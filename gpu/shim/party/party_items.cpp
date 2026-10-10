@@ -171,6 +171,21 @@ std::int32_t ItemLedgerDoneFlag(std::int32_t idx) {
     return kItemNone;
 }
 
+std::vector<std::uint32_t> LedgerBitsToSeed(const std::function<bool(std::uint32_t)>& is_set) {
+    std::vector<std::uint32_t> out;
+    if (is_set(kItemLedgerSeeded)) {
+        return out;
+    }
+    for (const LedgerRow& r : kLedger) {
+        const std::uint32_t bit = kItemLedgerBase + static_cast<std::uint32_t>(r.idx);
+        if (r.done_flag > 0 && is_set(static_cast<std::uint32_t>(r.done_flag)) && !is_set(bit) &&
+            std::find(out.begin(), out.end(), bit) == out.end()) {
+            out.push_back(bit);
+        }
+    }
+    return out;
+}
+
 std::int32_t ItemLedgerLot(std::int32_t idx) {
     for (const LedgerRow& r : kLedger) {
         if (r.idx == idx) {
@@ -814,15 +829,11 @@ void SeedLedgerFromOwnSave() {
     }
     // Once per save, before C2 ever wrote a host flag into it: every ledger lot whose awarding
     // event already ran here was earned by this player itself.
-    int seeded = 0;
-    for (std::int32_t idx = 0; idx < static_cast<std::int32_t>(ItemLedgerCount()); ++idx) {
-        const std::int32_t done = ItemLedgerDoneFlag(idx);
-        const std::int64_t bit = std::int64_t(kItemLedgerBase) + idx;
-        if (done > 0 && IsFlag(man, done) && !IsFlag(man, bit)) {
-            SetFlag(man, bit);
-            ++seeded;
-        }
+    const std::vector<std::uint32_t> bits = LedgerBitsToSeed([man](std::uint32_t id) { return IsFlag(man, id); });
+    for (const std::uint32_t bit : bits) {
+        SetFlag(man, bit);
     }
+    const int seeded = static_cast<int>(bits.size());
     SetFlag(man, kItemLedgerSeeded);
     Log("ledger seeded from the own save: %d lot%s this player already earned (marker flag %u)", seeded,
         seeded == 1 ? "" : "s", kItemLedgerSeeded);
