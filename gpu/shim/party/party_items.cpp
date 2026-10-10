@@ -17,6 +17,7 @@
 #include "game_state.h"
 #include "party_director.h"
 #include "party_progress.h"
+#include "seamless_rules.h"
 
 #include <atomic>
 #include <chrono>
@@ -428,6 +429,40 @@ bool ItemApplyAllowedNow(const ItemApplyState& s) {
            (s.session_role == 0 /* idle */ || s.session_role == 3 /* hosting in the own world */);
 }
 
+const char* LotFitName(LotFit f) {
+    switch (f) {
+    case LotFit::Give: return "fits";
+    case LotFit::Owned: return "unique item held already";
+    case LotFit::Full: return "would exceed the item's max";
+    }
+    return "?";
+}
+
+LotFit ClassifyLotFit(const std::vector<LotSlotState>& slots, std::string* why) {
+    LotFit fit = LotFit::Give;
+    for (const LotSlotState& s : slots) {
+        // Goods only: weapons / armor / runes have no count limit the award can hit.
+        if (s.category != 4 || s.id <= 0 || s.owned < 0 || s.max_num <= 0) {
+            continue;
+        }
+        const int num = s.num > 0 ? s.num : 1;
+        if (s.owned + num <= s.max_num || s.max_storage > 0) {
+            continue; // fits, or the overflow goes to the storage
+        }
+        const LotFit f = s.max_num == 1 && s.owned >= 1 ? LotFit::Owned : LotFit::Full;
+        if (fit == LotFit::Give || f == LotFit::Owned) {
+            fit = f;
+            if (why) {
+                char b[160];
+                std::snprintf(b, sizeof b, "goods %d: held %d + %d > max %d, no storage", s.id, s.owned, num,
+                              s.max_num);
+                *why = b;
+            }
+        }
+    }
+    return fit;
+}
+
 std::size_t GuestItems::Offer(const std::vector<ItemGrant>& items) {
     std::size_t taken = 0;
     for (const ItemGrant& g : items) {
@@ -467,8 +502,8 @@ std::optional<ItemGrant> GuestItems::Step(const ItemApplyState& s, double now) {
         return std::nullopt;
     }
     // Marks only set a flag (no popup): no spacing for them.
-    if (q_.front().source != ItemSource::Mark && now - last_apply_ < kSpacing) {
-        return std::nullopt;
+    if (q_.front().source != ItemSource::Mark && (now - last_apply_ < kSpacing || !s.calm)) {
+        return std::nullopt; // one popup at a time, and none in a fight
     }
     ItemGrant g = q_.front();
     q_.pop_front();
@@ -716,6 +751,42 @@ void ParseTestLots() {
     }
 }
 
+// ItemLotParam (ITEM_LOT_PARAM_ST, 1.09 paramdef): lotItemId01..08 s32 +0x00, lotItemCategory01..08
+// u32 +0x20, lotItemBasePoint01..08 u16 +0x40, lotItemNum01..08 u8 +0x8A. EquipParamGoods
+// (EQUIP_PARAM_GOODS_ST): maxNum s16 +0x36, maxRepositoryNum s16 +0x49.
+std::vector<LotSlotState> LotSlots(std::int32_t lot) {
+    std::vector<LotSlotState> out;
+    const u64 row = GameParamRow("ItemLotParam", "ITEM_LOT_PARAM_ST", static_cast<u32>(lot));
+    if (!row) {
+        return out;
+    }
+    for (int i = 0; i < 8; ++i) {
+        LotSlotState s;
+        std::uint16_t base = 0;
+        u8 num = 0;
+        if (!SafeGet(row + 4u * i, &s.id) || !SafeGet(row + 0x20 + 4u * i, &s.category) ||
+            !SafeGet(row + 0x40 + 2u * i, &base) || !SafeGet(row + 0x8a + i, &num)) {
+            continue;
+        }
+        if (s.id <= 0 || s.category == 0xffffffffu || base == 0) {
+            continue;
+        }
+        s.num = num;
+        if (s.category == 4) {
+            s.owned = InventoryCount(0x40000000u, static_cast<u32>(s.id));
+            if (const u64 goods = GameParamRow("EquipParamGoods", "EQUIP_PARAM_GOODS_ST", static_cast<u32>(s.id))) {
+                std::int16_t mx = -1, rep = -1;
+                if (SafeGet(goods + 0x36, &mx) && SafeGet(goods + 0x49, &rep)) {
+                    s.max_num = mx;
+                    s.max_storage = rep;
+                }
+            }
+        }
+        out.push_back(s);
+    }
+    return out;
+}
+
 void Apply(const ItemGrant& g) {
     const u64 man = Ptr(kFlagMan);
     const u64 mim = Ptr(kMapItemMan);
@@ -732,6 +803,28 @@ void Apply(const ItemGrant& g) {
     }
     if (!mim) {
         Log("skip %s: no MapItemMan", DescribeItem(g).c_str());
+        return;
+    }
+    // A flagless (ledger) lot the guest earned itself: the ledger bit only exists for the party's
+    // replays, so a lot this save got before (solo, or a save that started as a copy) shows up
+    // as "not given" there. The awarding event's own completion flag says it was.
+    if (g.flag < 0 && g.ledger >= 0) {
+        const std::int32_t event_done = ItemLedgerDoneFlag(g.ledger);
+        if (event_done > 0 && IsFlag(man, event_done)) {
+            SetFlag(man, done);
+            Log("skip %s: this save's own event flag %d says it was awarded here; ledger bit set", DescribeItem(g).c_str(),
+                event_done);
+            return;
+        }
+    }
+    // An item the game would refuse (a unique key / badge already held, a count at its max with
+    // no storage): it would open a blocking "inventory or storage max" dialog. Count it as given.
+    std::string why;
+    const LotFit fit = ClassifyLotFit(LotSlots(g.lot), &why);
+    if (fit != LotFit::Give) {
+        SetFlag(man, done);
+        Log("skip %s: %s (%s); flag %lld set instead", DescribeItem(g).c_str(), LotFitName(fit), why.c_str(),
+            static_cast<long long>(done));
         return;
     }
     // The ledger bit goes in first: the give can start a save (run A of the C3 check lost a
@@ -889,6 +982,30 @@ void RequestGuestItems(const std::vector<ItemGrant>& items) {
     Log("guest got %zu grants from the host, %zu new; %zu pending", items.size(), taken, pending);
 }
 
+namespace {
+
+/// No HP lost for kCalmAfter s (ChrIns +0x3B0 -> +0x20: +0xF8 HP): not in a fight, so an award
+/// popup does not land on a player under attack. A new player (load) starts calm.
+bool Calm(u64 player, double now) {
+    constexpr double kCalmAfter = 15.0;
+    static u64 last_player = 0;
+    static std::int32_t last_hp = -1;
+    static double last_hit = -1e9;
+    u64 a = 0, b = 0;
+    std::int32_t hp = -1;
+    if (!player || !SafeGet(player + 0x3b0, &a) || !a || !SafeGet(a + 0x20, &b) || !b || !SafeGet(b + 0xf8, &hp)) {
+        return true;
+    }
+    if (player == last_player && last_hp >= 0 && hp < last_hp) {
+        last_hit = now;
+    }
+    last_player = player;
+    last_hp = hp;
+    return now - last_hit >= kCalmAfter;
+}
+
+} // namespace
+
 void ItemsTick() {
     if (!g_on.load()) {
         return;
@@ -906,6 +1023,7 @@ void ItemsTick() {
     s.load_mode = LoadMode(Ptr(kFlagMan));
     s.own_world = OwnWorld();
     s.game_data = gs.player_rec != 0 && Ptr(kMapItemMan) != 0;
+    s.calm = Calm(gs.player, Now());
     static bool ready_logged = false;
     if (ItemApplyAllowedNow(s) != ready_logged) {
         ready_logged = !ready_logged;
