@@ -1182,6 +1182,7 @@ struct Global {
     std::atomic<int> role{0};  // Role
     std::atomic<bool> capture{false};
     std::atomic<ItemFlagObserver> item_observer{nullptr};
+    std::atomic<BeforeApplyHook> before_apply{nullptr};
     thread_local static bool self_write;
 
     // hooks -> tick (any thread)
@@ -1587,6 +1588,11 @@ void Tick(const GameSnapshot& s) {
         g.test_clear.clear();
         g.dump_session = true;
     }
+    if (store.LoadMode() == 0 && g.stable == kStableFrames) {
+        if (const BeforeApplyHook hook = g.before_apply.load()) {
+            hook();  // C3 ledger seeding: before the first host flag lands in this load
+        }
+    }
     if (role == Role::Host && store.LoadMode() == 0) {
         HostTick(g, store, s, now);
     } else if (role == Role::Guest) {
@@ -1605,6 +1611,10 @@ void Tick(const GameSnapshot& s) {
 
 void SetItemFlagObserver(ItemFlagObserver fn) {
     G().item_observer = fn;
+}
+
+void SetBeforeApplyHook(BeforeApplyHook fn) {
+    G().before_apply = fn;
 }
 
 std::vector<FlagChange> PopHostFlagChanges() {

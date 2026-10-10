@@ -594,6 +594,15 @@ BB_COOP_SYSV void AwardEntry(u64, u64 lot_arg, u64 host_only_arg, u64, u64, u64)
     Log("award lot %d (hostOnly %d, flag %d) in %s world, role %s", lot, host_only ? 1 : 0, flag,
         own == 1 ? "the own" : own == 0 ? "another's" : "an unknown",
         role == PartyRole::Host ? "host" : role == PartyRole::Guest ? "guest" : "none");
+    if (own == 1 && host_only && flag < 0 && !ItemLotDenied(lot, flag)) {
+        // A ledger lot this player earns in its own world (any role, solo too): its ledger bit, so
+        // a host's later replay of the same lot gives nothing twice.
+        const std::int32_t idx = ItemLedgerIndex(lot);
+        if (idx >= 0) {
+            SetFlag(Ptr(kFlagMan), std::int64_t(kItemLedgerBase) + idx);
+            Log("own award of ledger lot %d: ledger flag %d set", lot, int(kItemLedgerBase) + idx);
+        }
+    }
     if (role == PartyRole::Host && own == 1) {
         const std::optional<ItemGrant> g = ClassifyAward(lot, host_only);
         bool queued = false;
@@ -787,10 +796,35 @@ void InstallItemsPatches() {
     ParseTestLots();
     // C2 hands every host item_lot_picked flag 0 -> 1 to OnHostFlagSet (main thread).
     progress::SetItemFlagObserver(&OnHostFlagSet);
+    progress::SetBeforeApplyHook(&SeedLedgerFromOwnSave);
     Log("C2 item-flag observer registered");
     Log("%zu flagged lots, %zu ledger lots (flags %u..%u)", ItemLotFlagCount(), ItemLedgerCount(), kItemLedgerBase,
         kItemLedgerBase + kItemLedgerSize - 1);
     g_on = true;
+}
+
+void SeedLedgerFromOwnSave() {
+    if (!g_on.load()) {
+        return;
+    }
+    const u64 man = Ptr(kFlagMan);
+    if (!man || LoadMode(man) != 0 || IsFlag(man, kItemLedgerSeeded)) {
+        return;
+    }
+    // Once per save, before C2 ever wrote a host flag into it: every ledger lot whose awarding
+    // event already ran here was earned by this player itself.
+    int seeded = 0;
+    for (std::int32_t idx = 0; idx < static_cast<std::int32_t>(ItemLedgerCount()); ++idx) {
+        const std::int32_t done = ItemLedgerDoneFlag(idx);
+        const std::int64_t bit = std::int64_t(kItemLedgerBase) + idx;
+        if (done > 0 && IsFlag(man, done) && !IsFlag(man, bit)) {
+            SetFlag(man, bit);
+            ++seeded;
+        }
+    }
+    SetFlag(man, kItemLedgerSeeded);
+    Log("ledger seeded from the own save: %d lot%s this player already earned (marker flag %u)", seeded,
+        seeded == 1 ? "" : "s", kItemLedgerSeeded);
 }
 
 void OnHostFlagSet(std::uint32_t flag) {
