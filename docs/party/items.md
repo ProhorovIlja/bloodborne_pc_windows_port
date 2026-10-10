@@ -247,6 +247,12 @@ Message: `PARTY_CMD ITEM_LOT {seq, lot, flag (-1 if none), ledgerIdx (-1 if flag
   probe read the ItemLotParam / EquipParamGoods rows and the inventory on both instances: `goods 200: held
   1 + 1 > max 1, no storage` and `goods 4114: held 1 + 1 > max 1` -> `Owned` (the param file type is
   `ITEMLOT_PARAM_ST`, not `ITEM_LOT_PARAM_ST`).
+  **Rule (1) replaced (livesync, 2026-10-10):** checking `ItemLedgerDoneFlag` at apply time also skips
+  every boss reward the guest never got, because C2 writes the host's boss / event flags into the guest's
+  save first (join snapshot at the first steady world, 30 frames, before the 90-frame item gate; live
+  flags while summoned): a boss killed together sets 12401800 in the guest's save, then lot 50000001 was
+  skipped. Now the save's own history is recorded once as ledger bits before C2 touches it (ledger
+  seeding, below) and own-world ledger awards set their bit in the award hook; rules (2) and (3) stay.
 
 ### 6.3 Applying on a guest (main thread)
 
