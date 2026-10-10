@@ -1208,6 +1208,7 @@ struct Global {
     int last_mode = -2;
     Clock::time_point last_scan{}, last_dump{};
     bool dump_session = false;   // a session boundary dump is due
+    bool dump_home = false;      // guest: a session ended; dump once back in the own world (mode 0)
     bool dump_sync = false;      // a sync dump is due
     std::string label = "party";
     std::string dump_dir;
@@ -1535,7 +1536,11 @@ void SessionStarted(const char* label) {
 }
 
 void SessionEnded() {
-    G().dump_session = true;
+    Global& g = G();
+    g.dump_session = true;
+    if (CurrentRole() == Role::Guest) {
+        g.dump_home = true;  // the game still shows the host's world (mode 1) for a while
+    }
 }
 
 void Tick(const GameSnapshot& s) {
@@ -1604,8 +1609,16 @@ void Tick(const GameSnapshot& s) {
             WriteDumps(g, store, s);
             g.dump_session = g.dump_sync = false;
         }
+        if (g.dump_home && store.LoadMode() == 0) {
+            // What the guest's own save holds after the session (the "returned home" check).
+            const std::string keep = g.label;
+            g.label = "home";
+            WriteDumps(g, store, s);
+            g.label = keep;
+            g.dump_home = false;
+        }
     } else {
-        g.dump_session = g.dump_sync = false;
+        g.dump_session = g.dump_sync = g.dump_home = false;
     }
 }
 
