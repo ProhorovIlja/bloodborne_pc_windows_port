@@ -21,6 +21,7 @@
 #include "game_state.h"
 #include "party_director.h"
 #include "party_progress.h"
+#include "party_status.h"
 #include "seamless_rules.h"
 
 #include <atomic>
@@ -292,6 +293,17 @@ json::Value ItemsToJson(const std::vector<ItemGrant>& items) {
         row.push(g.flag);
         row.push(g.ledger);
         row.push(ItemSourceName(g.source));
+        if (!g.items.empty()) {
+            json::Value list = json::Value::make_array();
+            for (const GrantItem& it : g.items) {
+                json::Value e = json::Value::make_array();
+                e.push(static_cast<unsigned long long>(it.category));
+                e.push(it.id);
+                e.push(it.count);
+                list.push(e);
+            }
+            row.push(list);
+        }
         a.push(row);
     }
     v.set("items", a);
@@ -308,8 +320,8 @@ bool ItemsFromJson(const json::Value& v, std::vector<ItemGrant>* out, std::strin
             throw std::runtime_error("items: too many rows");
         }
         for (const json::Value& row : json::arr(v, "items")) {
-            if (row.type != json::Value::Type::Array || row.array.size() != 5) {
-                throw std::runtime_error("items: a row needs [seq, lot, flag, ledger, source]");
+            if (row.type != json::Value::Type::Array || (row.array.size() != 5 && row.array.size() != 6)) {
+                throw std::runtime_error("items: a row needs [seq, lot, flag, ledger, source(, items)]");
             }
             auto integer = [](const json::Value& x, const char* what) -> double {
                 // Range first: converting 1e300 to an integer is undefined.
@@ -340,6 +352,28 @@ bool ItemsFromJson(const json::Value& v, std::vector<ItemGrant>* out, std::strin
             g.source = ItemSourceFromName(row.array[4].string);
             if (g.DoneFlag() < 0) {
                 throw std::runtime_error("items: a row needs a flag or a ledger index");
+            }
+            if (row.array.size() == 6) {
+                const json::Value& list = row.array[5];
+                if (list.type != json::Value::Type::Array || list.array.size() > kMaxGrantItems) {
+                    throw std::runtime_error("items: the item list is not an array of at most 16");
+                }
+                for (const json::Value& e : list.array) {
+                    if (e.type != json::Value::Type::Array || e.array.size() != 3) {
+                        throw std::runtime_error("items: an item needs [category, id, count]");
+                    }
+                    const double cat = integer(e.array[0], "category"), id = integer(e.array[1], "item id"),
+                                 count = integer(e.array[2], "count");
+                    if (cat < 0 || cat > 15 || !GrantCategorySupported(static_cast<std::uint32_t>(cat)) || id <= 0 ||
+                        id > 2147483647.0 || count < 1 || count > 255) {
+                        throw std::runtime_error("items: item value out of range");
+                    }
+                    GrantItem it;
+                    it.category = static_cast<std::uint32_t>(cat);
+                    it.id = static_cast<std::int32_t>(id);
+                    it.count = static_cast<std::int32_t>(count);
+                    g.items.push_back(it);
+                }
             }
             r.push_back(g);
         }
@@ -448,6 +482,199 @@ bool ItemApplyAllowedNow(const ItemApplyState& s) {
            (s.session_role == 0 /* idle */ || s.session_role == 3 /* hosting in the own world */);
 }
 
+bool ItemSummonedApplyAllowedNow(const ItemApplyState& s) {
+    return s.world_up && !s.loading && s.load_mode == 1 && s.own_world == 0 && s.game_data &&
+           s.session_role == 6 /* client in the host's world */;
+}
+
+ItemApplyMode ItemApplyModeNow(const ItemApplyState& s) {
+    if (ItemApplyAllowedNow(s)) {
+        return ItemApplyMode::Home;
+    }
+    return ItemSummonedApplyAllowedNow(s) ? ItemApplyMode::Summoned : ItemApplyMode::None;
+}
+
+bool GrantCategorySupported(std::uint32_t category) {
+    return category == 0 || category == 1 || category == 2 || category == 4;
+}
+
+const char* LotPlanResultName(LotPlanResult r) {
+    switch (r) {
+    case LotPlanResult::Give: return "give";
+    case LotPlanResult::Random: return "random lot without the host's item list";
+    case LotPlanResult::Unsupported: return "blood gem / unsupported category";
+    case LotPlanResult::Missing: return "no ItemLotParam row";
+    }
+    return "?";
+}
+
+namespace {
+
+bool SlotWeighted(const LotRowData& r, int i) {
+    return r.base[i] > 0 || r.cumulate[i] > 0;
+}
+
+bool SlotHasItem(const LotRowData& r, int i) {
+    return r.id[i] > 0 && r.category[i] != 0xffffffffu;
+}
+
+int WeightedSlots(const LotRowData& r, int* only) {
+    int n = 0;
+    for (int i = 0; i < 8; ++i) {
+        if (SlotWeighted(r, i)) {
+            if (only) {
+                *only = i;
+            }
+            ++n;
+        }
+    }
+    return n;
+}
+
+int SlotCount(const LotRowData& r, int i) {
+    return r.num[i] > 0 ? r.num[i] : 1;
+}
+
+} // namespace
+
+bool LotChainRandom(const std::vector<LotRowData>& chain) {
+    for (const LotRowData& r : chain) {
+        if (WeightedSlots(r, nullptr) > 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<GrantItem> RollLotChain(const std::vector<LotRowData>& chain, std::uint64_t seed) {
+    std::vector<GrantItem> out;
+    std::uint64_t x = seed ? seed : 0x9e3779b97f4a7c15ull;
+    for (const LotRowData& r : chain) {
+        std::uint32_t total = 0;
+        for (int i = 0; i < 8; ++i) {
+            total += r.base[i];
+        }
+        if (total == 0) {
+            int only = -1;
+            if (WeightedSlots(r, &only) == 1 && SlotHasItem(r, only) && GrantCategorySupported(r.category[only])) {
+                out.push_back({r.category[only], r.id[only], SlotCount(r, only)}); // a cumulate-only slot
+            }
+            continue;
+        }
+        x ^= x << 13; // xorshift64
+        x ^= x >> 7;
+        x ^= x << 17;
+        std::uint32_t pick = static_cast<std::uint32_t>(x % total);
+        for (int i = 0; i < 8; ++i) {
+            if (pick < r.base[i]) {
+                if (SlotHasItem(r, i) && GrantCategorySupported(r.category[i])) {
+                    out.push_back({r.category[i], r.id[i], SlotCount(r, i)});
+                }
+                break;
+            }
+            pick -= r.base[i];
+        }
+    }
+    return out;
+}
+
+LotPlan PlanSummonedLot(const std::vector<LotRowData>& chain, const std::vector<GrantItem>& host_items,
+                        const std::function<bool(std::int32_t)>& row_done) {
+    LotPlan p;
+    if (chain.empty()) {
+        p.result = LotPlanResult::Missing;
+        p.why = "no ItemLotParam row";
+        return p;
+    }
+    auto done = [&](const LotRowData& r) { return r.flag > 0 && row_done && row_done(r.flag); };
+    auto add_flag = [&](const LotRowData& r) {
+        if (r.flag > 0 && std::find(p.row_flags.begin(), p.row_flags.end(), r.flag) == p.row_flags.end()) {
+            p.row_flags.push_back(r.flag);
+        }
+    };
+    if (!host_items.empty()) {
+        // The host's list: every item must be a weighted slot of a different row (what one roll
+        // of the chain can give), else it is ignored and the rows decide.
+        std::vector<bool> used(chain.size(), false);
+        std::vector<int> row_of(host_items.size(), -1);
+        bool ok = host_items.size() <= chain.size();
+        for (std::size_t k = 0; k < host_items.size() && ok; ++k) {
+            const GrantItem& it = host_items[k];
+            ok = false;
+            for (std::size_t r = 0; r < chain.size() && !ok; ++r) {
+                if (used[r]) {
+                    continue;
+                }
+                for (int i = 0; i < 8; ++i) {
+                    if (SlotWeighted(chain[r], i) && SlotHasItem(chain[r], i) && chain[r].category[i] == it.category &&
+                        chain[r].id[i] == it.id && it.count >= 1 && it.count <= SlotCount(chain[r], i)) {
+                        used[r] = true;
+                        row_of[k] = static_cast<int>(r);
+                        ok = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (ok) {
+            for (std::size_t k = 0; k < host_items.size(); ++k) {
+                const LotRowData& r = chain[static_cast<std::size_t>(row_of[k])];
+                if (done(r)) {
+                    continue;
+                }
+                if (!GrantCategorySupported(host_items[k].category)) {
+                    p.result = LotPlanResult::Unsupported;
+                    p.why = "category " + std::to_string(host_items[k].category);
+                    p.items.clear();
+                    p.row_flags.clear();
+                    return p;
+                }
+                p.items.push_back(host_items[k]);
+                add_flag(r);
+            }
+            // Rows the host's roll left empty are done as well (vanilla sets every record's flag).
+            for (std::size_t r = 0; r < chain.size(); ++r) {
+                if (!used[r] && !done(chain[r])) {
+                    add_flag(chain[r]);
+                }
+            }
+            p.result = LotPlanResult::Give;
+            p.why = "host's item list";
+            return p;
+        }
+        p.why = "host's item list does not match the rows; ";
+    }
+    for (const LotRowData& r : chain) {
+        if (done(r)) {
+            continue;
+        }
+        int only = -1;
+        const int n = WeightedSlots(r, &only);
+        if (n > 1) {
+            p.result = LotPlanResult::Random;
+            p.why += "row " + std::to_string(r.lot) + " has " + std::to_string(n) + " weighted slots";
+            p.items.clear();
+            p.row_flags.clear();
+            return p;
+        }
+        add_flag(r);
+        if (n == 0 || !SlotHasItem(r, only)) {
+            continue; // an empty row gives nothing
+        }
+        if (!GrantCategorySupported(r.category[only])) {
+            p.result = LotPlanResult::Unsupported;
+            p.why += "row " + std::to_string(r.lot) + " gives category " + std::to_string(r.category[only]);
+            p.items.clear();
+            p.row_flags.clear();
+            return p;
+        }
+        p.items.push_back({r.category[only], r.id[only], SlotCount(r, only)});
+    }
+    p.result = LotPlanResult::Give;
+    p.why += "deterministic rows";
+    return p;
+}
+
 const char* LotFitName(LotFit f) {
     switch (f) {
     case LotFit::Give: return "fits";
@@ -516,20 +743,48 @@ std::size_t GuestItems::Offer(const std::vector<ItemGrant>& items) {
 }
 
 std::optional<ItemGrant> GuestItems::Step(const ItemApplyState& s, double now) {
-    stable_ = ItemApplyAllowedNow(s) ? stable_ + 1 : 0;
+    const ItemApplyMode mode = ItemApplyModeNow(s);
+    if (mode == ItemApplyMode::None) {
+        stable_ = 0;
+    } else {
+        stable_ = mode == stable_mode_ ? stable_ + 1 : 1;
+    }
+    stable_mode_ = mode;
     if (q_.empty() || stable_ < kStableTicks) {
         return std::nullopt;
     }
-    // Marks only set a flag (no popup): no spacing for them.
-    if (q_.front().source != ItemSource::Mark && (now - last_apply_ < kSpacing || !s.calm)) {
-        return std::nullopt; // one popup at a time, and none in a fight
+    // Home: the queue in order. Summoned: the first grant not deferred to the own world (random
+    // lots without the host's list, blood gems).
+    auto it = q_.begin();
+    if (mode == ItemApplyMode::Summoned) {
+        while (it != q_.end() && it->source != ItemSource::Mark && home_only_.count(it->Key())) {
+            ++it;
+        }
+        if (it == q_.end()) {
+            return std::nullopt;
+        }
     }
-    ItemGrant g = q_.front();
-    q_.pop_front();
+    // Marks only set a flag (no popup / notice): no spacing for them.
+    if (it->source != ItemSource::Mark && (now - last_apply_ < kSpacing || !s.calm)) {
+        return std::nullopt; // one popup / notice at a time, and none in a fight
+    }
+    ItemGrant g = *it;
+    q_.erase(it);
     if (g.source != ItemSource::Mark) {
         queued_.erase(g.Key());
     }
+    last_mode_ = mode;
     return g;
+}
+
+void GuestItems::Defer(const ItemGrant& g) {
+    const std::int64_t key = g.Key();
+    if (key < 0 || done_.count(key) || queued_.count(key)) {
+        return;
+    }
+    home_only_.insert(key);
+    queued_.insert(key);
+    q_.push_front(g); // keeps its place for the own world
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -589,6 +844,13 @@ std::mutex g_guest_mu;
 GuestItems g_guest;          // under g_guest_mu
 std::vector<ItemGrant> g_test; // BB_PARTY_ITEMS_TEST lots, offered once the tick runs
 bool g_test_offered = false;
+// BB_PARTY_ITEMS_HOST_TEST (live check of the summoned give): the host awards these lots through
+// the game's own 0x17DDC50 (hostOnly 1, as EMEVD 2003[4]) once a cooperator has been in its world
+// for 20 s, 10 s apart; BB_PARTY_ITEMS_HOST_TEST_FLAGS: flags it sets (SetEventFlag) with the first.
+std::vector<std::int32_t> g_host_test;
+std::vector<std::uint32_t> g_host_test_flags;
+std::size_t g_host_test_next = 0;
+double g_host_test_coop = 0, g_host_test_poll = 0, g_host_test_last = 0;
 
 u64 Ptr(u64 slot_off) {
     u64 p = 0;
@@ -635,11 +897,15 @@ void SeedHostSeq() {
 
 // ---- The award hook (main thread: EMEVD, Lua) ----
 
-BB_COOP_SYSV void AwardEntry(u64, u64 lot_arg, u64 host_only_arg, u64, u64, u64) {
+AwardFn g_award_original = nullptr; // the trampoline (ReplacePrologue)
+bool g_capturing = false;           // main thread: the host's own award runs, GiveListEntry records
+std::vector<GrantItem> g_captured;  // its items (category, id, count)
+bool g_captured_bad = false;        // an item the direct give cannot replay (a blood gem)
+
+/// Host side of an award, before the game runs it: the grant to offer once the call returned
+/// (its items captured), else nothing. Guest side: the mark for a lot received while summoned.
+std::optional<ItemGrant> AwardEntry(u64 lot_arg, u64 host_only_arg) {
     perf::Scope z(perf::Zone::HookAward);
-    if (!g_on.load() || g_in_apply.load()) {
-        return;
-    }
     const std::int32_t lot = static_cast<std::int32_t>(static_cast<u32>(lot_arg));
     const bool host_only = static_cast<u8>(host_only_arg) != 0;
     const PartyRole role = Role();
@@ -659,19 +925,16 @@ BB_COOP_SYSV void AwardEntry(u64, u64 lot_arg, u64 host_only_arg, u64, u64, u64)
     }
     if (role == PartyRole::Host && own == 1) {
         const std::optional<ItemGrant> g = ClassifyAward(lot, host_only);
-        bool queued = false;
         {
             std::lock_guard<std::mutex> lk(g_host_mu);
             if (flag > 0) {
                 g_host.Capture(flag, lot);
             }
-            queued = g && g_host.Offer(*g);
         }
-        if (g) {
-            Log("host award %s %s", DescribeItem(*g).c_str(), queued ? "queued for the party" : "already sent");
-        } else if (host_only && flag < 0 && !ItemLotDenied(lot, flag)) {
+        if (!g && host_only && flag < 0 && !ItemLotDenied(lot, flag)) {
             Log("host award lot %d: flagless and not in the ledger table; not replayed", lot);
         }
+        return g;
     } else if (role == PartyRole::Guest && own == 0 && !host_only && flag > 0 && !ItemLotDenied(lot, flag)) {
         // We got it in the host's world; its flag went to the overlay only. Set it at home so the
         // host's replay of the same lot gives nothing twice.
@@ -681,19 +944,71 @@ BB_COOP_SYSV void AwardEntry(u64, u64 lot_arg, u64 host_only_arg, u64, u64, u64)
         m.source = ItemSource::Mark;
         std::lock_guard<std::mutex> lk(g_guest_mu);
         g_guest.Offer({m});
-        Log("guest received lot %d while summoned: flag %d will be set in the own world", lot, flag);
+        Log("guest received lot %d while summoned: flag %d goes into the own save (pool)", lot, flag);
     }
+    return std::nullopt;
+}
+
+BB_COOP_SYSV void AwardReplace(u64 mim, u64 lot_arg, u64 host_only_arg) {
+    if (!g_on.load() || g_in_apply.load()) {
+        g_award_original(mim, static_cast<u32>(lot_arg), static_cast<u32>(host_only_arg));
+        return;
+    }
+    std::optional<ItemGrant> g = AwardEntry(lot_arg, host_only_arg);
+    g_captured.clear();
+    g_captured_bad = false;
+    g_capturing = g.has_value();
+    g_award_original(mim, static_cast<u32>(lot_arg), static_cast<u32>(host_only_arg));
+    g_capturing = false;
+    if (!g) {
+        return;
+    }
+    // What the host's roll really gave: guests replay exactly that while summoned.
+    if (!g_captured_bad && g_captured.size() <= kMaxGrantItems) {
+        g->items = g_captured;
+    }
+    bool queued;
+    {
+        std::lock_guard<std::mutex> lk(g_host_mu);
+        queued = g_host.Offer(*g);
+    }
+    std::string list;
+    for (const GrantItem& it : g->items) {
+        list += (list.empty() ? "" : ", ") + std::to_string(it.category) + ":" + std::to_string(it.id) + "x" +
+                std::to_string(it.count);
+    }
+    Log("host award %s %s; items [%s]%s", DescribeItem(*g).c_str(), queued ? "queued for the party" : "already sent",
+        list.c_str(), g_captured_bad ? " (a blood gem: guests award it in their own world)" : "");
 }
 
 // Our own award's inventory adds (evidence for the apply log): ItemList {u32 n, then n x
 // {u32 gaitem, u32 itemId | category << 28, u32 count, u32 -1}} from +4 (0x17D8A42..0x17D8A8A).
 BB_COOP_SYSV void GiveListEntry(u64, u64 list, u64, u64, u64, u64) {
     perf::Scope z(perf::Zone::HookGiveList);
-    if (!g_in_apply.load() || !list) {
+    if (!list || (!g_in_apply.load() && !g_capturing)) {
         return;
     }
     u32 n = 0;
     if (!SafeGet(list, &n)) {
+        return;
+    }
+    if (g_capturing) {
+        for (u32 i = 0; i < n && i < 8; ++i) {
+            u32 e[4] = {};
+            if (!SafeRead(list + 4 + 16ull * i, e, sizeof e)) {
+                g_captured_bad = true;
+                continue;
+            }
+            GrantItem it;
+            it.category = e[1] >> 28;
+            it.id = static_cast<std::int32_t>(e[1] & 0x0fffffffu);
+            it.count = static_cast<std::int32_t>(e[2]);
+            if (!GrantCategorySupported(it.category) || it.id <= 0 || it.count < 1 || it.count > 255) {
+                g_captured_bad = true;
+                continue;
+            }
+            g_captured.push_back(it);
+        }
         return;
     }
     g_added.fetch_add(n);
@@ -748,6 +1063,101 @@ void ParityPatches() {
     Patch("full enemy drops for clients", 0x17dd191, {0x08, 0xc1}, {0x30, 0xc9});
 }
 
+std::vector<long> EnvList(const char* name) {
+    std::vector<long> out;
+    const char* v = std::getenv(name);
+    if (!v) {
+        return out;
+    }
+    std::string s(v);
+    std::size_t at = 0;
+    while (at < s.size()) {
+        std::size_t end = s.find(',', at);
+        if (end == std::string::npos) {
+            end = s.size();
+        }
+        const long x = std::strtol(s.substr(at, end - at).c_str(), nullptr, 10);
+        if (x > 0) {
+            out.push_back(x);
+        }
+        at = end + 1;
+    }
+    return out;
+}
+
+void ParseHostTest() {
+    for (const long lot : EnvList("BB_PARTY_ITEMS_HOST_TEST")) {
+        g_host_test.push_back(static_cast<std::int32_t>(lot));
+    }
+    for (const long f : EnvList("BB_PARTY_ITEMS_HOST_TEST_FLAGS")) {
+        g_host_test_flags.push_back(static_cast<std::uint32_t>(f));
+    }
+    if (!g_host_test.empty()) {
+        Log("BB_PARTY_ITEMS_HOST_TEST: %zu lot(s), %zu flag(s): the host awards them once a cooperator is in",
+            g_host_test.size(), g_host_test_flags.size());
+    }
+}
+
+/// The host fixture (main thread): the game's award with hostOnly 1, through our hook.
+void HostTestTick(double now) {
+    if (g_host_test_next >= g_host_test.size() || Role() != PartyRole::Host || OwnWorld() != 1) {
+        return;
+    }
+    const GameSnapshot quick = ReadGameState(false);
+    if (!quick.world_up || quick.loading) {
+        return;
+    }
+    if (!g_host_test_coop) {
+        if (now - g_host_test_poll < 1.0) {
+            return;
+        }
+        g_host_test_poll = now;
+        if (ReadGameState(true).cooperators > 0) {
+            g_host_test_coop = now;
+            Log("host test: a cooperator is in the world; awards in 20 s");
+        }
+        return;
+    }
+    if (now - g_host_test_coop < 20.0 || now - g_host_test_last < 10.0) {
+        return;
+    }
+    g_host_test_last = now;
+    const std::int32_t lot = g_host_test[g_host_test_next++];
+    const u64 mim = Ptr(kMapItemMan);
+    if (!mim) {
+        return;
+    }
+    Log("host test: awarding lot %d through 0x17DDC50 (hostOnly 1)", lot);
+    reinterpret_cast<AwardFn>(Guest(kAwardLot))(mim, static_cast<u32>(lot), 1);
+    if (g_host_test_next == 1) {
+        const u64 man = Ptr(kFlagMan);
+        for (const std::uint32_t f : g_host_test_flags) {
+            const bool was = IsFlag(man, f);
+            SetFlag(man, f);
+            Log("host test: flag %u %d -> %d", f, was ? 1 : 0, IsFlag(man, f) ? 1 : 0);
+        }
+    }
+}
+
+/// Held counts of a lot's deterministic items (evidence in the logs).
+/// Defined below (the ItemLotParam readers).
+std::vector<LotRowData> LotChain(std::int32_t lot);
+
+std::string HeldSummary(std::int32_t lot) {
+    std::string out;
+    for (const LotRowData& r : LotChain(lot)) {
+        for (int i = 0; i < 8; ++i) {
+            if ((r.base[i] > 0 || r.cumulate[i] > 0) && r.id[i] > 0 && GrantCategorySupported(r.category[i])) {
+                char b[96];
+                std::snprintf(b, sizeof b, "%s%u:%d held %d", out.empty() ? "" : ", ", r.category[i], r.id[i],
+                              ItemCount(r.category[i] << 28, static_cast<u32>(r.id[i])));
+                out += b;
+            }
+        }
+    }
+    return out.empty() ? "-" : out;
+}
+
 void ParseTestLots() {
     const char* v = std::getenv("BB_PARTY_ITEMS_TEST");
     if (!v || !*v) {
@@ -780,6 +1190,20 @@ void ParseTestLots() {
     }
 }
 
+void FillGoodsLimits(LotSlotState* s) {
+    if (s->category != 4) {
+        return;
+    }
+    s->owned = ItemCount(0x40000000u, static_cast<u32>(s->id));
+    if (const u64 goods = GameParamRow("EquipParamGoods", "EQUIP_PARAM_GOODS_ST", static_cast<u32>(s->id))) {
+        std::int16_t mx = -1, rep = -1;
+        if (SafeGet(goods + 0x36, &mx) && SafeGet(goods + 0x49, &rep)) {
+            s->max_num = mx;
+            s->max_storage = rep;
+        }
+    }
+}
+
 // ItemLotParam (ITEMLOT_PARAM_ST, 1.09 paramdef): lotItemId01..08 s32 +0x00, lotItemCategory01..08
 // u32 +0x20, lotItemBasePoint01..08 u16 +0x40, lotItemNum01..08 u8 +0x8A. EquipParamGoods
 // (EQUIP_PARAM_GOODS_ST): maxNum s16 +0x36, maxRepositoryNum s16 +0x49.
@@ -801,19 +1225,50 @@ std::vector<LotSlotState> LotSlots(std::int32_t lot) {
             continue;
         }
         s.num = num;
-        if (s.category == 4) {
-            s.owned = ItemCount(0x40000000u, static_cast<u32>(s.id));
-            if (const u64 goods = GameParamRow("EquipParamGoods", "EQUIP_PARAM_GOODS_ST", static_cast<u32>(s.id))) {
-                std::int16_t mx = -1, rep = -1;
-                if (SafeGet(goods + 0x36, &mx) && SafeGet(goods + 0x49, &rep)) {
-                    s.max_num = mx;
-                    s.max_storage = rep;
-                }
-            }
-        }
+        FillGoodsLimits(&s);
         out.push_back(s);
     }
     return out;
+}
+
+/// ItemLotParam rows lot, lot + 1, ... while they exist (the roll's chain, 0x17CEAF0).
+std::vector<LotRowData> LotChain(std::int32_t lot) {
+    std::vector<LotRowData> out;
+    for (std::size_t k = 0; k < kMaxLotChain; ++k) {
+        const u64 row = GameParamRow("ItemLotParam", "ITEMLOT_PARAM_ST", static_cast<u32>(lot) + static_cast<u32>(k));
+        if (!row) {
+            break;
+        }
+        LotRowData r;
+        r.lot = lot + static_cast<std::int32_t>(k);
+        bool ok = SafeGet(row + 0x80, &r.flag);
+        for (int i = 0; i < 8 && ok; ++i) {
+            ok = SafeGet(row + 4u * i, &r.id[i]) && SafeGet(row + 0x20 + 4u * i, &r.category[i]) &&
+                 SafeGet(row + 0x40 + 2u * i, &r.base[i]) && SafeGet(row + 0x50 + 2u * i, &r.cumulate[i]) &&
+                 SafeGet(row + 0x8a + i, &r.num[i]);
+        }
+        if (!ok) {
+            break;
+        }
+        out.push_back(r);
+    }
+    return out;
+}
+
+/// Host: a random lot gets one roll here, so every guest gets the same items (deterministic lots
+/// are resolved by each guest from its own ItemLotParam).
+void AttachHostRoll(ItemGrant* g) {
+    if (!g || !g->items.empty()) {
+        return;
+    }
+    const std::vector<LotRowData> chain = LotChain(g->lot);
+    if (!LotChainRandom(chain)) {
+        return;
+    }
+    static std::uint64_t salt = static_cast<std::uint64_t>(Clock::now().time_since_epoch().count());
+    salt = salt * 6364136223846793005ull + 1442695040888963407ull;
+    g->items = RollLotChain(chain, salt ^ static_cast<std::uint64_t>(g->lot));
+    Log("host rolled random lot %d once for the party: %zu item(s)", g->lot, g->items.size());
 }
 
 /// True when the award ran (a popup may have opened).
@@ -883,6 +1338,123 @@ bool Apply(const ItemGrant& g) {
     return true;
 }
 
+const char* CategoryWord(std::uint32_t c) {
+    switch (c) {
+    case 0: return "weapon";
+    case 1: return "armor";
+    case 2: return "rune";
+    case 4: return "goods";
+    }
+    return "item";
+}
+
+bool OwnSaveFlag(std::int64_t id) {
+    bool v = false;
+    return id >= 0 && progress::ReadFlagOwnSave(static_cast<u32>(id), &v) && v;
+}
+
+enum class SummonedResult { Given, Skipped, Defer };
+
+/// While summoned (load mode 1: the live flag store is the host's overlay, where the host's flag
+/// is already set, so 0x17DDC50 would roll nothing): the lot's items go straight into the own
+/// inventory (GiveItemDirect 0x131CB70, no popup) and its flags / ledger bit into the own save's
+/// pool (C2's mode-1 pool write). Nothing is written to the overlay.
+SummonedResult ApplySummoned(const ItemGrant& g) {
+    const std::int64_t done = g.DoneFlag();
+    if (g.source == ItemSource::Mark) {
+        const bool was = OwnSaveFlag(done);
+        const bool ok = progress::WriteFlagOwnSave(static_cast<u32>(done), true);
+        Log("mark lot %d while summoned: own-save flag %lld %s", g.lot, static_cast<long long>(done),
+            was ? "was already set" : ok ? "set (pool)" : "NOT written");
+        if (!was && ok) {
+            RequestGameSave("C3 mark");
+        }
+        return SummonedResult::Skipped;
+    }
+    if (OwnSaveFlag(done)) {
+        Log("skip %s: already given (own-save flag %lld set; %s)", DescribeItem(g).c_str(),
+            static_cast<long long>(done), HeldSummary(g.lot).c_str());
+        return SummonedResult::Skipped;
+    }
+    const std::vector<LotRowData> chain = LotChain(g.lot);
+    const LotPlan plan = PlanSummonedLot(chain, g.items, [](std::int32_t f) { return OwnSaveFlag(f); });
+    if (plan.result != LotPlanResult::Give) {
+        Log("%s: not while summoned (%s: %s); waits for the own world", DescribeItem(g).c_str(),
+            LotPlanResultName(plan.result), plan.why.c_str());
+        return SummonedResult::Defer;
+    }
+    // The same refusal rule as at home: a unique item already held / no room counts as given.
+    std::vector<LotSlotState> slots;
+    for (const GrantItem& it : plan.items) {
+        LotSlotState s;
+        s.category = it.category;
+        s.id = it.id;
+        s.num = it.count;
+        FillGoodsLimits(&s);
+        slots.push_back(s);
+    }
+    std::string why;
+    const LotFit fit = ClassifyLotFit(slots, &why);
+    // Flags first (the save that holds the items holds the flags; a save between the two loses an
+    // item rather than giving it twice).
+    std::vector<std::int64_t> flags = {done};
+    for (const std::int32_t f : plan.row_flags) {
+        if (f != done) {
+            flags.push_back(f);
+        }
+    }
+    std::string flag_list;
+    for (const std::int64_t f : flags) {
+        const bool ok = progress::WriteFlagOwnSave(static_cast<u32>(f), true);
+        flag_list += (flag_list.empty() ? "" : ",") + std::to_string(f) + (ok ? "" : "(NOT written)");
+    }
+    if (fit != LotFit::Give) {
+        Log("skip %s while summoned: %s (%s); own-save flag(s) %s set instead", DescribeItem(g).c_str(),
+            LotFitName(fit), why.c_str(), flag_list.c_str());
+        RequestGameSave("C3 item flags");
+        return SummonedResult::Skipped;
+    }
+    std::string given, notice;
+    int gave = 0, native = 0;
+    for (const GrantItem& it : plan.items) {
+        const u32 bits = it.category << 28;
+        const int before = ItemCount(bits, static_cast<u32>(it.id));
+        const bool ok = GiveItem(bits, static_cast<u32>(it.id), it.count);
+        const int after = ItemCount(bits, static_cast<u32>(it.id));
+        // The game's own "item acquired" dialog entry, as the host's lot award shows it.
+        const bool shown = ok && ShowItemGet(bits, static_cast<u32>(it.id), it.count);
+        gave += ok ? 1 : 0;
+        native += shown ? 1 : 0;
+        char b[192];
+        std::snprintf(b, sizeof b, "%s %d x%d (held %d -> %d%s%s)", CategoryWord(it.category), it.id, it.count,
+                      before, after, ok ? "" : ", GiveItemDirect unavailable",
+                      !ok ? "" : shown ? ", item-get dialog" : ", NO item-get dialog");
+        given += (given.empty() ? "" : "; ") + std::string(b);
+        std::snprintf(b, sizeof b, "%s %d x%d", CategoryWord(it.category), it.id, it.count);
+        notice += (notice.empty() ? "" : ", ") + std::string(b);
+    }
+    if (!plan.items.empty() && gave == 0) {
+        for (const std::int64_t f : flags) {
+            progress::WriteFlagOwnSave(static_cast<u32>(f), false);
+        }
+        Log("%s: the direct give is not available; flags cleared again, waits for the own world",
+            DescribeItem(g).c_str());
+        return SummonedResult::Defer;
+    }
+    Log("gave %s while summoned (%s): %s; own-save flag(s) %s set (pool, load mode %d), overlay untouched",
+        DescribeItem(g).c_str(), plan.why.c_str(), given.empty() ? "nothing left to give" : given.c_str(),
+        flag_list.c_str(), progress::FlagLoadMode());
+    RequestGameSave("C3 items given while summoned"); // items and flags land in the same save
+    if (gave == 0) {
+        return SummonedResult::Skipped;
+    }
+    if (native < gave) {
+        // Fallback only: the native dialog could not be queued for some item.
+        party::status::SetLastEvent("Party item received: " + notice);
+    }
+    return SummonedResult::Given;
+}
+
 } // namespace
 
 void InstallItemsPatches() {
@@ -904,14 +1476,20 @@ void InstallItemsPatches() {
         return;
     }
     // push rbp; mov rbp, rsp; push r15, r14, r13, r12, rbx (13 bytes; then sub rsp, 0x1a8).
-    if (!HookPrologue(kAwardLot, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
-                      &AwardEntry, "item award (0x17DDC50)")) {
+    // Replaced (not an entry hook): the host's call runs inside ours, so the items its roll gave
+    // (0x17D89F0, GiveListEntry) travel with the grant.
+    void* original = nullptr;
+    if (ReplacePrologue(kAwardLot, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                        reinterpret_cast<const void*>(&AwardReplace), &original, "item award (0x17DDC50)")) {
+        g_award_original = reinterpret_cast<AwardFn>(original);
+    } else {
         Log("no award hook: host-only lots are not reported (flag reports still work)");
     }
     HookPrologue(kGiveList, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                  &GiveListEntry, "item give log (0x17D89F0)");
     SeedHostSeq();
     ParseTestLots();
+    ParseHostTest();
     // C2 hands every host item_lot_picked flag 0 -> 1 to OnHostFlagSet (main thread).
     progress::SetItemFlagObserver(&OnHostFlagSet);
     progress::SetBeforeApplyHook(&SeedLedgerFromOwnSave);
@@ -926,18 +1504,33 @@ void SeedLedgerFromOwnSave() {
         return;
     }
     const u64 man = Ptr(kFlagMan);
-    if (!man || LoadMode(man) != 0 || IsFlag(man, kItemLedgerSeeded)) {
+    const int mode = LoadMode(man);
+    if (!man || (mode != 0 && mode != 1)) {
+        return;
+    }
+    // Mode 0: the live store is the own save. Mode 1 (summoned from the first load on, seamless
+    // play): the own pool, never the host's overlay.
+    auto is_set = [man, mode](std::uint32_t id) { return mode == 0 ? IsFlag(man, id) : OwnSaveFlag(id); };
+    if (is_set(kItemLedgerSeeded)) {
         return;
     }
     // Once per save, before C2 ever wrote a host flag into it: every ledger lot whose awarding
     // event already ran here was earned by this player itself.
-    const std::vector<std::uint32_t> bits = LedgerBitsToSeed([man](std::uint32_t id) { return IsFlag(man, id); });
+    const std::vector<std::uint32_t> bits = LedgerBitsToSeed(is_set);
     for (const std::uint32_t bit : bits) {
-        SetFlag(man, bit);
+        if (mode == 0) {
+            SetFlag(man, bit);
+        } else {
+            progress::WriteFlagOwnSave(bit, true);
+        }
     }
-    SetFlag(man, kItemLedgerSeeded);
-    Log("ledger seeded from the own save: %zu lot%s this player already earned (marker flag %u)", bits.size(),
-        bits.size() == 1 ? "" : "s", kItemLedgerSeeded);
+    if (mode == 0) {
+        SetFlag(man, kItemLedgerSeeded);
+    } else {
+        progress::WriteFlagOwnSave(kItemLedgerSeeded, true);
+    }
+    Log("ledger seeded from the own save (load mode %d): %zu lot%s this player already earned (marker flag %u)", mode,
+        bits.size(), bits.size() == 1 ? "" : "s", kItemLedgerSeeded);
 }
 
 void OnHostFlagSet(std::uint32_t flag) {
@@ -949,7 +1542,11 @@ void OnHostFlagSet(std::uint32_t flag) {
     {
         std::lock_guard<std::mutex> lk(g_host_mu);
         g = ClassifyFlag(static_cast<std::int32_t>(flag), g_host.Captured());
-        queued = g && g_host.Offer(*g);
+    }
+    if (g) {
+        AttachHostRoll(&*g); // main thread (C2's observer)
+        std::lock_guard<std::mutex> lk(g_host_mu);
+        queued = g_host.Offer(*g);
     }
     if (queued) {
         Log("host flag %u -> %s queued for the party", flag, DescribeItem(*g).c_str());
@@ -1014,6 +1611,9 @@ bool TakeHostFullItems(int* slot, std::vector<ItemGrant>* out) {
             list.push_back(g);
         }
     }
+    for (ItemGrant& g : list) {
+        AttachHostRoll(&g);
+    }
     {
         std::lock_guard<std::mutex> lk(g_host_mu);
         for (ItemGrant& g : list) {
@@ -1071,6 +1671,7 @@ void ItemsTick() {
         std::lock_guard<std::mutex> lk(g_guest_mu);
         g_guest.Offer(g_test);
     }
+    HostTestTick(Now());
     const GameSnapshot gs = ReadGameState(false);
     ItemApplyState s;
     s.world_up = gs.world_up && gs.map_id != 0xffffffffu; // the player stands in a map
@@ -1080,18 +1681,37 @@ void ItemsTick() {
     s.own_world = OwnWorld();
     s.game_data = gs.player_rec != 0 && Ptr(kMapItemMan) != 0;
     s.calm = Calm(gs.player, Now());
-    static bool ready_logged = false;
-    if (ItemApplyAllowedNow(s) != ready_logged) {
-        ready_logged = !ready_logged;
-        Log("own-world apply gate %s (%s, load mode %d, own world %d)", ready_logged ? "open" : "closed",
+    static ItemApplyMode gate_logged = ItemApplyMode::None;
+    const ItemApplyMode mode_now = ItemApplyModeNow(s);
+    if (mode_now != gate_logged) {
+        gate_logged = mode_now;
+        Log("apply gate %s (%s, load mode %d, own world %d)",
+            mode_now == ItemApplyMode::Home       ? "open: own world"
+            : mode_now == ItemApplyMode::Summoned ? "open: summoned (direct give, own pool)"
+                                                  : "closed",
             Describe(gs).c_str(), s.load_mode, s.own_world);
     }
     std::optional<ItemGrant> g;
+    ItemApplyMode mode;
     {
         std::lock_guard<std::mutex> lk(g_guest_mu);
         g = g_guest.Step(s, Now());
+        mode = g_guest.LastMode();
     }
     if (!g) {
+        return;
+    }
+    if (mode == ItemApplyMode::Summoned) {
+        const SummonedResult r = ApplySummoned(*g);
+        std::lock_guard<std::mutex> lk(g_guest_mu);
+        if (r == SummonedResult::Defer) {
+            g_guest.Defer(*g);
+            return;
+        }
+        g_guest.Done(g->Key());
+        if (r == SummonedResult::Given) {
+            g_guest.Awarded(Now());
+        }
         return;
     }
     const bool awarded = Apply(*g);
