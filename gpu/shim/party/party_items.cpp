@@ -8,6 +8,8 @@
 #include "party_async_io.h"
 #include "party_perf.h"
 
+#include "../../party_env.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -768,11 +770,10 @@ void InstallItemsPatches() {
         Log("no image; items off");
         return;
     }
-    const char* party = std::getenv("BB_PARTY");
-    if (party && party[0] && !EnvOff("BB_PARTY_FULL_REWARDS")) {
+    if (bb_party_enabled() && !EnvOff("BB_PARTY_FULL_REWARDS")) {
         ParityPatches();
     } else {
-        Log("parity patches off (%s)", party && party[0] ? "BB_PARTY_FULL_REWARDS=0" : "not in party mode");
+        Log("parity patches off (%s)", bb_party_enabled() ? "BB_PARTY_FULL_REWARDS=0" : "not in party mode");
     }
     if (EnvOff("BB_PARTY_ITEMS")) {
         Log("BB_PARTY_ITEMS=0: no item replay");
