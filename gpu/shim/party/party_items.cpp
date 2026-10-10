@@ -1957,9 +1957,29 @@ void ItemGetProbe() {
     if (const u64 hud = g_hud_obj.load(); hud && SafeGet(hud + 0xa88, &model) && model && SafeGet(model + 0x13a8, &cnt)) {
         rows = static_cast<int>(cnt);
     }
-    if (rows != last_rows) {
-        Log("item-get probe: HUD model rows %d (HUD 0x%llx)", rows, static_cast<unsigned long long>(g_hud_obj.load()));
+    // 0x1BFB2A0's open edge (rows 0 -> n): *0x5578A38 < 1, menu +0x84 == 0, GSM +0x1544 == 0
+    // -> menu +0x25C = 1 (and a save request).
+    std::int32_t blk = -1, m84 = -1, m25c = -1;
+    u8 g1544 = 0xff;
+    SafeGet(Guest(0x5578a38), &blk);
+    if (menu) {
+        SafeGet(menu + 0x84, &m84);
+        SafeGet(menu + 0x25c, &m25c);
+    }
+    if (const u64 gsm = Ptr(0x5556678)) {
+        SafeGet(gsm + 0x1544, &g1544);
+    }
+    static std::int32_t last_blk = -2, last_m84 = -2, last_m25c = -2;
+    static int last_g1544 = -2;
+    if (rows != last_rows || blk != last_blk || m84 != last_m84 || m25c != last_m25c || g1544 != last_g1544) {
+        Log("item-get probe: HUD model rows %d (HUD 0x%llx); open gate *0x5578A38 %d, menu+0x84 %d, GSM+0x1544 %u, "
+            "menu+0x25C %d",
+            rows, static_cast<unsigned long long>(g_hud_obj.load()), blk, m84, g1544, m25c);
         last_rows = rows;
+        last_blk = blk;
+        last_m84 = m84;
+        last_m25c = m25c;
+        last_g1544 = g1544;
     }
     if (n != last_n || static_cast<int>(up) != last_up || gate != last_gate) {
         const double now = Now();

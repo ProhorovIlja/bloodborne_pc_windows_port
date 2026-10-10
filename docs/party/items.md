@@ -481,3 +481,33 @@ items [8:102001x1 [gem 102001 (flags 2, rank 1, effects 1125000 -1 -1 -1 -1 -1)]
 ... while summoned (host's item list): blood gem 102001 (flags 2, rank 1, effects 1125000 -1 -1
 -1 -1 -1) (inventory add, item-get dialog); own-save flag(s) 52700180 set (pool, load mode 1),
 overlay untouched`. Unit tests: `test_gems` (party-items-test).
+
+### 10.2 The item-get dialog (2026-10-11)
+
+How it works [static]: the give list `0x17D89F0` (and our `ShowItemGet`) pushes an entry with
+`0x16D8850(*0x553B1C0, &handle, type bits, id, count, stored)` (8 pooled nodes at `+0x10`, the
+live list at `+8`; sound 300). The ItemGetMenuMan tick `0x16D86E0` (from the in-game menu update
+`0x17692F0`) sets **`*0x5562878 + 0x130 = 1`** ("dialog up") while the list is not empty and
+clears the list only when the action-button check `0x1CD91F0(0, ActionButtonMan, 0xB, 0x1130,
+...)` reports the confirm press (gated by player flag `WorldChrMan+0x60 -> +0x58 -> +0x38 -> +0x41`
+bit 7 clear and `*0x5540050`). It is modal: the entries stay until the player confirms. The HUD
+tick `0x1BFB2A0` (from `0x1BF9E10`, HUD object `rdi`) copies up to 5 entries a frame into the HUD
+model (`*(HUD+0xA88) + 0x1238`, 0x48 per row, count `+0x13A8`; item name text via `0x1C5B540`),
+and on the rows' 0 -> n edge with `*0x5578A38 < 1`, `menu+0x84 == 0`, `GSM+0x1544 == 0` sets
+`menu+0x25C = 1` and asks for a save (GSM `+0x1547..+0x1549`). The movie itself is drawn by the
+Scaleform HUD (the `FrpgMenuDlgItemGet` class names have no direct references).
+
+Live (`BB_PARTY_ITEMGET_PROBE=1`, runs r1-r3 and r6, 2 loopback instances, guest summoned in the
+host's Dream, `BB_PARTY_ITEMS_HOST_TEST=2700180,2700110`): on **both** instances, at the host's
+vanilla award and at the guest's replay alike: `1 entry in the dialog list, dialog UP, confirm
+check armed` -> `2 entries ..., dialog UP`; `HUD model rows 1` -> `2`; open gate `*0x5578A38 0,
+menu+0x84 0, GSM+0x1544 0, menu+0x25C 1`. The guest's state is the host's, entry for entry (the
+gem through the award's own give list, the other categories through `ShowItemGet`), and it stays
+up (nobody presses confirm in the test). Screenshots (`tools/mp/shot.py --watch`, PrintWindow of
+the background windows, 0.5 / 3 / 8 / 15 s after the give) still show **no box on either
+instance**, including the host's vanilla one: every game-side condition of the dialog holds, so
+what is missing is the Scaleform HUD draw of that element in these windowed background test
+instances (a port / renderer matter, not party state). Not fixed here; the probe is the tool for
+the next step (a foreground run with input to see whether the element ever draws in the port).
+Note for shot.py: the watcher only reads log lines written while it runs (start it with the run,
+`--seconds` longer than any queue wait).
