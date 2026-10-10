@@ -1211,6 +1211,8 @@ struct Global {
     std::string label = "party";
     std::string dump_dir;
     int scan_ms = 1000;
+    std::vector<u32> test_clear;  // BB_PARTY_PROGRESS_TEST_CLEAR: cleared once, first steady own world
+    bool start_dumped = false;    // BB_PARTY_FLAG_DUMP: one "start" dump at the first steady world
 };
 thread_local bool Global::self_write = false;
 
@@ -1457,6 +1459,19 @@ void Init() {
         }
         g.policy = Policy::FromEnv();
         g.tracker = HostTracker(NewEpoch());
+        if (const char* t = std::getenv("BB_PARTY_PROGRESS_TEST_CLEAR"); t && t[0]) {
+            for (const char* p = t; *p;) {
+                char* end = nullptr;
+                const unsigned long id = std::strtoul(p, &end, 10);
+                if (end == p) {
+                    break;
+                }
+                if (id && !NeverWritable(u32(id))) {
+                    g.test_clear.push_back(u32(id));
+                }
+                p = *end ? end + 1 : end;
+            }
+        }
         if (!g.enabled) {
             Log("off (BB_PARTY_PROGRESS=0)");
             return;
@@ -1549,6 +1564,29 @@ void Tick(const GameSnapshot& s) {
     }
     const auto now = Clock::now();
     const Role role = CurrentRole();
+    if (g.dump && !g.start_dumped) {
+        // What the save held when the world came up (before anything is applied): the restart check.
+        g.start_dumped = true;
+        const std::string keep = g.label;
+        g.label = "start";
+        WriteDumps(g, store, s);
+        g.label = keep;
+    }
+    if (!g.test_clear.empty() && store.LoadMode() == 0) {
+        // Test fixture (a guest save that lacks some host progress): before anything is applied.
+        std::string list;
+        for (u32 id : g.test_clear) {
+            bool before = false, after = false;
+            store.ReadOwnSave(id, &before);
+            store.WriteOwnSave(id, false);
+            store.ReadOwnSave(id, &after);
+            list += (list.empty() ? "" : ",") + std::to_string(id) + ":" + std::to_string(int(before)) + "->" +
+                    std::to_string(int(after));
+        }
+        Log("test: cleared in the own save (%s): %s", CategoryName(CategoryOf(g.test_clear.front())), list.c_str());
+        g.test_clear.clear();
+        g.dump_session = true;
+    }
     if (role == Role::Host && store.LoadMode() == 0) {
         HostTick(g, store, s, now);
     } else if (role == Role::Guest) {
