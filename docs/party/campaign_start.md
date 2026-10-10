@@ -376,6 +376,8 @@ empty save folder (`instances.py setup --saves <empty dir>`, or `BB_PARTY_SAVE=s
   them out as ShopLineupParam rows 2000 / 2010 with price 0, there is no item lot); then the lamp warp
   0x13CDF30 (default 2412951, Central Yharnam lamp). Insight stays 0; the bells come from the director's
   grants (§7). Without `BB_TEST_NEWGAME` it also skips a playing opening cutscene (existing clinic save).
+  While it runs (flags set, warp loading) the director holds its bell grants and bells
+  (`PrologueSkipBusy`). In party mode the host's warp is a host travel (B1) and goes to the guests too.
   Log: `Party: prologue skip:`.
 * `BB_PARTY_DIRECTOR_TEST=bell_guest` / `bell_host`: once ready and granted, ring the bell once through
   the item path (SpEffect 9005 / 9000 -> SendSign -> FROM server), for single-instance checks.
