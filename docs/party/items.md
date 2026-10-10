@@ -224,6 +224,35 @@ Message: `PARTY_CMD ITEM_LOT {seq, lot, flag (-1 if none), ledgerIdx (-1 if flag
   sends the full set; the guest applies what it lacks. Live messages are only an optimisation; resending is
   always safe.
 * Optional symmetry: members' own solo pickups can be pushed to the others the same way (union policy).
+* **Bug fixed 2026-10-10 (blocking "Unable to acquire Sword Hunter Badge due to inventory or storage
+  max" dialog on a guest).** Root cause: for a flagless lot the guest checked only its **ledger bit**
+  `60009000 + idx`. That bit exists only for C3 replays; a lot the guest's save earned by itself (solo play
+  before the party, or here two test saves that started as the same copy) has the awarding event's
+  completion flag set but no ledger bit, so the host's `items_full` list re-awarded it. Live evidence (run A):
+  `gave ... lot 50000010 (ledger 36 = flag 60009036, full)` (goods 4114, Sword Hunter Badge, `maxNum` 1, no
+  storage) although the guest's own flag 12411700 (ledger 36's event) was set; likewise lots 29000, 30000,
+  31000, 50000001 (done flags 9066, 9067, 12411800, 12401800). The game then refuses the unique item with a
+  modal dialog over the reward list. Fixes in `Apply` (party_items.cpp): (1) a ledger lot whose
+  `ItemLedgerDoneFlag` is set in the guest's own save only gets its ledger bit; (2) before any award the lot's
+  slots are read from the loaded ItemLotParam (`GameParamRow`, lotItemId +0x00, category +0x20, base point
+  +0x40, num +0x8A) and every goods slot is checked against the inventory (`0x14D9E80`) and EquipParamGoods
+  `maxNum` (+0x36) / `maxRepositoryNum` (+0x49): a unique item already held (`Owned`) or a count that would
+  pass the max with no storage room (`Full`) skips the lot and sets its flag / ledger bit instead
+  (`ClassifyLotFit`, unit-tested); (3) popups: 8 s between two real awards (skips take no time) and none
+  within 15 s of an HP loss (ChrIns +0x3B0 -> +0x20 -> +0xF8). The own-world gate (load mode 0, own-world
+  byte 1, session idle or hosting) was re-checked: no award while summoned. Not done: suppressing the
+  reward popup itself (`0x17D89F0` opens it; no flag found yet) and a menu-open check.
+  Live (2026-10-10): run C1 skipped the five lots above through rule (1) (`this save's own event flag
+  12411700 says it was awarded here`, no award, no dialog); run C3's `BB_PARTY_ITEMS_TEST=10010,50000010`
+  probe read the ItemLotParam / EquipParamGoods rows and the inventory on both instances: `goods 200: held
+  1 + 1 > max 1, no storage` and `goods 4114: held 1 + 1 > max 1` -> `Owned` (the param file type is
+  `ITEMLOT_PARAM_ST`, not `ITEM_LOT_PARAM_ST`).
+  **Rule (1) replaced (livesync, 2026-10-10):** checking `ItemLedgerDoneFlag` at apply time also skips
+  every boss reward the guest never got, because C2 writes the host's boss / event flags into the guest's
+  save first (join snapshot at the first steady world, 30 frames, before the 90-frame item gate; live
+  flags while summoned): a boss killed together sets 12401800 in the guest's save, then lot 50000001 was
+  skipped. Now the save's own history is recorded once as ledger bits before C2 touches it (ledger
+  seeding, below) and own-world ledger awards set their bit in the award hook; rules (2) and (3) stay.
 
 ### 6.3 Applying on a guest (main thread)
 
@@ -320,7 +349,16 @@ the rows its tables do not know (logged as rejected), never more.
 * Guest: grants are applied one at a time (1.5 s apart) once the gate held 90 frames: world up with a
   known map, no loading screen, flag store load mode 0, `GSM+0x1592 == 1`, session role 0 or 3, game data
   and MapItemMan present. Skip if the done flag is set; else `0x17DDC50(mim, lot, 0)`, then the ledger
-  flag. `0x17D89F0` is hooked only to log what our own award adds to the inventory.
+  flag. `0x17D89F0` is hooked only to log what our own award adds to the inventory. A skip or a mark
+  opens no popup and does not hold the next grant (a rejoin's ~130-lot full list is almost all skips;
+  with the 1.5 s spacing on skips too a new lot behind it waited ~200 s - live run, 2026-10-10).
+* Ledger seeding (live run 2026-10-10: a guest on its first party session was given lots 29000, 30000,
+  31000, 50000001, 50000010 again, which its own save had earned solo): once per save (marker flag
+  60009999, the last ledger bit), at the first steady own world and **before** C2 applies any host
+  flag (C2's before-apply hook, `progress::SetBeforeApplyHook`), every ledger lot whose done flag the
+  save holds gets its ledger bit. Afterwards an own-world `hostOnly` award of a ledger lot (any role)
+  sets its bit in the award hook. A save that took C2 host flags before seeding existed may hold host
+  boss flags and so skip a ledger lot it never got (dev saves only).
 * Guest "mark": a `hostOnly == 0` lot with a flag that the guest receives while summoned (its flag only
   reaches the overlay) is queued as a mark; at home its flag is set (no item) before any replay, so the
   host's later flag report does not duplicate it. The mark lives in memory: a crash before going home
