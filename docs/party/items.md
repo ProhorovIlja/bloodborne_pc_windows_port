@@ -224,6 +224,24 @@ Message: `PARTY_CMD ITEM_LOT {seq, lot, flag (-1 if none), ledgerIdx (-1 if flag
   sends the full set; the guest applies what it lacks. Live messages are only an optimisation; resending is
   always safe.
 * Optional symmetry: members' own solo pickups can be pushed to the others the same way (union policy).
+* **Bug fixed 2026-10-10 (blocking "Unable to acquire Sword Hunter Badge due to inventory or storage
+  max" dialog on a guest).** Root cause: for a flagless lot the guest checked only its **ledger bit**
+  `60009000 + idx`. That bit exists only for C3 replays; a lot the guest's save earned by itself (solo play
+  before the party, or here two test saves that started as the same copy) has the awarding event's
+  completion flag set but no ledger bit, so the host's `items_full` list re-awarded it. Live evidence (run A):
+  `gave ... lot 50000010 (ledger 36 = flag 60009036, full)` (goods 4114, Sword Hunter Badge, `maxNum` 1, no
+  storage) although the guest's own flag 12411700 (ledger 36's event) was set; likewise lots 29000, 30000,
+  31000, 50000001 (done flags 9066, 9067, 12411800, 12401800). The game then refuses the unique item with a
+  modal dialog over the reward list. Fixes in `Apply` (party_items.cpp): (1) a ledger lot whose
+  `ItemLedgerDoneFlag` is set in the guest's own save only gets its ledger bit; (2) before any award the lot's
+  slots are read from the loaded ItemLotParam (`GameParamRow`, lotItemId +0x00, category +0x20, base point
+  +0x40, num +0x8A) and every goods slot is checked against the inventory (`0x14D9E80`) and EquipParamGoods
+  `maxNum` (+0x36) / `maxRepositoryNum` (+0x49): a unique item already held (`Owned`) or a count that would
+  pass the max with no storage room (`Full`) skips the lot and sets its flag / ledger bit instead
+  (`ClassifyLotFit`, unit-tested); (3) popups: 8 s between two real awards (skips take no time) and none
+  within 15 s of an HP loss (ChrIns +0x3B0 -> +0x20 -> +0xF8). The own-world gate (load mode 0, own-world
+  byte 1, session idle or hosting) was re-checked: no award while summoned. Not done: suppressing the
+  reward popup itself (`0x17D89F0` opens it; no flag found yet) and a menu-open check.
 
 ### 6.3 Applying on a guest (main thread)
 
