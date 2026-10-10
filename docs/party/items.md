@@ -242,6 +242,11 @@ Message: `PARTY_CMD ITEM_LOT {seq, lot, flag (-1 if none), ledgerIdx (-1 if flag
   within 15 s of an HP loss (ChrIns +0x3B0 -> +0x20 -> +0xF8). The own-world gate (load mode 0, own-world
   byte 1, session idle or hosting) was re-checked: no award while summoned. Not done: suppressing the
   reward popup itself (`0x17D89F0` opens it; no flag found yet) and a menu-open check.
+  Live (2026-10-10): run C1 skipped the five lots above through rule (1) (`this save's own event flag
+  12411700 says it was awarded here`, no award, no dialog); run C3's `BB_PARTY_ITEMS_TEST=10010,50000010`
+  probe read the ItemLotParam / EquipParamGoods rows and the inventory on both instances: `goods 200: held
+  1 + 1 > max 1, no storage` and `goods 4114: held 1 + 1 > max 1` -> `Owned` (the param file type is
+  `ITEMLOT_PARAM_ST`, not `ITEM_LOT_PARAM_ST`).
 
 ### 6.3 Applying on a guest (main thread)
 
