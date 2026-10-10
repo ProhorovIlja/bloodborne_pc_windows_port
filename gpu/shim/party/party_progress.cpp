@@ -1292,7 +1292,9 @@ struct Global {
     std::string dump_dir;
     int scan_ms = 1000;
     std::vector<u32> test_clear;  // BB_PARTY_PROGRESS_TEST_CLEAR: cleared once, first steady own world
-    std::vector<u32> test_read;   // BB_PARTY_PROGRESS_TEST_READ: own-save values logged at each steady load
+    std::vector<u32> test_read;
+    FlagSnapshot host_snap;       // guest: the host's last full snapshot (late-joiner catch-up)
+    bool have_host_snap = false;   // BB_PARTY_PROGRESS_TEST_READ: own-save values logged at each steady load
     bool start_dumped = false;    // BB_PARTY_FLAG_DUMP: one "start" dump at the first steady world
 };
 thread_local bool Global::self_write = false;
@@ -1842,6 +1844,8 @@ void ApplyHostSnapshot(const FlagSnapshot& snap) {
     // apply then only writes the planned flags.
     GuestApplier::SnapshotPlan plan = GuestApplier::PlanSnapshot(snap, policy);
     std::lock_guard<std::mutex> lk(g.mu);
+    g.host_snap = snap;
+    g.have_host_snap = true;
     g.applier.QueueSnapshot(snap, std::move(plan));
     Log("host snapshot queued: %zu blocks, seq %llu", snap.blocks.size(), static_cast<unsigned long long>(snap.seq));
 }
@@ -1890,6 +1894,18 @@ bool ReadFlag(u32 id, bool* value) {
 bool WriteFlagOwnSave(u32 id, bool value) {
     const FlagStore store(Manager(), GameOps());
     return store.Valid() && store.WriteOwnSave(id, value);
+}
+
+bool HostSnapshotFlag(u32 id, bool* value) {
+    Init();
+    Global& g = G();
+    std::lock_guard<std::mutex> lk(g.mu);
+    if (!g.have_host_snap) {
+        return false;
+    }
+    bool known = false;
+    *value = g.host_snap.Get(id, &known);
+    return known;
 }
 
 bool ReadFlagOwnSave(u32 id, bool* value) {
