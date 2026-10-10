@@ -1183,6 +1183,7 @@ constexpr std::size_t kMaxHookIds = 1 << 16;
 constexpr u64 kStableFrames = 30;         // world up, no loading, same store for this long
 constexpr u64 kMode0Window = 600;         // frames after that in which mode 0 applies
 constexpr double kDumpMinGap = 2.0;       // seconds between sync dumps
+constexpr u64 kRefWalkEvery = 30;         // host scans between two full tree walks (see ScanRefs)
 
 using Clock = std::chrono::steady_clock;
 
@@ -1224,6 +1225,13 @@ struct Global {
     Policy policy;
 
     // main thread only
+    // The candidate blocks' addresses, from the last full walk of the flag tree (ScanRefs): the
+    // periodic diff reads just these 267 blocks; the ~1200-node walk runs after every load (the
+    // tree is rebuilt there), every kRefWalkEvery scans and whenever a cached read fails.
+    std::vector<BlockRef> scan_refs;
+    u64 scan_refs_man = 0, scan_refs_pool = 0;
+    u64 scans_since_walk = 0;
+    bool scan_refs_ok = false;
     u64 frame = 0, stable = 0;
     u64 last_man = 0;
     int last_mode = -2;
@@ -1399,16 +1407,31 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
     std::vector<FlagChange> changes;
     std::vector<std::pair<u32, std::array<u8, kBlockBytes>>> blocks;
     if (scan_due) {
-        const auto& cands = CandidateBlocks();
-        store.ForEachBlock([&](const BlockRef& r) {
-            if (!std::binary_search(cands.begin(), cands.end(), r.block)) {
-                return;
-            }
+        const bool walk = !g.scan_refs_ok || g.scan_refs_man != store.manager() || g.scan_refs_pool != store.Pool() ||
+                          g.stable == kStableFrames || g.scans_since_walk >= kRefWalkEvery;
+        if (walk) {
+            // The same blocks the walk used to read directly, in the same (ascending) order.
+            const auto& cands = CandidateBlocks();
+            g.scan_refs.clear();
+            g.scan_refs_ok = store.ForEachBlock([&](const BlockRef& r) {
+                if (std::binary_search(cands.begin(), cands.end(), r.block)) {
+                    g.scan_refs.push_back(r);
+                }
+            });
+            g.scan_refs_man = store.manager();
+            g.scan_refs_pool = store.Pool();
+            g.scans_since_walk = 0;
+        }
+        ++g.scans_since_walk;
+        blocks.reserve(g.scan_refs.size());
+        for (const BlockRef& r : g.scan_refs) {
             std::array<u8, kBlockBytes> data;
             if (store.ReadBlockBytes(r, data.data())) {
                 blocks.emplace_back(r.block, data);
+            } else {
+                g.scan_refs_ok = false; // the next scan walks the tree again
             }
-        });
+        }
     }
     std::vector<std::pair<u32, bool>> values;
     values.reserve(ids.size());
