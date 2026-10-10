@@ -491,3 +491,17 @@ the first Gehrman fight and first-visit Yahar'gul apply SpEffects 9120/9121. Opt
   `0x131A9F0` queued, playing bit rose, fell after 85 s, control back, world up;
   `cutscene:21000000,mirror` (mode 2, the phantom call): played 27.6 s, control back. The sidecar
   replayed an unfinished item after a restart (persistence path).
+
+## 9. Replays while summoned (seamless play, 2026-10-10)
+
+The replay queue no longer waits for an own-world phase that B2 may never have. Once the guest is
+a steady phantom (role 6, `kStableTicks`) and calm (no HP lost for 15 s), `GuestStory::Step`
+runs the first queued item **except endings** (`summoned_replay`, `BB_PARTY_STORY_SUMMONED=0`
+restores the old behaviour): a scene the guest missed plays through the phantom path (mode 2,
+the live mirror's call), then the time of day and the story flags go into the **own pool**
+(`progress::WriteFlagOwnSave`; 9800..9802 as three bits, no world-refresh byte - the world shown
+is the host's), never into the host-world overlay, followed by a save request. `st.tod_value`
+is read from the own pool while summoned ("never turn the clock back" compares the own save).
+Endings stay queued until the own world: they warp to the own Hunter's Dream (documented wait).
+Unit tests: `test_mirror_then_replay` (now finishes as a phantom),
+`test_replay_waits_home_when_summoned_off`, `test_missed_scene_replayed_while_summoned`.

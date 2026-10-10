@@ -259,3 +259,18 @@ and, separately, the raw pool (label suffix `-pool`, blocks numbered by `id/1000
   from EMEVD/EMELD only.
 - Chalice dungeons (area 29 blocks, areas 41-47, area 99) are out of scope.
 - 70000030/70000050 (type-7 global) and 72400512 (set by the first three boss kills) meaning.
+
+## 11. Silent catch-up: boss flags of the current map (2026-10-11)
+
+A join snapshot applied in load mode 0 wrote the host's boss flags into a guest standing in that
+boss's map (a fresh guest in the clinic, m24_01: Cleric Beast 12411800). The map's boss event then
+sees the kill and plays it: "PREY SLAUGHTERED", the music change, its reward branch - without the
+guest having been there. `GuestApplier::Apply(store, policy, allow_mode0, map_id)` now holds back
+every `boss_defeated` flag whose id names the map the guest stands in (`HoldBossFlagInMode0`:
+TAABZnnn area AA / block B == map id area / block) and writes it later: in load mode 1 (the own
+pool, which the running events never see) or after a load into another map. The log says
+"N boss flag(s) of this map held back". Live: the fresh guest's join snapshot in the clinic held
+2 boss flags; after the summon 12411800 was 1 in the own pool, and after a restart the own save
+read `12401800=1 12411800=1`. Rewards for such kills come only through C3. A banner is still
+shown when the guest **witnessed** the kill (it is in the host's world; the host's event plays).
+C2 mode-1 applies now also request a save (seamless guests may not save for a long time).
