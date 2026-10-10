@@ -4,6 +4,8 @@
 // memory ops, policy, diff, JSON, BBPF) and builds without the game (BB_PARTY_PROGRESS_NO_GAME,
 // tests/test_party_progress.cpp); the second half is the game glue (hooks, tick, globals).
 #include "party_progress.h"
+#include "party_async_io.h"
+#include "party_perf.h"
 
 #include "../net/json.h"
 
@@ -702,11 +704,32 @@ struct NodeView {
     std::int32_t kind = 0;
     u64 storage = 0;
 };
+// Two guarded reads per node (links + is_nil, then key / kind / storage of a real node) instead
+// of one per field: the host's periodic diff walks every node of the tree on the main thread.
 bool ReadNode(const MemOps& ops, u64 n, NodeView* v) {
-    return Rd(ops, n + man::kNodeLeft, &v->left) && Rd(ops, n + man::kNodeRight, &v->right) &&
-           Rd(ops, n + man::kNodeIsNil, &v->is_nil) && (v->is_nil || (Rd(ops, n + man::kNodeKey, &v->key) &&
-                                                                      Rd(ops, n + man::kNodeKind, &v->kind) &&
-                                                                      Rd(ops, n + man::kNodeStorage, &v->storage)));
+    static_assert(man::kNodeLeft == 0 && man::kNodeRight == 0x10 && man::kNodeIsNil == 0x19, "node links");
+    static_assert(man::kNodeKey == 0x20 && man::kNodeKind == 0x28 && man::kNodeStorage == 0x30, "node payload");
+    if (!n || !ops.read) {
+        return false;
+    }
+    u8 links[0x1a];
+    if (!ops.read(n, links, sizeof links)) {
+        return false;
+    }
+    std::memcpy(&v->left, links + man::kNodeLeft, 8);
+    std::memcpy(&v->right, links + man::kNodeRight, 8);
+    v->is_nil = links[man::kNodeIsNil];
+    if (v->is_nil) {
+        return true;
+    }
+    u8 payload[0x18];
+    if (!ops.read(n + man::kNodeKey, payload, sizeof payload)) {
+        return false;
+    }
+    std::memcpy(&v->key, payload, 4);
+    std::memcpy(&v->kind, payload + (man::kNodeKind - man::kNodeKey), 4);
+    std::memcpy(&v->storage, payload + (man::kNodeStorage - man::kNodeKey), 8);
+    return true;
 }
 } // namespace
 
@@ -766,7 +789,7 @@ bool FlagStore::ForEachBlock(const std::function<void(const BlockRef&)>& fn, std
     if (!Rd(ops_, head_ + man::kNodeParent, &n)) {
         return false;
     }
-    std::vector<u64> stack;
+    std::vector<NodeView> stack; // the nodes as read on the way down (each node is read once)
     std::size_t visited = 0;
     bool have_prev = false;
     u32 prev = 0;
@@ -782,16 +805,15 @@ bool FlagStore::ForEachBlock(const std::function<void(const BlockRef&)>& fn, std
             if (stack.size() > 96) {
                 return false;
             }
-            stack.push_back(n);
+            stack.push_back(v);
             n = v.left;
         }
         if (stack.empty()) {
             return true;
         }
-        n = stack.back();
+        const NodeView v = stack.back();
         stack.pop_back();
-        NodeView v;
-        if (!ReadNode(ops_, n, &v) || ++visited > max_nodes || (have_prev && v.key <= prev)) {
+        if (++visited > max_nodes || (have_prev && v.key <= prev)) {
             return false;
         }
         have_prev = true;
@@ -1171,8 +1193,8 @@ void Log(const char* fmt, ...) {
     va_start(ap, fmt);
     std::vsnprintf(line, sizeof line, fmt, ap);
     va_end(ap);
-    std::printf("Party progress: %s\n", line);
-    std::fflush(stdout);
+    perf::Scope z(perf::Zone::Log);
+    coop::asyncio::Print(std::string("Party progress: ") + line + "\n"); // never blocks the caller (party_async_io.h)
 }
 
 struct Global {
@@ -1274,12 +1296,14 @@ bool Capturing() {
 }
 
 BB_COOP_SYSV void OnSetEventFlag(u64 man, u64 id, u64, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookSetFlag);
     if (Capturing() && man == Manager()) {
         NoteId(u32(id));
     }
 }
 
 BB_COOP_SYSV void OnSetEventFlagValue(u64 man, u64 first, u64 bits, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookSetFlagValue);
     if (!Capturing() || man != Manager() || u32(bits) == 0 || u32(bits) > 32) {
         return;
     }
@@ -1289,12 +1313,14 @@ BB_COOP_SYSV void OnSetEventFlagValue(u64 man, u64 first, u64 bits, u64, u64, u6
 }
 
 BB_COOP_SYSV void OnBroadcastSetFlag(u64, u64 id, u64, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookBroadcastFlag);
     if (Capturing() && std::int32_t(u32(id)) >= 0) {
         NoteId(u32(id));
     }
 }
 
 BB_COOP_SYSV void OnEmkEndOrRestart(u64 self, u64, u64, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookEmkEnd);
     if (!Capturing()) {
         return;
     }
@@ -1325,11 +1351,14 @@ std::string DefaultDumpDir() {
 }
 
 void WriteDumps(Global& g, const FlagStore& store, const GameSnapshot& s) {
-    std::error_code ec;
+    perf::Scope z(perf::Zone::ProgressDump);
     if (g.dump_dir.empty()) {
         g.dump_dir = DefaultDumpDir();
     }
-    std::filesystem::create_directories(g.dump_dir, ec);
+    asyncio::Run([dir = g.dump_dir] {
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+    });
     BbpfHeader h;
     h.map_id = s.map_id;
     h.load_mode = store.LoadMode();
@@ -1340,20 +1369,24 @@ void WriteDumps(Global& g, const FlagStore& store, const GameSnapshot& s) {
     h.frame = g.frame;
     for (int pass = 0; pass < 2; ++pass) {
         h.label = pass ? (g.label + "-pool").substr(0, 16) : g.label.substr(0, 16);
-        const std::vector<BbpfBlock> blocks = pass ? CollectPool(store) : CollectVisible(store);
+        // The game's memory is read here (main thread); encoding and the file go to the writer.
+        std::vector<BbpfBlock> blocks = pass ? CollectPool(store) : CollectVisible(store);
         char name[96];
         std::snprintf(name, sizeof name, "/flags_%s_%llu.bbpf", h.label.c_str(), static_cast<unsigned long long>(g.frame));
-        const std::string path = g.dump_dir + name;
-        if (BbpfWriteFile(path, h, blocks)) {
-            Log("dump %s (%zu blocks, mode %d)", path.c_str(), blocks.size(), h.load_mode);
-        } else {
-            Log("dump %s failed", path.c_str());
-        }
+        std::string path = g.dump_dir + name;
+        asyncio::Run([path = std::move(path), h, blocks = std::move(blocks)] {
+            if (BbpfWriteFile(path, h, blocks)) {
+                Log("dump %s (%zu blocks, mode %d)", path.c_str(), blocks.size(), h.load_mode);
+            } else {
+                Log("dump %s failed", path.c_str());
+            }
+        });
     }
     g.last_dump = Clock::now();
 }
 
 void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Clock::time_point now) {
+    perf::Scope z(perf::Zone::ProgressScan);
     std::vector<u32> ids;
     {
         std::lock_guard<std::mutex> lk(g.hook_mu);
@@ -1425,6 +1458,7 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
 }
 
 void GuestTick(Global& g, const FlagStore& store) {
+    perf::Scope z(perf::Zone::ProgressGuest);
     const bool mode0_window = g.stable >= kStableFrames && g.stable < kStableFrames + kMode0Window;
     std::lock_guard<std::mutex> lk(g.mu);
     const std::size_t pending = g.applier.Pending();
