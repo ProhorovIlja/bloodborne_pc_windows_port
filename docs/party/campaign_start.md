@@ -351,3 +351,34 @@ state and weapons. Keep the C5 rule: party saves separate from solo saves.
   login never ran after ss.info), so no `summon_messenger/create` could follow either way. Static: SendSign
   0x1901320 reaches none of 0x14D9E80 / 0x157F200 / 0x131CB70 / 0x14D0BE0 within 7 levels of direct calls
   (virtual calls not followed) [I]. Grants stay on by default, so ownership does not matter for the party.
+
+## 8. Test aids: fresh characters without a person at the pad (TEST ONLY)
+
+`gpu/shim/party/test_newgame.{h,cpp}` (pure driver unit-tested by `party-newgame-test`). **These are
+test aids for automated runs; they are never on in normal play and they write to the save.** Use an
+empty save folder (`instances.py setup --saves <empty dir>`, or `BB_PARTY_SAVE=separate` with an empty
+`user\savedata_party`).
+
+* `BB_TEST_NEWGAME=1` (+ `BB_TEST_NAME=Hunter1`): from the title of an empty save, the director's pad
+  press (no OS input) walks New Game -> Brightness (Down, Cross on Next) -> Controls (Up wraps to Next,
+  Cross) -> the "Paleblood" movie (Options skips it) -> Contract (Cross on Enter Name: the ImeDialog
+  HLE fills `BB_TEST_NAME`, else `BB_IME_TEXT`, else "Hunter"; Up wraps to Finish, Cross; "Finalise
+  contract?" preselects NO: Left, Cross) -> loading -> the opening cutscene 24010005 (Options skips it;
+  12410000 ON, 9180 OFF, 9402 ON as in vanilla). Default character (Male, Young, Milquetoast). Each
+  step is checked in-process (movie start = sceAvPlayerAddSource, name box = ImeDialog count, loading
+  screen, flags) and retried when the game ignored it. In party mode it waits for the party link and
+  the end of the FROM sign-in first (the same gate as auto-Continue, which is off while it runs). Taps
+  are held 0.12 s: menus auto-repeat a held direction (0.25 s moved two rows). Log: `Party: newgame:`.
+* `BB_TEST_PROLOGUE_SKIP=1` (+ `BB_TEST_PROLOGUE_WARP=yharnam|sickroom|dream|<ReturnPoint id>|0`):
+  once the opening is done in the player's own world, sets 12410000, 9402, 9401, 12417810, the
+  messengers' choice flags 72101000 / 72101011, 12101020, 12101021, 12100105, 9404, clears 9180; gives
+  the starting weapons 7000000 (right) and 14000000 (left) through GiveItemDirect (the messengers hand
+  them out as ShopLineupParam rows 2000 / 2010 with price 0, there is no item lot); then the lamp warp
+  0x13CDF30 (default 2412951, Central Yharnam lamp). Insight stays 0; the bells come from the director's
+  grants (§7). Without `BB_TEST_NEWGAME` it also skips a playing opening cutscene (existing clinic save).
+  While it runs (flags set, warp loading) the director holds its bell grants and bells
+  (`PrologueSkipBusy`). In party mode the host's warp is a host travel (B1) and goes to the guests too.
+  Log: `Party: prologue skip:`.
+* `BB_PARTY_DIRECTOR_TEST=bell_guest` / `bell_host`: once ready and granted, ring the bell once through
+  the item path (SpEffect 9005 / 9000 -> SendSign -> FROM server), for single-instance checks.
+
