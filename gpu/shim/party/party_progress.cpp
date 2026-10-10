@@ -937,12 +937,47 @@ void GuestApplier::QueueChanges(u64 epoch, const std::vector<FlagChange>& change
 }
 
 void GuestApplier::QueueSnapshot(const FlagSnapshot& snap) {
+    QueueSnapshot(snap, SnapshotPlan{});
+}
+
+GuestApplier::SnapshotPlan GuestApplier::PlanSnapshot(const FlagSnapshot& snap, const Policy& policy) {
+    SnapshotPlan plan;
+    plan.valid = true;
+    plan.policy = policy;
+    for (const auto& [block, bits] : snap.blocks) {
+        const auto* mask = CandidateMask(block);
+        if (!mask) {
+            continue;
+        }
+        std::array<u8, kBlockBytes> set{};
+        for (u32 b : bits) {
+            if (b < kBitsPerBlock) {
+                PutBit(set.data(), b, true);
+            }
+        }
+        for (u32 b = 0; b < kBitsPerBlock; ++b) {
+            if (!GetBit(mask->data(), b)) {
+                continue;
+            }
+            const u32 id = block * kBitsPerBlock + b;
+            const bool v = GetBit(set.data(), b);
+            const SyncMode m = ModeFor(policy, id);
+            if (m == SyncMode::State || (m == SyncMode::SetOnly && v)) {
+                plan.flags.emplace_back(id, v);
+            }
+        }
+    }
+    return plan;
+}
+
+void GuestApplier::QueueSnapshot(const FlagSnapshot& snap, SnapshotPlan plan) {
     cursor_.Reset(snap.epoch, snap.seq);
     // A newer snapshot supersedes a queued one (a host's stream of them must not pile up).
     items_.erase(std::remove_if(items_.begin(), items_.end(), [](const Item& i) { return i.snapshot; }), items_.end());
     Item it;
     it.snapshot = true;
     it.snap = snap;
+    it.plan = std::move(plan);
     items_.push_back(std::move(it));
     Trim();
 }
@@ -989,6 +1024,12 @@ std::size_t GuestApplier::Apply(const FlagStore& store, const Policy& policy, bo
         if (!it.snapshot) {
             for (const FlagChange& c : it.changes) {
                 ApplyOne(store, policy, c.id, c.value);
+            }
+            continue;
+        }
+        if (it.plan.valid && it.plan.policy == policy) {
+            for (const auto& [id, v] : it.plan.flags) {
+                ApplyOne(store, policy, id, v);
             }
             continue;
         }
@@ -1183,6 +1224,7 @@ constexpr std::size_t kMaxHookIds = 1 << 16;
 constexpr u64 kStableFrames = 30;         // world up, no loading, same store for this long
 constexpr u64 kMode0Window = 600;         // frames after that in which mode 0 applies
 constexpr double kDumpMinGap = 2.0;       // seconds between sync dumps
+constexpr std::size_t kScanSlices = 4;  // frames a scan round's block reads are spread over
 constexpr u64 kRefWalkEvery = 300;        // host scans between two safety walks of the tree (scan_refs)
 
 using Clock = std::chrono::steady_clock;
@@ -1228,13 +1270,16 @@ struct Global {
     // The candidate blocks' addresses, from the last full walk of the flag tree (ScanRefs): the
     // periodic diff reads just these 267 blocks; the ~1200-node walk runs after every load (the
     // tree is rebuilt there), every kRefWalkEvery scans and whenever a cached read fails. A walk
-    // takes its own frame: the blocks are read and compared on the next one (scan_deferred).
+    // takes its own frame; the blocks are then read and compared in kScanSlices frames.
     std::vector<BlockRef> scan_refs;
     u64 scan_refs_man = 0, scan_refs_pool = 0;
     u64 scans_since_walk = 0;
     bool scan_refs_ok = false;
-    bool scan_deferred = false;
-    u64 deferred_at_stable = 0;
+    bool round_active = false;   // a scan round runs (its slices on consecutive frames)
+    std::size_t round_pos = 0;   // next scan_refs index
+    std::size_t round_blocks = 0;
+    u64 round_at_stable = 0;     // g.stable of the round's last frame (a load in between ends it)
+    bool scan_overflow = false;  // the hooks overflowed: a round is due
     u64 frame = 0, stable = 0;
     u64 last_man = 0;
     int last_mode = -2;
@@ -1403,19 +1448,20 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
         std::lock_guard<std::mutex> lk(g.hook_mu);
         ids.swap(g.hook_ids);
     }
-    const bool overflow = g.hook_overflow.exchange(false);
-    if (g.scan_deferred && g.stable != g.deferred_at_stable + 1) {
-        g.scan_deferred = false; // a load came between: walk again
+    g.scan_overflow = g.hook_overflow.exchange(false) || g.scan_overflow;
+    if (g.round_active && (g.stable != g.round_at_stable + 1 || g.stable == kStableFrames)) {
+        g.round_active = false; // a load came between: the next round walks again
     }
-    bool scan_due = g.scan_deferred || overflow || g.scans == 0 ||
-                          std::chrono::duration<double, std::milli>(now - g.last_scan).count() >= g.scan_ms ||
-                          g.stable == kStableFrames;  // right after a load
-    std::vector<FlagChange> changes;
-    std::vector<std::pair<u32, std::array<u8, kBlockBytes>>> blocks;
-    if (scan_due) {
-        const bool walk = !g.scan_deferred &&
-                          (!g.scan_refs_ok || g.scan_refs_man != store.manager() || g.scan_refs_pool != store.Pool() ||
-                           g.stable == kStableFrames || g.scans_since_walk >= kRefWalkEvery);
+    // A scan round: (a walk of the tree in its own frame, then) the candidate blocks in
+    // kScanSlices consecutive frames, so no frame pays for all of them.
+    const bool start_round = !g.round_active &&
+                             (g.scan_overflow || g.scans == 0 ||
+                              std::chrono::duration<double, std::milli>(now - g.last_scan).count() >= g.scan_ms ||
+                              g.stable == kStableFrames); // right after a load
+    bool slice = false;
+    if (start_round) {
+        const bool walk = !g.scan_refs_ok || g.scan_refs_man != store.manager() || g.scan_refs_pool != store.Pool() ||
+                          g.stable == kStableFrames || g.scans_since_walk >= kRefWalkEvery;
         if (walk) {
             // The same blocks the walk used to read directly, in the same (ascending) order.
             const auto& cands = CandidateBlocks();
@@ -1428,24 +1474,37 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
             g.scan_refs_man = store.manager();
             g.scan_refs_pool = store.Pool();
             g.scans_since_walk = 0;
-            g.scan_deferred = true; // read and compare on the next frame (the store is re-checked there)
-            g.deferred_at_stable = g.stable;
-            scan_due = false;
-        } else {
-            g.scan_deferred = false;
         }
-    }
-    if (scan_due) {
         ++g.scans_since_walk;
-        blocks.reserve(g.scan_refs.size());
-        for (const BlockRef& r : g.scan_refs) {
+        g.scan_overflow = false;
+        g.round_active = true;
+        g.round_pos = 0;
+        g.round_blocks = 0;
+        slice = !walk;
+    } else if (g.round_active) {
+        slice = true;
+    }
+    g.round_at_stable = g.stable;
+    bool round_done = false;
+    std::vector<FlagChange> changes;
+    std::vector<std::pair<u32, std::array<u8, kBlockBytes>>> blocks;
+    if (slice) {
+        const std::size_t n = g.scan_refs.size();
+        const std::size_t chunk = (n + kScanSlices - 1) / kScanSlices;
+        const std::size_t to = std::min(n, g.round_pos + chunk);
+        blocks.reserve(to - g.round_pos);
+        for (std::size_t i = g.round_pos; i < to; ++i) {
+            const BlockRef& r = g.scan_refs[i];
             std::array<u8, kBlockBytes> data;
             if (store.ReadBlockBytes(r, data.data())) {
                 blocks.emplace_back(r.block, data);
             } else {
-                g.scan_refs_ok = false; // the next scan walks the tree again
+                g.scan_refs_ok = false; // the next round walks the tree again
             }
         }
+        g.round_pos = to;
+        g.round_blocks += blocks.size();
+        round_done = to >= n;
     }
     std::vector<std::pair<u32, bool>> values;
     values.reserve(ids.size());
@@ -1460,15 +1519,16 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
     for (const auto& [id, v] : values) {
         g.tracker.ObserveId(id, v, &changes);
     }
-    if (scan_due) {
-        for (const auto& [block, data] : blocks) {
-            g.tracker.ObserveBlock(block, data.data(), &changes);
-        }
+    for (const auto& [block, data] : blocks) {
+        g.tracker.ObserveBlock(block, data.data(), &changes);
+    }
+    if (round_done) {
         g.tracker.EndScan();
         g.last_scan = now;
         ++g.scans;
+        g.round_active = false;
         if (!baseline) {
-            Log("host baseline: %zu candidate blocks in the store (epoch %016llx)", blocks.size(),
+            Log("host baseline: %zu candidate blocks in the store (epoch %016llx)", g.round_blocks,
                 static_cast<unsigned long long>(g.tracker.epoch()));
         }
     }
@@ -1680,8 +1740,16 @@ void ApplyHostSnapshot(const FlagSnapshot& snap) {
     if (!g.enabled) {
         return;
     }
+    Policy policy;
+    {
+        std::lock_guard<std::mutex> lk(g.mu);
+        policy = g.policy;
+    }
+    // The candidate-bit walk (~ms) here on the link's thread, outside g.mu: the main thread's
+    // apply then only writes the planned flags.
+    GuestApplier::SnapshotPlan plan = GuestApplier::PlanSnapshot(snap, policy);
     std::lock_guard<std::mutex> lk(g.mu);
-    g.applier.QueueSnapshot(snap);
+    g.applier.QueueSnapshot(snap, std::move(plan));
     Log("host snapshot queued: %zu blocks, seq %llu", snap.blocks.size(), static_cast<unsigned long long>(snap.seq));
 }
 
