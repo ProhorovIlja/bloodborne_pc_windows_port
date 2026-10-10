@@ -5,6 +5,8 @@
 // byte before anything is written. Offsets are ours (raw ELF VA). The game's code is System V:
 // every call into it goes through a BB_COOP_SYSV pointer at Guest(off).
 #include "party_items.h"
+#include "party_async_io.h"
+#include "party_perf.h"
 
 #include "../../party_env.h"
 
@@ -563,8 +565,8 @@ void Log(const char* fmt, ...) {
     va_start(ap, fmt);
     std::vsnprintf(line, sizeof line, fmt, ap);
     va_end(ap);
-    std::printf("Party items: %s\n", line);
-    std::fflush(stdout);
+    perf::Scope z(perf::Zone::Log);
+    coop::asyncio::Print(std::string("Party items: ") + line + "\n"); // never blocks the caller (party_async_io.h)
 }
 
 bool EnvOff(const char* name) {
@@ -634,6 +636,7 @@ void SeedHostSeq() {
 // ---- The award hook (main thread: EMEVD, Lua) ----
 
 BB_COOP_SYSV void AwardEntry(u64, u64 lot_arg, u64 host_only_arg, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookAward);
     if (!g_on.load() || g_in_apply.load()) {
         return;
     }
@@ -685,6 +688,7 @@ BB_COOP_SYSV void AwardEntry(u64, u64 lot_arg, u64 host_only_arg, u64, u64, u64)
 // Our own award's inventory adds (evidence for the apply log): ItemList {u32 n, then n x
 // {u32 gaitem, u32 itemId | category << 28, u32 count, u32 -1}} from +4 (0x17D8A42..0x17D8A8A).
 BB_COOP_SYSV void GiveListEntry(u64, u64 list, u64, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookGiveList);
     if (!g_in_apply.load() || !list) {
         return;
     }

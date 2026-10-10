@@ -4,6 +4,8 @@
 // memory ops, policy, diff, JSON, BBPF) and builds without the game (BB_PARTY_PROGRESS_NO_GAME,
 // tests/test_party_progress.cpp); the second half is the game glue (hooks, tick, globals).
 #include "party_progress.h"
+#include "party_async_io.h"
+#include "party_perf.h"
 
 #include "../net/json.h"
 
@@ -702,11 +704,32 @@ struct NodeView {
     std::int32_t kind = 0;
     u64 storage = 0;
 };
+// Two guarded reads per node (links + is_nil, then key / kind / storage of a real node) instead
+// of one per field: the host's periodic diff walks every node of the tree on the main thread.
 bool ReadNode(const MemOps& ops, u64 n, NodeView* v) {
-    return Rd(ops, n + man::kNodeLeft, &v->left) && Rd(ops, n + man::kNodeRight, &v->right) &&
-           Rd(ops, n + man::kNodeIsNil, &v->is_nil) && (v->is_nil || (Rd(ops, n + man::kNodeKey, &v->key) &&
-                                                                      Rd(ops, n + man::kNodeKind, &v->kind) &&
-                                                                      Rd(ops, n + man::kNodeStorage, &v->storage)));
+    static_assert(man::kNodeLeft == 0 && man::kNodeRight == 0x10 && man::kNodeIsNil == 0x19, "node links");
+    static_assert(man::kNodeKey == 0x20 && man::kNodeKind == 0x28 && man::kNodeStorage == 0x30, "node payload");
+    if (!n || !ops.read) {
+        return false;
+    }
+    u8 links[0x1a];
+    if (!ops.read(n, links, sizeof links)) {
+        return false;
+    }
+    std::memcpy(&v->left, links + man::kNodeLeft, 8);
+    std::memcpy(&v->right, links + man::kNodeRight, 8);
+    v->is_nil = links[man::kNodeIsNil];
+    if (v->is_nil) {
+        return true;
+    }
+    u8 payload[0x18];
+    if (!ops.read(n + man::kNodeKey, payload, sizeof payload)) {
+        return false;
+    }
+    std::memcpy(&v->key, payload, 4);
+    std::memcpy(&v->kind, payload + (man::kNodeKind - man::kNodeKey), 4);
+    std::memcpy(&v->storage, payload + (man::kNodeStorage - man::kNodeKey), 8);
+    return true;
 }
 } // namespace
 
@@ -766,7 +789,7 @@ bool FlagStore::ForEachBlock(const std::function<void(const BlockRef&)>& fn, std
     if (!Rd(ops_, head_ + man::kNodeParent, &n)) {
         return false;
     }
-    std::vector<u64> stack;
+    std::vector<NodeView> stack; // the nodes as read on the way down (each node is read once)
     std::size_t visited = 0;
     bool have_prev = false;
     u32 prev = 0;
@@ -782,16 +805,15 @@ bool FlagStore::ForEachBlock(const std::function<void(const BlockRef&)>& fn, std
             if (stack.size() > 96) {
                 return false;
             }
-            stack.push_back(n);
+            stack.push_back(v);
             n = v.left;
         }
         if (stack.empty()) {
             return true;
         }
-        n = stack.back();
+        const NodeView v = stack.back();
         stack.pop_back();
-        NodeView v;
-        if (!ReadNode(ops_, n, &v) || ++visited > max_nodes || (have_prev && v.key <= prev)) {
+        if (++visited > max_nodes || (have_prev && v.key <= prev)) {
             return false;
         }
         have_prev = true;
@@ -915,12 +937,47 @@ void GuestApplier::QueueChanges(u64 epoch, const std::vector<FlagChange>& change
 }
 
 void GuestApplier::QueueSnapshot(const FlagSnapshot& snap) {
+    QueueSnapshot(snap, SnapshotPlan{});
+}
+
+GuestApplier::SnapshotPlan GuestApplier::PlanSnapshot(const FlagSnapshot& snap, const Policy& policy) {
+    SnapshotPlan plan;
+    plan.valid = true;
+    plan.policy = policy;
+    for (const auto& [block, bits] : snap.blocks) {
+        const auto* mask = CandidateMask(block);
+        if (!mask) {
+            continue;
+        }
+        std::array<u8, kBlockBytes> set{};
+        for (u32 b : bits) {
+            if (b < kBitsPerBlock) {
+                PutBit(set.data(), b, true);
+            }
+        }
+        for (u32 b = 0; b < kBitsPerBlock; ++b) {
+            if (!GetBit(mask->data(), b)) {
+                continue;
+            }
+            const u32 id = block * kBitsPerBlock + b;
+            const bool v = GetBit(set.data(), b);
+            const SyncMode m = ModeFor(policy, id);
+            if (m == SyncMode::State || (m == SyncMode::SetOnly && v)) {
+                plan.flags.emplace_back(id, v);
+            }
+        }
+    }
+    return plan;
+}
+
+void GuestApplier::QueueSnapshot(const FlagSnapshot& snap, SnapshotPlan plan) {
     cursor_.Reset(snap.epoch, snap.seq);
     // A newer snapshot supersedes a queued one (a host's stream of them must not pile up).
     items_.erase(std::remove_if(items_.begin(), items_.end(), [](const Item& i) { return i.snapshot; }), items_.end());
     Item it;
     it.snapshot = true;
     it.snap = snap;
+    it.plan = std::move(plan);
     items_.push_back(std::move(it));
     Trim();
 }
@@ -967,6 +1024,12 @@ std::size_t GuestApplier::Apply(const FlagStore& store, const Policy& policy, bo
         if (!it.snapshot) {
             for (const FlagChange& c : it.changes) {
                 ApplyOne(store, policy, c.id, c.value);
+            }
+            continue;
+        }
+        if (it.plan.valid && it.plan.policy == policy) {
+            for (const auto& [id, v] : it.plan.flags) {
+                ApplyOne(store, policy, id, v);
             }
             continue;
         }
@@ -1161,6 +1224,8 @@ constexpr std::size_t kMaxHookIds = 1 << 16;
 constexpr u64 kStableFrames = 30;         // world up, no loading, same store for this long
 constexpr u64 kMode0Window = 600;         // frames after that in which mode 0 applies
 constexpr double kDumpMinGap = 2.0;       // seconds between sync dumps
+constexpr std::size_t kScanSlices = 4;  // frames a scan round's block reads are spread over
+constexpr u64 kRefWalkEvery = 300;        // host scans between two safety walks of the tree (scan_refs)
 
 using Clock = std::chrono::steady_clock;
 
@@ -1171,8 +1236,8 @@ void Log(const char* fmt, ...) {
     va_start(ap, fmt);
     std::vsnprintf(line, sizeof line, fmt, ap);
     va_end(ap);
-    std::printf("Party progress: %s\n", line);
-    std::fflush(stdout);
+    perf::Scope z(perf::Zone::Log);
+    coop::asyncio::Print(std::string("Party progress: ") + line + "\n"); // never blocks the caller (party_async_io.h)
 }
 
 struct Global {
@@ -1203,6 +1268,19 @@ struct Global {
     Policy policy;
 
     // main thread only
+    // The candidate blocks' addresses, from the last full walk of the flag tree (ScanRefs): the
+    // periodic diff reads just these 267 blocks; the ~1200-node walk runs after every load (the
+    // tree is rebuilt there), every kRefWalkEvery scans and whenever a cached read fails. A walk
+    // takes its own frame; the blocks are then read and compared in kScanSlices frames.
+    std::vector<BlockRef> scan_refs;
+    u64 scan_refs_man = 0, scan_refs_pool = 0;
+    u64 scans_since_walk = 0;
+    bool scan_refs_ok = false;
+    bool round_active = false;   // a scan round runs (its slices on consecutive frames)
+    std::size_t round_pos = 0;   // next scan_refs index
+    std::size_t round_blocks = 0;
+    u64 round_at_stable = 0;     // g.stable of the round's last frame (a load in between ends it)
+    bool scan_overflow = false;  // the hooks overflowed: a round is due
     u64 frame = 0, stable = 0;
     u64 last_man = 0;
     int last_mode = -2;
@@ -1278,12 +1356,14 @@ bool Capturing() {
 }
 
 BB_COOP_SYSV void OnSetEventFlag(u64 man, u64 id, u64, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookSetFlag);
     if (Capturing() && man == Manager()) {
         NoteId(u32(id));
     }
 }
 
 BB_COOP_SYSV void OnSetEventFlagValue(u64 man, u64 first, u64 bits, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookSetFlagValue);
     if (!Capturing() || man != Manager() || u32(bits) == 0 || u32(bits) > 32) {
         return;
     }
@@ -1293,12 +1373,14 @@ BB_COOP_SYSV void OnSetEventFlagValue(u64 man, u64 first, u64 bits, u64, u64, u6
 }
 
 BB_COOP_SYSV void OnBroadcastSetFlag(u64, u64 id, u64, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookBroadcastFlag);
     if (Capturing() && std::int32_t(u32(id)) >= 0) {
         NoteId(u32(id));
     }
 }
 
 BB_COOP_SYSV void OnEmkEndOrRestart(u64 self, u64, u64, u64, u64, u64) {
+    perf::Scope z(perf::Zone::HookEmkEnd);
     if (!Capturing()) {
         return;
     }
@@ -1329,11 +1411,14 @@ std::string DefaultDumpDir() {
 }
 
 void WriteDumps(Global& g, const FlagStore& store, const GameSnapshot& s) {
-    std::error_code ec;
+    perf::Scope z(perf::Zone::ProgressDump);
     if (g.dump_dir.empty()) {
         g.dump_dir = DefaultDumpDir();
     }
-    std::filesystem::create_directories(g.dump_dir, ec);
+    asyncio::Run([dir = g.dump_dir] {
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+    });
     BbpfHeader h;
     h.map_id = s.map_id;
     h.load_mode = store.LoadMode();
@@ -1344,42 +1429,86 @@ void WriteDumps(Global& g, const FlagStore& store, const GameSnapshot& s) {
     h.frame = g.frame;
     for (int pass = 0; pass < 2; ++pass) {
         h.label = pass ? (g.label + "-pool").substr(0, 16) : g.label.substr(0, 16);
-        const std::vector<BbpfBlock> blocks = pass ? CollectPool(store) : CollectVisible(store);
+        // The game's memory is read here (main thread); encoding and the file go to the writer.
+        std::vector<BbpfBlock> blocks = pass ? CollectPool(store) : CollectVisible(store);
         char name[96];
         std::snprintf(name, sizeof name, "/flags_%s_%llu.bbpf", h.label.c_str(), static_cast<unsigned long long>(g.frame));
-        const std::string path = g.dump_dir + name;
-        if (BbpfWriteFile(path, h, blocks)) {
-            Log("dump %s (%zu blocks, mode %d)", path.c_str(), blocks.size(), h.load_mode);
-        } else {
-            Log("dump %s failed", path.c_str());
-        }
+        std::string path = g.dump_dir + name;
+        asyncio::Run([path = std::move(path), h, blocks = std::move(blocks)] {
+            if (BbpfWriteFile(path, h, blocks)) {
+                Log("dump %s (%zu blocks, mode %d)", path.c_str(), blocks.size(), h.load_mode);
+            } else {
+                Log("dump %s failed", path.c_str());
+            }
+        });
     }
     g.last_dump = Clock::now();
 }
 
 void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Clock::time_point now) {
+    perf::Scope z(perf::Zone::ProgressScan);
     std::vector<u32> ids;
     {
         std::lock_guard<std::mutex> lk(g.hook_mu);
         ids.swap(g.hook_ids);
     }
-    const bool overflow = g.hook_overflow.exchange(false);
-    const bool scan_due = overflow || g.scans == 0 ||
-                          std::chrono::duration<double, std::milli>(now - g.last_scan).count() >= g.scan_ms ||
-                          g.stable == kStableFrames;  // right after a load
+    g.scan_overflow = g.hook_overflow.exchange(false) || g.scan_overflow;
+    if (g.round_active && (g.stable != g.round_at_stable + 1 || g.stable == kStableFrames)) {
+        g.round_active = false; // a load came between: the next round walks again
+    }
+    // A scan round: (a walk of the tree in its own frame, then) the candidate blocks in
+    // kScanSlices consecutive frames, so no frame pays for all of them.
+    const bool start_round = !g.round_active &&
+                             (g.scan_overflow || g.scans == 0 ||
+                              std::chrono::duration<double, std::milli>(now - g.last_scan).count() >= g.scan_ms ||
+                              g.stable == kStableFrames); // right after a load
+    bool slice = false;
+    if (start_round) {
+        const bool walk = !g.scan_refs_ok || g.scan_refs_man != store.manager() || g.scan_refs_pool != store.Pool() ||
+                          g.stable == kStableFrames || g.scans_since_walk >= kRefWalkEvery;
+        if (walk) {
+            // The same blocks the walk used to read directly, in the same (ascending) order.
+            const auto& cands = CandidateBlocks();
+            g.scan_refs.clear();
+            g.scan_refs_ok = store.ForEachBlock([&](const BlockRef& r) {
+                if (std::binary_search(cands.begin(), cands.end(), r.block)) {
+                    g.scan_refs.push_back(r);
+                }
+            });
+            g.scan_refs_man = store.manager();
+            g.scan_refs_pool = store.Pool();
+            g.scans_since_walk = 0;
+        }
+        ++g.scans_since_walk;
+        g.scan_overflow = false;
+        g.round_active = true;
+        g.round_pos = 0;
+        g.round_blocks = 0;
+        slice = !walk;
+    } else if (g.round_active) {
+        slice = true;
+    }
+    g.round_at_stable = g.stable;
+    bool round_done = false;
     std::vector<FlagChange> changes;
     std::vector<std::pair<u32, std::array<u8, kBlockBytes>>> blocks;
-    if (scan_due) {
-        const auto& cands = CandidateBlocks();
-        store.ForEachBlock([&](const BlockRef& r) {
-            if (!std::binary_search(cands.begin(), cands.end(), r.block)) {
-                return;
-            }
+    if (slice) {
+        const std::size_t n = g.scan_refs.size();
+        const std::size_t chunk = (n + kScanSlices - 1) / kScanSlices;
+        const std::size_t to = std::min(n, g.round_pos + chunk);
+        blocks.reserve(to - g.round_pos);
+        for (std::size_t i = g.round_pos; i < to; ++i) {
+            const BlockRef& r = g.scan_refs[i];
             std::array<u8, kBlockBytes> data;
             if (store.ReadBlockBytes(r, data.data())) {
                 blocks.emplace_back(r.block, data);
+            } else {
+                g.scan_refs_ok = false; // the next round walks the tree again
             }
-        });
+        }
+        g.round_pos = to;
+        g.round_blocks += blocks.size();
+        round_done = to >= n;
     }
     std::vector<std::pair<u32, bool>> values;
     values.reserve(ids.size());
@@ -1394,15 +1523,16 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
     for (const auto& [id, v] : values) {
         g.tracker.ObserveId(id, v, &changes);
     }
-    if (scan_due) {
-        for (const auto& [block, data] : blocks) {
-            g.tracker.ObserveBlock(block, data.data(), &changes);
-        }
+    for (const auto& [block, data] : blocks) {
+        g.tracker.ObserveBlock(block, data.data(), &changes);
+    }
+    if (round_done) {
         g.tracker.EndScan();
         g.last_scan = now;
         ++g.scans;
+        g.round_active = false;
         if (!baseline) {
-            Log("host baseline: %zu candidate blocks in the store (epoch %016llx)", blocks.size(),
+            Log("host baseline: %zu candidate blocks in the store (epoch %016llx)", g.round_blocks,
                 static_cast<unsigned long long>(g.tracker.epoch()));
         }
     }
@@ -1429,6 +1559,7 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
 }
 
 void GuestTick(Global& g, const FlagStore& store) {
+    perf::Scope z(perf::Zone::ProgressGuest);
     const bool mode0_window = g.stable >= kStableFrames && g.stable < kStableFrames + kMode0Window;
     std::lock_guard<std::mutex> lk(g.mu);
     const std::size_t pending = g.applier.Pending();
@@ -1670,8 +1801,16 @@ void ApplyHostSnapshot(const FlagSnapshot& snap) {
     if (!g.enabled) {
         return;
     }
+    Policy policy;
+    {
+        std::lock_guard<std::mutex> lk(g.mu);
+        policy = g.policy;
+    }
+    // The candidate-bit walk (~ms) here on the link's thread, outside g.mu: the main thread's
+    // apply then only writes the planned flags.
+    GuestApplier::SnapshotPlan plan = GuestApplier::PlanSnapshot(snap, policy);
     std::lock_guard<std::mutex> lk(g.mu);
-    g.applier.QueueSnapshot(snap);
+    g.applier.QueueSnapshot(snap, std::move(plan));
     Log("host snapshot queued: %zu blocks, seq %llu", snap.blocks.size(), static_cast<unsigned long long>(snap.seq));
 }
 
