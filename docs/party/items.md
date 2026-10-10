@@ -403,9 +403,10 @@ the overlay, where the host's flag is set) and without any overlay write:
   A guest uses the host's list only when every item is a weighted slot of a different chain row
   with a count <= lotItemNum (security: a host cannot hand out other items); else the rows decide.
 * give: `GiveItemDirect 0x131CB70(0, category << 28, id, count)` (weapon, armor, rune, goods).
-  **Blood gems** (category 8) need the area's gem-effect data (`0x1A88130`) and still wait for
-  the own world (`GuestItems::Defer`, logged "waits for the own world"; the rest of the queue
-  goes on).
+  **Blood gems** (category 8): the gem the host's game generated is recreated on the guest
+  (10.1). Only a gem lot without the host's gem data (a random gem lot reported by flag, the
+  rejoin full list) still waits for the own world (`GuestItems::Defer`, logged "waits for the
+  own world"; the rest of the queue goes on).
 * the native **item-get dialog**: `0x16D8850(*0x553B1C0, &inventory gaitem handle, type bits, id,
   count, 0)` - the entry the lot award's give list queues at `0x17D9348` (plus sound 300); the
   handle is the inventory entry's `+0`. Our overlay toast stays only as a fallback when that
@@ -439,3 +440,44 @@ Live (2 loopback instances, guest summoned in the host's Dream the whole time):
   and the full list skips `lot 2700120 ... already given (own-save flag set; 0:15000000 held 1)`,
   `2700150 ... held 1` x4, `2700110 ... 4:1210 held 8` - nothing given twice. New lots in the same
   run: `goods 1000 x2 (held 15 -> 17, item-get dialog)`, `armor 31000/32000/33000 (item-get dialog)`.
+
+### 10.1 Blood gems while summoned (2026-10-11)
+
+How a lot makes a gem [static]: the lot result builder `0x1A8B080` calls, for a category-8
+slot, `0x1A88130(out handle, SprjGaitem, LotReq+0x18, LotReq+0x28, LotReq+0x38, slot id)`.
+`LotReq+0x18/+0x28/+0x38` are the **area context** `0x17DDC50` fills from the current block
+(`*0x553B148`, row `+0x20`: `+0x48` byte, `+0x4C` / `+0x50` ids, `+0x20 -> +0x38` nine id
+pairs); `0x1A88130` sums the pairs' rank offsets onto the slot id, looks the GemGenParam row up
+(`0x1F1D630`), rolls the effects (`0x1A8F400`, game RNG) and creates the instance
+(`0x1A87E20` -> `0x1A87590(out, SprjGaitem, gem id)`: a new SprjGaitem slot, handle
+`0xC0800000 | index`, instance `+8` handle, `+0xC` `0x80000000 | gem id`). `0x1A87E20` then
+writes the instance data: `+0x18` flags (two bits of the GemGenParam row `+0x8C`), `+0x1C` rank,
+`+0x20..+0x34` six GemeffectParam ids (-1 = empty). The handle goes through the give list
+`0x17D89F0`, which adds it to the inventory (`0x14CDA70`), queues the item-get dialog entry
+`0x16D8850` with that handle and plays sound 300. Instances: `*(0x553E990) + 8 + index * 8`;
+references `+0x8008/+0x800C + index * 8` (`0x1A8BAE0` +1, `0x1A8BC00` -1, frees at 0).
+
+So the guest gets **the host's gem**, not a new roll:
+* host: `GiveListEntry` (the `0x17D89F0` hook) reads each category-8 entry's instance
+  (`ReadGem`: handle check, id, `+0x18..+0x34`) into the grant's item (`GrantItem::gem`). Awards
+  (`0x17DDC50`, captured during the call) and pickups (`0x17D8570 -> 0x17D89F0`, host in its own
+  world: kept for 120 s and attached when the treasure's flag reaches `OnHostFlagSet`, if it
+  fits the lot's rows) both carry it. A random gem lot is never rolled by the host (no instance
+  data); EVENT `items` element `[8, id, 1, [flags, rank, e1..e6]]`.
+* guest (`PlanSummonedLot`): a gem matches a weighted category-8 slot of an unused row with
+  `slot id <= gem id <= slot id + 99` (`kMaxGemIdOffset`; 1.09 steps by 1..3), count 1, gem data
+  plausible (flags 0..3, rank 0..1000, effects -1 or 0..99,999,999; `ItemsFromJson` refuses
+  anything else). At give time (`GiveGem`): the GemGenParam row of the id and the GemeffectParam
+  row of every effect must exist (`GameParamRow`), the three functions are byte-checked, then
+  `0x1A87590(&h, SprjGaitem, id)`, the instance data copied to `+0x18`, and the give list
+  `0x17D89F0(MapItemMan, {1, h, 0x80000000 | id, 1, -1})` - inventory (or storage / ground), the
+  native item-get dialog and its sound, exactly as the host's award; then our reference is
+  released (`0x1A8BC00`).
+
+Live (r1, 2 loopback instances, guest summoned in the host's Dream, `BB_PARTY_ITEMS_HOST_TEST=
+2700180,2700110`): host `host award #0 lot 2700180 (flag 52700180, award) queued for the party;
+items [8:102001x1 [gem 102001 (flags 2, rank 1, effects 1125000 -1 -1 -1 -1 -1)]]`; guest
+`inventory add 1/1: item 102001 category 8 count 1 (gaitem 0xc0800062)` and `gave ... lot 2700180
+... while summoned (host's item list): blood gem 102001 (flags 2, rank 1, effects 1125000 -1 -1
+-1 -1 -1) (inventory add, item-get dialog); own-save flag(s) 52700180 set (pool, load mode 1),
+overlay untouched`. Unit tests: `test_gems` (party-items-test).
