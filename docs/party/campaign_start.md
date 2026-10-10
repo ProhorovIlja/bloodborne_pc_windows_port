@@ -382,3 +382,40 @@ empty save folder (`instances.py setup --saves <empty dir>`, or `BB_PARTY_SAVE=s
 * `BB_PARTY_DIRECTOR_TEST=bell_guest` / `bell_host`: once ready and granted, ring the bell once through
   the item path (SpEffect 9005 / 9000 -> SendSign -> FROM server), for single-instance checks.
 
+
+## 9. Late joiner catch-up (2026-10-11)
+
+A guest whose party save is behind the host's (a fresh character, or one still in the prologue)
+used to sit in the clinic: the prologue flags are not C2-synced, so the director never saw it
+ready. Now (`party_catchup.{h,cpp}`, rules `coop::Catchup` in `party_start.h`, tested by
+party-start-test), on the guest only, connected to a host whose C2 snapshot says 12410000 and
+9401 are ON (the host is past its prologue), in the own world (role 0, load mode 0):
+
+1. A scene playing in the own world while behind (the opening, even after C2's snapshot already
+   set 12410000): **the game's own skip request** `0x1D07400(SprjRemo *0x5540058, &-1)` ->
+   `0x1CF9D40` (solo: remo player `+0x168 |= 0x20`; multiplayer: the scene's skip vote `+0x13D`;
+   only while `+0x168` bit 1 "skippable" is set, so it is retried every second).
+2. Steady 3 s: the campaign-start flags (test_newgame.h `PrologueSkipFlags`: 12410000, 9402,
+   9401, 12417810, 72101000, 72101011, 12101020, 12101021, 12100105, 9404, 9180 OFF) into the own
+   save, the starting weapons 7000000 / 14000000 when none is held (with the item-get dialog), a
+   save request.
+3. The gather: lamp warp `0x13CDF30` to the host's last lamp (party_travel's record from the host's
+   "phantom lamp" event; the Hunter's Dream 2102961 when unknown). The load opens C2's post-load
+   window: the host's snapshot (lamps, shortcuts, bosses - boss flags of the current map silently,
+   event_flags.md 11) lands in the own save.
+4. Then the director sees the guest ready, grants the bells and the summon follows; C3's full list
+   brings the host's key items while summoned. The director holds its bells while the catch-up
+   applies / warps (`CatchupBusy`). Never on the host, never in another direction, and only in
+   party processes (the party save `user\savedata_party`, ingame_flow.md 5).
+
+The test aid's driver (BB_TEST_NEWGAME) also kept pressing only while 12410000 was OFF; C2 set it
+during the opening and the driver stopped, the opening played 149 s (run 6). It now keeps skipping
+while 9180 is ON.
+
+Live (`--label "check: opening skip (remo skip request)"`, host base save, guest empty
+`savedata_party` + BB_TEST_NEWGAME): `+47.989 catch-up ... skip 1 ... skippable bit 0`, `+48.292
+remo playing`, `+51.117 skip 4 ... skippable bit 1`, `+51.198 remo ended after 2.9 s`, `+51.324`
+flags 11 of 11 + both weapons, `+52.334 lamp warp to 2102961 (the host's last lamp)`, `+59.688
+arrived`, `+69.328` summoned (role 6, load mode 1). Restart (`check: late joiner after restart`):
+"the own save is past the prologue: nothing to catch up", own save `12410000=1 9401=1 12101020=1
+12417810=1 12401800=1 12411800=1`, summoned again at +45.6 s; `user\savedata` (solo) untouched.
