@@ -1214,6 +1214,7 @@ struct Global {
     std::string dump_dir;
     int scan_ms = 1000;
     std::vector<u32> test_clear;  // BB_PARTY_PROGRESS_TEST_CLEAR: cleared once, first steady own world
+    std::vector<u32> test_read;   // BB_PARTY_PROGRESS_TEST_READ: own-save values logged at each steady load
     bool start_dumped = false;    // BB_PARTY_FLAG_DUMP: one "start" dump at the first steady world
 };
 thread_local bool Global::self_write = false;
@@ -1446,6 +1447,10 @@ void GuestTick(Global& g, const FlagStore& store) {
         static_cast<unsigned long long>(c.skipped - before.skipped),
         static_cast<unsigned long long>(c.failed - before.failed),
         static_cast<unsigned long long>(g.applier.cursor().last_seq()));
+    if (n > 0 && store.LoadMode() == 1) {
+        // Summoned: the pool changed but the game may not save for a long time (seamless play).
+        RequestGameSave("C2 host flags in the own pool");
+    }
     g.dump_sync = true;
 }
 
@@ -1461,6 +1466,19 @@ void Init() {
         }
         g.policy = Policy::FromEnv();
         g.tracker = HostTracker(NewEpoch());
+        if (const char* t = std::getenv("BB_PARTY_PROGRESS_TEST_READ"); t && t[0]) {
+            for (const char* p = t; *p;) {
+                char* end = nullptr;
+                const unsigned long id = std::strtoul(p, &end, 10);
+                if (end == p) {
+                    break;
+                }
+                if (id) {
+                    g.test_read.push_back(u32(id));
+                }
+                p = *end ? end + 1 : end;
+            }
+        }
         if (const char* t = std::getenv("BB_PARTY_PROGRESS_TEST_CLEAR"); t && t[0]) {
             for (const char* p = t; *p;) {
                 char* end = nullptr;
@@ -1593,9 +1611,23 @@ void Tick(const GameSnapshot& s) {
         g.test_clear.clear();
         g.dump_session = true;
     }
-    if (store.LoadMode() == 0 && g.stable == kStableFrames) {
+    if (g.stable == kStableFrames && !g.test_read.empty()) {
+        // Test evidence: what the own save holds at this load (mode 1: the pool, not the overlay).
+        std::string list;
+        for (u32 id : g.test_read) {
+            bool own = false, visible = false;
+            const bool ok = store.ReadOwnSave(id, &own);
+            const bool vok = store.ReadVisible(id, &visible);
+            list += (list.empty() ? "" : " ") + std::to_string(id) + "=" + (ok ? std::to_string(int(own)) : "?") +
+                    "/" + (vok ? std::to_string(int(visible)) : "?");
+        }
+        Log("test read (load mode %d, own save / visible): %s", store.LoadMode(), list.c_str());
+    }
+    if (g.stable == kStableFrames) {
         if (const BeforeApplyHook hook = g.before_apply.load()) {
-            hook();  // C3 ledger seeding: before the first host flag lands in this load
+            // C3 ledger seeding: before the first host flag lands in this load. Load mode 1 too:
+            // with seamless play a guest may be summoned from its first load on (own-pool reads).
+            hook();
         }
     }
     if (role == Role::Host && store.LoadMode() == 0) {
@@ -1719,6 +1751,16 @@ bool ReadFlag(u32 id, bool* value) {
 bool WriteFlagOwnSave(u32 id, bool value) {
     const FlagStore store(Manager(), GameOps());
     return store.Valid() && store.WriteOwnSave(id, value);
+}
+
+bool ReadFlagOwnSave(u32 id, bool* value) {
+    const FlagStore store(Manager(), GameOps());
+    return store.Valid() && store.ReadOwnSave(id, value);
+}
+
+int FlagLoadMode() {
+    const FlagStore store(Manager(), GameOps());
+    return store.Valid() ? store.LoadMode() : -1;
 }
 
 Stats GetStats() {
