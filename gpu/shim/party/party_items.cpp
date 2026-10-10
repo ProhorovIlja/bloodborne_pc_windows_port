@@ -750,12 +750,12 @@ void ParseTestLots() {
     }
 }
 
-// ItemLotParam (ITEM_LOT_PARAM_ST, 1.09 paramdef): lotItemId01..08 s32 +0x00, lotItemCategory01..08
+// ItemLotParam (ITEMLOT_PARAM_ST, 1.09 paramdef): lotItemId01..08 s32 +0x00, lotItemCategory01..08
 // u32 +0x20, lotItemBasePoint01..08 u16 +0x40, lotItemNum01..08 u8 +0x8A. EquipParamGoods
 // (EQUIP_PARAM_GOODS_ST): maxNum s16 +0x36, maxRepositoryNum s16 +0x49.
 std::vector<LotSlotState> LotSlots(std::int32_t lot) {
     std::vector<LotSlotState> out;
-    const u64 row = GameParamRow("ItemLotParam", "ITEM_LOT_PARAM_ST", static_cast<u32>(lot));
+    const u64 row = GameParamRow("ItemLotParam", "ITEMLOT_PARAM_ST", static_cast<u32>(lot));
     if (!row) {
         return out;
     }
@@ -796,6 +796,18 @@ bool Apply(const ItemGrant& g) {
         SetFlag(man, done);
         Log("mark lot %d: flag %lld %s", g.lot, static_cast<long long>(done), was ? "was already set" : "set");
         return false;
+    }
+    if (g.source == ItemSource::Test) {
+        // BB_PARTY_ITEMS_TEST: what the inventory check sees, before any other rule.
+        std::string why;
+        const std::vector<LotSlotState> slots = LotSlots(g.lot);
+        const LotFit fit = ClassifyLotFit(slots, &why);
+        for (const LotSlotState& s : slots) {
+            Log("test lot %d slot: category %u id %d num %d held %d max %d storage max %d", g.lot, s.category, s.id,
+                s.num, s.owned, s.max_num, s.max_storage);
+        }
+        Log("test lot %d: %zu slot(s), %s%s%s", g.lot, slots.size(), LotFitName(fit), why.empty() ? "" : ": ",
+            why.c_str());
     }
     if (IsFlag(man, done)) {
         Log("skip %s: already given (flag %lld set)", DescribeItem(g).c_str(), static_cast<long long>(done));
@@ -843,7 +855,7 @@ bool Apply(const ItemGrant& g) {
     }
     const bool now_set = IsFlag(man, done);
     Log("gave %s: 0x17DDC50(lot %d, 0) added %u item entr%s; flag %lld is %s", DescribeItem(g).c_str(), g.lot, added,
-        added == 1 ? "y" : "ies", static_cast<long long>(done), now_set ? "set" : "CLEAR (nothing given)");
+        added == 1 ? "y" : "ies", static_cast<long long>(done), now_set ? "set" : "CLEAR (nothing given)");
     return true;
 }
 
