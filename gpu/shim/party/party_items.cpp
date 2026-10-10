@@ -509,7 +509,6 @@ std::optional<ItemGrant> GuestItems::Step(const ItemApplyState& s, double now) {
     q_.pop_front();
     if (g.source != ItemSource::Mark) {
         queued_.erase(g.Key());
-        last_apply_ = now;
     }
     return g;
 }
@@ -787,7 +786,8 @@ std::vector<LotSlotState> LotSlots(std::int32_t lot) {
     return out;
 }
 
-void Apply(const ItemGrant& g) {
+/// True when the award ran (a popup may have opened).
+bool Apply(const ItemGrant& g) {
     const u64 man = Ptr(kFlagMan);
     const u64 mim = Ptr(kMapItemMan);
     const std::int64_t done = g.DoneFlag();
@@ -795,15 +795,15 @@ void Apply(const ItemGrant& g) {
         const bool was = IsFlag(man, done);
         SetFlag(man, done);
         Log("mark lot %d: flag %lld %s", g.lot, static_cast<long long>(done), was ? "was already set" : "set");
-        return;
+        return false;
     }
     if (IsFlag(man, done)) {
         Log("skip %s: already given (flag %lld set)", DescribeItem(g).c_str(), static_cast<long long>(done));
-        return;
+        return false;
     }
     if (!mim) {
         Log("skip %s: no MapItemMan", DescribeItem(g).c_str());
-        return;
+        return false;
     }
     // A flagless (ledger) lot the guest earned itself: the ledger bit only exists for the party's
     // replays, so a lot this save got before (solo, or a save that started as a copy) shows up
@@ -814,7 +814,7 @@ void Apply(const ItemGrant& g) {
             SetFlag(man, done);
             Log("skip %s: this save's own event flag %d says it was awarded here; ledger bit set", DescribeItem(g).c_str(),
                 event_done);
-            return;
+            return false;
         }
     }
     // An item the game would refuse (a unique key / badge already held, a count at its max with
@@ -825,7 +825,7 @@ void Apply(const ItemGrant& g) {
         SetFlag(man, done);
         Log("skip %s: %s (%s); flag %lld set instead", DescribeItem(g).c_str(), LotFitName(fit), why.c_str(),
             static_cast<long long>(done));
-        return;
+        return false;
     }
     // The ledger bit goes in first: the give can start a save (run A of the C3 check lost a
     // ledger bit written after the award), so the save that holds the item holds the bit too.
@@ -843,7 +843,8 @@ void Apply(const ItemGrant& g) {
     }
     const bool now_set = IsFlag(man, done);
     Log("gave %s: 0x17DDC50(lot %d, 0) added %u item entr%s; flag %lld is %s", DescribeItem(g).c_str(), g.lot, added,
-        added == 1 ? "y" : "ies", static_cast<long long>(done), now_set ? "set" : "CLEAR (nothing given)");
+        added == 1 ? "y" : "ies", static_cast<long long>(done), now_set ? "set" : "CLEAR (nothing given)");
+    return true;
 }
 
 } // namespace
@@ -1038,9 +1039,12 @@ void ItemsTick() {
     if (!g) {
         return;
     }
-    Apply(*g);
+    const bool awarded = Apply(*g);
     std::lock_guard<std::mutex> lk(g_guest_mu);
     g_guest.Done(g->Key());
+    if (awarded) {
+        g_guest.Awarded(Now());
+    }
 }
 
 #endif // BB_PARTY_ITEMS_NO_GAME
