@@ -281,7 +281,7 @@ if (flag < 0) SetEventFlag(*(void**)(0x800000000ull+0x553B100), 60009000 + idx, 
   flag is set either way (same as vanilla).
 * RNG: the roll consumes the game RNG (`GSM+0xA80`) even for single-item lots. That is harmless on a guest in
   its own world.
-* Not recommended: giving while summoned (calling `0x17D89F0` with a hand-built list plus writing the pool bit).
+* Superseded by section 10 (direct give + own pool while summoned). Originally: not recommended: giving while summoned (calling `0x17D89F0` with a hand-built list plus writing the pool bit).
   It needs gaitem handles for weapons/armour (`0x1A876D0`, `0x1A88130`) and racing the overlay.
 
 ### 6.4 Interplay with C2 and C4
@@ -382,3 +382,60 @@ the rows its tables do not know (logged as rejected), never more.
   [inferred from the event shape]; NG+ handling of the ledger flags (T6 global zone 9) [unchecked]; the
   `items_full` list also carries `hostOnly == 0` flagged lots, which a guest that was present in an earlier
   session (mark lost) gets a second time.
+
+## 10. Awarding while summoned (seamless play, 2026-10-10/11)
+
+With B2 / fast join a guest stays summoned (role 6, flag store load mode 1) nearly all the time,
+so the own-world replay of 6.3 never ran. Now `ItemsTick` has two gates (`ItemApplyModeNow`):
+**Home** (6.3, unchanged) and **Summoned** (`world up, no load, load mode 1, own-world byte 0,
+role 6, game data`). In Summoned mode a grant is applied without `0x17DDC50` (whose roll reads
+the overlay, where the host's flag is set) and without any overlay write:
+
+* "already given": the done flag (lot flag or ledger bit) read from the **own pool**
+  (`progress::ReadFlagOwnSave`), never the overlay.
+* items: `PlanSummonedLot` over the lot's ItemLotParam chain (`GameParamRow`, rows lot, lot+1...
+  as `0x17CEAF0` walks them; per-row flags already in the own pool are skipped). A row with one
+  weighted slot (base or cumulate point) is deterministic (1169 of 1176 table lots). The host
+  sends what its roll **really** gave: the award hook now **replaces** `0x17DDC50`
+  (`ReplacePrologue`), so `GiveListEntry` captures the host's `0x17D89F0` list during the call
+  (`[category, id, count]`, EVENT "items" row element 6). Random lots reported by flag or in
+  the full list are rolled **once on the host** (`RollLotChain`) so all guests get the same.
+  A guest uses the host's list only when every item is a weighted slot of a different chain row
+  with a count <= lotItemNum (security: a host cannot hand out other items); else the rows decide.
+* give: `GiveItemDirect 0x131CB70(0, category << 28, id, count)` (weapon, armor, rune, goods).
+  **Blood gems** (category 8) need the area's gem-effect data (`0x1A88130`) and still wait for
+  the own world (`GuestItems::Defer`, logged "waits for the own world"; the rest of the queue
+  goes on).
+* the native **item-get dialog**: `0x16D8850(*0x553B1C0, &inventory gaitem handle, type bits, id,
+  count, 0)` - the entry the lot award's give list queues at `0x17D9348` (plus sound 300); the
+  handle is the inventory entry's `+0`. Our overlay toast stays only as a fallback when that
+  call cannot be made.
+* flags: the done flag plus each giving row's flag into the own pool (`WriteFlagOwnSave`,
+  C2's mode-1 pool write), written **before** the give.
+* the fit rule (unique / full -> flag only) and the popup rules (8 s spacing, no HP loss for
+  15 s) are the same as at home. Marks (hostOnly 0 lots received while summoned) are applied at
+  once into the own pool (no more "lost on a crash before going home").
+* a save request after each give (see below) so items and flags reach the save together.
+
+Save request: the Lua binding **SaveRequest `0x1336DA0`** (registered at `0x1342F89`: if GSM
+`+0x1578` "save allowed" then `+0x1548 = 1`, `+0x1547`, `+0x1549 = 1`) asks the game's save task
+to write; `GameSaveTick` runs pending requests (C2 mode-1 applies, C3 gives, C4 story writes,
+the late-joiner catch-up) at most once per 15 s. Without it the runs below lost everything at
+exit (the game had not saved since the join).
+
+Fixtures: `BB_PARTY_ITEMS_HOST_TEST=<lot>,...` (host: awards through the game's `0x17DDC50`,
+hostOnly 1, 20 s after a cooperator appeared, 10 s apart), `BB_PARTY_ITEMS_HOST_TEST_FLAGS=<id>,...`
+(host: SetEventFlag with the first award), `BB_PARTY_PROGRESS_TEST_READ=<id>,...` (each steady
+load: own save / visible values).
+
+Live (2 loopback instances, guest summoned in the host's Dream the whole time):
+* host awards 2700120 (weapon 15000000), 2700150 (armor set, chain), 2700110 (goods 1210 x8),
+  2700180 (blood gem), 22502610 (random ledger lot): guest `gave ... while summoned (host's item
+  list): weapon 15000000 x1 (held 0 -> 1)`, `armor 290000/291000/112000/293000`, `goods 1210 x8
+  (held 0 -> 8)`, `goods 1510 x1` (the host's roll), all "own-save flag(s) ... set (pool, load
+  mode 1), overlay untouched"; 2700180 "not while summoned (blood gem...); waits for the own world".
+* restart (run 4): the guest's first own-world load reads `52700120=1 52700150=1 52700110=1
+  60009032=1 12700110=1 12707800=1` (the last two are the host's C2 flags, written while summoned)
+  and the full list skips `lot 2700120 ... already given (own-save flag set; 0:15000000 held 1)`,
+  `2700150 ... held 1` x4, `2700110 ... 4:1210 held 8` - nothing given twice. New lots in the same
+  run: `goods 1000 x2 (held 15 -> 17, item-get dialog)`, `armor 31000/32000/33000 (item-get dialog)`.
