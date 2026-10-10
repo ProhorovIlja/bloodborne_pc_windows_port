@@ -1015,21 +1015,43 @@ bool GuestApplier::ApplyOne(const FlagStore& store, const Policy& policy, u32 id
     return true;
 }
 
-std::size_t GuestApplier::Apply(const FlagStore& store, const Policy& policy, bool allow_mode0) {
-    if (!store.Valid() || items_.empty() || (store.LoadMode() == 0 && !allow_mode0)) {
+bool HoldBossFlagInMode0(u32 id, u32 map_id) {
+    if (id < 10000000u || CategoryOf(id) != Category::boss_defeated) {
+        return false;
+    }
+    const u32 area = id / 100000 % 100, block = id / 10000 % 10;
+    return area == ((map_id >> 24) & 0xff) && block == ((map_id >> 16) & 0xff);
+}
+
+std::size_t GuestApplier::Apply(const FlagStore& store, const Policy& policy, bool allow_mode0, u32 map_id) {
+    if (!store.Valid() || (items_.empty() && held_.empty()) || (store.LoadMode() == 0 && !allow_mode0)) {
         return 0;
     }
     const u64 before = n_.applied;
+    const bool hold = store.LoadMode() == 0 && map_id != kNoMap;
+    std::vector<std::pair<u32, bool>> held;
+    auto apply = [&](u32 id, bool v) {
+        if (hold && HoldBossFlagInMode0(id, map_id)) {
+            held.emplace_back(id, v); // silent later (mode 1 pool / another map)
+            return;
+        }
+        ApplyOne(store, policy, id, v);
+    };
+    const std::vector<std::pair<u32, bool>> again = std::move(held_);
+    held_.clear();
+    for (const auto& [id, v] : again) {
+        apply(id, v);
+    }
     for (const Item& it : items_) {
         if (!it.snapshot) {
             for (const FlagChange& c : it.changes) {
-                ApplyOne(store, policy, c.id, c.value);
+                apply(c.id, c.value);
             }
             continue;
         }
         if (it.plan.valid && it.plan.policy == policy) {
             for (const auto& [id, v] : it.plan.flags) {
-                ApplyOne(store, policy, id, v);
+                apply(id, v);
             }
             continue;
         }
@@ -1052,12 +1074,13 @@ std::size_t GuestApplier::Apply(const FlagStore& store, const Policy& policy, bo
                 const bool v = GetBit(set.data(), b);
                 const SyncMode m = ModeFor(policy, id);
                 if (m == SyncMode::State || (m == SyncMode::SetOnly && v)) {
-                    ApplyOne(store, policy, id, v);
+                    apply(id, v);
                 }
             }
         }
     }
     items_.clear();
+    held_ = std::move(held);
     return std::size_t(n_.applied - before);
 }
 
@@ -1561,7 +1584,7 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
     }
 }
 
-void GuestTick(Global& g, const FlagStore& store) {
+void GuestTick(Global& g, const FlagStore& store, u32 map_id) {
     perf::Scope z(perf::Zone::ProgressGuest);
     const bool mode0_window = g.stable >= kStableFrames && g.stable < kStableFrames + kMode0Window;
     std::lock_guard<std::mutex> lk(g.mu);
@@ -1570,16 +1593,18 @@ void GuestTick(Global& g, const FlagStore& store) {
         return;
     }
     const auto before = g.applier.counters();
-    const std::size_t n = g.applier.Apply(store, g.policy, mode0_window);
-    if (g.applier.Pending() == pending) {
+    const std::size_t held_before = g.applier.Held();
+    const std::size_t n = g.applier.Apply(store, g.policy, mode0_window, map_id ? map_id : 0xffffffffu);
+    if (n == 0 && g.applier.Pending() == pending && g.applier.Held() == held_before) {
         return;  // kept for later (mode 0 outside the post-load window)
     }
     const auto& c = g.applier.counters();
-    Log("guest applied %zu flags in load mode %d (already %llu, skipped %llu, failed %llu; cursor %llu)", n,
+    Log("guest applied %zu flags in load mode %d (already %llu, skipped %llu, failed %llu; cursor %llu; %zu boss "
+        "flag(s) of this map held back: written silently once summoned or elsewhere)", n,
         store.LoadMode(), static_cast<unsigned long long>(c.already - before.already),
         static_cast<unsigned long long>(c.skipped - before.skipped),
         static_cast<unsigned long long>(c.failed - before.failed),
-        static_cast<unsigned long long>(g.applier.cursor().last_seq()));
+        static_cast<unsigned long long>(g.applier.cursor().last_seq()), g.applier.Held());
     if (n > 0 && store.LoadMode() == 1) {
         // Summoned: the pool changed but the game may not save for a long time (seamless play).
         RequestGameSave("C2 host flags in the own pool");
@@ -1766,7 +1791,7 @@ void Tick(const GameSnapshot& s) {
     if (role == Role::Host && store.LoadMode() == 0) {
         HostTick(g, store, s, now);
     } else if (role == Role::Guest) {
-        GuestTick(g, store);
+        GuestTick(g, store, s.map_id);
     }
     if (g.dump) {
         const bool gap = std::chrono::duration<double>(now - g.last_dump).count() >= kDumpMinGap;
