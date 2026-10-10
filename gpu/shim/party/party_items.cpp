@@ -774,7 +774,7 @@ std::vector<LotSlotState> LotSlots(std::int32_t lot) {
         }
         s.num = num;
         if (s.category == 4) {
-            s.owned = InventoryCount(0x40000000u, static_cast<u32>(s.id));
+            s.owned = ItemCount(0x40000000u, static_cast<u32>(s.id));
             if (const u64 goods = GameParamRow("EquipParamGoods", "EQUIP_PARAM_GOODS_ST", static_cast<u32>(s.id))) {
                 std::int16_t mx = -1, rep = -1;
                 if (SafeGet(goods + 0x36, &mx) && SafeGet(goods + 0x49, &rep)) {
