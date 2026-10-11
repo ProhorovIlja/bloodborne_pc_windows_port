@@ -35,6 +35,8 @@ instances log at every steady load (`BB_PARTY_PROGRESS_TEST_READ`): `own` is wha
 | 13 | A fresh guest joins the advanced host late (run 7: host save from before the ending, guest `BB_TEST_NEWGAME`) | catch-up, gather, summon, `host_warp=2412952` | yes | yes | after the gather load (own world, m21): 12401800, 13201800, 12601850, 12101800 = 1; after the summon + travel to m24_01: 12411700, 12411800 = 1/1 (the current map's boss flags land at that map's load); **time of day 9800..9802 = 0/1, 13201803 = 0/1** | yes | **partial**: every boss caught up into the own save; the Blood Moon did not (open 2b) |
 | 13b | Blood Moon catch-up (fix 3) | run 7c: the same late guest (own 9800..9802 = 0) summoned again | yes | yes | `time of day behind the host's: own save 9800..9802 0 -> 7 (host 7)`, save requested; reads 1/1 | yes | **pass**  |
 | 13c | The caught-up time of day survives a restart | run 7d: Continue on both | yes | yes | guest's first own-world load (mode 0): 9800..9802 = 1/1 | yes | **pass** |
+| 14 | 3 players (base save copies, `BB_PARTY_MAX=3`) | `host_warp=2412952`, `host_warp=2402951`, `host_kill=2400800` (already dead in that save), `host_warp=2412951` | yes, both guests clients throughout | yes: each warp re-joined both guests (`re-join done` on both, host cooperators back) | boss flags 1/1 on both guests | yes | **pass** (travel chain; no fresh 3-player campaign) |
+| 1c | Gather to the host's real map (fix 4) | both fresh again, host's prologue ends in the Dream | yes | **yes**: `gather at the host's lamp: lamp warp to 2102950` (a Dream lamp; before: 2412959 in m24_01), summoned into m21 | - | yes | **pass** |
 | 12 | Continue party game resumes the same world | every run 2..6d | yes | yes | yes | yes | **pass** (host back where it saved; guest re-summoned, 20-110 s after start) |
 
 User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
@@ -42,7 +44,7 @@ User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
 | Decision | Result |
 |---|---|
 | A guest behind the host catches up fully in its own save (bosses, Blood Moon, lamps, shortcuts) | **partial**: bosses **pass** (rows 2, 3, 5, 7, 9 while summoned; row 13 for a fresh guest joining late: all six boss flags in its own save); campaign start **pass** (rows 1, 13); Blood Moon **pass after fix 3** (row 13b; before: row 7b not kept, row 13 a late joiner's own time of day stayed 0); lamps / shortcuts not measured in this soak |
-| NPC quest choices are shared (anyone's first choice counts) | **not covered**: no NPC quest step in this soak (the Gehrman refusal was set by the host only) |
+| NPC quest choices are shared (anyone's first choice counts) | **not covered here**: owned by agent/guestprog (world_actions.md: guest NPC talk, `npc_quest` world actions, Iosefka step live, `BB_PARTY_PROGRESS_NPC` on by default) - not in `windows-upstream-0.5` yet at 544bcd7; the soak-side quest chain runs once it is merged |
 | Cutscenes play for everyone | **pass**: Blood Moon 32000000 and Gehrman's refusal 21000040 played on the host and on the summoned guest (live mirror) |
 
 ## Fixes made during the soak
@@ -58,14 +60,17 @@ User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
    game's own view of 9800..9802 is the host's overlay; when it is ahead of the guest's own save the
    value goes into the own pool (only upward) with a save request. The C2 snapshot does not carry
    these flags (checked: no line in run 7b), so the summoned view is the source.
-4. Test steps added (party_director.cpp): `%MAP` on any step (steady-world clock, so warps and
+4. **Gather to the map the host stands in** (open 1): `GatherLampFor` (party_travel, tested) keeps
+   the host's last lamp when it is in the host's map, else a ReturnPointParam row of that map;
+   the director's gather and the late-joiner catch-up use it (row 1c).
+5. Test steps added (party_director.cpp): `%MAP` on any step (steady-world clock, so warps and
    kills chain without re-joins), `host_walk=chrENTITY`, `host_flag=ID` (a talk-menu choice),
    `host_skipremo` / `guest_skipremo` (the game's own cutscene skip request), `host_kill` logs
    whether the entity is in the character table.
 
 ## Open (not fixed here)
 
-1. **Gather target for a fresh host** (row 1): the guest's gather warp used the host's "last lamp"
+1. **(Fixed by fix 4)** **Gather target for a fresh host** (row 1): the guest's gather warp used the host's "last lamp"
    2412959 (the record a fresh character has: m24_01) while the host stood in the Dream, so the
    guest joined the host's world in m24_01 and the two were split until the host's next travel.
    Better: gather to the host's current map (roster) when its last-lamp record is the default.
@@ -86,7 +91,11 @@ User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
    the arena with the fight-start flag set gave no 12601800; the boss is spawned by its fight-start
    event (host enters the arena region), which a flag write does not run. Not a party bug; a real
    playthrough (or a region trigger aid) is needed.
-4. **Gehrman's refusal cutscene played a second time on the guest** right after the live mirror
+4. **Gehrman's refusal cutscene played a second time on the guest** - not from the party's story
+   queue: run 6b logged one `live mirror: remo 21000040 ... -> queued` and no second queue or
+   guest EMEVD 2002 line; the second "remo playing" started 0.1 s after the first ended, i.e. a
+   scene the game itself chained. Re-checked in run 8 (NG+1 save) but the NG+1 opening scene took
+   the whole run; not reproduced. Original note: right after the live mirror
    ended (run 6b, `remo playing` again at +254 s): a queued replay of the same story item after the
    live mirror. Check the story queue's de-duplication.
 5. Summons took longer late in the day (host hosting 85-108 s after start, guest joined 70 s
