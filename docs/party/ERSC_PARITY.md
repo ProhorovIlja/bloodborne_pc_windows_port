@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-11 (integration `windows-upstream-0.5` @ 580fbd3).
+Last update: 2026-10-11 (agent/sixp: A7, A9; integration `windows-upstream-0.5` @ 0d88184).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -51,7 +51,7 @@ only 100% when it meets it.
 
 | Area | Parity |
 |---|---|
-| A. Session & joining | 70% |
+| A. Session & joining | 76% |
 | B. World & travel | 72% |
 | C. Death & respawn | 64% |
 | D. Progress (anyone can progress) | 57% |
@@ -59,7 +59,7 @@ only 100% when it meets it.
 | F. Network & robustness | 72% |
 | G. BB-specific (chalice, insight, bath) | 27% |
 | H. Bloodborne rule (feels like SP in a party) | 67% |
-| **Overall (unweighted mean of rows)** | **~65%** |
+| **Overall (unweighted mean of rows)** | **~66%** |
 
 ## A. Session & joining
 
@@ -71,9 +71,9 @@ only 100% when it meets it.
 | A4 | Join speed | Seconds after both are in the world *(verify)* | Fast join ~10 s; Continue -> summoned 23 s, fresh 53 s after the restart | 70 | Target Continue <=15 s (flowlive WIP) |
 | A5 | Join any time / late joiner | Yes | Yes, with catch-up of progress + opening skip | 80 | party_catchup |
 | A6 | Leave cleanly | Separating Mist leaves at any time; if the host uses it the session disbands; everyone mists out to close | Leave works (0.4 s) | 75 | Spurious "Session lost" notice (flowlive WIP); host "End party" with 2 guests untested |
-| A7 | Player count | 1-6 players (host + 5) | 3 live-verified; 4 coded (party_fourp), not live (needs 4 slots) | 50 | Target 4 (user decision); 5-6 not planned |
+| A7 | Player count | 1-6 players (host + 5) | Max 4 by user decision (host + 3): one constant (party::kMaxPartyPlayers) sizes the link slots, VITALS, HUD rows and the Party members page; the engine takes the 3rd cooperator through H1 (party_fourp). Live 2026-10-11 with 4 real clients: `cooperators 2 -> 3` on the host, every client sees all four (presence count 4), screenshots show the four together, nobody in a wall | 90 | max 4 by user decision; 100% = 4 verified live. four_players.md "A7". Open: the 3rd cooperator's summon takes 57-108 s (its first invites are dropped in the game's session handshake); boss scaling H2-H4 with 3 cooperators not yet seen live |
 | A8 | Settings in game | ersc_settings.ini: [GAMEPLAY] allow_invaders, death_debuffs, allow_summons, overhead_player_display; [SCALING]; [PASSWORD]; [SAVE]; [LANGUAGE] | All settings in the game's own System menu, Party pages | 90 | bbport_game_menu |
-| A9 | Version check | Same mod + game version required | Party protocol version checked on join (kLinkProtocolVersion), clear reject reason | 70 | Build/patch-set mismatch beyond the protocol number not checked |
+| A9 | Version check | Same mod + game version required | Protocol version, then the bbport build (git describe), eboot.bin, the game params (gameparam.parambnd.dcx), gameplay patches, gameplay mods, the party's installed hook set and the party rules; a mismatch is refused with what differs and what to do, shown in the party UI | 95 | version_check.md; party-link-test, test_simguest (build); live 2026-10-11: 4 clients with equal identities admitted, a guest with other party options refused at the title ("party patches differ ... use the same bbport build and party options"). Not live: two different builds |
 | A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Moved to the 100%+ milestone (I1) |
 | A11 | Joining during a boss fight / cutscene | Joiner spawns near the host | Decision: wait outside until it ends. Not implemented | 0 | |
 
@@ -172,3 +172,4 @@ only 100% when it meets it.
 - 2026-10-11: I2 pings through walls with distance and player colours (100%+).
 - 2026-10-11: I3 world warper shader-cache builder (100%+).
 - 2026-10-11: C4 85 (rot), D7 75 (enemy scaling measured + settings), E2 90 (overhead display; reusable WorldToScreen + member colours for I2) - agent/balance, docs/party/balance.md.
+- 2026-10-11: A7 (4 players live with 4 real clients, 90) and A9 (build / params / party hook fingerprint, live mismatch refusal, 95), agent/sixp.
