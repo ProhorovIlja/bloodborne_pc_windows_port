@@ -502,6 +502,41 @@ the live mirror's call), then the time of day and the story flags go into the **
 (`progress::WriteFlagOwnSave`; 9800..9802 as three bits, no world-refresh byte - the world shown
 is the host's), never into the host-world overlay, followed by a save request. `st.tod_value`
 is read from the own pool while summoned ("never turn the clock back" compares the own save).
-Endings stay queued until the own world: they warp to the own Hunter's Dream (documented wait).
+Endings run last, from the summoned state too (2026-10-11, `summoned_ending`,
+`BB_PARTY_STORY_ENDING_SUMMONED=0` restores the wait for the own world): once the guest is a
+steady, calm phantom with an ending queued, the program starts with the lamp warp
+`0x13CDF30(2102961)` run as a travel replay (`RunLampWarpReplay`: travel capture, guest-lamp
+interceptor and send-home retarget stand aside). A client's lamp warp leaves the host's room and
+loads its **own** world (as every B1 travel follow), so the program's `WaitArrive` (load seen,
+own world, m21, steady) is met in the guest's own Hunter's Dream and the ending runs there exactly
+as at home: A sets 72100130 (m21 12100180 does the rest), B / C emulate the event (flags, remo by
+sex, NG cycle +1, 6604 / 6601|6602 / 6603, last 22|23) -> native ending step -> staff roll -> next
+cycle. The `TravelDream` op skips the warp only in the **own** Dream (`own_world`), not in the
+host's m21. The director rings no bell while the ending runs (`StoryBusy`), so the guest rejoins
+the party only from its new cycle. After our ending flag the story tick logs `ending: staff roll /
+ending step t=...` every 10 s (the world is down for minutes; it also keeps the harness reaper
+away) and `ending: the next cycle's world is up ...` with the NG cycle; `NG cycle N at world-up`
+is logged once per world-up.
+
+Test hook: `BB_PARTY_STORY_TEST=ending:<1|2|3>[,summoned]` (+ `BB_PARTY_STORY_TEST_DELAY`) queues
+that ending as if the host had sent it (`summoned`: only once session role 6).
+
+Live (copied saves only):
+* r3 (2 instances, guest summoned in the host's Dream, `ending:2,summoned`, delay 75 s): guest
+  `test: ... ending 2 ... queued (session client, NG cycle 0)`, `ending: warping to the own
+  Hunter's Dream (2102961) - leaving the host's world (summoned)`, then in its own world (session
+  idle): `flags set ON (12101800=1, 9180=1)`, `replay: remo 21000020 mode 0 -> queued`, `remo ended
+  after 72.3 s`, `9180=0`, `NG cycle 0 -> 1`, `6604=1,6601=1,6603=1`, `22=1`, `world down` (the
+  ending step; Mv_AudioPlayThread = the staff roll movie).
+* r4 / r5 (1 instance, `ending:2`): screenshots 10 / 45 / 100 s after flag 22 show the staff roll
+  (`Hidetaka Miyazaki`, `Lead Character Artist`, `Lead 2D Artist` ...); r5: `staff roll / ending
+  step t=100 ... t=381 s`, then `NG cycle 1 at world-up (map m24_01_00_00 ...)` - the next cycle
+  starts in Iosefka's Clinic with its opening cutscene 24011005 - and `the next cycle's world is up
+  391 s after the ending started (NG cycle 1, map m24_01_00_00)`.
+* r7: the same save copy booted again (Continue, no re-copy): `NG cycle 1 at world-up (map
+  m24_01_00_00)` - the NG+ cycle is in the save (the backup save is NG 0).
+Unit tests: `test_summoned_ending`, `test_missed_scene_replayed_while_summoned` (party-story-test).
+Open: the host's own ending with B2 sessions (does its ending step close the room before the
+guest's warp?) - the guest no longer depends on it, it leaves by itself.
 Unit tests: `test_mirror_then_replay` (now finishes as a phantom),
 `test_replay_waits_home_when_summoned_off`, `test_missed_scene_replayed_while_summoned`.
