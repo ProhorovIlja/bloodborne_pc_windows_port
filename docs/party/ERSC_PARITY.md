@@ -54,12 +54,12 @@ only 100% when it meets it.
 | A. Session & joining | 84% |
 | B. World & travel | 82% |
 | C. Death & respawn | 65% |
-| D. Progress (anyone can progress) | 73% |
+| D. Progress (anyone can progress) | 74% |
 | E. Services & UI | 88% |
-| F. Network & robustness | 72% |
+| F. Network & robustness | 78% |
 | G. BB-specific (chalice, insight, bath) | 67% |
 | H. Bloodborne rule (feels like SP in a party) | 71% |
-| **Overall (unweighted mean of rows)** | **~75%** |
+| **Overall (unweighted mean of rows)** | **~76%** |
 
 ## A. Session & joining
 
@@ -98,15 +98,15 @@ only 100% when it meets it.
 | C3 | Party wipe | Everyone respawns at their last grace; session kept (boss/invasion limbo ends on a wipe) | Same; verified | 90 | §6.8 r8-r15 |
 | C4 | Death penalty | Optional rot: 5 types, one picked at random per death, stacking, removed only by resting at a grace; stops one player dying endlessly while another keeps enemies from respawning | Rot (on by default, System > Party rules; the host's setting counts for the party): each death adds a stack (max 5) of a random kind, max HP -10 % or max stamina -10 %; cleansed by the player's own lamp / headstone use; kept across restarts. 2 kinds, not ERSC's 5 (damage / discovery / vials would need SpEffect rows of our own). Echoes: single-player bloodstain for everyone (hostdeath); rot is independent of it | 95 | 2026-10-11 live: host death -> toast, max HP 719 -> 647, lamp warp -> cleansed (run 4); guest's own death in the host's world (boss runs): stacks 3 -> 4, "this one stamina": max stamina 100 -> 90, max HP 503 (70 %), toast "Rot 4/5: max HP -30 %, stamina -10 %". docs/party/balance.md |
 | C5 | Spectate while dead | A death in a boss fight or invasion puts the player in limbo, spectating, until the party wipes or someone rests at a grace | None | 0 | |
-| C6 | Rejoin after a crash / redirect | Rejoin by item | ~4.5 s ring to client after the world is up; crash rejoin ~30 s | 80 | §6.11 |
+| C6 | Rejoin after a crash / redirect | Rejoin by item | ~4.5 s ring to client after the world is up; crash rejoin ~30 s after the restart (~34 s after the crash), ~15 s of it after the guest's world is up: the 26 s sign hold for the host's dead transport connection | 80 | 2026-10-11: join_timing.md (profile; another guest port failed - the host's game keeps the old address; early NR expiry experimental, off). Floor without the hold ~22 s after the crash |
 | C7 | Resting while others are in a boss room | They are removed from the boss room | A rest is a party move (host load), so nobody stays behind; not tested during a fight | 60 | Test during a boss fight |
 
 ## D. Progress: anyone can progress
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| D1 | Boss kills count for everyone | Yes | Yes (K10); session kept after the kill | 85 | |
-| D2 | World state shared (doors, shortcuts, lamps) | Host's world; progression events completed online also progress each player's own world | Host world flags mirrored to guests live (~0.3 s); guest's own save gets C2 progress | 80 | event_flags.md §12. Visual door check pending |
+| D1 | Boss kills count for everyone | Yes | Yes (K10); session kept after the kill; the guest sees the host's cleared boss (no boss, no bar) though its own save has it alive; a guest dying after / during the fight now respawns (it lay dead before) | 90 | 2026-10-11: b2_seamless.md §6.12 (watchdog live), event_flags.md §12 visual check with control run |
+| D2 | World state shared (doors, shortcuts, lamps) | Host's world; progression events completed online also progress each player's own world | Host world flags mirrored to guests live (~0.3 s); guest's own save gets C2 progress; boss state visually checked | 85 | event_flags.md §12. 2026-10-11 visual: boss passes; doors inconclusive (chosen doors looked open with and without the flag) |
 | D3 | Guest actions change the host's world | Yes *(verify)* | Guest levers / gates / doors: the host's game gets the guest's ObjAct kick natively (logged) and the object animates in the host's world; the guest's flag changes in its copy of the host's world go to the host as EVENT `world_action` (whitelisted shortcut / world-state / key / NPC flags, host re-validates against its map, rate limit, fuzzed) and into the guest's own save; kick replay when the host's game missed it | 80 | 2026-10-11 live: guest pulls lever 2411310 -> host log `ObjAct kick (another player) ... kick event 12410200` 0.07 s later, host's gate open on its screen (shots), 12410200 set by the host's own event; guest's own save 12410200=1 (world_actions.md 9). Not run: elevator, ladder, one-way door, illusory wall; a neighbour block's constructor flags stay local (own-block rule) |
 | D4 | Items & pickups | Random drops instanced per player; persistent loot (bosses, scarabs) for everyone in the area; one-time items not re-granted if already owned | Instanced world treasure (user decision): three patches spawn treasure for guests and let a guest's pickup set its flag; the world mirror shows each guest its OWN pickups, a guest's pickup goes to its own save only; enemy drops per player (each game rolls each enemy's drop, a guest keeps its full roll); boss rewards / key items for everyone present (C3), item-get dialog, blood gems | 75 | Live: treasure spawned for and taken by a guest in the host's world (Madman's Knowledge, Search Body, item-get on the guest; run 9); per-player enemy drops: the host's kill rolled on both games for the same enemy (handle 0x10014001: host role 3, guest role 6), the guest keeps its full roll (patch 0x17DD764). Own-save write of a guest pickup fixed after run 9, not re-run; a guest's own damage kill not run (world_actions.md 4, 9) |
 | D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests; soak: boss flags of 7 bosses in the guest's own save, late joiner catches up bosses, cutscenes for everyone (Blood Moon, Gehrman refusal, ending) | 70 | 2026-10-11 campaign_soak.md. NPC quest choices ("first choice counts for everyone") not covered; Gehrman refusal cutscene replayed twice on the guest (open 4) |
@@ -130,7 +130,7 @@ only 100% when it meets it.
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
 | F1 | Real internet play (latency/loss) | Works over Steam | Network simulator on both transports (UDP game traffic, TCP party link) + scripted outages; party events reliable and ordered (TCP + replay cursor). Live 2026-10-11 at 60 ms/1 %, 150 ms/3 % and a 5 s total outage mid-session: bell join 5-11 s, B2 travel, guest/host deaths, boss clear, mirror parity all fine, 0 link drops | 75 | network_robustness.md §3; party-link-test netsim (300 events in order through 5 % loss + 1.5 s outage); a real 2-PC internet test still open |
-| F2 | NAT traversal | Steam relay | Host: one port UDP+TCP (9307), UPnP mapping (IUPnPNAT) on by default, manual-forward hint, STUN public address in the code; guests need nothing; guest-guest hole punch with host-relay fallback; CGNAT host -> VPN | 55 | network_robustness.md §4 (2026-10-11); not tried on a real router / NAT |
+| F2 | NAT traversal | Steam relay | Host: one port UDP+TCP (9307), UPnP on by default, manual-forward hint, STUN address in the code. **No port: UDP hole punching** - each guest's code `BBG1-...` (its STUN endpoint) to the host (*Add a guest code*), the host punches, the party link falls back to a reliable UDP stream on the same port (`party_rudp`), the game's UDP shares the mapping. Guest-guest punch with host relay. Symmetric NAT / CGNAT on both sides cannot be punched -> another host or a VPN; member relay considered, not built | 75 | 2026-10-11: network_robustness.md §3b/§4; live NAT-sim run (`nat=1`, no TCP listener): link over UDP 0.6 s after the punch, bell join, B2 travel; party-link-test rudp + NAT cases. No real router tested |
 | F3 | Security | n/a | Hardening + fuzzing of party events | 80 | party-security-test |
 | F4 | Invasions | allow_invaders=1 enables invaders (hairpin item); no warp or rest during an invasion | None (serverless) | — | Not planned |
 | F5 | Watchdog / desync recovery | n/a | Watchdog, B1 fallback; a 5 s outage mid-session survives without desync (no reconnect, client kept, mirror parity); link reconnect + event replay tested | 80 | network_robustness.md §3 (2026-10-11 outage run); party-link-test |
@@ -164,6 +164,7 @@ only 100% when it meets it.
 
 ## Change log
 
+- 2026-10-11 (overlay): F2 55 -> 75 (UDP hole punching with guest codes, reliable UDP link, NAT sim live), D1 85 -> 90 (guest death after a boss fixed; boss state visual), D2 80 -> 85 (boss visual; doors inconclusive), C6 80 (profiled; the 26 s hold remains).
 - 2026-10-11: table created from the state of the integration branch at 580fbd3.
 - 2026-10-11: ERSC column checked against ersc-docs.github.io (settings + FAQ) and the Nexus
   description; rows A9, A10, B7, C7, D8, D9, F6 added.
