@@ -52,7 +52,7 @@ only 100% when it meets it.
 | C. Death & respawn | 57% |
 | D. Progress (anyone can progress) | 52% |
 | E. Services & UI | 82% |
-| F. Network & robustness | 48% |
+| F. Network & robustness | 73% |
 | G. BB-specific (chalice, insight, bath) | 27% |
 | H. Bloodborne rule (feels like SP in a party) | 67% |
 | **Overall (unweighted mean of rows)** | **~60%** |
@@ -125,11 +125,11 @@ only 100% when it meets it.
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| F1 | Real internet play (latency/loss) | Reworked P2P on Steam's newer networking API; old packet-loss disconnects gone | Only loopback tested | 20 | Net simulator + reliable party events (overlay WIP) |
-| F2 | NAT traversal | Steam relay | Direct IP; UPnP / port forward not done | 20 | network_robustness.md (WIP) |
+| F1 | Real internet play (latency/loss) | Works over Steam | Network simulator on both transports (UDP game traffic, TCP party link) + scripted outages; party events reliable and ordered (TCP + replay cursor). Live 2026-10-11 at 60 ms/1 %, 150 ms/3 % and a 5 s total outage mid-session: bell join 5-11 s, B2 travel, guest/host deaths, boss clear, mirror parity all fine, 0 link drops | 75 | network_robustness.md §3; party-link-test netsim (300 events in order through 5 % loss + 1.5 s outage); a real 2-PC internet test still open |
+| F2 | NAT traversal | Steam relay | Host: one port UDP+TCP (9307), UPnP mapping (IUPnPNAT) on by default, manual-forward hint, STUN public address in the code; guests need nothing; guest-guest hole punch with host-relay fallback; CGNAT host -> VPN | 55 | network_robustness.md §4 (2026-10-11); not tried on a real router / NAT |
 | F3 | Security | n/a | Hardening + fuzzing of party events | 80 | party-security-test |
 | F4 | Invasions | allow_invaders=1 enables invaders (hairpin item); no warp or rest during an invasion | None (serverless) | — | Not planned |
-| F5 | Watchdog / desync recovery | n/a | Watchdog, B1 fallback | 70 | |
+| F5 | Watchdog / desync recovery | n/a | Watchdog, B1 fallback; a 5 s outage mid-session survives without desync (no reconnect, client kept, mirror parity); link reconnect + event replay tested | 80 | network_robustness.md §3 (2026-10-11 outage run); party-link-test |
 | F6 | Minimal anticheat | Debug flags / speed multipliers disabled in a session | None (friends only) | — | Not planned |
 
 ## G. Bloodborne-specific
