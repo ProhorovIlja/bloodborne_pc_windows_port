@@ -2022,20 +2022,20 @@ void GuestMirrorTick(Global& g, bool force_full, const char* why) {
     } else {
         g.mirror_live_bits += r.bits;
     }
-    if (full && !r.changed.empty()) {
-        // What the vanilla overlay lacked: flag blocks (id / 1000) and the bits that changed.
+    if (!r.changed.empty()) {
+        // Full: what the vanilla overlay lacked; live: what the host changed. Flag blocks (id / 1000).
         std::string list;
         for (const auto& [key, bits] : r.changed) {
             char b[32];
             std::snprintf(b, sizeof b, "%s%u:%d", list.empty() ? "" : " ", BlockOfPoolKey(key), bits);
             list += b;
             if (list.size() > 400) {
-                Log("world mirror: blocks changed by the full copy (block:bits): %s", list.c_str());
+                Log("world mirror: blocks changed by the %s (block:bits): %s", full ? "full copy" : "host", list.c_str());
                 list.clear();
             }
         }
         if (!list.empty()) {
-            Log("world mirror: blocks changed by the full copy (block:bits): %s", list.c_str());
+            Log("world mirror: blocks changed by the %s (block:bits): %s", full ? "full copy" : "host", list.c_str());
         }
     }
     if (full || r.groups) {

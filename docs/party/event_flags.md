@@ -247,9 +247,9 @@ and, separately, the raw pool (label suffix `-pool`, blocks numbered by `id/1000
 
 ## 10. Open questions
 
-- Exact native writer of the lamp-lit flags 7AAB02xx and of 1AAB78x0 (lamp object code), and
-  which of the two the Hunter's Dream headstones read (confidence medium: the DLC-removal events
-  clear 7AAB02xx).
+- Exact native writer of the lamp-lit flags 7AAB02xx and of 1AAB78x0 (lamp object code). The
+  Hunter's Dream headstones list the lamps from the overlay's flags (a guest's list was empty until
+  the host-world mirror, section 12, filled 72xx02xx).
 - Packet 0x0e (network-synced EMEVD events) semantics and whether the host's EMEVD completion of
   network-synced events reaches guests.
 - Which thread runs the save writer 0x156aa50 / its task.
@@ -274,3 +274,51 @@ pool, which the running events never see) or after a load into another map. The 
 read `12401800=1 12411800=1`. Rewards for such kills come only through C3. A banner is still
 shown when the guest **witnessed** the kill (it is in the host's world; the host's event plays).
 C2 mode-1 applies now also request a save (seamless guests may not save for a long time).
+
+## 12. Host-world mirror: the guest's overlay as a copy of the host's world (2026-10-11)
+
+**Gap.** In load mode 1 every Get/SetEventFlag of a guest reads the overlay (+0x88), and the only
+thing that fills it is the vanilla packet 0x10 apply (0x13BECA0: all ~900 overlay groups allocated
+zeroed, 12 copied, section 4). A/B live run (save `savedata_20261010`, host in the Dream, bell join,
+then host lamp warp to Central Yharnam = B2; `BB_PARTY_FLAG_DUMP=1`, host pool dump vs guest visible
+dump after the guest's m24_01 load, `BB_PARTY_WORLD_MIRROR=0`): of the 638 mirror groups the host
+had 39 non-zero, the guest 15; **33 groups had host bits the guest lacked**: area gates 2400-2402 /
+2410-2412 (block 2), T1 doors/shortcuts/boss state of other maps (12200, 12300 x24, 12301, 12307,
+12400 x67, 12401 incl. 12401800, 12407, 12800), every item pickup (50000-50003 x21, 52300 x35,
+52400 x23, 52410 x39 - the map the guest stood in -, 52411, 52420 x11), T7 lamps lit and NPC state
+(72100 x10, 72101, 72300 x4, 72400 x21, **72410 x20 incl. the lit lamps 72410201-203**), 70000030,
+70009250. So the guest saw unlit lamps (headstone list empty -> crash), un-picked items, closed
+gates of other maps.
+
+**Fix** (`party_progress` "world mirror"; `WorldMirrorKey`, `HostWorldTracker`, `GuestWorldMirror`):
+
+* Mirror groups (638): global types 0,1,5,6,7 minus blocks 6-8 (own pool in mode 1) and 60009xxx
+  (C3's ledger); map types 1,5,6,7 of the 16 non-chalice table maps minus **T1 zones 4-6** (boss-fight
+  state, enemy AI: the vanilla snapshot carries the current map's; a live copy would break fog and
+  boss scripts). Bits never written: 2000-2099 (session flags the guest's own session code keeps)
+  and 9020-9026 (chalice slot, set by SetLoadMode(1)). Not type 9, not area 29 / 40-47 / 99.
+* Host: at the end of each scan round (BB_PARTY_PROGRESS_SCAN_MS, 1 s) one 150 KB read of its pool,
+  diffed per mirror group. EVENT **`world_groups`** `{v, epoch, full, g:[[key, hex125]...]}`: a full
+  image (non-zero groups, `full=1`: absent = zero) to each newly connected member right before
+  `flag_snapshot`, then the changed groups (absolute bytes) to everyone.
+* Guest: keeps the image; writes the overlay buffers directly (map +0x90, node key +0x20, buffer
+  +0x28; key = GroupKey) - never the own pool, never through SetEventFlag:
+  * **full copy** right after every vanilla apply (party_b2 K11 call site 0x17851CE calls
+    `progress::OnVanillaSnapshotApplied()` after 0x13BECA0, before MoveMapStep's SetLoadMode(1) and
+    the host-world load), again after the B2 overlay guard, and whenever the overlay's identity
+    (head, root, leftmost buffer) changes: every masked bit becomes the host's;
+  * **live**: each frame (also during loads) the bits the host changed since the last apply; the
+    guest's own runtime bits in the overlay (its events in the host's world) stay.
+* `BB_PARTY_WORLD_MIRROR=0` (guest) turns it off; `BB_PARTY_PROGRESS_MIRROR` (set-only C2 flags
+  into the overlay) is unrelated and stays off.
+
+**Live result** (same run with the mirror on): first join `full copy (right after the vanilla
+snapshot apply, load mode 0): 32 of 900 overlay groups written, 422 bits changed`; B2 `33 groups,
+372 bits` (the old map's groups included); live `1 group, 3 bits` within ~1 s of host changes. Dump
+after the guest's m24_01 load: host and guest non-zero mirror groups 39 = 39, **host-only bits: 0**
+except 2010/2020 (session, masked by design). Guest-only bits (guest's own runtime, kept): 5500-5521
+and 9042-9075 (set by the guest's game at its load), 3503, its m24_01 / m27 event completions.
+
+**Effects seen:** the guest's Hunter's Dream headstone lists the host's lamps (7: 1st Floor
+Sickroom ... Old Yharnam) and no longer crashes; choosing a lamp moves the party (guest_services.md
+3.3). The world lamp prompt is **not** a flag question: see guest_services.md 3.3 (lamp type).
