@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-11 (agent/splittravel: B3, B4, B5, H1).
+Last update: 2026-10-11 (agent/guestprog: D3, D4, D8, G2, H5; before: agent/splittravel B3, B4, B5, H1).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -54,12 +54,12 @@ only 100% when it meets it.
 | A. Session & joining | 84% |
 | B. World & travel | 82% |
 | C. Death & respawn | 65% |
-| D. Progress (anyone can progress) | 64% |
+| D. Progress (anyone can progress) | 73% |
 | E. Services & UI | 88% |
 | F. Network & robustness | 72% |
-| G. BB-specific (chalice, insight, bath) | 53% |
-| H. Bloodborne rule (feels like SP in a party) | 70% |
-| **Overall (unweighted mean of rows)** | **~73%** |
+| G. BB-specific (chalice, insight, bath) | 67% |
+| H. Bloodborne rule (feels like SP in a party) | 71% |
+| **Overall (unweighted mean of rows)** | **~75%** |
 
 ## A. Session & joining
 
@@ -107,12 +107,12 @@ only 100% when it meets it.
 |---|---|---|---|---|---|
 | D1 | Boss kills count for everyone | Yes | Yes (K10); session kept after the kill | 85 | |
 | D2 | World state shared (doors, shortcuts, lamps) | Host's world; progression events completed online also progress each player's own world | Host world flags mirrored to guests live (~0.3 s); guest's own save gets C2 progress | 80 | event_flags.md §12. Visual door check pending |
-| D3 | Guest actions change the host's world | Yes *(verify)* | Lamp lighting via host only. Guest levers / doors / shortcuts not routed | 30 | Next: generalise the lamp_lit request to levers/doors |
-| D4 | Items & pickups | Random drops instanced per player; persistent loot (bosses, scarabs) for everyone in the area; one-time items not re-granted if already owned | Summoned awards, item-get dialog, blood gems for guests | 75 | C3 |
+| D3 | Guest actions change the host's world | Yes *(verify)* | Guest levers / gates / doors: the host's game gets the guest's ObjAct kick natively (logged) and the object animates in the host's world; the guest's flag changes in its copy of the host's world go to the host as EVENT `world_action` (whitelisted shortcut / world-state / key / NPC flags, host re-validates against its map, rate limit, fuzzed) and into the guest's own save; kick replay when the host's game missed it | 80 | 2026-10-11 live: guest pulls lever 2411310 -> host log `ObjAct kick (another player) ... kick event 12410200` 0.07 s later, host's gate open on its screen (shots), 12410200 set by the host's own event; guest's own save 12410200=1 (world_actions.md 9). Not run: elevator, ladder, one-way door, illusory wall; a neighbour block's constructor flags stay local (own-block rule) |
+| D4 | Items & pickups | Random drops instanced per player; persistent loot (bosses, scarabs) for everyone in the area; one-time items not re-granted if already owned | Instanced world treasure (user decision): three patches spawn treasure for guests and let a guest's pickup set its flag; the world mirror shows each guest its OWN pickups, a guest's pickup goes to its own save only; enemy drops per player (each game rolls each enemy's drop, a guest keeps its full roll); boss rewards / key items for everyone present (C3), item-get dialog, blood gems | 75 | Live: treasure spawned for and taken by a guest in the host's world (Madman's Knowledge, Search Body, item-get on the guest; run 9); per-player enemy drops: the host's kill rolled on both games for the same enemy (handle 0x10014001: host role 3, guest role 6), the guest keeps its full roll (patch 0x17DD764). Own-save write of a guest pickup fixed after run 9, not re-run; a guest's own damage kill not run (world_actions.md 4, 9) |
 | D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests; soak: boss flags of 7 bosses in the guest's own save, late joiner catches up bosses, cutscenes for everyone (Blood Moon, Gehrman refusal, ending) | 70 | 2026-10-11 campaign_soak.md. NPC quest choices ("first choice counts for everyone") not covered; Gehrman refusal cutscene replayed twice on the guest (open 4) |
 | D6 | Full campaign start to credits | Playable | Soaked new game -> clinic -> Dream -> Central Yharnam -> Cleric Beast -> Gascoigne -> Cathedral Ward -> Amelia -> Forbidden Woods -> Rom -> Blood Moon -> Nightmare Frontier -> Gehrman -> ending B + staff roll on host and guest, Continue between every run | 75 | 2026-10-11 campaign_soak.md (2 players end to end; 3 players: travel chain with both guests following, row 14; test-step travel and kills, not real play). Mergo's Wet Nurse not killable by the tooling |
 | D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Measured: BB scales only bosses (SpEffect 7500/7501: +50 % HP and status resist, +30 poise per cooperator, damage +0); normal enemies none. Six settings per extra hunter (System > Enemy scaling, overlay Party tab, bbport.ini): boss/enemy HP and poise in % of the vanilla boss step, damage +%; defaults harder than vanilla (boss HP 150 %, boss damage +10 %, enemy HP 50 %); negative poise = ERSC's staggerable note. Host's values to every peer; rows 7500-7503 written on each; 7503 on normal enemies, never on the 34 boss entities | 90 | 2026-10-11 live boss runs (Cleric Beast, 1 cooperator): boss gets 7500, HP 5277 / 5277 on host AND guest (2700 x 1.117 area x 1.75; vanilla x1.5 = 4523); enemies 520 -> 650. Damage A/B (boss_damage 0 vs 100): hits 61-126 (max 239) vs 216-534 on both players. Poise row written, stagger not measured. docs/party/balance.md |
-| D8 | NPC dialogue / talk events synchronised | Yes | Story choices synced (C4); NPC talk with a guest present untested | 25 | Test NPC talk (Gilbert, Eileen) in party |
+| D8 | NPC dialogue / talk events synchronised | Yes | Guests talk to world NPCs (IsClientPlayer answered 0 for world talk scripts); quest flags the talk sets go to the host's world and the guest's own save (world_action npc_quest, set and clear); NPC quest sync to every guest's save on by default (shared quest choices, user decision) | 70 | 2026-10-11 live: Gilbert (talk prompt, dialogue), Iosefka at the clinic door: guest `set 1143 72410337 12410739 (npc_quest)` -> host `slot 1 changed the host's world ... 1143=1 72410337=1`. Cathedral Ward run: Oedon Chapel Dweller -> host 72400310=1, Eileen -> host 72400520=1. Next: a quest choice with an item gift, Alfred |
 | D9 | A grace rest resets the world for everyone | Yes | Lamp rest = host load: enemies respawn in the host's world; guests get the refill and HP (verified) | 85 | guest_services.md §3.3 |
 | D10 | Cutscenes play for the whole party | Synced talk events | Decision: everyone watches. Untested (K11 skips the clinic opening for guests) | 20 | |
 
@@ -141,7 +141,7 @@ only 100% when it meets it.
 | # | Feature | ERSC analogue | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
 | G1 | Chalice dungeons in party | Catacombs work in co-op | 2026-10-11: Pthumeru layer 1 cleared live in a party (runs c11-c15): host ritual -> guest summoned by quick join; lever + door; layer boss debug kill keeps the session (K10 both roles, guest send-home dropped); guest gets its own boss lots; the lift down to the next layer carries host and guest (y 31.5 -> 10.5, both alive); lamp exit puts both in the Dream with one load (B2 re-join). Guest ritual: chalices now shared both ways, so the host opens the altar and glyph-searches the guest's dungeon (c17: altar menu, glyph dialog and board lookup reached; the IME glyph lost its 8th char, fixed); host entry + summon into the guest's dungeon not yet verified live (c18 queued). Two old crashes not reproduced in 8 runs at 1792 MiB | 75 | c18: host enters a guest-made dungeon by glyph, party summoned |
-| G2 | Insight, Messengers' bath, Insight items | — | Untested for guests | 10 | |
+| G2 | Insight, Messengers' bath, Insight items | — | Boss Insight (native +1 + director N-1); NEW: a host's non-boss Insight (first encounter, story) also goes to every guest present; Insight items white-enabled; Bath Messengers incl. the Insight shop open to guests (own echoes / Insight / stock) | 50 | Unit-tested (phantom `boss:false`); shops verified earlier (guest_services.md 5); encounter Insight and Insight-shop purchase by a guest not run live |
 | G3 | Blood Moon / world phase changes | — | Blood Moon live in a party: Rom's death -> Queen Yharnam (13201803) -> cutscene 32000000 on host and summoned guest, time of day 3 into the guest's own save, the host's event warp followed; a guest behind (late joiner, or one that quit before the save) gets the host's time of day into its own save at the next summon (new catch-up) | 75 | 2026-10-11 campaign_soak.md rows 7b, 13, 13b. Evening -> night (Amelia's skull 12401803) not triggered in the soak |
 
 ## H. Bloodborne rule: a party that plays like single-player
@@ -152,7 +152,7 @@ only 100% when it meets it.
 | H2 | No repeated summons | Join once per play session | The session survives travel, bosses, deaths and wipes; Continue party game re-joins automatically; a crash or redirect needs a re-join (~4.5 s); after Leave, Join party re-summons (2026-10-11 flowlive: NP context re-registered, signaling resolve retried); a guest's join is ~12 s from its world to the host's (join_timing.md 2026-10-11) | 75 | A4, C6 |
 | H3 | No progress lost by anyone | Online progression also progresses your own world | Guest's own save gets kills, flags, items, story and lamps (C2/C3/C4 + mirror); full campaign not soaked; Insight / echoes for the guest partly unverified | 65 | D6 soak, G2 |
 | H4 | No unnecessary respawns | Only the dead player respawns; enemies reset on a grace rest | Guest death respawns only the guest; host death respawns the whole party; enemies reset on a lamp rest only | 60 | C2 |
-| H5 | Character freedom as in single-player | Every player has their own character, inventory, levels | Guests: Doll level-up, shops, workbench, storage, own inventory and consumables. Untested: runes / Memory Altar, covenants, gestures, outfits, bath shop and Insight purchases, chalice ritual by a guest | 70 | G2, guest services audit |
+| H5 | Character freedom as in single-player | Every player has their own character, inventory, levels | Guests: Doll level-up, shops (vials, bullets), workbench, storage, mirror, dress-up, Insight shop, own inventory and consumables; world NPCs (D8); world treasure (D4, instanced). Static audit (world_actions.md 8): Memory Altar t210690 has no client test; equipment / outfits / gestures are menu-local. Chalice ritual by a guest stays host-only (G1) | 75 | Talk-script IsClientPlayer scan of every talkesdbnd; not run live: Memory Altar, covenants |
 
 ## I. 100%+ milestone (after every row above is 100%)
 
@@ -177,3 +177,4 @@ only 100% when it meets it.
 - 2026-10-11: B1 78, D5 70, D6 75, G3 75 - campaign soak new game -> end credits (2 players), Blood Moon catch-up; agent/edgetravel, docs/party/campaign_soak.md.
 - 2026-10-11: D6 note (3-player travel soak), gather to the host's map; summary D 64 - agent/edgetravel.
 - 2026-10-11: B3 90, B4 92, B5 70, H1 78 (splittravel): the lamp / headstone / Hunter's Mark question, alone travel for host and guests, same-map moves without a loading screen (split_travel.md).
+- 2026-10-11 (guestprog): D3 80, D4 75, D8 75, G2 50, H5 75 - guest world actions, NPC talk, instanced pickups, encounter Insight, Blood Moon catch-up (world_actions.md).
