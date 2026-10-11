@@ -5,8 +5,8 @@
 //             effects' maxHpRate (node +0x48 -> param row +0x10, read live), NG+ table, 9200 sync.
 //             Called by the per-frame HP update 0x1a0d7d0 (max = base * rate; current HP grows
 //             with the "independent" rate) and the boss-bar refresh (EMEVD 2004[53]).
-//   0x17e1d90 RemoveSpEffect(list, node, 1) (EMEVD 2004[21]): NOT used - removing 7503 from a boss
-//             mid-fight killed it (live); bosses are kept out by entity (0x13c97a0) instead
+//   0x17e1d90 RemoveSpEffect(list, node, 1) (EMEVD 2004[21]): not used; bosses are kept out of 7503
+//             by entity (0x13c97a0) instead
 //   chr vfunc +0x3f0 ApplySpEffect(chr, id, chr, 0, 1, 0, 0, 1.0 x5) (party_director / party_b2)
 //   ChrIns +0x1c8 SpEffect list (+8 first node; node +0x40 id, +0x48 row, +0x58 next)
 //   ChrIns +0x3c8 -> +8 NpcParam row (0x18e4fa6): teamType +0x12f, isSoulGetByBoss 0x149 bit 4
@@ -129,6 +129,7 @@ struct TickState {
     bool have_written[4]{};
     int hp_logged_factor = -1, hp_logged_max = -1;
     int hits = 0;
+    Clock::time_point next_rot_log{};
     std::string toast;            // a rot notice waiting for the respawn
     Clock::time_point toast_at{};  // alive in the world since  // rot factor (percent) of the last "max HP now" line
     Clock::time_point factor_since{};
@@ -200,24 +201,32 @@ BB_COOP_SYSV float RateHook(u64 list, u64 independent) {
     return r;
 }
 
+// Evidence: how often the game asked each rot rate for the local player, and the last answer.
+std::atomic<std::uint32_t> g_kind_calls[kRotKinds];
+std::atomic<float> g_kind_last[kRotKinds];
+float Note(int kind, float r) {
+    g_kind_calls[kind].fetch_add(1, std::memory_order_relaxed);
+    g_kind_last[kind].store(r, std::memory_order_relaxed);
+    return r;
+}
 bool Mine(u64 list) {
     return list && list == g_rot_list.load(std::memory_order_relaxed);
 }
 BB_COOP_SYSV float StaminaRateHook(u64 list) {  // 0x17e4a20 max stamina rate (maxStaminaRate +0x18)
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotStamina])(list);
-    return Mine(list) ? r * g_kind_value[kRotStamina].load(std::memory_order_relaxed) : r;
+    return Mine(list) ? Note(kRotStamina, r * g_kind_value[kRotStamina].load(std::memory_order_relaxed)) : r;
 }
 BB_COOP_SYSV float StaminaCostHook(u64 list, u64 ctx) {  // 0x17e4c50 consumeStaminaRate +0x1b8
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64, u64)>(g_kind_orig[kRotStaminaCost])(list, ctx);
-    return Mine(list) ? r * g_kind_value[kRotStaminaCost].load(std::memory_order_relaxed) : r;
+    return Mine(list) ? Note(kRotStaminaCost, r * g_kind_value[kRotStaminaCost].load(std::memory_order_relaxed)) : r;
 }
 BB_COOP_SYSV float RallyHook(u64 list, u64 ctx) {  // 0x17e5590 regainRate +0x1f4
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64, u64)>(g_kind_orig[kRotRally])(list, ctx);
-    return Mine(list) ? r * g_kind_value[kRotRally].load(std::memory_order_relaxed) : r;
+    return Mine(list) ? Note(kRotRally, r * g_kind_value[kRotRally].load(std::memory_order_relaxed)) : r;
 }
 BB_COOP_SYSV float DiscoveryHook(u64 list) {  // 0x17e8010 the sum of itemDropRate +0x1fc (points)
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotDiscovery])(list);
-    return Mine(list) ? r + g_kind_value[kRotDiscovery].load(std::memory_order_relaxed) : r;
+    return Mine(list) ? Note(kRotDiscovery, r + g_kind_value[kRotDiscovery].load(std::memory_order_relaxed)) : r;
 }
 
 void OnLampUse(u32 id) {
@@ -406,9 +415,8 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
                         Log("%s", b);
                     }
                 }
-                // No removal: taking 7503 off a boss mid-fight (0x17e1d90, EMEVD 2004[21]'s remove) killed
-                // the Cleric Beast outright (live 2026-10-11, HP 6597 -> 0). Bosses never get it now
-                // (the boss entity table below); one that still carries it is only counted.
+                // No removal mid-fight (0x17e1d90): bosses never get 7503 (the boss entity tables);
+                // one that still carries it is only counted.
                 if (HasEffect(chr, int(kEnemyRow))) ++removed;
                 continue;
             }
@@ -660,6 +668,18 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         }
     }
     g_rot_list.store(in_world ? Field<u64>(s.player, 0x1c8) : 0, std::memory_order_relaxed);
+    if (g_stacks.load() > 0 && in_world && hp > 0 && now >= st.next_rot_log) {
+        st.next_rot_log = now + std::chrono::seconds(20);
+        std::string b;
+        for (int k = 1; k < kRotKinds; ++k) {
+            char e[96];
+            std::snprintf(e, sizeof e, " %s: %u calls, last %.2f;", kRotKindName[k],
+                          g_kind_calls[k].exchange(0), double(g_kind_last[k].load()));
+            b += e;
+        }
+        Log("rot in effect (%d stack(s); the game's asks for this player since the last line):%s max HP %d, "
+            "max stamina %d", g_stacks.load(), b.c_str(), max_hp, Field<int>(dm, 0x138, -1));
+    }
 
     // D7: the rows (every second) and the enemies (every 2 s).
     if (s.cooperators >= 0) st.last_n = std::clamp(s.cooperators, 0, 3);
