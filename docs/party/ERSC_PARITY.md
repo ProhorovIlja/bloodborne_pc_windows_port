@@ -40,6 +40,7 @@ only 100% when it meets it.
 | Hunter's Dream | Always shared: everyone in the Dream is in the host's Dream together |
 | Cutscenes | Play for everyone in the party |
 | Joining during a boss fight / cutscene | Joiner waits outside (host's last lamp / fog) until it ends |
+| Party size | Max 4 players (host + 3) for now; 100% on A7 = 4 verified live |
 | Friendly fire / PvP, invasions | Not wanted |
 
 ## Summary
@@ -66,7 +67,7 @@ only 100% when it meets it.
 | A4 | Join speed | Seconds after both are in the world *(verify)* | Fast join ~10 s; Continue -> summoned 23 s, fresh 53 s after the restart | 70 | Target Continue <=15 s (flowlive WIP) |
 | A5 | Join any time / late joiner | Yes | Yes, with catch-up of progress + opening skip | 80 | party_catchup |
 | A6 | Leave cleanly | Separating Mist leaves at any time; if the host uses it the session disbands; everyone mists out to close | Leave works (0.4 s) | 75 | Spurious "Session lost" notice (flowlive WIP); host "End party" with 2 guests untested |
-| A7 | Player count | 1-6 players (host + 5) | 3 live-verified; 4 coded (party_fourp), not live (needs 4 slots) | 50 | 5-6 not planned yet |
+| A7 | Player count | 1-6 players (host + 5) | 3 live-verified; 4 coded (party_fourp), not live (needs 4 slots) | 50 | Target 4 (user decision); 5-6 not planned |
 | A8 | Settings in game | ersc_settings.ini: [GAMEPLAY] allow_invaders, death_debuffs, allow_summons, overhead_player_display; [SCALING]; [PASSWORD]; [SAVE]; [LANGUAGE] | All settings in the game's own System menu, Party pages | 90 | bbport_game_menu |
 | A9 | Version check | Same mod + game version required | Party protocol version checked on join (kLinkProtocolVersion), clear reject reason | 70 | Build/patch-set mismatch beyond the protocol number not checked |
 | A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Not wanted (user, 2026-10-11) |
