@@ -51,7 +51,7 @@ only 100% when it meets it.
 
 | Area | Parity |
 |---|---|
-| A. Session & joining | 84% |
+| A. Session & joining | 86% |
 | B. World & travel | 82% |
 | C. Death & respawn | 79% |
 | D. Progress (anyone can progress) | 74% |
