@@ -54,12 +54,12 @@ only 100% when it meets it.
 | A. Session & joining | 76% |
 | B. World & travel | 72% |
 | C. Death & respawn | 65% |
-| D. Progress (anyone can progress) | 58% |
+| D. Progress (anyone can progress) | 64% |
 | E. Services & UI | 88% |
 | F. Network & robustness | 72% |
-| G. BB-specific (chalice, insight, bath) | 37% |
+| G. BB-specific (chalice, insight, bath) | 53% |
 | H. Bloodborne rule (feels like SP in a party) | 67% |
-| **Overall (unweighted mean of rows)** | **~67%** |
+| **Overall (unweighted mean of rows)** | **~69%** |
 
 ## A. Session & joining
 
@@ -81,7 +81,7 @@ only 100% when it meets it.
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| B1 | No tether / roam anywhere | All fog walls / barriers (and their teleports) removed; the whole map is open and the party may split up | Confinement walls opened; players can stand in different map blocks (stale-hit crash fixed) | 75 | travel.md §7, 146 m split held 2+ min. Real stick walk-away not tested |
+| B1 | No tether / roam anywhere | All fog walls / barriers (and their teleports) removed; the whole map is open and the party may split up | Confinement walls opened; players can stand in different map blocks (stale-hit crash fixed); the soak walked the host across Cathedral Ward / Great Bridge with the guest, and hopped through 9 areas | 78 | 2026-10-11: travel.md §7 (146 m split held 2+ min), campaign_soak.md rows 2-10 (no crash in 14 runs). Real stick walk-away not tested |
 | B2 | Fog / boss gates | Gone (no multiplayer fog walls) | Fog gates by pad verified | 80 | b2_seamless.md §6.8 |
 | B3 | Fast travel | Warping never ends the session; players may split up, so warps are per player *(per-player warp inferred)* | Any member's lamp / headstone / mark becomes a party move with one loading screen (B2) | 85 | B2 default; 5 lamp warps in a row |
 | B4 | Loading screens | One load, no rejoin | One load, guests stay clients (B1 fallback after 45 s) | 85 | b2_seamless.md |
@@ -109,8 +109,8 @@ only 100% when it meets it.
 | D2 | World state shared (doors, shortcuts, lamps) | Host's world; progression events completed online also progress each player's own world | Host world flags mirrored to guests live (~0.3 s); guest's own save gets C2 progress | 80 | event_flags.md §12. Visual door check pending |
 | D3 | Guest actions change the host's world | Yes *(verify)* | Lamp lighting via host only. Guest levers / doors / shortcuts not routed | 30 | Next: generalise the lamp_lit request to levers/doors |
 | D4 | Items & pickups | Random drops instanced per player; persistent loot (bosses, scarabs) for everyone in the area; one-time items not re-granted if already owned | Summoned awards, item-get dialog, blood gems for guests | 75 | C3 |
-| D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests | 65 | Full NPC quest lines untested; campaign soak WIP |
-| D6 | Full campaign start to credits | Playable | Not yet soaked end to end | 30 | campaign_soak (edgetravel WIP) |
+| D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests; soak: boss flags of 7 bosses in the guest's own save, late joiner catches up bosses, cutscenes for everyone (Blood Moon, Gehrman refusal, ending) | 70 | 2026-10-11 campaign_soak.md. NPC quest choices ("first choice counts for everyone") not covered; Gehrman refusal cutscene replayed twice on the guest (open 4) |
+| D6 | Full campaign start to credits | Playable | Soaked new game -> clinic -> Dream -> Central Yharnam -> Cleric Beast -> Gascoigne -> Cathedral Ward -> Amelia -> Forbidden Woods -> Rom -> Blood Moon -> Nightmare Frontier -> Gehrman -> ending B + staff roll on host and guest, Continue between every run | 75 | 2026-10-11 campaign_soak.md (2 players end to end; 3 players: travel chain with both guests following, row 14; test-step travel and kills, not real play). Mergo's Wet Nurse not killable by the tooling |
 | D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Measured: BB scales only bosses (SpEffect 7500/7501: +50 % HP and status resist, +30 poise per cooperator, damage +0); normal enemies none. Six settings per extra hunter (System > Enemy scaling, overlay Party tab, bbport.ini): boss/enemy HP and poise in % of the vanilla boss step, damage +%; defaults harder than vanilla (boss HP 150 %, boss damage +10 %, enemy HP 50 %); negative poise = ERSC's staggerable note. Host's values to every peer; rows 7500-7503 written on each; 7503 on normal enemies, never on the 34 boss entities | 90 | 2026-10-11 live boss runs (Cleric Beast, 1 cooperator): boss gets 7500, HP 5277 / 5277 on host AND guest (2700 x 1.117 area x 1.75; vanilla x1.5 = 4523); enemies 520 -> 650. Damage A/B (boss_damage 0 vs 100): hits 61-126 (max 239) vs 216-534 on both players. Poise row written, stagger not measured. docs/party/balance.md |
 | D8 | NPC dialogue / talk events synchronised | Yes | Story choices synced (C4); NPC talk with a guest present untested | 25 | Test NPC talk (Gilbert, Eileen) in party |
 | D9 | A grace rest resets the world for everyone | Yes | Lamp rest = host load: enemies respawn in the host's world; guests get the refill and HP (verified) | 85 | guest_services.md §3.3 |
@@ -142,7 +142,7 @@ only 100% when it meets it.
 |---|---|---|---|---|---|
 | G1 | Chalice dungeons in party | Catacombs work in co-op | 2026-10-11: Pthumeru layer 1 cleared live in a party (runs c11-c15): host ritual -> guest summoned by quick join; lever + door; layer boss debug kill keeps the session (K10 both roles, guest send-home dropped); guest gets its own boss lots; the lift down to the next layer carries host and guest (y 31.5 -> 10.5, both alive); lamp exit puts both in the Dream with one load (B2 re-join). Guest ritual: chalices now shared both ways, so the host opens the altar and glyph-searches the guest's dungeon (c17: altar menu, glyph dialog and board lookup reached; the IME glyph lost its 8th char, fixed); host entry + summon into the guest's dungeon not yet verified live (c18 queued). Two old crashes not reproduced in 8 runs at 1792 MiB | 75 | c18: host enters a guest-made dungeon by glyph, party summoned |
 | G2 | Insight, Messengers' bath, Insight items | — | Untested for guests | 10 | |
-| G3 | Blood Moon / world phase changes | — | Untested in party (part of the soak) | 25 | |
+| G3 | Blood Moon / world phase changes | — | Blood Moon live in a party: Rom's death -> Queen Yharnam (13201803) -> cutscene 32000000 on host and summoned guest, time of day 3 into the guest's own save, the host's event warp followed; a guest behind (late joiner, or one that quit before the save) gets the host's time of day into its own save at the next summon (new catch-up) | 75 | 2026-10-11 campaign_soak.md rows 7b, 13, 13b. Evening -> night (Amelia's skull 12401803) not triggered in the soak |
 
 ## H. Bloodborne rule: a party that plays like single-player
 
@@ -174,3 +174,5 @@ only 100% when it meets it.
 - 2026-10-11: C4 95 (2 rot kinds, guest death live), D7 90 (Cleric Beast live on both peers, damage A/B), Enemy scaling page back (MaxPages 16, live), HP offset +0xf8 fixed in party_b2 / guestsvc / phantom - agent/balance.
 - 2026-10-11: C4 85 (rot), D7 75 (enemy scaling measured + settings), E2 90 (overhead display; reusable WorldToScreen + member colours for I2) - agent/balance, docs/party/balance.md.
 - 2026-10-11: A7 (4 players live with 4 real clients on 2 of 3 runs, 85) and A9 (build / params / party hook fingerprint, live mismatch refusal, 95), agent/sixp.
+- 2026-10-11: B1 78, D5 70, D6 75, G3 75 - campaign soak new game -> end credits (2 players), Blood Moon catch-up; agent/edgetravel, docs/party/campaign_soak.md.
+- 2026-10-11: D6 note (3-player travel soak), gather to the host's map; summary D 64 - agent/edgetravel.
