@@ -253,6 +253,7 @@ struct State {
 // MSB treasure spawns seen on this game (0x17DC300(MapItemMan, entity handle, MsbEvent, pos)):
 // the fixture's pickup targets. Main thread.
 std::atomic<std::uint64_t> g_pickups{0};  // map item pickups on this game (PickupEntry)
+std::atomic<double> g_pickup_at{-1e9};     // Now() of the last one
 std::mutex g_treasure_mu;
 struct Treasure {
     std::array<float, 3> pos{};
@@ -262,6 +263,13 @@ std::vector<Treasure> g_treasure;
 std::mutex g_kick_mu;
 std::vector<std::int32_t> g_kicks_out;
 std::vector<std::pair<std::int32_t, double>> g_kicks_seen;
+
+/// A map treasure's pickup flag (5AABZnnn, a map's item lot): what a guest's pickup in the host's
+/// world sets. Global item flags (5000-5999, 9042-9075 ...) are the guest game's own bookkeeping.
+bool MapItemFlag(std::uint32_t id) {
+    return id >= 50000000u && id < 60000000u && id / 100000u % 100u != 0 &&
+           progress::CategoryOf(id) == Category::item_lot_picked;
+}
 
 State& S() {
     std::call_once(g_st.once, [] {
@@ -366,7 +374,7 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         for (const auto& [id, v] : changes) {
             // Item pickups never: the overlay's item bits are the own pool's (instanced items), so
             // a difference is always a pickup this guest made (also one during a map change).
-            if (!(st.pickups && progress::CategoryOf(id) == Category::item_lot_picked)) {
+            if (!(st.pickups && MapItemFlag(id))) {
                 st.known.insert(std::uint64_t(id) * 2 + (v ? 1 : 0));
             }
         }
@@ -379,7 +387,7 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
     r.map = s.map_id;
     std::vector<std::uint32_t> local, picked;
     for (const auto& [id, v] : changes) {
-        if (v && progress::CategoryOf(id) == Category::item_lot_picked && st.pickups) {
+        if (v && st.pickups && MapItemFlag(id) && now - g_pickup_at.load() < 15.0) {
             // D4: the guest picked up the host world's treasure - instanced: its own save only.
             if (progress::WriteFlagOwnSave(id, true)) {
                 ++st.stats.own_save;
@@ -1002,6 +1010,7 @@ BB_COOP_SYSV void PickupEntry(std::uint64_t, std::uint64_t handle_ptr, std::uint
     std::int32_t h = -1;
     SafeGet(handle_ptr, &h);
     g_pickups.fetch_add(1);
+    g_pickup_at.store(Now());
     Log("map item pickup on this game (role %d): item handle %#x", LocalSessionRole(), unsigned(h));
 }
 
