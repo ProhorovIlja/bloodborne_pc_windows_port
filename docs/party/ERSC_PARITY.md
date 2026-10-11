@@ -53,13 +53,13 @@ only 100% when it meets it.
 |---|---|
 | A. Session & joining | 84% |
 | B. World & travel | 82% |
-| C. Death & respawn | 65% |
+| C. Death & respawn | 78% |
 | D. Progress (anyone can progress) | 64% |
 | E. Services & UI | 88% |
 | F. Network & robustness | 72% |
 | G. BB-specific (chalice, insight, bath) | 53% |
-| H. Bloodborne rule (feels like SP in a party) | 70% |
-| **Overall (unweighted mean of rows)** | **~73%** |
+| H. Bloodborne rule (feels like SP in a party) | 75% |
+| **Overall (unweighted mean of rows)** | **~75%** |
 
 ## A. Session & joining
 
@@ -93,11 +93,11 @@ only 100% when it meets it.
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| C1 | Guest dies alone | Respawns in the same world at the last grace THEY rested at; session not terminated | Respawns alone at a lit lamp in the party's map, keeps echoes, no bloodstain; host plays on | 80 | b2_seamless.md §6.10-6.11 |
-| C2 | Host dies alone | Same rule as any player: respawns at their own last grace, the others play on | Session kept, but the WHOLE party is moved to the host's lamp (one load); guests keep HP and items | 50 | Next: host respawn without moving guests (hostdeath agent) |
+| C1 | Guest dies alone | Respawns in the same world at the last grace THEY rested at; session not terminated | Respawns alone, still a client: outside a boss fight at its OWN last lamp when split travel can load it (in the host's area), else at the host's last lamp / a lit lamp of the party's map; after a boss fight at the host's lamp (shared). Drops its echoes into a bloodstain (its own records: picked up in its game). Host plays on | 85 | b2_seamless.md §6.9-6.12; 2026-10-11 hostdeath hd15c/hd16/hd19: `guest: bloodstain recorded: echoes 5000 -> 0, stain 5000 echoes at (-193.7, -28.6, 67.0) map 0x18010000`, lone respawn at the host's lamp, still a client. Open: own-lamp respawn outside the host's area (split travel refuses a death alone load yet: falls back to the host's lamp); guest stain pickup not checked |
+| C2 | Host dies alone | Same rule as any player: respawns at their own last grace, the others play on | Revived ALONE at its last lamp in the loaded map, no load for anyone: its death funnel is taken, the chr revived (HP, death flags, ChrCtrl, fade-in, ChrResetRequest + Idle_wild) and put on the lamp's spawn spot; vanilla bloodstain at the death spot (pickable at once); guests stay in place, still clients, re-create the host's chr. Lamp in another map: the host loads it alone (split travel `alone`), guests stay. Every guest down too: a wipe (party respawn) | 85 | 2026-10-11 hostdeath hd10-hd20 (b2_seamless.md §6.12): Central Yharnam 2412951 and the Hunter's Dream 2102961: `host death taken: no stage request, no party move`, `host revive #1: after: hp 719`, visible on both screens, a Circle backsteps it 2.3 m, later lamp warps load and the guest follows; echoes 3000 -> bloodstain ("Acquire Blood Echoes"); other map (hd18): `the host loads it alone (the guests stay)`, guest `remote chr removed (the host travelled alone)`. Open: no death camera fade / lamp-rise animation (the host blinks to the lamp 1 s after the funnel); 3 players |
 | C3 | Party wipe | Everyone respawns at their last grace; session kept (boss/invasion limbo ends on a wipe) | Same; verified | 90 | §6.8 r8-r15 |
 | C4 | Death penalty | Optional rot: 5 types, one picked at random per death, stacking, removed only by resting at a grace; stops one player dying endlessly while another keeps enemies from respawning | Rot (on by default, System > Party rules; the host's setting counts for the party): each death adds a stack (max 5) of a random kind, max HP -10 % or max stamina -10 %; cleansed by the player's own lamp / headstone use; kept across restarts. 2 kinds, not ERSC's 5 (damage / discovery / vials would need SpEffect rows of our own). Echoes: single-player bloodstain for everyone (hostdeath); rot is independent of it | 95 | 2026-10-11 live: host death -> toast, max HP 719 -> 647, lamp warp -> cleansed (run 4); guest's own death in the host's world (boss runs): stacks 3 -> 4, "this one stamina": max stamina 100 -> 90, max HP 503 (70 %), toast "Rot 4/5: max HP -30 %, stamina -10 %". docs/party/balance.md |
-| C5 | Spectate while dead | A death in a boss fight or invasion puts the player in limbo, spectating, until the party wipes or someone rests at a grace | None | 0 | |
+| C5 | Spectate while dead | A death in a boss fight or invasion puts the player in limbo, spectating, until the party wipes or someone rests at a grace | Limbo without a spectator camera: a death while a boss health bar is up (EMEVD 2003[11] HUD slots *0x5562878 +0x1658) waits - host: its death is taken and not revived; guest: its held death outlasts the grace - until the bar goes (then the respawn at the party's lamp: the host's), every member is down (wipe: party respawn at the host's lamp) or a load starts (a rest). The dead camera stays on the body | 50 | 2026-10-11 hostdeath hd13 (Cleric Beast): `host death in a boss fight (boss bar 0: name 500000 chr 1001409f hp 5277): limbo`, host_kill -> `the boss fight is over ... respawn at the lamp here`, revived; hd14c: guest `dead in a boss fight ... limbo`, then host death -> `every member is down too (1 of 1): a wipe`. Open: spectate camera on a living member; boss-room exit for the living on a rest (C7) |
 | C6 | Rejoin after a crash / redirect | Rejoin by item | ~4.5 s ring to client after the world is up; crash rejoin ~30 s | 80 | §6.11 |
 | C7 | Resting while others are in a boss room | They are removed from the boss room | A rest is a party move (host load), so nobody stays behind; not tested during a fight | 60 | Test during a boss fight |
 
@@ -148,10 +148,10 @@ only 100% when it meets it.
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| H1 | No unnecessary loading screens | One load per warp; a death loads only the dead player | Same-map moves without a load (in-world); a lone traveller's load only for that player; one load per party travel | 78 | inworld1-2, split13-14. Open: a host death still loads every guest unless in the same map (hostdeath), same-map death respawn |
+| H1 | No unnecessary loading screens | One load per warp; a death loads only the dead player | Same-map moves without a load (in-world); a lone traveller's load only for that player; one load per party travel | 85 | inworld1-2, split13-14; hostdeath hd10-hd20: a host death in the loaded map loads nobody (revive in place), in another map only the host. Open: a guest's lone death respawn is still a death load (the revive could serve it too) |
 | H2 | No repeated summons | Join once per play session | The session survives travel, bosses, deaths and wipes; Continue party game re-joins automatically; a crash or redirect needs a re-join (~4.5 s); after Leave, Join party re-summons (2026-10-11 flowlive: NP context re-registered, signaling resolve retried); a guest's join is ~12 s from its world to the host's (join_timing.md 2026-10-11) | 75 | A4, C6 |
 | H3 | No progress lost by anyone | Online progression also progresses your own world | Guest's own save gets kills, flags, items, story and lamps (C2/C3/C4 + mirror); full campaign not soaked; Insight / echoes for the guest partly unverified | 65 | D6 soak, G2 |
-| H4 | No unnecessary respawns | Only the dead player respawns; enemies reset on a grace rest | Guest death respawns only the guest; host death respawns the whole party; enemies reset on a lamp rest only | 60 | C2 |
+| H4 | No unnecessary respawns | Only the dead player respawns; enemies reset on a grace rest | Only the dead player respawns (host revive in place, guest lone respawn); a wipe respawns everyone; enemies reset on a lamp rest only | 80 | C2 (hostdeath 2026-10-11) |
 | H5 | Character freedom as in single-player | Every player has their own character, inventory, levels | Guests: Doll level-up, shops, workbench, storage, own inventory and consumables. Untested: runes / Memory Altar, covenants, gestures, outfits, bath shop and Insight purchases, chalice ritual by a guest | 70 | G2, guest services audit |
 
 ## I. 100%+ milestone (after every row above is 100%)
@@ -177,3 +177,4 @@ only 100% when it meets it.
 - 2026-10-11: B1 78, D5 70, D6 75, G3 75 - campaign soak new game -> end credits (2 players), Blood Moon catch-up; agent/edgetravel, docs/party/campaign_soak.md.
 - 2026-10-11: D6 note (3-player travel soak), gather to the host's map; summary D 64 - agent/edgetravel.
 - 2026-10-11: B3 90, B4 92, B5 70, H1 78 (splittravel): the lamp / headstone / Hunter's Mark question, alone travel for host and guests, same-map moves without a loading screen (split_travel.md).
+- 2026-10-11: C1 85, C2 85, C5 50, H1 85, H4 80 (agent/hostdeath, b2_seamless.md §6.12): host revived in place at its lamp (guests stay), host death to another map alone, boss-fight limbo for host and guest, guest bloodstain.
