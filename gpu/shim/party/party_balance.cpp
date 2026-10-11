@@ -530,15 +530,21 @@ void Init() {
     g_kind_hooked[kRotStamina] = ReplacePrologue(kMaxStaminaRate, {0x55, 0x48, 0x89, 0xe5, 0x48, 0x83, 0xec, 0x10},
                                                  reinterpret_cast<const void*>(&StaminaRateHook),
                                                  &g_kind_orig[kRotStamina], "balance: max stamina rate (rot)");
-    g_kind_hooked[kRotStaminaCost] = ReplacePrologue(0x17e4c50, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53},
-                                                     reinterpret_cast<const void*>(&StaminaCostHook),
-                                                     &g_kind_orig[kRotStaminaCost], "balance: stamina cost rate (rot)");
-    g_kind_hooked[kRotRally] = ReplacePrologue(0x17e5590, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53},
-                                               reinterpret_cast<const void*>(&RallyHook), &g_kind_orig[kRotRally],
-                                               "balance: rally rate (rot)");
-    g_kind_hooked[kRotDiscovery] = ReplacePrologue(0x17e8010, {0x48, 0x8b, 0x47, 0x08, 0xc5, 0xf8, 0x57, 0xc0},
-                                                   reinterpret_cast<const void*>(&DiscoveryHook),
-                                                   &g_kind_orig[kRotDiscovery], "balance: item discovery sum (rot)");
+    // Kinds 3-5 (stamina cost, rally, item discovery) are not verified live yet: off unless
+    // BB_PARTY_ROT_ALL_KINDS=1 (0.5.2: health and stamina only). Without the hooks a death picks
+    // among the hooked kinds only.
+    const char* all = std::getenv("BB_PARTY_ROT_ALL_KINDS");
+    if (all && all[0] == '1') {
+        g_kind_hooked[kRotStaminaCost] = ReplacePrologue(0x17e4c50, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53},
+                                                         reinterpret_cast<const void*>(&StaminaCostHook),
+                                                         &g_kind_orig[kRotStaminaCost], "balance: stamina cost rate (rot)");
+        g_kind_hooked[kRotRally] = ReplacePrologue(0x17e5590, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53},
+                                                   reinterpret_cast<const void*>(&RallyHook), &g_kind_orig[kRotRally],
+                                                   "balance: rally rate (rot)");
+        g_kind_hooked[kRotDiscovery] = ReplacePrologue(0x17e8010, {0x48, 0x8b, 0x47, 0x08, 0xc5, 0xf8, 0x57, 0xc0},
+                                                       reinterpret_cast<const void*>(&DiscoveryHook),
+                                                       &g_kind_orig[kRotDiscovery], "balance: item discovery sum (rot)");
+    }
     SetLampUseObserver(&OnLampUse);
     std::string kinds;
     for (int k = 0; k < kRotKinds; ++k)
