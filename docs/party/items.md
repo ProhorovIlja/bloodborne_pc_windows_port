@@ -533,3 +533,17 @@ Bisect (2026-10-11, coordinator's list):
   (5 per update) while the model holds the award - the game's whole data path to Scaleform is
   live, and still nothing is drawn at the bottom centre. Next: a frame capture (RenderDoc) of a
   foreground run with the list up, to see whether the row draws are issued and what they render.
+
+**Resolved (2026-10-11): the box was always drawn; the screenshots were cropped.** A full-resolution
+dump of the presented frame (`BB_FINAL_DUMP_TRIGGER`, r17, solo) shows the dialog at the bottom
+centre: `Poison Knife 8` and the `OK` prompt. `tools/mp/shot.py` ran DPI-unaware: on this 200 %
+display `GetClientRect` gave the logical size (416x234) of an 833x468 client while `PrintWindow`
+drew physical pixels, so every shot was only the top-left quarter of the frame (the HUD gauges -
+which is why nothing looked wrong - but never the bottom-centre box or the top-right Insight /
+echoes counter). Fix: `shot.py` makes itself per-monitor DPI aware before enumerating windows.
+Frame capture (`BB_CAPTURE_TRIGGER`, r16) agrees: after the give the UI pass gains the row
+background (masked by a Scaleform stencil pass) and 4 text draws from the glyph cache.
+Live (r18, 2 instances, guest summoned, fixed shot.py, 2 s after each give): host and guest show
+the same dialog - `Clear Deep Sea 1` (the host's blood gem, recreated on the guest), then
+`Clear Deep Sea 1` + `Poison Knife 8` with `OK`. No game or port change was needed; the
+bisect notes above stay as the record of what was ruled out.
