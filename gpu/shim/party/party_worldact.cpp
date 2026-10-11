@@ -1122,6 +1122,15 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
     if (role == PartyRole::Guest) {
         GuestTick(s, link);
     } else if (role == PartyRole::Host) {
+        // The fixture's clock on the host (kill=N: the host's own kill, each player rolls its drop).
+        const bool steady = s.world_up && !s.loading && s.cooperators > 0;
+        if (!steady || s.map_id != st.map) {
+            st.steady = false;
+            st.map = s.map_id;
+        } else if (!st.steady) {
+            st.steady = true;
+            st.steady_since = Now();
+        }
         HostTick(s);
     }
 }
