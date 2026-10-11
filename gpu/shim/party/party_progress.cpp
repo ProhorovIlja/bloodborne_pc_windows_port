@@ -826,6 +826,77 @@ bool FlagStore::ForEachBlock(const std::function<void(const BlockRef&)>& fn, std
     }
 }
 
+bool FlagStore::OverlayGroups(std::map<u32, u64>* out, std::size_t max_nodes) const {
+    out->clear();
+    if (!valid_) {
+        return false;
+    }
+    u64 head = 0, n = 0;
+    if (!Rd(ops_, man_ + man::kOverlayHead, &head) || !head) {
+        return true;  // no overlay
+    }
+    if (!Rd(ops_, head + man::kNodeParent, &n)) {
+        return false;
+    }
+    // In-order walk (left +0, right +0x10, is_nil +0x19, key +0x20, buffer +0x28).
+    std::vector<std::pair<u32, std::pair<u64, u64>>> stack;  // key, (buffer, right)
+    std::size_t visited = 0;
+    bool have_prev = false;
+    u32 prev = 0;
+    for (;;) {
+        for (;;) {
+            u8 links[0x1a];
+            if (!n || !ops_.read(n, links, sizeof links)) {
+                return false;
+            }
+            if (links[man::kNodeIsNil]) {
+                break;
+            }
+            u8 payload[0x10];
+            if (stack.size() > 96 || !ops_.read(n + man::kNodeKey, payload, sizeof payload)) {
+                return false;
+            }
+            u32 key = 0;
+            u64 buf = 0, left = 0, right = 0;
+            std::memcpy(&key, payload, 4);
+            std::memcpy(&buf, payload + 8, 8);
+            std::memcpy(&left, links + man::kNodeLeft, 8);
+            std::memcpy(&right, links + man::kNodeRight, 8);
+            stack.push_back({key, {buf, right}});
+            n = left;
+        }
+        if (stack.empty()) {
+            return true;
+        }
+        const auto e = stack.back();
+        stack.pop_back();
+        if (++visited > max_nodes || (have_prev && e.first <= prev)) {
+            out->clear();
+            return false;
+        }
+        have_prev = true;
+        prev = e.first;
+        if (e.second.first) {
+            (*out)[e.first] = e.second.first;
+        }
+        n = e.second.second;
+    }
+}
+
+u64 FlagStore::OverlayIdentity() const {
+    u64 head = 0, root = 0, leftmost = 0;
+    if (!valid_ || !Rd(ops_, man_ + man::kOverlayHead, &head) || !head) {
+        return 0;
+    }
+    Rd(ops_, head + man::kNodeParent, &root);
+    Rd(ops_, head + man::kNodeLeft, &leftmost);  // the head's left = the smallest node
+    u64 buf = 0;
+    if (leftmost && leftmost != head) {
+        Rd(ops_, leftmost + man::kNodeKind, &buf);
+    }
+    return head * 0x9e3779b97f4a7c15ull ^ root * 0xc2b2ae3d27d4eb4full ^ buf;
+}
+
 bool FlagStore::ReadBlockBytes(const BlockRef& r, u8* out) const {
     return r.data && ops_.read && ops_.read(r.data, out, kBlockBytes);
 }
@@ -1212,6 +1283,276 @@ std::vector<BbpfBlock> CollectPool(const FlagStore& s) {
     return out;
 }
 
+// =============================================================================================
+// host-world mirror (guest overlay)
+
+namespace {
+struct MirrorTables {
+    std::vector<int> keys;
+    std::vector<GroupBytes> masks;  // per pool key; all zero outside the mirror
+};
+const MirrorTables& Mirror() {
+    static const MirrorTables t = [] {
+        MirrorTables m;
+        m.masks.assign(kPoolBlocks, GroupBytes{});
+        for (int key = 0; key < int(kPoolBlocks); ++key) {
+            const u32 block = BlockOfPoolKey(key);
+            if (block == 0xffffffffu) {
+                continue;
+            }
+            const u32 type = block / 10000, area = block / 100 % 100, mblock = block / 10 % 10, zone = block % 10;
+            const bool global = area == 0 && mblock == 0;
+            bool in = false;
+            if (global) {
+                // 6000-8999 stay in the own pool in mode 1; 60009000+ is C3's ledger.
+                in = (type == 0 && (zone < 6 || zone == 9)) || type == 1 || type == 5 || type == 7 ||
+                     (type == 6 && zone != 9);
+            } else if (area != 29 && !(area >= 40 && area <= 47)) {
+                in = (type == 1 && !(zone >= 4 && zone <= 6)) || type == 5 || type == 6 || type == 7;
+            }
+            if (!in) {
+                continue;
+            }
+            m.keys.push_back(key);
+            GroupBytes& mask = m.masks[key];
+            mask.fill(0xff);
+            const u32 first = block * kBitsPerBlock;
+            for (u32 bit = 0; bit < kBitsPerBlock; ++bit) {
+                const u32 id = first + bit;
+                if ((id >= 2000 && id <= 2099) || (id >= 9020 && id <= 9026)) {
+                    PutBit(mask.data(), bit, false);
+                }
+            }
+            for (u32 bit = kBitsPerBlock; bit < kBlockBytes * 8; ++bit) {
+                PutBit(mask.data(), bit, false);  // padding bits of the last byte
+            }
+        }
+        return m;
+    }();
+    return t;
+}
+const GroupBytes kZeroGroup{};
+bool NonZero(const GroupBytes& g) {
+    return std::any_of(g.begin(), g.end(), [](u8 b) { return b != 0; });
+}
+} // namespace
+
+bool WorldMirrorKey(int key) {
+    const auto& k = Mirror().keys;
+    return std::binary_search(k.begin(), k.end(), key);
+}
+
+const std::vector<int>& WorldMirrorKeys() {
+    return Mirror().keys;
+}
+
+const GroupBytes& WorldMirrorMask(int key) {
+    return key >= 0 && key < int(kPoolBlocks) ? Mirror().masks[key] : kZeroGroup;
+}
+
+void HostWorldTracker::Observe(const u8* pool, WorldImage* out) {
+    if (shadow_.empty()) {
+        shadow_.assign(kPoolBlocks, GroupBytes{});
+    }
+    for (int key : WorldMirrorKeys()) {
+        const u8* now = pool + std::size_t(key) * kBlockBytes;
+        GroupBytes& sh = shadow_[key];
+        if (std::memcmp(sh.data(), now, kBlockBytes) == 0) {
+            continue;
+        }
+        std::memcpy(sh.data(), now, kBlockBytes);
+        if (baseline_ && out) {
+            out->groups[u32(key)] = sh;
+        }
+    }
+    baseline_ = true;
+}
+
+WorldImage HostWorldTracker::Full(u64 epoch) const {
+    WorldImage img;
+    img.epoch = epoch;
+    img.full = true;
+    if (shadow_.empty()) {
+        return img;
+    }
+    for (int key : WorldMirrorKeys()) {
+        if (NonZero(shadow_[key])) {
+            img.groups[u32(key)] = shadow_[key];
+        }
+    }
+    return img;
+}
+
+void GuestWorldMirror::Receive(const WorldImage& img) {
+    if (image_.empty()) {
+        image_.assign(kPoolBlocks, GroupBytes{});
+        applied_.assign(kPoolBlocks, GroupBytes{});
+    }
+    if (img.full) {
+        for (int key : WorldMirrorKeys()) {
+            const auto it = img.groups.find(u32(key));
+            const GroupBytes& g = it == img.groups.end() ? kZeroGroup : it->second;
+            if (image_[key] != g) {
+                image_[key] = g;
+                dirty_.insert(key);
+            }
+        }
+        have_ = true;
+        return;
+    }
+    for (const auto& [key, g] : img.groups) {
+        if (WorldMirrorKey(int(key)) && image_[key] != g) {
+            image_[key] = g;
+            dirty_.insert(int(key));
+        }
+    }
+}
+
+const GroupBytes& GuestWorldMirror::Group(int key) const {
+    return key >= 0 && key < int(image_.size()) ? image_[key] : kZeroGroup;
+}
+
+bool GuestWorldMirror::Apply(const std::map<u32, u64>& overlay, const MemOps& ops, bool full, Result* r) {
+    Result res;
+    if (!have_ || !ops.read || !ops.write) {
+        if (r) {
+            *r = res;
+        }
+        return false;
+    }
+    auto one = [&](int key) {
+        const auto it = overlay.find(u32(key));
+        const GroupBytes& want = image_[key];
+        if (it == overlay.end() || !it->second) {
+            res.missing += NonZero(want) ? 1 : 0;
+            return;
+        }
+        const GroupBytes& mask = Mirror().masks[key];
+        GroupBytes cur;
+        if (!ops.read(it->second, cur.data(), kBlockBytes)) {
+            return;
+        }
+        GroupBytes next = cur;
+        for (u32 i = 0; i < kBlockBytes; ++i) {
+            // full: every masked bit becomes the host's; else only the bits the host changed since
+            // the last apply (the guest's own runtime bits in the overlay stay).
+            const u8 m = full ? mask[i] : u8(mask[i] & (applied_[key][i] ^ want[i]));
+            next[i] = u8((cur[i] & ~m) | (want[i] & m));
+        }
+        applied_[key] = want;
+        if (next == cur) {
+            return;
+        }
+        std::size_t bytes = 0, bits = 0;
+        for (u32 i = 0; i < kBlockBytes; ++i) {
+            if (const u8 d = u8(next[i] ^ cur[i])) {
+                ++bytes;
+                bits += std::size_t(__builtin_popcount(d));
+            }
+        }
+        if (ops.write(it->second, next.data(), kBlockBytes)) {
+            ++res.groups;
+            res.changed.emplace_back(key, int(bits));
+            res.bytes += bytes;
+            res.bits += bits;
+        }
+    };
+    if (full) {
+        for (int key : WorldMirrorKeys()) {
+            one(key);
+        }
+    } else {
+        for (int key : dirty_) {
+            one(key);
+        }
+    }
+    dirty_.clear();
+    if (r) {
+        *r = res;
+    }
+    return true;
+}
+
+std::string WorldImageToJson(const WorldImage& img) {
+    static const char* hexd = "0123456789abcdef";
+    json::Value v = json::Value::make_object();
+    v.set("v", 1);
+    v.set("epoch", json::hex(img.epoch));
+    v.set("full", img.full ? 1 : 0);
+    json::Value arr = json::Value::make_array();
+    for (const auto& [key, g] : img.groups) {
+        json::Value e = json::Value::make_array();
+        e.push(static_cast<unsigned>(key));
+        std::string h(kBlockBytes * 2, '0');
+        for (u32 i = 0; i < kBlockBytes; ++i) {
+            h[2 * i] = hexd[g[i] >> 4];
+            h[2 * i + 1] = hexd[g[i] & 15];
+        }
+        e.push(h);
+        arr.push(std::move(e));
+    }
+    v.set("g", std::move(arr));
+    return json::dump(v, 0);
+}
+
+bool WorldImageFromJson(const std::string& text, WorldImage* out, std::string* error) {
+    json::Value v;
+    std::string err;
+    if (!json::parse(text, v, err)) {
+        if (error) {
+            *error = err;
+        }
+        return false;
+    }
+    auto nib = [](char c) -> int {
+        if (c >= '0' && c <= '9') {
+            return c - '0';
+        }
+        if (c >= 'a' && c <= 'f') {
+            return c - 'a' + 10;
+        }
+        return -1;
+    };
+    try {
+        if (json::u32(v, "v") != 1) {
+            throw std::runtime_error("unsupported version");
+        }
+        WorldImage img;
+        img.epoch = json::as_u64(json::member(v, "epoch"), "epoch");
+        img.full = json::u32(v, "full") != 0;
+        if (json::arr(v, "g").size() > kPoolBlocks) {
+            throw std::runtime_error("too many groups");
+        }
+        for (const json::Value& e : json::arr(v, "g")) {
+            if (e.type != json::Value::Type::Array || e.array.size() != 2 ||
+                e.array[1].type != json::Value::Type::String || e.array[1].string.size() != kBlockBytes * 2) {
+                throw std::runtime_error("bad group entry");
+            }
+            const u64 key = json::as_u64(e.array[0], "key");
+            if (key >= kPoolBlocks || !WorldMirrorKey(int(key))) {
+                throw std::runtime_error("not a mirror group");
+            }
+            GroupBytes g;
+            const std::string& h = e.array[1].string;
+            for (u32 i = 0; i < kBlockBytes; ++i) {
+                const int hi = nib(h[2 * i]), lo = nib(h[2 * i + 1]);
+                if (hi < 0 || lo < 0) {
+                    throw std::runtime_error("bad hex");
+                }
+                g[i] = u8(hi << 4 | lo);
+            }
+            img.groups[u32(key)] = g;
+        }
+        *out = std::move(img);
+    } catch (const std::exception& ex) {
+        if (error) {
+            *error = ex.what();
+        }
+        return false;
+    }
+    return true;
+}
+
 } // namespace coop::progress
 
 #ifndef BB_PARTY_PROGRESS_NO_GAME
@@ -1289,6 +1630,15 @@ struct Global {
     // guest state (under mu)
     GuestApplier applier;
     Policy policy;
+
+    // host-world mirror (under mu): host shadow + outbox, guest image + the overlay it last filled
+    HostWorldTracker world;
+    WorldImage world_out;
+    GuestWorldMirror mirror;
+    u64 overlay_id = 0;          // OverlayIdentity() of the overlay the last full apply wrote
+    bool mirror_full_due = false; // a vanilla snapshot apply came before the host's image
+    u64 mirror_full_applies = 0, mirror_live_bits = 0;
+    std::vector<u8> pool_copy;   // host, main thread: the pool read for the world diff
 
     // main thread only
     // The candidate blocks' addresses, from the last full walk of the flag tree (ScanRefs): the
@@ -1553,6 +1903,19 @@ void HostTick(Global& g, const FlagStore& store, const GameSnapshot& s, const Cl
         g.tracker.ObserveBlock(block, data.data(), &changes);
     }
     if (round_done) {
+        // The host-world mirror: every mirror group of the own pool (one 150 KB read a scan).
+        g.pool_copy.resize(std::size_t(kPoolBlocks) * kBlockBytes);
+        if (SafeRead(store.Pool(), g.pool_copy.data(), g.pool_copy.size())) {
+            const bool had = g.world.has_baseline();
+            const std::size_t before = g.world_out.groups.size();
+            g.world.Observe(g.pool_copy.data(), &g.world_out);
+            if (!had) {
+                Log("host world mirror baseline: %zu non-zero of %zu mirror groups",
+                    g.world.Full(0).groups.size(), WorldMirrorKeys().size());
+            } else if (g.world_out.groups.size() != before) {
+                g.dump_sync = true;
+            }
+        }
         g.tracker.EndScan();
         g.last_scan = now;
         ++g.scans;
@@ -1612,7 +1975,85 @@ void GuestTick(Global& g, const FlagStore& store, u32 map_id) {
     g.dump_sync = true;
 }
 
+const char* MirrorWhy(bool full, u64 id, u64 last) {
+    return !full ? "host changes" : id != last ? "new overlay" : "snapshot applied";
+}
+
+/// Guest, main thread: the host's world image into the overlay. Full after the overlay was
+/// (re)built by the vanilla snapshot apply, else the bits the host changed since. Any load mode
+/// (the overlay is only visible in mode 1; at home it is a stale copy nobody reads).
+void GuestMirrorTick(Global& g, bool force_full, const char* why) {
+    perf::Scope z(perf::Zone::ProgressGuest);
+    static const bool on = EnvOn("BB_PARTY_WORLD_MIRROR", true);
+    if (!on) {
+        return;
+    }
+    const FlagStore store(Manager(), GameOps());
+    if (!store.Valid()) {
+        return;
+    }
+    const u64 id = store.OverlayIdentity();
+    if (!id) {
+        return;
+    }
+    std::lock_guard<std::mutex> lk(g.mu);
+    const bool full = force_full || g.mirror_full_due || id != g.overlay_id;
+    if (full ? !g.mirror.has_image() : g.mirror.Dirty() == 0) {
+        if (full && !g.mirror_full_due) {
+            g.mirror_full_due = true;
+            Log("world mirror: overlay ready (%s) before the host's world image; filled when it arrives",
+                why ? why : "rebuilt");
+        }
+        return;
+    }
+    std::map<u32, u64> overlay;
+    if (!store.OverlayGroups(&overlay) || overlay.empty()) {
+        return;
+    }
+    GuestWorldMirror::Result r;
+    const u64 last = g.overlay_id;
+    g.mirror.Apply(overlay, store.ops(), full, &r);
+    g.overlay_id = id;
+    g.mirror_full_due = false;
+    if (full) {
+        ++g.mirror_full_applies;
+    } else {
+        g.mirror_live_bits += r.bits;
+    }
+    if (full && !r.changed.empty()) {
+        // What the vanilla overlay lacked: flag blocks (id / 1000) and the bits that changed.
+        std::string list;
+        for (const auto& [key, bits] : r.changed) {
+            char b[32];
+            std::snprintf(b, sizeof b, "%s%u:%d", list.empty() ? "" : " ", BlockOfPoolKey(key), bits);
+            list += b;
+            if (list.size() > 400) {
+                Log("world mirror: blocks changed by the full copy (block:bits): %s", list.c_str());
+                list.clear();
+            }
+        }
+        if (!list.empty()) {
+            Log("world mirror: blocks changed by the full copy (block:bits): %s", list.c_str());
+        }
+    }
+    if (full || r.groups) {
+        Log("world mirror: %s (%s, load mode %d): %zu of %zu overlay groups written, %zu bits changed%s%s",
+            full ? "full copy" : "live", why ? why : MirrorWhy(full, id, last), store.LoadMode(), r.groups,
+            overlay.size(), r.bits, r.missing ? ", host groups the overlay lacks: " : "",
+            r.missing ? std::to_string(r.missing).c_str() : "");
+        g.dump_sync = true;
+    }
+}
+
 } // namespace
+
+void OnVanillaSnapshotApplied() {
+    Global& g = G();
+    if (!g.enabled || CurrentRole() != Role::Guest) {
+        return;
+    }
+    GuestMirrorTick(g, true, "right after the vanilla snapshot apply");
+}
 
 void Init() {
     Global& g = G();
@@ -1725,6 +2166,9 @@ void Tick(const GameSnapshot& s) {
         return;
     }
     ++g.frame;
+    if (CurrentRole() == Role::Guest) {
+        GuestMirrorTick(g, false, nullptr);  // also while loading: before the host-world load reads it
+    }
     if (!s.world_up || s.loading) {
         g.stable = 0;
         return;
@@ -1794,6 +2238,9 @@ void Tick(const GameSnapshot& s) {
         GuestTick(g, store, s.map_id);
     }
     if (g.dump) {
+        if (g.stable == kStableFrames && role != Role::None) {
+            g.dump_session = true;  // every steady load in a session (host pool vs guest overlay)
+        }
         const bool gap = std::chrono::duration<double>(now - g.last_dump).count() >= kDumpMinGap;
         if (g.dump_session || (g.dump_sync && gap)) {
             WriteDumps(g, store, s);
@@ -1835,6 +2282,25 @@ bool FullSnapshot(FlagSnapshot* out) {
         return false;
     }
     *out = g.tracker.Snapshot(g.map_id);
+    return true;
+}
+
+WorldImage PopHostWorldChanges() {
+    Global& g = G();
+    std::lock_guard<std::mutex> lk(g.mu);
+    WorldImage out;
+    out.groups.swap(g.world_out.groups);
+    out.epoch = g.tracker.epoch();
+    return out;
+}
+
+bool HostWorldImage(WorldImage* out) {
+    Global& g = G();
+    std::lock_guard<std::mutex> lk(g.mu);
+    if (!g.world.has_baseline()) {
+        return false;
+    }
+    *out = g.world.Full(g.tracker.epoch());
     return true;
 }
 
@@ -1883,6 +2349,23 @@ bool OnLinkEvent(const std::string& name, const std::string& body, std::string* 
             return false;
         }
         ApplyHostFlags(epoch, changes);
+        return true;
+    }
+    if (name == kEventWorldGroups) {
+        WorldImage img;
+        if (!WorldImageFromJson(body, &img, error)) {
+            return false;
+        }
+        Init();
+        Global& g = G();
+        if (!g.enabled) {
+            return true;
+        }
+        std::lock_guard<std::mutex> lk(g.mu);
+        g.mirror.Receive(img);
+        if (img.full) {
+            Log("world mirror: host image received (%zu non-zero groups)", img.groups.size());
+        }
         return true;
     }
     if (name == kEventFlagSnapshot) {
