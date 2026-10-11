@@ -324,6 +324,17 @@ Central Yharnam door, shortcut_door) at +55.31 s -> guest `world mirror: blocks 
 (block:bits): 12400:1 12410:1` at +55.60 s in load mode 1; the guest's next dump has both in its
 visible (overlay) tree. (A door's model follows at the next load of that map: "reproduce" events.)
 
+**Visual check (2026-10-11, runs `D1/D2 visual 2: test|ctl`, `D1 door visual 3: test|ctl`):**
+* **Boss (D1/D2): passes.** Test: host has the Cleric Beast dead, the guest's own save has it
+  alive (`BB_PARTY_PROGRESS_TEST_CLEAR` on the guest only); both stand in the arena: no boss, no
+  boss bar, no fog on the guest's screen. Control (boss alive for both, same spots): the *Cleric
+  Beast* bar appears on the guest's screen within 6 s.
+* **Doors: inconclusive.** Doors 2411308 / 2411306 (event 12410110 slots 3 / 4; their open flag is
+  the event's own slot flag 12410113 / 12410114, not a parameter) looked open in the test *and*
+  the control run from the spots used, and door 2411301 (slot 7) is already open in the base save
+  (12410117). The flags themselves reach the guest's overlay (live door flags above); a door that
+  is visibly shut until opened still needs picking.
+
 **Effects seen:** the guest's Hunter's Dream headstone lists the host's lamps (7: 1st Floor
 Sickroom ... Old Yharnam) and no longer crashes; choosing a lamp moves the party (guest_services.md
 3.3). The world lamp prompt is **not** a flag question: see guest_services.md 3.3 (lamp type).
