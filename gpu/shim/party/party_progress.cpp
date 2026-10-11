@@ -339,7 +339,8 @@ Policy Policy::Defaults() {
 
 Policy Policy::FromEnv() {
     Policy p = Defaults();
-    if (EnvOn("BB_PARTY_PROGRESS_NPC", false)) {
+    // NPC quest choices are shared (user decision 2026-10-11): on unless BB_PARTY_PROGRESS_NPC=0.
+    if (EnvOn("BB_PARTY_PROGRESS_NPC", true)) {
         p.mode[static_cast<int>(Category::npc_quest)] = SyncMode::SetOnly;
     }
     p.mirror_overlay = EnvOn("BB_PARTY_PROGRESS_MIRROR", false);
@@ -1292,11 +1293,14 @@ namespace {
 struct MirrorTables {
     std::vector<int> keys;
     std::vector<GroupBytes> masks;  // per pool key; all zero outside the mirror
+    std::vector<GroupBytes> items;  // per pool key: the masked item_lot_picked bits
 };
+std::atomic<bool> g_instanced_items{false};
 const MirrorTables& Mirror() {
     static const MirrorTables t = [] {
         MirrorTables m;
         m.masks.assign(kPoolBlocks, GroupBytes{});
+        m.items.assign(kPoolBlocks, GroupBytes{});
         for (int key = 0; key < int(kPoolBlocks); ++key) {
             const u32 block = BlockOfPoolKey(key);
             if (block == 0xffffffffu) {
@@ -1328,6 +1332,12 @@ const MirrorTables& Mirror() {
             for (u32 bit = kBitsPerBlock; bit < kBlockBytes * 8; ++bit) {
                 PutBit(mask.data(), bit, false);  // padding bits of the last byte
             }
+            GroupBytes& items = m.items[key];
+            for (u32 bit = 0; bit < kBitsPerBlock; ++bit) {
+                if (GetBit(mask.data(), bit) && CategoryOf(first + bit) == Category::item_lot_picked) {
+                    PutBit(items.data(), bit, true);
+                }
+            }
         }
         return m;
     }();
@@ -1346,6 +1356,18 @@ bool WorldMirrorKey(int key) {
 
 const std::vector<int>& WorldMirrorKeys() {
     return Mirror().keys;
+}
+
+const GroupBytes& WorldItemMask(int key) {
+    return key >= 0 && key < int(kPoolBlocks) ? Mirror().items[key] : kZeroGroup;
+}
+
+void SetInstancedItems(bool on) {
+    g_instanced_items.store(on);
+}
+
+bool InstancedItems() {
+    return g_instanced_items.load();
 }
 
 const GroupBytes& WorldMirrorMask(int key) {
@@ -1414,6 +1436,42 @@ const GroupBytes& GuestWorldMirror::Group(int key) const {
     return key >= 0 && key < int(image_.size()) ? image_[key] : kZeroGroup;
 }
 
+std::vector<std::pair<u32, bool>> GuestWorldMirror::LocalChanges(const std::map<u32, u64>& overlay,
+                                                                const MemOps& ops, std::size_t max) const {
+    std::vector<std::pair<u32, bool>> out;
+    if (!have_ || !ops.read) {
+        return out;
+    }
+    for (const auto& [key, buf] : overlay) {
+        if (!buf || !WorldMirrorKey(int(key)) || dirty_.count(int(key))) {
+            continue;
+        }
+        GroupBytes cur;
+        if (!ops.read(buf, cur.data(), kBlockBytes)) {
+            continue;
+        }
+        const GroupBytes& mask = Mirror().masks[key];
+        const GroupBytes& host = applied_[key];
+        const bool inst = g_instanced_items.load(std::memory_order_relaxed);
+        const u32 base = BlockOfPoolKey(int(key)) * kBitsPerBlock;
+        for (u32 i = 0; i < kBlockBytes; ++i) {
+            const u8 d = u8((cur[i] ^ host[i]) & mask[i] & (inst ? u8(~Mirror().items[key][i]) : u8(0xff)));
+            if (!d) {
+                continue;
+            }
+            for (u32 b = 0; b < 8; ++b) {
+                if (d & (0x80u >> b)) {
+                    if (out.size() >= max) {
+                        return out;
+                    }
+                    out.emplace_back(base + i * 8 + b, (cur[i] & (0x80u >> b)) != 0);
+                }
+            }
+        }
+    }
+    return out;
+}
+
 bool GuestWorldMirror::Apply(const std::map<u32, u64>& overlay, const MemOps& ops, bool full, Result* r) {
     Result res;
     if (!have_ || !ops.read || !ops.write) {
@@ -1429,7 +1487,12 @@ bool GuestWorldMirror::Apply(const std::map<u32, u64>& overlay, const MemOps& op
             res.missing += NonZero(want) ? 1 : 0;
             return;
         }
-        const GroupBytes& mask = Mirror().masks[key];
+        GroupBytes mask = Mirror().masks[key];
+        if (g_instanced_items.load(std::memory_order_relaxed)) {
+            for (u32 i = 0; i < kBlockBytes; ++i) {
+                mask[i] = u8(mask[i] & ~Mirror().items[key][i]);  // the guest's own pickups (D4)
+            }
+        }
         GroupBytes cur;
         if (!ops.read(it->second, cur.data(), kBlockBytes)) {
             return;
@@ -1977,6 +2040,43 @@ void GuestTick(Global& g, const FlagStore& store, u32 map_id) {
     g.dump_sync = true;
 }
 
+/// D4, guest: the item_lot_picked bits of the host-world overlay follow the guest's OWN pool (its
+/// pickups), not the host's: full (after the overlay was rebuilt / refilled) = the pool's value;
+/// live = set-only from the pool (C3 gives while summoned write the pool), so a pickup the guest's
+/// game just made in the overlay is never taken back before GuestLocalWorldChanges saw it.
+std::size_t GuestItemOverlaySync(const FlagStore& store, const std::map<u32, u64>& overlay, bool full) {
+    if (!InstancedItems()) {
+        return 0;
+    }
+    std::size_t bits = 0;
+    for (const auto& [key, buf] : overlay) {
+        if (!buf || !WorldMirrorKey(int(key))) {
+            continue;
+        }
+        const GroupBytes& im = WorldItemMask(int(key));
+        bool any = false;
+        for (u8 b : im) {
+            any = any || b;
+        }
+        const u64 pool = store.PoolBlockAddress(int(key));
+        GroupBytes cur, own;
+        if (!any || !pool || !store.ops().read(buf, cur.data(), kBlockBytes) ||
+            !store.ops().read(pool, own.data(), kBlockBytes)) {
+            continue;
+        }
+        GroupBytes next = cur;
+        for (u32 i = 0; i < kBlockBytes; ++i) {
+            next[i] = full ? u8((cur[i] & ~im[i]) | (own[i] & im[i])) : u8(cur[i] | (own[i] & im[i]));
+        }
+        if (next != cur && store.ops().write(buf, next.data(), kBlockBytes)) {
+            for (u32 i = 0; i < kBlockBytes; ++i) {
+                bits += std::size_t(__builtin_popcount(u8(next[i] ^ cur[i])));
+            }
+        }
+    }
+    return bits;
+}
+
 const char* MirrorWhy(bool full, u64 id, u64 last) {
     return !full ? "host changes" : id != last ? "new overlay" : "snapshot applied";
 }
@@ -2015,6 +2115,9 @@ void GuestMirrorTick(Global& g, bool force_full, const char* why) {
     GuestWorldMirror::Result r;
     const u64 last = g.overlay_id;
     g.mirror.Apply(overlay, store.ops(), full, &r);
+    if (const std::size_t ib = GuestItemOverlaySync(store, overlay, full)) {
+        Log("world mirror: %zu item pickup bit(s) of the guest's own save put into the overlay (instanced items)", ib);
+    }
     g.overlay_id = id;
     g.mirror_full_due = false;
     if (full) {
@@ -2440,6 +2543,46 @@ bool HostWorldFlag(u32 id, bool* value) {
 int FlagLoadMode() {
     const FlagStore store(Manager(), GameOps());
     return store.Valid() ? store.LoadMode() : -1;
+}
+
+bool GuestLocalWorldChanges(std::vector<std::pair<u32, bool>>* out, std::size_t max) {
+    const FlagStore store(Manager(), GameOps());
+    if (!store.Valid() || store.LoadMode() != 1) {
+        return false;
+    }
+    std::map<u32, u64> overlay;
+    if (!store.OverlayGroups(&overlay) || overlay.empty()) {
+        return false;
+    }
+    Global& g = G();
+    std::lock_guard<std::mutex> lk(g.mu);
+    if (!g.mirror.has_image() || g.overlay_id != store.OverlayIdentity()) {
+        return false;  // the overlay was rebuilt and not yet filled: every bit would look local
+    }
+    *out = g.mirror.LocalChanges(overlay, store.ops(), max);
+    if (InstancedItems()) {
+        // D4: item pickups the guest's game made in the overlay that its own pool lacks.
+        for (const auto& [key, buf] : overlay) {
+            const GroupBytes& im = WorldItemMask(int(key));
+            const u64 pool = store.PoolBlockAddress(int(key));
+            GroupBytes cur, own;
+            if (!buf || !pool || !WorldMirrorKey(int(key)) || !store.ops().read(buf, cur.data(), kBlockBytes) ||
+                !store.ops().read(pool, own.data(), kBlockBytes)) {
+                continue;
+            }
+            const u32 base = BlockOfPoolKey(int(key)) * kBitsPerBlock;
+            for (u32 i = 0; i < kBlockBytes && out->size() < max; ++i) {
+                const u8 d = u8(cur[i] & ~own[i] & im[i]);
+                for (u32 b = 0; d && b < 8; ++b) {
+                    if (d & (0x80u >> b)) {
+                        out->emplace_back(base + i * 8 + b, true);
+                    }
+                }
+            }
+        }
+        GuestItemOverlaySync(store, overlay, false);  // C3's summoned gives (pool) show in the overlay
+    }
+    return true;
 }
 
 Stats GetStats() {
