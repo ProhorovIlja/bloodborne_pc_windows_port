@@ -252,6 +252,7 @@ struct State {
 // next world_action. Host: remote kicks its game applied (NetKickEntry): kick event id -> time.
 // MSB treasure spawns seen on this game (0x17DC300(MapItemMan, entity handle, MsbEvent, pos)):
 // the fixture's pickup targets. Main thread.
+std::atomic<std::uint64_t> g_pickups{0};  // map item pickups on this game (PickupEntry)
 std::mutex g_treasure_mu;
 struct Treasure {
     std::array<float, 3> pos{};
@@ -621,41 +622,39 @@ bool MyPos(float out[3]) {
     return true;
 }
 
-// The nearest live map character of the current map's entity range (AABnnnn) within 25 m, by the
-// WorldChrMan id sets (party_guestsvc FindChr's walk) and 0x13C97A0(id).
-std::int32_t NearestEnemy(const float me[3], float pos[3], const std::vector<std::int32_t>& skip) {
-    std::uint64_t wcm = 0;
-    std::int32_t sets = 0;
-    if (!SafeGet(Guest(0x553e878), &wcm) || !wcm || !SafeGet(wcm + 0x90, &sets) || sets <= 0 || sets > 4096) {
+// The nearest live map character (WorldChrMan block lists: +0x28 blocks of 0x160, count +0x20;
+// block +0xC0 list of 0x38-byte entries, count +0xB8; entry +0 the ChrIns) within 45 m that is not
+// a player (PlayerIns +0x78 chr type is only meaningful for players: skip the local player and
+// chrs whose entity +0x3B8 is negative).
+std::uint64_t NearestEnemy(const float me[3], float pos[3], const std::vector<std::uint64_t>& skip) {
+    std::uint64_t wcm = 0, blocks = 0, local = 0;
+    std::int32_t nb = 0;
+    if (!SafeGet(Guest(0x553e878), &wcm) || !wcm || !SafeGet(wcm + 0x20, &nb) || !SafeGet(wcm + 0x28, &blocks) ||
+        !blocks || nb <= 0 || nb > 64) {
         return 0;
     }
-    using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::int32_t, std::uint64_t);
-    const Find find = reinterpret_cast<Find>(Guest(0x13c97a0));
-    std::int32_t best = 0;
+    SafeGet(wcm + 0x60, &local);
+    std::uint64_t best = 0;
     float bd = 45.0f * 45.0f;
     int seen = 0, dead = 0;
-    for (std::int32_t i = 0; i < sets; ++i) {
-        std::uint64_t set = 0, arr = 0;
+    for (std::int32_t b = 0; b < nb; ++b) {
+        std::uint64_t list = 0;
         std::int32_t n = 0;
-        if (!SafeGet(wcm + 0x98 + 8 * std::uint64_t(i), &set) || !set || !SafeGet(set + 0xf0, &n) ||
-            !SafeGet(set + 0xf8, &arr) || n <= 0 || n > 100000) {
+        if (!SafeGet(blocks + std::uint64_t(b) * 0x160 + 0xb8, &n) || n <= 0 || n > 4096 ||
+            !SafeGet(blocks + std::uint64_t(b) * 0x160 + 0xc0, &list) || !list) {
             continue;
         }
         for (std::int32_t k = 0; k < n; ++k) {
-            std::int32_t id = 0;
-            if (!SafeGet(arr + 8 * std::uint64_t(k), &id) || id < 1000000 || id > 9999999 ||
-                std::find(skip.begin(), skip.end(), id) != skip.end() || id % 10000 >= 700) {
-                continue;  // AAB0000-AAB0699: enemies (NPCs from 700 up)
-            }
-            const std::uint64_t chr = find(id, id, 0);
-            std::uint64_t cm = 0, dm = 0;
+            std::uint64_t chr = 0, cm = 0, dm = 0;
             std::int32_t hp = 0;
             float p[4] = {};
-            if (!chr || !SafeRead(chr + 0xc0, p, sizeof p)) {
+            if (!SafeGet(list + std::uint64_t(k) * 0x38, &chr) || !chr || chr == local ||
+                std::find(skip.begin(), skip.end(), chr) != skip.end() || !SafeRead(chr + 0xc0, p, sizeof p)) {
                 continue;
             }
             ++seen;
-            if (SafeGet(chr + 0x3b0, &cm) && cm && SafeGet(cm + 0x20, &dm) && dm && SafeGet(dm + 0x128, &hp) && hp <= 0) {
+            if (!SafeGet(chr + 0x3b0, &cm) || !cm || !SafeGet(cm + 0x20, &dm) || !dm || !SafeGet(dm + 0x128, &hp) ||
+                hp <= 0) {
                 ++dead;
                 continue;
             }
@@ -663,34 +662,45 @@ std::int32_t NearestEnemy(const float me[3], float pos[3], const std::vector<std
             const float d = dx * dx + dy * dy + dz * dz;
             if (d < bd) {
                 bd = d;
-                best = id;
+                best = chr;
                 std::memcpy(pos, p, 12);
             }
         }
     }
     if (!best) {
-        Log("test: fixture: enemies of the map ids seen: %d (%d dead), none alive within 45 m", seen, dead);
+        Log("test: fixture: map characters seen: %d (%d dead / unreadable), none alive within 45 m", seen, dead);
     }
     return best;
 }
 
 void KillTick(Fixture& f, double now) {
-    static std::vector<std::int32_t> done_ids;
+    static std::vector<std::uint64_t> done_ids;
+    static std::uint64_t kill_chr = 0;
     float me[3] = {};
     if (!MyPos(me)) {
         return;
     }
     if (f.kill_stage == 0) {
-        f.kill_id = NearestEnemy(me, f.kill_pos, done_ids);
-        if (!f.kill_id) {
+        kill_chr = NearestEnemy(me, f.kill_pos, done_ids);
+        f.kill_id = 0;
+        if (kill_chr) {
+            SafeGet(kill_chr + 0x3b8, &f.kill_id);
+        }
+        if (!kill_chr) {
             Log("test: fixture: no live enemy within 45 m");
             f.kills = 0;
             return;
         }
-        done_ids.push_back(f.kill_id);
-        // Lua ForceDead (0x13320C0(ctx, entity)): the enemy's normal death on this game.
-        reinterpret_cast<void(BB_COOP_SYSV*)(std::uint64_t, std::uint32_t)>(Guest(0x13320c0))(0, std::uint32_t(f.kill_id));
-        Log("test: fixture: enemy %d at (%.1f, %.1f, %.1f) killed by this player (ForceDead)", f.kill_id,
+        done_ids.push_back(kill_chr);
+        // What Lua ForceDead (0x13320C0) does with the chr: clear +0x1E3 bit 5, then 0x18BF9A0(chr)
+        // (HP 0 and the dead flag): the enemy's normal death on this game.
+        std::uint8_t b = 0;
+        if (SafeGet(kill_chr + 0x1e3, &b)) {
+            b = std::uint8_t(b & 0xdf);
+            SafeWrite(kill_chr + 0x1e3, &b, 1);
+        }
+        reinterpret_cast<void(BB_COOP_SYSV*)(std::uint64_t)>(Guest(0x18bf9a0))(kill_chr);
+        Log("test: fixture: enemy (chr +0x3B8 %d) at (%.1f, %.1f, %.1f) killed by this player (ForceDead)", f.kill_id,
             f.kill_pos[0], f.kill_pos[1], f.kill_pos[2]);
         f.kill_stage = 1;
         f.next = now + 6.0;  // death animation; the drop appears
@@ -756,24 +766,27 @@ void FixtureTick(double now) {
     if (f.idx >= total && f.pickups > 0) {
         // The nearest treasure not tried yet: stand on it, Cross (pick up), next one 5 s later.
         static std::array<float, 3> cur{};
+        static std::uint64_t picks_before = 0;
         if (f.presses >= 1) {
-            // Around the treasure (8 directions x 0.8 / 1.3 m, facing it) until a prompt shows.
-            std::uint32_t pp = 0;
-            const bool up = GuestSvcPromptUp(&pp) && pp != 10010110;  // 10010110: a stale talk text
-            if (up || f.presses > 16) {
-                Log("test: fixture: treasure: prompt %s %u after %d spot(s); Cross", up ? "up" : "not seen", pp,
-                    f.presses);
-                runtime_pad_director_press(0x4000);
-                f.release = now + 0.15;
+            // Around the treasure (8 directions x 0.6 / 1.1 m, facing it), Cross at each spot until
+            // the game's pickup function ran (PickupEntry).
+            if (g_pickups.load() > picks_before || f.presses > 16) {
+                Log("test: fixture: treasure: %s after %d spot(s)",
+                    g_pickups.load() > picks_before ? "picked up" : "no pickup", f.presses);
                 f.presses = 0;
-                f.next = now + 5.0;
+                f.next = now + 4.0;
                 --f.pickups;
                 return;
             }
+            if (f.release > 0) {
+                return;
+            }
             std::string what;
-            PutLocal(cur.data(), 0.0f, 1.0f, f.presses <= 8 ? 0.8f : 1.3f, float(f.presses % 8) * 45.0f, &what);
+            PutLocal(cur.data(), 0.0f, 1.0f, f.presses <= 8 ? 0.6f : 1.1f, float(f.presses % 8) * 45.0f, &what);
+            runtime_pad_director_press(0x4000);
+            f.release = now + 0.15;
             ++f.presses;
-            f.next = now + 0.8;
+            f.next = now + 1.0;
             return;
         }
         static std::vector<std::array<float, 3>> tried;
@@ -825,7 +838,8 @@ void FixtureTick(double now) {
             tried.push_back(best);
             std::string what;
             cur = best;
-            PutLocal(best.data(), 0.0f, 1.0f, 0.8f, 0.0f, &what);
+            picks_before = g_pickups.load();
+            PutLocal(best.data(), 0.0f, 1.0f, 0.6f, 0.0f, &what);
             Log("test: fixture: treasure at (%.1f, %.1f, %.1f), %.1f m away: %s", best[0], best[1], best[2],
                 std::sqrt(bd), what.c_str());
             f.presses = 1;
@@ -970,6 +984,7 @@ BB_COOP_SYSV void PickupEntry(std::uint64_t, std::uint64_t handle_ptr, std::uint
                               std::uint64_t) {
     std::int32_t h = -1;
     SafeGet(handle_ptr, &h);
+    g_pickups.fetch_add(1);
     Log("map item pickup on this game (role %d): item handle %#x", LocalSessionRole(), unsigned(h));
 }
 
