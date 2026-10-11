@@ -5,8 +5,8 @@
 //             effects' maxHpRate (node +0x48 -> param row +0x10, read live), NG+ table, 9200 sync.
 //             Called by the per-frame HP update 0x1a0d7d0 (max = base * rate; current HP grows
 //             with the "independent" rate) and the boss-bar refresh (EMEVD 2004[53]).
-//   0x17e1d90 RemoveSpEffect(list, node, 1) (EMEVD 2004[21]): NOT used - removing 7503 from a boss
-//             mid-fight killed it (live); bosses are kept out by entity (0x13c97a0) instead
+//   0x17e1d90 RemoveSpEffect(list, node, 1) (EMEVD 2004[21]): not used; bosses are kept out of 7503
+//             by entity (0x13c97a0) instead
 //   chr vfunc +0x3f0 ApplySpEffect(chr, id, chr, 0, 1, 0, 0, 1.0 x5) (party_director / party_b2)
 //   ChrIns +0x1c8 SpEffect list (+8 first node; node +0x40 id, +0x48 row, +0x58 next)
 //   ChrIns +0x3c8 -> +8 NpcParam row (0x18e4fa6): teamType +0x12f, isSoulGetByBoss 0x149 bit 4
@@ -40,6 +40,7 @@
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace coop::balance {
 
@@ -99,12 +100,16 @@ bool g_have_host = false;
 Rules g_host;
 
 std::atomic<u64> g_rot_list{0};         // the local player's SpEffect list (rate hook)
-std::atomic<float> g_rot_factor{1.0f};  // max HP: 1 - 0.1 * health stacks while rot is on
-std::atomic<float> g_rot_st_factor{1.0f};  // max stamina: 1 - 0.1 * stamina stacks
-std::atomic<int> g_stacks{0}, g_deaths{0};  // all stacks (health + stamina)
-std::atomic<int> g_st_stacks{0};            // of them: stamina rot
-void* g_st_rate_orig = nullptr;
-bool g_st_hooked = false;
+// Rot kinds (ERSC: five, one at random per death). Each is a rate function of the player's
+// SpEffect list, its prologue replaced; the result is changed for the local player's list only.
+enum RotKind { kRotHealth, kRotStamina, kRotStaminaCost, kRotRally, kRotDiscovery, kRotKinds };
+const char* const kRotKindName[kRotKinds] = {"health", "stamina", "stamina cost", "rally", "discovery"};
+std::atomic<int> g_kind[kRotKinds];          // stacks per kind (sum = g_stacks)
+std::atomic<float> g_kind_value[kRotKinds];  // the factor (or, discovery, the points) applied now
+bool g_kind_hooked[kRotKinds]{};
+void* g_kind_orig[kRotKinds]{};
+std::atomic<float> g_rot_factor{1.0f};  // max HP (the HP hook)
+std::atomic<int> g_stacks{0}, g_deaths{0};  // all stacks
 std::atomic<bool> g_rest_pending{false};
 std::atomic<bool> g_hooked{false};
 using RateFn = float(BB_COOP_SYSV*)(u64, u64);
@@ -124,6 +129,7 @@ struct TickState {
     bool have_written[4]{};
     int hp_logged_factor = -1, hp_logged_max = -1;
     int hits = 0;
+    Clock::time_point next_rot_log{};
     std::string toast;            // a rot notice waiting for the respawn
     Clock::time_point toast_at{};  // alive in the world since  // rot factor (percent) of the last "max HP now" line
     Clock::time_point factor_since{};
@@ -149,9 +155,18 @@ void LoadRot() {
     std::ifstream f(RotPath());
     std::string key;
     int v = 0;
-    if (f >> key >> v && key == "stacks") g_stacks = std::clamp(v, 0, kRotMaxStacks);
-    int st = 0;
-    if (f >> key >> st && key == "stamina") g_st_stacks = std::clamp(st, 0, g_stacks.load());
+    if (!(f >> key >> v) || key != "stacks") return;
+    const int left = std::clamp(v, 0, kRotMaxStacks);
+    int sum = 0;
+    for (int k = 0; k < kRotKinds; ++k) {
+        int n = 0;
+        if (!(f >> key >> n)) break;  // an older file: "stacks N" only (health)
+        n = std::clamp(n, 0, left - sum);
+        g_kind[k] = n;
+        sum += n;
+    }
+    if (sum < left) g_kind[kRotHealth] = g_kind[kRotHealth].load() + (left - sum);
+    g_stacks = left;
 }
 
 void SaveRot() {
@@ -160,11 +175,23 @@ void SaveRot() {
     std::filesystem::create_directories(p.parent_path(), ec);
     std::ofstream f(p, std::ios::trunc);
     f << "stacks " << g_stacks.load() << "\n";
+    for (int k = 0; k < kRotKinds; ++k) f << "kind" << k << " " << g_kind[k].load() << "\n";
 }
 
 void UpdateRotFactor(const Rules& r) {
-    g_rot_factor = r.rot ? RotHpFactor(g_stacks.load() - g_st_stacks.load()) : 1.0f;
-    g_rot_st_factor = r.rot ? RotHpFactor(g_st_stacks.load()) : 1.0f;
+    for (int k = 0; k < kRotKinds; ++k) {
+        const int n = r.rot ? g_kind[k].load() : 0;
+        float v = 1.0f;
+        switch (k) {
+        case kRotHealth:
+        case kRotStamina: v = RotHpFactor(n); break;                            // max -10 % a stack
+        case kRotStaminaCost: v = 1.0f + 0.1f * static_cast<float>(n); break;   // costs +10 % a stack
+        case kRotRally: v = std::max(0.0f, 1.0f - 0.15f * static_cast<float>(n)); break;  // rally -15 %
+        case kRotDiscovery: v = -10.0f * static_cast<float>(n); break;           // discovery -10 points
+        }
+        g_kind_value[k] = v;
+    }
+    g_rot_factor = g_kind_value[kRotHealth].load();
 }
 
 // ---- Hooks ----
@@ -174,10 +201,32 @@ BB_COOP_SYSV float RateHook(u64 list, u64 independent) {
     return r;
 }
 
-BB_COOP_SYSV float StaminaRateHook(u64 list) {
-    float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_st_rate_orig)(list);
-    if (list && list == g_rot_list.load(std::memory_order_relaxed)) r *= g_rot_st_factor.load(std::memory_order_relaxed);
+// Evidence: how often the game asked each rot rate for the local player, and the last answer.
+std::atomic<std::uint32_t> g_kind_calls[kRotKinds];
+std::atomic<float> g_kind_last[kRotKinds];
+float Note(int kind, float r) {
+    g_kind_calls[kind].fetch_add(1, std::memory_order_relaxed);
+    g_kind_last[kind].store(r, std::memory_order_relaxed);
     return r;
+}
+bool Mine(u64 list) {
+    return list && list == g_rot_list.load(std::memory_order_relaxed);
+}
+BB_COOP_SYSV float StaminaRateHook(u64 list) {  // 0x17e4a20 max stamina rate (maxStaminaRate +0x18)
+    const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotStamina])(list);
+    return Mine(list) ? Note(kRotStamina, r * g_kind_value[kRotStamina].load(std::memory_order_relaxed)) : r;
+}
+BB_COOP_SYSV float StaminaCostHook(u64 list, u64 ctx) {  // 0x17e4c50 consumeStaminaRate +0x1b8
+    const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64, u64)>(g_kind_orig[kRotStaminaCost])(list, ctx);
+    return Mine(list) ? Note(kRotStaminaCost, r * g_kind_value[kRotStaminaCost].load(std::memory_order_relaxed)) : r;
+}
+BB_COOP_SYSV float RallyHook(u64 list, u64 ctx) {  // 0x17e5590 regainRate +0x1f4
+    const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64, u64)>(g_kind_orig[kRotRally])(list, ctx);
+    return Mine(list) ? Note(kRotRally, r * g_kind_value[kRotRally].load(std::memory_order_relaxed)) : r;
+}
+BB_COOP_SYSV float DiscoveryHook(u64 list) {  // 0x17e8010 the sum of itemDropRate +0x1fc (points)
+    const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotDiscovery])(list);
+    return Mine(list) ? Note(kRotDiscovery, r + g_kind_value[kRotDiscovery].load(std::memory_order_relaxed)) : r;
 }
 
 void OnLampUse(u32 id) {
@@ -214,6 +263,7 @@ Doping ReadRow(u64 row) {
     d.attack_rate = Field<float>(row, 0x48, -1.0f);
     d.resist_rate = Field<float>(row, 0x108, -1.0f);
     d.super_armor = Field<std::int16_t>(row, 0x13a, 0);
+    if (d.super_armor != 0 && Field<std::uint16_t>(row, 0x156, 0) != 155) d.super_armor = -99999;  // not counted yet
     return d;
 }
 
@@ -223,6 +273,11 @@ void WriteRow(u64 row, const Doping& d) {
     for (u64 off : {0x108ull, 0x10cull, 0x110ull, 0x114ull}) SafeWrite(row + off, &d.resist_rate, 4);
     const std::int16_t sa = static_cast<std::int16_t>(std::clamp(d.super_armor, -30000, 30000));
     SafeWrite(row + 0x13a, &sa, 2);
+    // The engine counts changeSuperArmorPoint only on effects whose stateInfo (+0x156) is 155 (the
+    // poise sums 0x17e8590 / 0x18d0351 / 0x18fd400: `cmp word [row+0x156], 0x9b`). The 1.09 doping
+    // rows carry +30 / +60 with stateInfo 0, so the game's own boss poise bonus never applied.
+    const std::uint16_t state = sa != 0 ? 155 : 0;
+    SafeWrite(row + 0x156, &state, 2);
 }
 
 void WriteParams(const Rules& r, int n) {
@@ -269,6 +324,16 @@ constexpr int kBossEntities[] = {2100800, 2100810, 2200800, 2200801, 2300800, 23
                                  2410811, 2420800, 2500800, 2500801, 2500802, 2600800, 2600801, 2600802, 2600850,
                                  2700800, 2700801, 2700802, 2800800, 2800801, 2800802, 2800803, 3200800, 3300800,
                                  3400800, 3400801, 3400850, 3500800, 3500850, 3600800, 3600801};
+// The chalice bosses (m29): the entities the parameterised chalice boss events (12904877, 12904881,
+// 12906791, 12906795, 12906806: 2004[8] SpEffect 7500 / 7501 on a parameter) are started with
+// (2000[0] / 2000[6] arguments, every 1.09 EMEVD). Resolved only in area 29.
+constexpr int kChaliceBossEntities[] = {
+    2900100, 2900101, 2900102, 2900103, 2900104, 2900105, 2900106, 2900107, 2900108, 2900109, 2900110,
+    2900111, 2900112, 2900113, 2900114, 2900115, 2900116, 2900117, 2900118, 2900120, 2900124, 2900125,
+    2900127, 2900128, 2900129, 2900130, 2900131, 2900132, 2900133, 2900134, 2900135, 2900136, 2900137,
+    2900138, 2900139, 2900140, 2900141, 2900142, 2900143, 2900144, 2900146, 2900148, 2900149, 2900150,
+    2900200, 2900225, 2900250, 2900300, 2900310, 2900320, 2900350, 2900400, 2900450, 2900451, 2900452,
+    2900453, 2900454, 2900457, 2900460, 2900470, 2900471, 2900472, 2900473, 2900810, 2900820, 2910103};
 constexpr u64 kGetChrByEntityId = 0x13c97a0;
 
 u64 ChrByEntity(int entity) {
@@ -298,10 +363,14 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
     int seen = 0, enemies = 0, applied = 0, removed = 0, bosses = 0, carrying = 0, counted = 0;
     // The bosses of the loaded maps, by the entity ids the boss events dope (EMEVD 2004[8] with
     // SpEffect 7500 / 7501, every map; GetChrByEntityId 0x13c97a0, as the events resolve them).
-    u64 boss_chrs[sizeof kBossEntities / sizeof kBossEntities[0]];
+    u64 boss_chrs[sizeof kBossEntities / sizeof kBossEntities[0] + sizeof kChaliceBossEntities / sizeof(int)];
     int n_boss = 0;
     for (int e : kBossEntities)
         if (const u64 c = ChrByEntity(e)) boss_chrs[n_boss++] = c;
+    if (((s.map_id >> 24) & 0xff) == 29) {
+        for (int e : kChaliceBossEntities)
+            if (const u64 c = ChrByEntity(e)) boss_chrs[n_boss++] = c;
+    }
     for (int set = 0; set < sets; ++set) {
         const u64 tab = Field<u64>(wcm, 0x850 + u64(set) * 8);
         const int count = Field<int>(tab, 0, 0);
@@ -328,19 +397,26 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
                     u64 node = 0;
                     HasEffect(chr, dope, &node);
                     const u64 list = Field<u64>(chr, 0x1c8);
-                    char b[200];
-                    std::snprintf(b, sizeof b, "boss chr %x: SpEffect %d (flags %x): HP %d / %d base %d, rate %.3f",
+                    int poise = 0;  // the engine's poise sum (stateInfo 155 effects only)
+                    for (u64 n = Field<u64>(list, 8); n; n = Field<u64>(n, 0x58)) {
+                        const u64 row = Field<u64>(n, 0x48);
+                        if ((Field<u32>(n, 0x1c) & 0x800c0003u) == 0 && row && Field<std::uint16_t>(row, 0x156) == 155)
+                            poise += Field<std::int16_t>(row, 0x13a);
+                    }
+                    char b[240];
+                    std::snprintf(b, sizeof b, "boss chr %x: SpEffect %d (flags %x): HP %d / %d base %d, rate %.3f, "
+                                               "poise bonus %+d (counted)",
                                   Field<u32>(chr, 8, ~0u), dope, Field<u32>(node, 0x1c), Field<int>(dm, 0xf8, -1),
                                   Field<int>(dm, 0xfc, -1), Field<int>(dm, 0x100, -1),
-                                  double(list && g_rate_orig ? reinterpret_cast<RateFn>(g_rate_orig)(list, 0) : -1.0f));
+                                  double(list && g_rate_orig ? reinterpret_cast<RateFn>(g_rate_orig)(list, 0) : -1.0f),
+                                  poise);
                     if (g_boss_line != b) {
                         g_boss_line = b;
                         Log("%s", b);
                     }
                 }
-                // No removal: taking 7503 off a boss mid-fight (0x17e1d90, EMEVD 2004[21]'s remove) killed
-                // the Cleric Beast outright (live 2026-10-11, HP 6597 -> 0). Bosses never get it now
-                // (the boss entity table below); one that still carries it is only counted.
+                // No removal mid-fight (0x17e1d90): bosses never get 7503 (the boss entity tables);
+                // one that still carries it is only counted.
                 if (HasEffect(chr, int(kEnemyRow))) ++removed;
                 continue;
             }
@@ -449,15 +525,32 @@ void Init() {
                         &g_rate_orig, "balance: max HP rate (rot)")) {
         g_hooked = true;
     }
-    // The second rot kind (ERSC has five): max stamina, through the stamina rate 0x17e4a20.
-    if (ReplacePrologue(kMaxStaminaRate, {0x55, 0x48, 0x89, 0xe5, 0x48, 0x83, 0xec, 0x10},
-                        reinterpret_cast<const void*>(&StaminaRateHook), &g_st_rate_orig,
-                        "balance: max stamina rate (rot)")) {
-        g_st_hooked = true;
+    g_kind_hooked[kRotHealth] = g_hooked;
+    // The other rot kinds (ERSC has five): rate functions of the SpEffect list (1.09 eboot).
+    g_kind_hooked[kRotStamina] = ReplacePrologue(kMaxStaminaRate, {0x55, 0x48, 0x89, 0xe5, 0x48, 0x83, 0xec, 0x10},
+                                                 reinterpret_cast<const void*>(&StaminaRateHook),
+                                                 &g_kind_orig[kRotStamina], "balance: max stamina rate (rot)");
+    // Kinds 3-5 (stamina cost, rally, item discovery) are not verified live yet: off unless
+    // BB_PARTY_ROT_ALL_KINDS=1 (0.5.2: health and stamina only). Without the hooks a death picks
+    // among the hooked kinds only.
+    const char* all = std::getenv("BB_PARTY_ROT_ALL_KINDS");
+    if (all && all[0] == '1') {
+        g_kind_hooked[kRotStaminaCost] = ReplacePrologue(0x17e4c50, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53},
+                                                         reinterpret_cast<const void*>(&StaminaCostHook),
+                                                         &g_kind_orig[kRotStaminaCost], "balance: stamina cost rate (rot)");
+        g_kind_hooked[kRotRally] = ReplacePrologue(0x17e5590, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53},
+                                                   reinterpret_cast<const void*>(&RallyHook), &g_kind_orig[kRotRally],
+                                                   "balance: rally rate (rot)");
+        g_kind_hooked[kRotDiscovery] = ReplacePrologue(0x17e8010, {0x48, 0x8b, 0x47, 0x08, 0xc5, 0xf8, 0x57, 0xc0},
+                                                       reinterpret_cast<const void*>(&DiscoveryHook),
+                                                       &g_kind_orig[kRotDiscovery], "balance: item discovery sum (rot)");
     }
     SetLampUseObserver(&OnLampUse);
-    Log("on: rot hooks HP %s, stamina %s; %d rot stack(s) (%d stamina) kept from the last game",
-        g_hooked ? "in" : "NOT in", g_st_hooked ? "in" : "NOT in", g_stacks.load(), g_st_stacks.load());
+    std::string kinds;
+    for (int k = 0; k < kRotKinds; ++k)
+        kinds += std::string(" ") + kRotKindName[k] + (g_kind_hooked[k] ? "" : "(NOT hooked)") + "=" +
+                 std::to_string(g_kind[k].load());
+    Log("on: rot kinds%s; %d stack(s) kept from the last game", kinds.c_str(), g_stacks.load());
 }
 
 void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
@@ -488,21 +581,42 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     if (in_world && s.player == st.last_player && st.last_hp > 0 && hp == 0 && max_hp > 1) {
         ++g_deaths;
         st.last_death = now;
-        bool stamina_kind = false;
+        int kind = -1;
         if (r.rot && g_stacks.load() < kRotMaxStacks) {
-            // One kind picked at random per death (ERSC): max HP or, with the hook in, max stamina.
-            stamina_kind = g_st_hooked && (std::chrono::steady_clock::now().time_since_epoch().count() >> 10) % 2 == 1;
-            ++g_stacks;
-            if (stamina_kind) ++g_st_stacks;
-            SaveRot();
+            // One kind picked at random per death (ERSC), among the hooked ones; BB_PARTY_ROT_KIND=N
+            // forces kind N (tests).
+            int hooked[kRotKinds], nh = 0;
+            for (int k = 0; k < kRotKinds; ++k)
+                if (g_kind_hooked[k]) hooked[nh++] = k;
+            if (nh > 0) {
+                const auto t = static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+                kind = hooked[(t >> 10) % static_cast<std::uint64_t>(nh)];
+                if (const char* f = std::getenv("BB_PARTY_ROT_KIND"); f && *f) {
+                    // "2,3": the kinds of this player's deaths in turn
+                    std::vector<int> list;
+                    for (const char* q = f; *q;) {
+                        list.push_back(std::clamp(std::atoi(q), 0, kRotKinds - 1));
+                        while (*q && *q != ',') ++q;
+                        if (*q == ',') ++q;
+                    }
+                    kind = list[static_cast<std::size_t>(g_deaths.load() - 1) % list.size()];
+                }
+                ++g_stacks;
+                g_kind[kind] = g_kind[kind].load() + 1;
+                SaveRot();
+            }
         }
-        const int k = g_stacks.load(), ks = g_st_stacks.load(), kh = k - ks;
-        Log("death %d; rot %s, %d stack(s) (this one %s): max HP x%.2f, max stamina x%.2f", g_deaths.load(),
-            r.rot ? "on" : "off", k, stamina_kind ? "stamina" : "health", double(RotHpFactor(kh)), double(RotHpFactor(ks)));
+        const int k = g_stacks.load();
+        Log("death %d; rot %s, %d stack(s) (this one: %s): health %d, stamina %d, stamina cost %d, rally %d, "
+            "discovery %d",
+            g_deaths.load(), r.rot ? "on" : "off", k, kind >= 0 ? kRotKindName[kind] : "none", g_kind[0].load(),
+            g_kind[1].load(), g_kind[2].load(), g_kind[3].load(), g_kind[4].load());
         if (r.rot) {
-            char b[160];
-            std::snprintf(b, sizeof b, "Rot %d/%d: max HP -%d %%, stamina -%d %% until you rest at a lamp", k,
-                          kRotMaxStacks, kh * kRotHpPercentPerStack, ks * kRotHpPercentPerStack);
+            static const char* const kWhat[kRotKinds] = {"max HP -10 %", "max stamina -10 %", "stamina costs +10 %",
+                                                         "rally -15 %", "item discovery -10"};
+            char b[200];
+            std::snprintf(b, sizeof b, "Rot %d/%d: %s until you rest at a lamp", k, kRotMaxStacks,
+                          kind >= 0 ? kWhat[kind] : "-");
             st.toast = b;  // shown once the player is back on its feet (the death's travel notice comes first)
             st.toast_at = Clock::time_point{};
         }
@@ -530,9 +644,9 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         if (st.last_death != Clock::time_point{} && since_death < 20.0) {
             Log("lamp warp %.0f s after a death: the respawn, not a rest", since_death);
         } else if (g_stacks.load() > 0) {
-            Log("lamp rest: rot cleansed (%d stack(s), %d stamina)", g_stacks.load(), g_st_stacks.load());
+            Log("lamp rest: rot cleansed (%d stack(s))", g_stacks.load());
             g_stacks = 0;
-            g_st_stacks = 0;
+            for (auto& c : g_kind) c = 0;
             SaveRot();
             if (r.rot) party::status::SetLastEvent("The rot is cleansed");
         }
@@ -540,8 +654,9 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     UpdateRotFactor(r);
     // Evidence: the local max HP once a rot change has settled (3 s, in the world).
     {
-        const int f = static_cast<int>(std::lround(g_rot_factor.load() * 100.0f)) +
-                      1000 * static_cast<int>(std::lround(g_rot_st_factor.load() * 100.0f));
+        const int f = static_cast<int>(std::lround(g_kind_value[kRotHealth].load() * 100.0f)) +
+                      1000 * static_cast<int>(std::lround(g_kind_value[kRotStamina].load() * 100.0f)) +
+                      1000000 * g_stacks.load();
         if (f != st.last_factor) {
             st.last_factor = f;
             st.factor_since = now;
@@ -550,11 +665,27 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
             std::chrono::duration<double>(now - st.factor_since).count() >= 3.0) {
             st.hp_logged_factor = f;
             st.hp_logged_max = max_hp;
-            Log("max HP now %d (HP %d), max stamina %d, rot factor HP %d %% stamina %d %% (%d stack(s))", max_hp, hp,
-                Field<int>(dm, 0x138, -1), f % 1000, f / 1000, g_stacks.load());
+            const u64 list = Field<u64>(s.player, 0x1c8);
+            Log("max HP now %d (HP %d), max stamina %d, rot factor HP %d %% stamina %d %% (%d stack(s)); "
+                "stamina cost x%.2f, rally x%.2f, discovery sum %+.0f (with rot)",
+                max_hp, hp, Field<int>(dm, 0x138, -1), f % 1000, f / 1000 % 1000, g_stacks.load(),
+                double(g_kind_value[kRotStaminaCost].load()), double(g_kind_value[kRotRally].load()),
+                double(g_kind_hooked[kRotDiscovery] ? DiscoveryHook(list) : 0.0f));
         }
     }
     g_rot_list.store(in_world ? Field<u64>(s.player, 0x1c8) : 0, std::memory_order_relaxed);
+    if (g_stacks.load() > 0 && in_world && hp > 0 && now >= st.next_rot_log) {
+        st.next_rot_log = now + std::chrono::seconds(20);
+        std::string b;
+        for (int k = 1; k < kRotKinds; ++k) {
+            char e[96];
+            std::snprintf(e, sizeof e, " %s: %u calls, last %.2f;", kRotKindName[k],
+                          g_kind_calls[k].exchange(0), double(g_kind_last[k].load()));
+            b += e;
+        }
+        Log("rot in effect (%d stack(s); the game's asks for this player since the last line):%s max HP %d, "
+            "max stamina %d", g_stacks.load(), b.c_str(), max_hp, Field<int>(dm, 0x138, -1));
+    }
 
     // D7: the rows (every second) and the enemies (every 2 s).
     if (s.cooperators >= 0) st.last_n = std::clamp(s.cooperators, 0, 3);

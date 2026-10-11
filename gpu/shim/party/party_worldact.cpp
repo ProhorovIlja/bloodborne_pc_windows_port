@@ -21,6 +21,13 @@ bool WorldActionAllowed(std::uint32_t id, bool clear, std::uint32_t host_map) {
         return false;
     }
     const Category c = progress::CategoryOf(id);
+    // Elevator / two-state object flags (C2's state ids, e.g. 12410350/351 Central Yharnam's lift):
+    // the lift's own network-synced events and the replicated ObjAct kick move it on the host; a
+    // guest's value, arriving later, would fight the host's ride.
+    if (c != Category::npc_quest &&
+        progress::ModeFor(progress::Policy::Defaults(), id, c) == progress::SyncMode::State) {
+        return false;
+    }
     bool global_ok = false;
     switch (c) {
     case Category::shortcut_door:
@@ -32,6 +39,7 @@ bool WorldActionAllowed(std::uint32_t id, bool clear, std::uint32_t host_map) {
         global_ok = true;
         break;
     case Category::key_event:
+    case Category::cutscene_seen:  // D10: a scene a guest's event played is seen in the host's world too
         if (clear) {
             return false;
         }
@@ -177,11 +185,27 @@ bool WorldTalkAllowed(std::uint32_t talk) {
     return map >= 220 && map <= 369;  // the world maps' NPCs (Gilbert, Eileen, Alfred, Iosefka, ...)
 }
 
+const std::vector<GateRule>& GateRules() {
+    // From every EMEVD boss-defeat event (2003[12]/[15]/[53]): its own flag and the 2000-3999
+    // flags it sets (tools: flag_tool expand_all; 12411899 sets 2410 once both Central Yharnam
+    // bosses are dead).
+    static const std::vector<GateRule> rules = {
+        {12201800, 2200}, {12301700, 2301}, {12301800, 2300}, {12401800, 2400}, {12401800, 2401},
+        {12401800, 2402}, {12411700, 2411}, {12411800, 2412}, {12411800, 2410, 12411700},
+        {12421700, 2420}, {12421800, 2421}, {12501800, 2500}, {12601800, 2601}, {12601850, 2600},
+        {12701800, 2700}, {12701800, 2701}, {12801800, 2800}, {13201800, 3200}, {13301800, 3300},
+        {13401800, 3400}, {13401800, 3401}, {13401800, 3402}, {13401800, 3403}, {13501800, 3510},
+        {13501800, 3511}, {13501800, 3512}, {13501800, 3513}, {13501850, 3517}, {13601800, 3600},
+    };
+    return rules;
+}
+
 } // namespace coop::worldact
 
 #ifndef BB_PARTY_WORLDACT_NO_GAME
 
 #include "coop_hooks.h"
+#include "party_b2.h"
 #include "game_state.h"
 #include "party_director.h"
 #include "party_link.h"
@@ -279,8 +303,10 @@ State& S() {
         g_st.watch = ParseIds(std::getenv("BB_PARTY_WORLD_WATCH"));
         Log("guest world actions %s (levers, doors, shortcuts, elevators, NPC talk -> the host's world)",
             g_st.enabled ? "on" : "off");
+        // 0.5.2: off by default (opt-in, =1) until the own-save write of a guest's pickup and a
+        // guest's full drop have been verified live (docs/party/world_actions.md 4, 10).
         const char* pk = std::getenv("BB_PARTY_GUEST_PICKUP");
-        if (g_st.enabled && !(pk && pk[0] == '0')) {
+        if (g_st.enabled && pk && pk[0] == '1') {
             // D4, instanced world items (items.md 2.4): MSB treasure is spawned on a client too
             // (0x17DC300: role 6 / session slot gates), and its pickup sets the pickup flag and runs
             // its Lua event there (0x17D6780: the "client in another world" skip) - into the
@@ -292,19 +318,20 @@ State& S() {
                                       {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "treasure spawn on a client (slot)");
             const bool c = PatchBytes(0x17D6838, {0x0f, 0x84, 0x2b, 0x02, 0x00, 0x00},
                                       {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "pickup flag on a client in another world");
-            // Enemy drops are per player too (user decision 2026-10-11): every player's game rolls
-            // each enemy's drop itself (0x17DD0B0 on enemy death); a client kept only isGuestDrop
-            // items (vials, bullets): 0x17DD764 je (not a client: no filter) -> jmp.
-            const char* dr = std::getenv("BB_PARTY_GUEST_DROPS");
-            const bool d = (dr && dr[0] == '0') ||
-                           PatchBytes(0x17DD764, {0x0f, 0x84, 0x3a, 0x02, 0x00, 0x00}, {0xe9, 0x3b, 0x02, 0x00, 0x00, 0x90},
-                                      "full enemy drops on a client");
-            Log("guest enemy drops: %s", dr && dr[0] == '0' ? "vanilla (vials / bullets only)" : d ? "full, own roll per player"
-                                                                                                   : "NOT installed");
             g_st.pickups = a && b && c;
             progress::SetInstancedItems(g_st.pickups);
             Log("guest treasure pickups in the host's world: %s (instanced per player)",
                 g_st.pickups ? "on" : "NOT installed");
+        }
+        // Enemy drops per player (user decision 2026-10-11): every player's game rolls each enemy's
+        // drop itself (0x17DD0B0 on enemy death; live: the same enemy rolled on host and guest);
+        // a client keeps only isGuestDrop items (vials, bullets) unless 0x17DD764 je -> jmp.
+        // Opt-in (=1) for 0.5.2.
+        const char* dr = std::getenv("BB_PARTY_GUEST_DROPS");
+        if (g_st.enabled && dr && dr[0] == '1') {
+            const bool d = PatchBytes(0x17DD764, {0x0f, 0x84, 0x3a, 0x02, 0x00, 0x00},
+                                      {0xe9, 0x3b, 0x02, 0x00, 0x00, 0x90}, "full enemy drops on a client");
+            Log("guest enemy drops: %s", d ? "full, own roll per player" : "NOT installed");
         }
     });
     return g_st;
@@ -341,6 +368,35 @@ std::string IdList(const std::vector<std::uint32_t>& ids) {
                progress::CategoryName(progress::CategoryOf(id)) + ")";
     }
     return out;
+}
+
+/// BB_PARTY_GATE_CATCHUP=1 (opt-in for 0.5.2: not run live; 2410-style flags also gate bells).
+bool GateCatchupOn() {
+    static const bool on = [] {
+        const char* v = std::getenv("BB_PARTY_GATE_CATCHUP");
+        return v && v[0] == '1';
+    }();
+    return on;
+}
+
+/// The area gate flags of the bosses the guest's own save has killed, into the own save (pool in
+/// load mode 1). Once per steady world; logged when something was written.
+void GateCatchup() {
+    std::string list;
+    for (const GateRule& r : GateRules()) {
+        bool boss = false, also = true, gate = false;
+        if (!progress::ReadFlagOwnSave(r.boss, &boss) || !boss || (r.also && (!progress::ReadFlagOwnSave(r.also, &also) || !also)) ||
+            !progress::ReadFlagOwnSave(r.gate, &gate) || gate) {
+            continue;
+        }
+        if (progress::WriteFlagOwnSave(r.gate, true)) {
+            list += " " + std::to_string(r.gate) + "(boss " + std::to_string(r.boss) + ")";
+        }
+    }
+    if (!list.empty()) {
+        Log("guest catch-up: area gate flags of its own bosses into the own save:%s", list.c_str());
+        RequestGameSave("guest gate catch-up");
+    }
 }
 
 void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
@@ -381,6 +437,9 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.baselined = true;
         Log("guest: %zu local flag difference(s) in the host's world held back as the baseline (%s)",
             changes.size(), MapName(s.map_id).c_str());
+        if (GateCatchupOn()) {
+            GateCatchup();
+        }
         return;
     }
     Request r;
@@ -536,8 +595,14 @@ void HostTick(const GameSnapshot& s) {
             continue;
         }
         std::string list;
+        // Split travel: a guest alone in a map the host is not in changes that map's flags; they
+        // are checked against the map it stands in (docs/party/split_travel.md 6).
+        const std::uint32_t check_map = b2::MemberApart(slot) ? b2::MemberMap(slot) : s.map_id;
+        if (check_map != s.map_id) {
+            Log("host: world action from slot %d, alone in %s: checked against its map", slot, MapName(check_map).c_str());
+        }
         auto apply = [&](std::uint32_t id, bool v) {
-            if (!WorldActionAllowed(id, !v, s.map_id)) {
+            if (!WorldActionAllowed(id, !v, check_map)) {
                 ++st.stats.refused;
                 list += " " + std::to_string(id) + "(refused)";
                 return;
@@ -606,6 +671,9 @@ struct Fixture {
     int pickups = 0;  // "pickup=N": the N treasures nearest the guest, one try each
     std::string map;  // "map=NAME": only while the current map's name contains NAME
     int kills = 0;    // "kill=N": N times the nearest live map enemy: ForceDead, then pick up its drop
+    bool attack = false;  // "attack": kill with the weapon (R1 taps) instead of ForceDead
+    bool has_near = false;  // "near=X:Y:Z": the treasure nearest that point, not the player
+    float near[3] = {};
     int kill_stage = 0;
     float kill_pos[3] = {};
     std::int32_t kill_id = 0;
@@ -657,7 +725,7 @@ std::uint64_t NearestEnemy(const float me[3], float pos[3], const std::vector<st
     SafeGet(wcm + 0x60, &local);
     std::uint64_t best = 0;
     float bd = 45.0f * 45.0f;
-    int seen = 0, dead = 0;
+    int seen = 0, dead = 0, logged = 0;
     for (std::int32_t b = 0; b < nb; ++b) {
         std::uint64_t list = 0;
         std::int32_t n = 0;
@@ -681,6 +749,17 @@ std::uint64_t NearestEnemy(const float me[3], float pos[3], const std::vector<st
             }
             const float dx = p[0] - me[0], dy = p[1] - me[1], dz = p[2] - me[2];
             const float d = dx * dx + dy * dy + dz * dz;
+            std::int32_t ent = 0, type = -1;
+            SafeGet(chr + 0x3b8, &ent);
+            SafeGet(chr + 0x78, &type);
+            if (ent >= 10000000 && ent <= 10000010) {
+                continue;  // a player (the host or another guest), not an enemy
+            }
+            if (d < 30.0f * 30.0f && logged < 6) {
+                ++logged;
+                Log("test: fixture: candidate chr %p +0x3B8 %d +0x78 %d HP %d at %.1f m", reinterpret_cast<void*>(chr),
+                    ent, type, hp, std::sqrt(d));
+            }
             if (d < bd) {
                 bd = d;
                 best = chr;
@@ -713,6 +792,12 @@ void KillTick(Fixture& f, double now) {
             return;
         }
         done_ids.push_back(kill_chr);
+        if (f.attack) {
+            f.kill_stage = 10;  // weapon: R1 taps facing it (stages 10..)
+            Log("test: fixture: attacking enemy (chr +0x3B8 %d) at (%.1f, %.1f, %.1f) with the weapon", f.kill_id,
+                f.kill_pos[0], f.kill_pos[1], f.kill_pos[2]);
+            return;
+        }
         // What Lua ForceDead (0x13320C0) does with the chr: clear +0x1E3 bit 5, then 0x18BF9A0(chr)
         // (HP 0 and the dead flag): the enemy's normal death on this game.
         std::uint8_t b = 0;
@@ -725,6 +810,35 @@ void KillTick(Fixture& f, double now) {
             f.kill_pos[0], f.kill_pos[1], f.kill_pos[2]);
         f.kill_stage = 1;
         f.next = now + 6.0;  // death animation; the drop appears
+        return;
+    }
+    if (f.kill_stage >= 10) {
+        // Stand 1.3 m in front of it, facing it, R1; until its HP is 0 (60 taps at most).
+        std::uint64_t cm = 0, dm = 0;
+        std::int32_t hp = 1;
+        float p[4] = {};
+        if (SafeRead(kill_chr + 0xc0, p, sizeof p)) {
+            std::memcpy(f.kill_pos, p, 12);
+        }
+        const bool read = SafeGet(kill_chr + 0x3b0, &cm) && cm && SafeGet(cm + 0x20, &dm) && dm && SafeGet(dm + 0x128, &hp);
+        if ((read && hp <= 0) || f.kill_stage >= 70) {
+            Log("test: fixture: enemy (chr +0x3B8 %d) %s after %d weapon tap(s)", f.kill_id,
+                read && hp <= 0 ? "killed by this player's weapon" : "still alive", f.kill_stage - 10);
+            f.kill_stage = 1;
+            f.next = now + 6.0;
+            return;
+        }
+        if ((f.kill_stage - 10) % 6 == 0) {
+            std::string what;
+            PutLocal(f.kill_pos, 0.0f, 1.0f, 1.3f, 0.0f, &what);
+        }
+        runtime_pad_director_press(0x800);  // R1
+        f.release = now + 0.12;
+        ++f.kill_stage;
+        f.next = now + 0.7;
+        if ((f.kill_stage - 10) % 10 == 1) {
+            Log("test: fixture: R1 #%d, enemy HP %d", f.kill_stage - 10, read ? hp : -1);
+        }
         return;
     }
     if (f.kill_stage >= 1 && f.kill_stage <= 3) {
@@ -767,6 +881,10 @@ void FixtureTick(double now) {
         }
         if (const std::size_t a = v.find("map="); a != std::string::npos) {
             f.map = v.substr(a + 4, v.find(';', a) == std::string::npos ? std::string::npos : v.find(';', a) - a - 4);
+        }
+        f.attack = v.find("attack") != std::string::npos;
+        if (const std::size_t a = v.find("near="); a != std::string::npos) {
+            f.has_near = std::sscanf(v.c_str() + a + 5, "%f:%f:%f", &f.near[0], &f.near[1], &f.near[2]) == 3;
         }
         if (const std::size_t a = v.find("kill="); a != std::string::npos) {
             f.kills = std::atoi(v.c_str() + a + 5);
@@ -838,7 +956,8 @@ void FixtureTick(double now) {
                 if (!want && tr.flag && progress::ReadFlag(tr.flag, &taken) && taken) {
                     continue;  // taken in this guest's view (its own pickups, instanced)
                 }
-                const float dx = t[0] - me[0], dy = t[1] - me[1], dz = t[2] - me[2];
+                const float* from = f.has_near ? f.near : me;
+                const float dx = t[0] - from[0], dy = t[1] - from[1], dz = t[2] - from[2];
                 const float d = dx * dx + dy * dy + dz * dz;
                 if (d < bd) {
                     bd = d;
@@ -901,6 +1020,10 @@ void FixtureTick(double now) {
             return;
         }
         Log("test: fixture: %s %d done", kind, ent);
+        if (obj) {
+            runtime_pad_director_press(0x2000);  // Circle: back out of a menu the object opened
+            f.release = now + 0.15;
+        }
         ++f.idx;
         f.tries = 0;
         f.presses = 0;
@@ -1070,11 +1193,15 @@ void Init() {
     const bool b = HookPrologue(0x13AF830, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                                 &NetKickEntry, "ObjAct remote kick (log)");
     Log("ObjAct kick log %s", a && b ? "on" : "partly off");
-    // Enemy drop rolls and map item pickups: logged (rare events; the D4 evidence).
+    // Enemy drop rolls and map item pickups: logged (the D4 evidence) - only with D4 on or a test.
+    const bool d4 = st.pickups || std::getenv("BB_PARTY_WORLDACT_TEST") ||
+                    (std::getenv("BB_PARTY_GUEST_DROPS") && std::getenv("BB_PARTY_GUEST_DROPS")[0] == '1');
+    if (d4) {
     HookPrologue(0x17DD0B0, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                  &EnemyDropEntry, "enemy drop roll (log)");
     HookPrologue(0x17D8570, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                  &PickupEntry, "map item pickup (log)");
+    }
     if (std::getenv("BB_PARTY_WORLDACT_TEST")) {
         HookPrologue(0x17DC300, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                      &TreasureSpawnEntry, "MSB treasure spawn (test fixture)");
