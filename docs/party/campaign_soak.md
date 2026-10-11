@@ -33,13 +33,15 @@ instances log at every steady load (`BB_PARTY_PROGRESS_TEST_READ`): `own` is wha
 | 10 | Gehrman | `host_flag=72100131` (the refusal choice), `host_skipremo`, `host_kill=2100800` | yes (K10) | m21 | 12101800 boss defeat, Insight to the guest | yes | **pass**; refusal cutscene 21000040 on both (live mirror, 108 s) |
 | 11 | Ending B (Honoring Wishes) + credits, guest gets them | `host_walk` to the Gehrman arena (MSB point 2102808 at (28.4, -9.2, 5.6), on hit parts 2103601-5) | until the ending (the guest leaves to play it in its own Dream, by design) | m21 | guest's own save: 12101800, 9180, 6604 / 6601 / 6603, **22**, NG cycle 0 -> 1 | yes | **pass**: host event 12100000 -> remo 21000020 (72 s) -> NG cycle 1 -> ending step (world down = staff roll); guest got `ending 2` at the same second, warped to its own Dream, same remo 72 s, flags, NG cycle 1, ending step |
 | 13 | A fresh guest joins the advanced host late (run 7: host save from before the ending, guest `BB_TEST_NEWGAME`) | catch-up, gather, summon, `host_warp=2412952` | yes | yes | after the gather load (own world, m21): 12401800, 13201800, 12601850, 12101800 = 1; after the summon + travel to m24_01: 12411700, 12411800 = 1/1 (the current map's boss flags land at that map's load); **time of day 9800..9802 = 0/1, 13201803 = 0/1** | yes | **partial**: every boss caught up into the own save; the Blood Moon did not (open 2b) |
+| 13b | Blood Moon catch-up (fix 3) | run 7c: the same late guest (own 9800..9802 = 0) summoned again | yes | yes | `time of day behind the host's: own save 9800..9802 0 -> 7 (host 7)`, save requested; reads 1/1 | yes | **pass**  |
+| 13c | The caught-up time of day survives a restart | run 7d: Continue on both | yes | yes | guest's first own-world load (mode 0): 9800..9802 = 1/1 | yes | **pass** |
 | 12 | Continue party game resumes the same world | every run 2..6d | yes | yes | yes | yes | **pass** (host back where it saved; guest re-summoned, 20-110 s after start) |
 
 User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
 
 | Decision | Result |
 |---|---|
-| A guest behind the host catches up fully in its own save (bosses, Blood Moon, lamps, shortcuts) | **partial**: bosses **pass** (rows 2, 3, 5, 7, 9 while summoned; row 13 for a fresh guest joining late: all six boss flags in its own save); campaign start **pass** (rows 1, 13); Blood Moon **fail** (row 7b: not kept; row 13: a late joiner's own time of day stays 0, open 2b); lamps / shortcuts not measured in this soak |
+| A guest behind the host catches up fully in its own save (bosses, Blood Moon, lamps, shortcuts) | **partial**: bosses **pass** (rows 2, 3, 5, 7, 9 while summoned; row 13 for a fresh guest joining late: all six boss flags in its own save); campaign start **pass** (rows 1, 13); Blood Moon **pass after fix 3** (row 13b; before: row 7b not kept, row 13 a late joiner's own time of day stayed 0); lamps / shortcuts not measured in this soak |
 | NPC quest choices are shared (anyone's first choice counts) | **not covered**: no NPC quest step in this soak (the Gehrman refusal was set by the host only) |
 | Cutscenes play for everyone | **pass**: Blood Moon 32000000 and Gehrman's refusal 21000040 played on the host and on the summoned guest (live mirror) |
 
@@ -52,7 +54,11 @@ User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
    snapshot when 12410000 && 9401 turn on (party_progress_bridge.cpp). Live: catch-up, gather,
    summon 27 s after the host's prologue, then the host's warp to Central Yharnam with the guest
    following (B2, 14.7 s).
-2. Test steps added (party_director.cpp): `%MAP` on any step (steady-world clock, so warps and
+3. **Blood Moon catch-up** (open 2 / 2b): party_catchup `TimeOfDayCatchup` - while summoned the
+   game's own view of 9800..9802 is the host's overlay; when it is ahead of the guest's own save the
+   value goes into the own pool (only upward) with a save request. The C2 snapshot does not carry
+   these flags (checked: no line in run 7b), so the summoned view is the source.
+4. Test steps added (party_director.cpp): `%MAP` on any step (steady-world clock, so warps and
    kills chain without re-joins), `host_walk=chrENTITY`, `host_flag=ID` (a talk-menu choice),
    `host_skipremo` / `guest_skipremo` (the game's own cutscene skip request), `host_kill` logs
    whether the entity is in the character table.
@@ -63,14 +69,14 @@ User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
    2412959 (the record a fresh character has: m24_01) while the host stood in the Dream, so the
    guest joined the host's world in m24_01 and the two were split until the host's next travel.
    Better: gather to the host's current map (roster) when its last-lamp record is the default.
-2. **Time of day written while summoned did not persist** (row 7b): the guest logged `own save
+2. **(Fixed by fix 3)** **Time of day written while summoned did not persist** (row 7b): the guest logged `own save
    9800..9802 0 -> 7 (pool)` 0.4 s before the run was ended; in the next session its own save read
    9800 = 0 (13201803 too). The write already requests a save (`RequestGameSave`, party_story),
    but GameSaveTick waits for 30 steady frames (and at most one save per 15 s), so a quit right
    after the cutscene loses it, and the story item is not replayed later. Fix idea: keep the item
    queued until a save went through, or re-derive the own time of day from the host's snapshot
    at each join.
-2b. **Blood Moon is not part of the late-joiner catch-up** (row 13): the C2 snapshot brings boss
+2b. **(Fixed by fix 3)** **Blood Moon is not part of the late-joiner catch-up** (row 13): the C2 snapshot brings boss
    flags into the own save, but the time of day (9800..9802, set by the host's event 13201803 with
    `2003[...]` value ops, not a boolean the change stream carries) and 13201803 stay 0 in a late
    guest's own save. Needed for the user decision "a guest behind catches up fully": copy the host's

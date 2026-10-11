@@ -142,7 +142,7 @@ only 100% when it meets it.
 |---|---|---|---|---|---|
 | G1 | Chalice dungeons in party | Catacombs work in co-op | Guest summoned into the host's dungeon live; no full clear; two one-off crashes | 45 | chalice full clear (bossk10 WIP) |
 | G2 | Insight, Messengers' bath, Insight items | — | Untested for guests | 10 | |
-| G3 | Blood Moon / world phase changes | — | Untested in party (part of the soak) | 25 | |
+| G3 | Blood Moon / world phase changes | — | Blood Moon live in a party: Rom's death -> Queen Yharnam (13201803) -> cutscene 32000000 on host and summoned guest, time of day 3 into the guest's own save, the host's event warp followed; a guest behind (late joiner, or one that quit before the save) gets the host's time of day into its own save at the next summon (new catch-up) | 75 | 2026-10-11 campaign_soak.md rows 7b, 13, 13b. Evening -> night (Amelia's skull 12401803) not triggered in the soak |
 
 ## H. Bloodborne rule: a party that plays like single-player
 
@@ -172,3 +172,4 @@ only 100% when it meets it.
 - 2026-10-11: I2 pings through walls with distance and player colours (100%+).
 - 2026-10-11: I3 world warper shader-cache builder (100%+).
 - 2026-10-11: C4 85 (rot), D7 75 (enemy scaling measured + settings), E2 90 (overhead display; reusable WorldToScreen + member colours for I2) - agent/balance, docs/party/balance.md.
+- 2026-10-11: B1 78, D5 70, D6 75, G3 75 - campaign soak new game -> end credits (2 players), Blood Moon catch-up; agent/edgetravel, docs/party/campaign_soak.md.
