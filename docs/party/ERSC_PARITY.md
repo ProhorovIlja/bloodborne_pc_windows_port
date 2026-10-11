@@ -159,6 +159,7 @@ only 100% when it meets it.
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
 | I1 | PvP / friendly fire the host can switch on and off | Judicator's Rulebook (host toggles friendly fire / PvP) | None | — | Not started; after 100% |
+| I2 | Pings: mark a spot / see party members through walls | ERSC syncs map waypoints; overhead_player_display has a "player ping" mode | None. Plan: a ping button places a marker; every party member (and each ping) shows through walls with its distance in metres and the player's colour. Drawn in world space, either by the game's Scaleform HUD (world-to-screen transformed, like enemy HP bars / lock-on) or by the port's overlay projecting world positions with the game camera's view-projection | — | Not started; after 100%. Overlaps E2 (names over party members): reuse its projection |
 
 ## Change log
 
@@ -166,4 +167,5 @@ only 100% when it meets it.
 - 2026-10-11: ERSC column checked against ersc-docs.github.io (settings + FAQ) and the Nexus
   description; rows A9, A10, B7, C7, D8, D9, F6 added.
 - 2026-10-11: Bloodborne rule + section H added (user). Design decisions table (user's answers); rows A11, D10 added.
-- 2026-10-11: shared lamp for boss fights; per-player enemy drops; PvP host toggle as 100%+ milestone (section I, not counted in the mean). A10 friendly fire / PvP not wanted.
+- 2026-10-11: shared lamp for boss fights; per-player enemy drops; PvP host toggle as 100%+ milestone (section I, not counted in the mean).
+- 2026-10-11: I2 pings through walls with distance and player colours (100%+). A10 friendly fire / PvP not wanted.
