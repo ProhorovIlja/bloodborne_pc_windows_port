@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-11 (agent/sixp: A7, A9; integration `windows-upstream-0.5` @ 0d88184).
+Last update: 2026-10-11 (agent/splittravel: B3, B4, B5, H1).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -51,15 +51,15 @@ only 100% when it meets it.
 
 | Area | Parity |
 |---|---|
-| A. Session & joining | 76% |
-| B. World & travel | 72% |
+| A. Session & joining | 84% |
+| B. World & travel | 82% |
 | C. Death & respawn | 65% |
-| D. Progress (anyone can progress) | 58% |
+| D. Progress (anyone can progress) | 64% |
 | E. Services & UI | 88% |
 | F. Network & robustness | 72% |
-| G. BB-specific (chalice, insight, bath) | 37% |
-| H. Bloodborne rule (feels like SP in a party) | 67% |
-| **Overall (unweighted mean of rows)** | **~67%** |
+| G. BB-specific (chalice, insight, bath) | 53% |
+| H. Bloodborne rule (feels like SP in a party) | 70% |
+| **Overall (unweighted mean of rows)** | **~73%** |
 
 ## A. Session & joining
 
@@ -67,25 +67,25 @@ only 100% when it meets it.
 |---|---|---|---|---|---|
 | A1 | Friends-only, password, no randoms | `cooppassword` in ersc_settings.ini (must match for all); vanilla matchmaking off | Serverless P2P with a password (stored DPAPI-protected), host address + port | 85 | party_flow; internet (NAT) untested -> F2 |
 | A2 | Separate co-op save | Own save file (`save_file_extension`, e.g. .co2 vs vanilla .sl2) | Separate party save, single-player save untouched | 90 | party_flow, ingame_flow.md |
-| A3 | Start / join in game | Tiny Great Pot creates the session; Effigy of Meleina joins from anywhere in the world, spawning near the host; mod items are granted on a grace rest | Title: New / Join / Continue party game; in-game System > Party: Join / Leave / Rejoin | 85 | flowlive live runs 1-4. Open: Continue needs a game restart (exit 75) |
-| A4 | Join speed | Seconds after both are in the world *(verify)* | Fast join ~10 s; Continue -> summoned 23 s, fresh 53 s after the restart | 70 | Target Continue <=15 s (flowlive WIP) |
+| A3 | Start / join in game | Tiny Great Pot creates the session; Effigy of Meleina joins from anywhere in the world, spawning near the host; mod items are granted on a grace rest | Title: New / Join / Continue party game (a quick restart into the party game: patches, imports and the save folder are chosen at boot); in-game System > Party: Join / Leave / Rejoin; Party page values update live | 90 | 2026-10-11 flowlive: live runs fresh / continue / Leave + Join party through the real menus (ingame_flow.md 7), live value columns. Open: the restart (exit 75) stays by design (ingame_flow.md 2) |
+| A4 | Join speed | Seconds after both are in the world *(verify)* | Guest world steady -> first bell 1.2 s (was 6.9 s: pre-ring spacing 0.8 s per side), world up -> summoned 10.5 s, loading gone -> summoned 6 s; Continue: host hosts 5 s after its restart | 80 | 2026-10-11 flowlive (timestamped runs, join_timing.md). Left: bell -> sign 2 s, JoinRoom -> client 1.7 s, the 3.3 s load of the host's world (split travel: same-map loads) |
 | A5 | Join any time / late joiner | Yes | Yes, with catch-up of progress + opening skip | 80 | party_catchup |
-| A6 | Leave cleanly | Separating Mist leaves at any time; if the host uses it the session disbands; everyone mists out to close | Leave works (0.4 s) | 75 | Spurious "Session lost" notice (flowlive WIP); host "End party" with 2 guests untested |
+| A6 | Leave cleanly | Separating Mist leaves at any time; if the host uses it the session disbands; everyone mists out to close | Guest Leave: the game's own OnLeave_Limit, home in 3.8 s, no "Session lost"; host Leave with 2 guests: the session ends at once (0.4 s) and both guests go home (OnLeave_Limit on host lost) | 90 | 2026-10-11 flowlive: guest Leave live (no Session lost), host End party with 2 guests live; Join party after Leave re-summoned |
 | A7 | Player count | 1-6 players (host + 5) | Max 4 by user decision (host + 3): one constant (party::kMaxPartyPlayers) sizes the link slots, VITALS, HUD rows and the Party members page; the engine takes the 3rd cooperator through H1 (party_fourp). Live 2026-10-11 with 4 real clients: `cooperators 2 -> 3` on the host, every client sees all four (presence count 4), screenshots show the four together, nobody in a wall | 85 | max 4 by user decision; 100% = 4 verified live. four_players.md "A7". Open: the 4th player got in on 2 of 3 live runs, 57-108 s after the 3rd (its first invites are dropped in the game's session handshake; the third run hit the 240 s queue lease first); boss scaling H2-H4 with 3 cooperators not yet seen live |
 | A8 | Settings in game | ersc_settings.ini: [GAMEPLAY] allow_invaders, death_debuffs, allow_summons, overhead_player_display; [SCALING]; [PASSWORD]; [SAVE]; [LANGUAGE] | All settings in the game's own System menu, Party pages | 90 | bbport_game_menu |
 | A9 | Version check | Same mod + game version required | Protocol version, then the bbport build (git describe), eboot.bin, the game params (gameparam.parambnd.dcx), gameplay patches, gameplay mods, the party's installed hook set and the party rules; a mismatch is refused with what differs and what to do, shown in the party UI | 95 | version_check.md; party-link-test, test_simguest (build); live 2026-10-11: 4 clients with equal identities admitted, a guest with other party options refused at the title ("party patches differ ... use the same bbport build and party options"). Not live: two different builds |
 | A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Moved to the 100%+ milestone (I1) |
-| A11 | Joining during a boss fight / cutscene | Joiner spawns near the host | Decision: wait outside until it ends. Not implemented | 0 | |
+| A11 | Joining during a boss fight / cutscene | Joiner spawns near the host | Decision: wait outside until it ends. The host does not ring while its boss bar is up (EMEVD 2003[11]) or a cutscene plays; the joiner's sign waits at the host's lamp in its own world | 50 | 2026-10-11 flowlive ea94ed5; not yet seen live in a boss fight |
 
 ## B. World & travel
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| B1 | No tether / roam anywhere | All fog walls / barriers (and their teleports) removed; the whole map is open and the party may split up | Confinement walls opened; players can stand in different map blocks (stale-hit crash fixed) | 75 | travel.md §7, 146 m split held 2+ min. Real stick walk-away not tested |
+| B1 | No tether / roam anywhere | All fog walls / barriers (and their teleports) removed; the whole map is open and the party may split up | Confinement walls opened; players can stand in different map blocks (stale-hit crash fixed); the soak walked the host across Cathedral Ward / Great Bridge with the guest, and hopped through 9 areas | 78 | 2026-10-11: travel.md §7 (146 m split held 2+ min), campaign_soak.md rows 2-10 (no crash in 14 runs). Real stick walk-away not tested |
 | B2 | Fog / boss gates | Gone (no multiplayer fog walls) | Fog gates by pad verified | 80 | b2_seamless.md §6.8 |
-| B3 | Fast travel | Warping never ends the session; players may split up, so warps are per player *(per-player warp inferred)* | Any member's lamp / headstone / mark becomes a party move with one loading screen (B2) | 85 | B2 default; 5 lamp warps in a row |
-| B4 | Loading screens | One load, no rejoin | One load, guests stay clients (B1 fallback after 45 s) | 85 | b2_seamless.md |
-| B5 | Independent travel (split party travels apart) | Players may split up (stated); each respawns at their own last grace | Not supported: travel always moves the whole party | 20 | Design choice; revisit after C2 |
+| B3 | Fast travel | Warping never ends the session; players may split up, so warps are per player *(per-player warp inferred)* | Each lamp / headstone / Hunter's Mark asks "Travel with the party?" (game dialog, cursor on YES). YES: party move (one load, B2; a move inside the loaded map is an in-world warp for everyone). NO: only that player moves (split_travel.md) | 90 | split11-13, inworld1-2 (2026-10-11). Open: Mark choice for guests needs BB_PARTY_GUEST_MARK |
+| B4 | Loading screens | One load, no rejoin | A real map change: one load (B2, guests stay clients). Same-map moves (Mark / lamp of this map, party move, a host load into the guest's map) are chr warps: no loading screen | 92 | inworld1-2: host Mark + guest lamp in m24_01, host and guest `in-world warp ... no load`. Open: same-map death respawn (hostdeath revive) |
+| B5 | Independent travel (split party travels apart) | Players may split up (stated); each respawns at their own last grace | Guest alone: into the host's area = one load for the guest only; elsewhere (Dream) = alone host-world load, host does not load; host alone: guests stay, no load; meeting again rebuilds the chrs without a load; session, watchdog, K5, OnLeave_Limit kept | 70 | split13 (guest m24_01 -> Dream -> m24_01, host never loads), split14 (host Dream and back, guest never loads). Open: enemy/flag authority in a map the host is not in (D3), 3+ players apart, guest death apart |
 | B6 | Scripted transitions, Hunter's Mark, headstones | n/a | All keep the session | 85 | edgetravel 6 cases |
 | B7 | Mount / map waypoints | Torrent for everyone; map waypoints synchronised | n/a (no mount, no map in BB) | — | |
 
@@ -109,8 +109,8 @@ only 100% when it meets it.
 | D2 | World state shared (doors, shortcuts, lamps) | Host's world; progression events completed online also progress each player's own world | Host world flags mirrored to guests live (~0.3 s); guest's own save gets C2 progress | 80 | event_flags.md §12. Visual door check pending |
 | D3 | Guest actions change the host's world | Yes *(verify)* | Lamp lighting via host only. Guest levers / doors / shortcuts not routed | 30 | Next: generalise the lamp_lit request to levers/doors |
 | D4 | Items & pickups | Random drops instanced per player; persistent loot (bosses, scarabs) for everyone in the area; one-time items not re-granted if already owned | Summoned awards, item-get dialog, blood gems for guests | 75 | C3 |
-| D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests | 65 | Full NPC quest lines untested; campaign soak WIP |
-| D6 | Full campaign start to credits | Playable | Not yet soaked end to end | 30 | campaign_soak (edgetravel WIP) |
+| D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests; soak: boss flags of 7 bosses in the guest's own save, late joiner catches up bosses, cutscenes for everyone (Blood Moon, Gehrman refusal, ending) | 70 | 2026-10-11 campaign_soak.md. NPC quest choices ("first choice counts for everyone") not covered; Gehrman refusal cutscene replayed twice on the guest (open 4) |
+| D6 | Full campaign start to credits | Playable | Soaked new game -> clinic -> Dream -> Central Yharnam -> Cleric Beast -> Gascoigne -> Cathedral Ward -> Amelia -> Forbidden Woods -> Rom -> Blood Moon -> Nightmare Frontier -> Gehrman -> ending B + staff roll on host and guest, Continue between every run | 75 | 2026-10-11 campaign_soak.md (2 players end to end; 3 players: travel chain with both guests following, row 14; test-step travel and kills, not real play). Mergo's Wet Nurse not killable by the tooling |
 | D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Measured: BB scales only bosses (SpEffect 7500/7501: +50 % HP and status resist, +30 poise per cooperator, damage +0); normal enemies none. Six settings per extra hunter (System > Enemy scaling, overlay Party tab, bbport.ini): boss/enemy HP and poise in % of the vanilla boss step, damage +%; defaults harder than vanilla (boss HP 150 %, boss damage +10 %, enemy HP 50 %); negative poise = ERSC's staggerable note. Host's values to every peer; rows 7500-7503 written on each; 7503 on normal enemies, never on the 34 boss entities | 90 | 2026-10-11 live boss runs (Cleric Beast, 1 cooperator): boss gets 7500, HP 5277 / 5277 on host AND guest (2700 x 1.117 area x 1.75; vanilla x1.5 = 4523); enemies 520 -> 650. Damage A/B (boss_damage 0 vs 100): hits 61-126 (max 239) vs 216-534 on both players. Poise row written, stagger not measured. docs/party/balance.md |
 | D8 | NPC dialogue / talk events synchronised | Yes | Story choices synced (C4); NPC talk with a guest present untested | 25 | Test NPC talk (Gilbert, Eileen) in party |
 | D9 | A grace rest resets the world for everyone | Yes | Lamp rest = host load: enemies respawn in the host's world; guests get the refill and HP (verified) | 85 | guest_services.md §3.3 |
@@ -142,14 +142,14 @@ only 100% when it meets it.
 |---|---|---|---|---|---|
 | G1 | Chalice dungeons in party | Catacombs work in co-op | 2026-10-11: Pthumeru layer 1 cleared live in a party (runs c11-c15): host ritual -> guest summoned by quick join; lever + door; layer boss debug kill keeps the session (K10 both roles, guest send-home dropped); guest gets its own boss lots; the lift down to the next layer carries host and guest (y 31.5 -> 10.5, both alive); lamp exit puts both in the Dream with one load (B2 re-join). Guest ritual: chalices now shared both ways, so the host opens the altar and glyph-searches the guest's dungeon (c17: altar menu, glyph dialog and board lookup reached; the IME glyph lost its 8th char, fixed); host entry + summon into the guest's dungeon not yet verified live (c18 queued). Two old crashes not reproduced in 8 runs at 1792 MiB | 75 | c18: host enters a guest-made dungeon by glyph, party summoned |
 | G2 | Insight, Messengers' bath, Insight items | — | Untested for guests | 10 | |
-| G3 | Blood Moon / world phase changes | — | Untested in party (part of the soak) | 25 | |
+| G3 | Blood Moon / world phase changes | — | Blood Moon live in a party: Rom's death -> Queen Yharnam (13201803) -> cutscene 32000000 on host and summoned guest, time of day 3 into the guest's own save, the host's event warp followed; a guest behind (late joiner, or one that quit before the save) gets the host's time of day into its own save at the next summon (new catch-up) | 75 | 2026-10-11 campaign_soak.md rows 7b, 13, 13b. Evening -> night (Amelia's skull 12401803) not triggered in the soak |
 
 ## H. Bloodborne rule: a party that plays like single-player
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| H1 | No unnecessary loading screens | One load per warp; a death loads only the dead player | One load per party travel (B2); a host death still loads every guest | 65 | C2 (hostdeath) removes the guests' load |
-| H2 | No repeated summons | Join once per play session | The session survives travel, bosses, deaths and wipes; Continue party game re-joins automatically; a crash or redirect needs a re-join (~4.5 s) | 75 | A4, C6 |
+| H1 | No unnecessary loading screens | One load per warp; a death loads only the dead player | Same-map moves without a load (in-world); a lone traveller's load only for that player; one load per party travel | 78 | inworld1-2, split13-14. Open: a host death still loads every guest unless in the same map (hostdeath), same-map death respawn |
+| H2 | No repeated summons | Join once per play session | The session survives travel, bosses, deaths and wipes; Continue party game re-joins automatically; a crash or redirect needs a re-join (~4.5 s); after Leave, Join party re-summons (2026-10-11 flowlive: NP context re-registered, signaling resolve retried); a guest's join is ~12 s from its world to the host's (join_timing.md 2026-10-11) | 75 | A4, C6 |
 | H3 | No progress lost by anyone | Online progression also progresses your own world | Guest's own save gets kills, flags, items, story and lamps (C2/C3/C4 + mirror); full campaign not soaked; Insight / echoes for the guest partly unverified | 65 | D6 soak, G2 |
 | H4 | No unnecessary respawns | Only the dead player respawns; enemies reset on a grace rest | Guest death respawns only the guest; host death respawns the whole party; enemies reset on a lamp rest only | 60 | C2 |
 | H5 | Character freedom as in single-player | Every player has their own character, inventory, levels | Guests: Doll level-up, shops, workbench, storage, own inventory and consumables. Untested: runes / Memory Altar, covenants, gestures, outfits, bath shop and Insight purchases, chalice ritual by a guest | 70 | G2, guest services audit |
@@ -174,3 +174,6 @@ only 100% when it meets it.
 - 2026-10-11: C4 95 (2 rot kinds, guest death live), D7 90 (Cleric Beast live on both peers, damage A/B), Enemy scaling page back (MaxPages 16, live), HP offset +0xf8 fixed in party_b2 / guestsvc / phantom - agent/balance.
 - 2026-10-11: C4 85 (rot), D7 75 (enemy scaling measured + settings), E2 90 (overhead display; reusable WorldToScreen + member colours for I2) - agent/balance, docs/party/balance.md.
 - 2026-10-11: A7 (4 players live with 4 real clients on 2 of 3 runs, 85) and A9 (build / params / party hook fingerprint, live mismatch refusal, 95), agent/sixp.
+- 2026-10-11: B1 78, D5 70, D6 75, G3 75 - campaign soak new game -> end credits (2 players), Blood Moon catch-up; agent/edgetravel, docs/party/campaign_soak.md.
+- 2026-10-11: D6 note (3-player travel soak), gather to the host's map; summary D 64 - agent/edgetravel.
+- 2026-10-11: B3 90, B4 92, B5 70, H1 78 (splittravel): the lamp / headstone / Hunter's Mark question, alone travel for host and guests, same-map moves without a loading screen (split_travel.md).
