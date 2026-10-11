@@ -888,7 +888,9 @@ u64 FlagStore::OverlayIdentity() const {
     if (!valid_ || !Rd(ops_, man_ + man::kOverlayHead, &head) || !head) {
         return 0;
     }
-    Rd(ops_, head + man::kNodeParent, &root);
+    if (!Rd(ops_, head + man::kNodeParent, &root) || !root || root == head) {
+        return 0;  // empty (before the first snapshot apply)
+    }
     Rd(ops_, head + man::kNodeLeft, &leftmost);  // the head's left = the smallest node
     u64 buf = 0;
     if (leftmost && leftmost != head) {
