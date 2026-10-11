@@ -5,7 +5,8 @@
 //             effects' maxHpRate (node +0x48 -> param row +0x10, read live), NG+ table, 9200 sync.
 //             Called by the per-frame HP update 0x1a0d7d0 (max = base * rate; current HP grows
 //             with the "independent" rate) and the boss-bar refresh (EMEVD 2004[53]).
-//   0x17e1d90 RemoveSpEffect(list, node, 1)                         (EMEVD 2004[21])
+//   0x17e1d90 RemoveSpEffect(list, node, 1) (EMEVD 2004[21]): NOT used - removing 7503 from a boss
+//             mid-fight killed it (live); bosses are kept out by entity (0x13c97a0) instead
 //   chr vfunc +0x3f0 ApplySpEffect(chr, id, chr, 0, 1, 0, 0, 1.0 x5) (party_director / party_b2)
 //   ChrIns +0x1c8 SpEffect list (+8 first node; node +0x40 id, +0x48 row, +0x58 next)
 //   ChrIns +0x3c8 -> +8 NpcParam row (0x18e4fa6): teamType +0x12f, isSoulGetByBoss 0x149 bit 4
@@ -52,7 +53,6 @@ using Clock = std::chrono::steady_clock;
 constexpr u64 kSlotWorldChrMan = 0x553e878;
 constexpr u64 kMaxHpRate = 0x17e46e0;
 constexpr u64 kMaxStaminaRate = 0x17e4a20;  // float(list): the SpEffects' maxStaminaRate (+0x18)
-constexpr u64 kRemoveSpEffect = 0x17e1d90;
 constexpr u32 kBossRow0 = 7500;   // 7500 + k: k + 1 cooperators
 constexpr u32 kEnemyRow = 7503;   // unused in 1.09
 constexpr float kVanillaRowHp[4] = {1.5f, 2.0f, 2.5f, 3.0f};
@@ -206,16 +206,6 @@ bool ApplyEffect(u64 chr, int id) {
     return true;
 }
 
-bool RemoveEffect(u64 chr, int id) {
-    static const bool code_ok = MatchesOriginal(kRemoveSpEffect, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41,
-                                                                  0x55, 0x41, 0x54, 0x53, 0x50, 0x48, 0x89, 0xf3});
-    u64 node = 0;
-    const u64 list = Field<u64>(chr, 0x1c8);
-    if (!code_ok || !list || !HasEffect(chr, id, &node)) return false;
-    using Fn = void(BB_COOP_SYSV*)(u64, u64, u64);
-    reinterpret_cast<Fn>(Guest(kRemoveSpEffect))(list, node, 1);
-    return true;
-}
 
 // ---- Param rows ----
 Doping ReadRow(u64 row) {
@@ -273,6 +263,21 @@ void WriteParams(const Rules& r, int n) {
 }
 
 // ---- Enemies ----
+// Every entity the boss events dope (EMEVD 2004[8] SpEffect 7500 / 7501 in the 1.09 maps;
+// the chalice bosses in m29 take theirs from event parameters / Lua_MultiDoping: isSoulGetByBoss).
+constexpr int kBossEntities[] = {2100800, 2100810, 2200800, 2200801, 2300800, 2300810, 2400800, 2410800, 2410810,
+                                 2410811, 2420800, 2500800, 2500801, 2500802, 2600800, 2600801, 2600802, 2600850,
+                                 2700800, 2700801, 2700802, 2800800, 2800801, 2800802, 2800803, 3200800, 3300800,
+                                 3400800, 3400801, 3400850, 3500800, 3500850, 3600800, 3600801};
+constexpr u64 kGetChrByEntityId = 0x13c97a0;
+
+u64 ChrByEntity(int entity) {
+    static const bool code_ok = MatchesOriginal(kGetChrByEntityId, {0x55, 0x48, 0x89, 0xe5});
+    if (!code_ok) return 0;
+    using Fn = u64(BB_COOP_SYSV*)(int, u64, u64);
+    return reinterpret_cast<Fn>(Guest(kGetChrByEntityId))(entity, u64(unsigned(entity)), 0);
+}
+
 std::string g_boss_line;  // the last boss line logged (only changes are logged)
 u64 g_sample = 0;
 u32 g_sample_handle = ~0u;
@@ -291,6 +296,12 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
     if (!wcm || !s.player) return;
     const int sets = std::min(Field<int>(Field<u64>(wcm, 8), 0x18, -2) + 2, kMaxSets);
     int seen = 0, enemies = 0, applied = 0, removed = 0, bosses = 0, carrying = 0, counted = 0;
+    // The bosses of the loaded maps, by the entity ids the boss events dope (EMEVD 2004[8] with
+    // SpEffect 7500 / 7501, every map; GetChrByEntityId 0x13c97a0, as the events resolve them).
+    u64 boss_chrs[sizeof kBossEntities / sizeof kBossEntities[0]];
+    int n_boss = 0;
+    for (int e : kBossEntities)
+        if (const u64 c = ChrByEntity(e)) boss_chrs[n_boss++] = c;
     for (int set = 0; set < sets; ++set) {
         const u64 tab = Field<u64>(wcm, 0x850 + u64(set) * 8);
         const int count = Field<int>(tab, 0, 0);
@@ -308,7 +319,8 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
             if (team != kEnemyTeam) continue;
             ++enemies;
             const bool doped = HasEffect(chr, 7500) || HasEffect(chr, 7501) || HasEffect(chr, 7502);
-            if (doped || boss_soul) {
+            const bool boss_entity = std::find(boss_chrs, boss_chrs + n_boss, chr) != boss_chrs + n_boss;
+            if (doped || boss_soul || boss_entity) {
                 ++bosses;
                 if (doped) {  // evidence: the boss's HP with the party's doping row (same on every peer)
                     const u64 dm = Field<u64>(Field<u64>(chr, 0x3b0), 0x20);
@@ -326,7 +338,10 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
                         Log("%s", b);
                     }
                 }
-                if (HasEffect(chr, int(kEnemyRow)) && RemoveEffect(chr, int(kEnemyRow))) ++removed;
+                // No removal: taking 7503 off a boss mid-fight (0x17e1d90, EMEVD 2004[21]'s remove) killed
+                // the Cleric Beast outright (live 2026-10-11, HP 6597 -> 0). Bosses never get it now
+                // (the boss entity table below); one that still carries it is only counted.
+                if (HasEffect(chr, int(kEnemyRow))) ++removed;
                 continue;
             }
             if (scale && applied < kMaxAppliesPerPass && !HasEffect(chr, int(kEnemyRow))) {
@@ -373,7 +388,7 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
     }
     const bool any = applied || removed;
     if (S().log || any || (sample[0] && ++g_sample_logs <= 3))
-        Log("enemy pass: %d chrs, %d enemies (%d bosses), SpEffect %u applied to %d, removed from %d, carried by %d "
+        Log("enemy pass: %d chrs, %d enemies (%d bosses), SpEffect %u applied to %d, on %d boss(es) from before, carried by %d "
             "(%d counted)%s",
             seen, enemies, bosses, kEnemyRow, applied, removed, carrying, counted, sample);
 }
