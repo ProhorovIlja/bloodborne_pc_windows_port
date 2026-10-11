@@ -6,6 +6,10 @@ playing solo. Update a row whenever its status changes (date + evidence). Percen
 judgement calls: 100 = matches ERSC (or a sane BB equivalent) and is verified live; code that is
 written but not verified live counts at most 60.
 
+The player-facing summary is the **Party co-op** section of the [README](../../README.md) (How it plays /
+Deaths / Coming next). Whenever a row changes what a player experiences, update that section in the
+same commit: move items from "Coming next" to "How it plays" once verified live.
+
 ERSC sources: the Nexus description (v2.0.0, pasted by the user 2026-10-11), the Nightreign mod's
 description (scaling semantics), an ExitLag guide (secondary; it says 4 players where Nexus says 6, Nexus wins), the mod's docs site (https://ersc-docs.github.io/: install/settings page and FAQ, read
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
