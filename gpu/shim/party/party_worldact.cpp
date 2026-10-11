@@ -704,7 +704,7 @@ std::uint64_t NearestEnemy(const float me[3], float pos[3], const std::vector<st
     SafeGet(wcm + 0x60, &local);
     std::uint64_t best = 0;
     float bd = 45.0f * 45.0f;
-    int seen = 0, dead = 0;
+    int seen = 0, dead = 0, logged = 0;
     for (std::int32_t b = 0; b < nb; ++b) {
         std::uint64_t list = 0;
         std::int32_t n = 0;
@@ -728,6 +728,17 @@ std::uint64_t NearestEnemy(const float me[3], float pos[3], const std::vector<st
             }
             const float dx = p[0] - me[0], dy = p[1] - me[1], dz = p[2] - me[2];
             const float d = dx * dx + dy * dy + dz * dz;
+            std::int32_t ent = 0, type = -1;
+            SafeGet(chr + 0x3b8, &ent);
+            SafeGet(chr + 0x78, &type);
+            if (ent >= 10000000 && ent <= 10000010) {
+                continue;  // a player (the host or another guest), not an enemy
+            }
+            if (d < 30.0f * 30.0f && logged < 6) {
+                ++logged;
+                Log("test: fixture: candidate chr %p +0x3B8 %d +0x78 %d HP %d at %.1f m", reinterpret_cast<void*>(chr),
+                    ent, type, hp, std::sqrt(d));
+            }
             if (d < bd) {
                 bd = d;
                 best = chr;
