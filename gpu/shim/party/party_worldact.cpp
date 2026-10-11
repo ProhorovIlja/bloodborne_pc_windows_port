@@ -302,8 +302,10 @@ State& S() {
         g_st.watch = ParseIds(std::getenv("BB_PARTY_WORLD_WATCH"));
         Log("guest world actions %s (levers, doors, shortcuts, elevators, NPC talk -> the host's world)",
             g_st.enabled ? "on" : "off");
+        // 0.5.2: off by default (opt-in, =1) until the own-save write of a guest's pickup and a
+        // guest's full drop have been verified live (docs/party/world_actions.md 4, 10).
         const char* pk = std::getenv("BB_PARTY_GUEST_PICKUP");
-        if (g_st.enabled && !(pk && pk[0] == '0')) {
+        if (g_st.enabled && pk && pk[0] == '1') {
             // D4, instanced world items (items.md 2.4): MSB treasure is spawned on a client too
             // (0x17DC300: role 6 / session slot gates), and its pickup sets the pickup flag and runs
             // its Lua event there (0x17D6780: the "client in another world" skip) - into the
@@ -315,19 +317,20 @@ State& S() {
                                       {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "treasure spawn on a client (slot)");
             const bool c = PatchBytes(0x17D6838, {0x0f, 0x84, 0x2b, 0x02, 0x00, 0x00},
                                       {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "pickup flag on a client in another world");
-            // Enemy drops are per player too (user decision 2026-10-11): every player's game rolls
-            // each enemy's drop itself (0x17DD0B0 on enemy death); a client kept only isGuestDrop
-            // items (vials, bullets): 0x17DD764 je (not a client: no filter) -> jmp.
-            const char* dr = std::getenv("BB_PARTY_GUEST_DROPS");
-            const bool d = (dr && dr[0] == '0') ||
-                           PatchBytes(0x17DD764, {0x0f, 0x84, 0x3a, 0x02, 0x00, 0x00}, {0xe9, 0x3b, 0x02, 0x00, 0x00, 0x90},
-                                      "full enemy drops on a client");
-            Log("guest enemy drops: %s", dr && dr[0] == '0' ? "vanilla (vials / bullets only)" : d ? "full, own roll per player"
-                                                                                                   : "NOT installed");
             g_st.pickups = a && b && c;
             progress::SetInstancedItems(g_st.pickups);
             Log("guest treasure pickups in the host's world: %s (instanced per player)",
                 g_st.pickups ? "on" : "NOT installed");
+        }
+        // Enemy drops per player (user decision 2026-10-11): every player's game rolls each enemy's
+        // drop itself (0x17DD0B0 on enemy death; live: the same enemy rolled on host and guest);
+        // a client keeps only isGuestDrop items (vials, bullets) unless 0x17DD764 je -> jmp.
+        // Opt-in (=1) for 0.5.2.
+        const char* dr = std::getenv("BB_PARTY_GUEST_DROPS");
+        if (g_st.enabled && dr && dr[0] == '1') {
+            const bool d = PatchBytes(0x17DD764, {0x0f, 0x84, 0x3a, 0x02, 0x00, 0x00},
+                                      {0xe9, 0x3b, 0x02, 0x00, 0x00, 0x90}, "full enemy drops on a client");
+            Log("guest enemy drops: %s", d ? "full, own roll per player" : "NOT installed");
         }
     });
     return g_st;
@@ -364,6 +367,15 @@ std::string IdList(const std::vector<std::uint32_t>& ids) {
                progress::CategoryName(progress::CategoryOf(id)) + ")";
     }
     return out;
+}
+
+/// BB_PARTY_GATE_CATCHUP=1 (opt-in for 0.5.2: not run live; 2410-style flags also gate bells).
+bool GateCatchupOn() {
+    static const bool on = [] {
+        const char* v = std::getenv("BB_PARTY_GATE_CATCHUP");
+        return v && v[0] == '1';
+    }();
+    return on;
 }
 
 /// The area gate flags of the bosses the guest's own save has killed, into the own save (pool in
@@ -424,7 +436,9 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.baselined = true;
         Log("guest: %zu local flag difference(s) in the host's world held back as the baseline (%s)",
             changes.size(), MapName(s.map_id).c_str());
-        GateCatchup();
+        if (GateCatchupOn()) {
+            GateCatchup();
+        }
         return;
     }
     Request r;
@@ -1172,11 +1186,15 @@ void Init() {
     const bool b = HookPrologue(0x13AF830, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                                 &NetKickEntry, "ObjAct remote kick (log)");
     Log("ObjAct kick log %s", a && b ? "on" : "partly off");
-    // Enemy drop rolls and map item pickups: logged (rare events; the D4 evidence).
+    // Enemy drop rolls and map item pickups: logged (the D4 evidence) - only with D4 on or a test.
+    const bool d4 = st.pickups || std::getenv("BB_PARTY_WORLDACT_TEST") ||
+                    (std::getenv("BB_PARTY_GUEST_DROPS") && std::getenv("BB_PARTY_GUEST_DROPS")[0] == '1');
+    if (d4) {
     HookPrologue(0x17DD0B0, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                  &EnemyDropEntry, "enemy drop roll (log)");
     HookPrologue(0x17D8570, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                  &PickupEntry, "map item pickup (log)");
+    }
     if (std::getenv("BB_PARTY_WORLDACT_TEST")) {
         HookPrologue(0x17DC300, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                      &TreasureSpawnEntry, "MSB treasure spawn (test fixture)");
