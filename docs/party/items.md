@@ -403,9 +403,10 @@ the overlay, where the host's flag is set) and without any overlay write:
   A guest uses the host's list only when every item is a weighted slot of a different chain row
   with a count <= lotItemNum (security: a host cannot hand out other items); else the rows decide.
 * give: `GiveItemDirect 0x131CB70(0, category << 28, id, count)` (weapon, armor, rune, goods).
-  **Blood gems** (category 8) need the area's gem-effect data (`0x1A88130`) and still wait for
-  the own world (`GuestItems::Defer`, logged "waits for the own world"; the rest of the queue
-  goes on).
+  **Blood gems** (category 8): the gem the host's game generated is recreated on the guest
+  (10.1). Only a gem lot without the host's gem data (a random gem lot reported by flag, the
+  rejoin full list) still waits for the own world (`GuestItems::Defer`, logged "waits for the
+  own world"; the rest of the queue goes on).
 * the native **item-get dialog**: `0x16D8850(*0x553B1C0, &inventory gaitem handle, type bits, id,
   count, 0)` - the entry the lot award's give list queues at `0x17D9348` (plus sound 300); the
   handle is the inventory entry's `+0`. Our overlay toast stays only as a fallback when that
@@ -439,3 +440,74 @@ Live (2 loopback instances, guest summoned in the host's Dream the whole time):
   and the full list skips `lot 2700120 ... already given (own-save flag set; 0:15000000 held 1)`,
   `2700150 ... held 1` x4, `2700110 ... 4:1210 held 8` - nothing given twice. New lots in the same
   run: `goods 1000 x2 (held 15 -> 17, item-get dialog)`, `armor 31000/32000/33000 (item-get dialog)`.
+
+### 10.1 Blood gems while summoned (2026-10-11)
+
+How a lot makes a gem [static]: the lot result builder `0x1A8B080` calls, for a category-8
+slot, `0x1A88130(out handle, SprjGaitem, LotReq+0x18, LotReq+0x28, LotReq+0x38, slot id)`.
+`LotReq+0x18/+0x28/+0x38` are the **area context** `0x17DDC50` fills from the current block
+(`*0x553B148`, row `+0x20`: `+0x48` byte, `+0x4C` / `+0x50` ids, `+0x20 -> +0x38` nine id
+pairs); `0x1A88130` sums the pairs' rank offsets onto the slot id, looks the GemGenParam row up
+(`0x1F1D630`), rolls the effects (`0x1A8F400`, game RNG) and creates the instance
+(`0x1A87E20` -> `0x1A87590(out, SprjGaitem, gem id)`: a new SprjGaitem slot, handle
+`0xC0800000 | index`, instance `+8` handle, `+0xC` `0x80000000 | gem id`). `0x1A87E20` then
+writes the instance data: `+0x18` flags (two bits of the GemGenParam row `+0x8C`), `+0x1C` rank,
+`+0x20..+0x34` six GemeffectParam ids (-1 = empty). The handle goes through the give list
+`0x17D89F0`, which adds it to the inventory (`0x14CDA70`), queues the item-get dialog entry
+`0x16D8850` with that handle and plays sound 300. Instances: `*(0x553E990) + 8 + index * 8`;
+references `+0x8008/+0x800C + index * 8` (`0x1A8BAE0` +1, `0x1A8BC00` -1, frees at 0).
+
+So the guest gets **the host's gem**, not a new roll:
+* host: `GiveListEntry` (the `0x17D89F0` hook) reads each category-8 entry's instance
+  (`ReadGem`: handle check, id, `+0x18..+0x34`) into the grant's item (`GrantItem::gem`). Awards
+  (`0x17DDC50`, captured during the call) and pickups (`0x17D8570 -> 0x17D89F0`, host in its own
+  world: kept for 120 s and attached when the treasure's flag reaches `OnHostFlagSet`, if it
+  fits the lot's rows) both carry it. A random gem lot is never rolled by the host (no instance
+  data); EVENT `items` element `[8, id, 1, [flags, rank, e1..e6]]`.
+* guest (`PlanSummonedLot`): a gem matches a weighted category-8 slot of an unused row with
+  `slot id <= gem id <= slot id + 99` (`kMaxGemIdOffset`; 1.09 steps by 1..3), count 1, gem data
+  plausible (flags 0..3, rank 0..1000, effects -1 or 0..99,999,999; `ItemsFromJson` refuses
+  anything else). At give time (`GiveGem`): the GemGenParam row of the id and the GemeffectParam
+  row of every effect must exist (`GameParamRow`), the three functions are byte-checked, then
+  `0x1A87590(&h, SprjGaitem, id)`, the instance data copied to `+0x18`, and the give list
+  `0x17D89F0(MapItemMan, {1, h, 0x80000000 | id, 1, -1})` - inventory (or storage / ground), the
+  native item-get dialog and its sound, exactly as the host's award; then our reference is
+  released (`0x1A8BC00`).
+
+Live (r1, 2 loopback instances, guest summoned in the host's Dream, `BB_PARTY_ITEMS_HOST_TEST=
+2700180,2700110`): host `host award #0 lot 2700180 (flag 52700180, award) queued for the party;
+items [8:102001x1 [gem 102001 (flags 2, rank 1, effects 1125000 -1 -1 -1 -1 -1)]]`; guest
+`inventory add 1/1: item 102001 category 8 count 1 (gaitem 0xc0800062)` and `gave ... lot 2700180
+... while summoned (host's item list): blood gem 102001 (flags 2, rank 1, effects 1125000 -1 -1
+-1 -1 -1) (inventory add, item-get dialog); own-save flag(s) 52700180 set (pool, load mode 1),
+overlay untouched`. Unit tests: `test_gems` (party-items-test).
+
+### 10.2 The item-get dialog (2026-10-11)
+
+How it works [static]: the give list `0x17D89F0` (and our `ShowItemGet`) pushes an entry with
+`0x16D8850(*0x553B1C0, &handle, type bits, id, count, stored)` (8 pooled nodes at `+0x10`, the
+live list at `+8`; sound 300). The ItemGetMenuMan tick `0x16D86E0` (from the in-game menu update
+`0x17692F0`) sets **`*0x5562878 + 0x130 = 1`** ("dialog up") while the list is not empty and
+clears the list only when the action-button check `0x1CD91F0(0, ActionButtonMan, 0xB, 0x1130,
+...)` reports the confirm press (gated by player flag `WorldChrMan+0x60 -> +0x58 -> +0x38 -> +0x41`
+bit 7 clear and `*0x5540050`). It is modal: the entries stay until the player confirms. The HUD
+tick `0x1BFB2A0` (from `0x1BF9E10`, HUD object `rdi`) copies up to 5 entries a frame into the HUD
+model (`*(HUD+0xA88) + 0x1238`, 0x48 per row, count `+0x13A8`; item name text via `0x1C5B540`),
+and on the rows' 0 -> n edge with `*0x5578A38 < 1`, `menu+0x84 == 0`, `GSM+0x1544 == 0` sets
+`menu+0x25C = 1` and asks for a save (GSM `+0x1547..+0x1549`). The movie itself is drawn by the
+Scaleform HUD (the `FrpgMenuDlgItemGet` class names have no direct references).
+
+Live (`BB_PARTY_ITEMGET_PROBE=1`, runs r1-r3 and r6, 2 loopback instances, guest summoned in the
+host's Dream, `BB_PARTY_ITEMS_HOST_TEST=2700180,2700110`): on **both** instances, at the host's
+vanilla award and at the guest's replay alike: `1 entry in the dialog list, dialog UP, confirm
+check armed` -> `2 entries ..., dialog UP`; `HUD model rows 1` -> `2`; open gate `*0x5578A38 0,
+menu+0x84 0, GSM+0x1544 0, menu+0x25C 1`. The guest's state is the host's, entry for entry (the
+gem through the award's own give list, the other categories through `ShowItemGet`), and it stays
+up (nobody presses confirm in the test). Screenshots (`tools/mp/shot.py --watch`, PrintWindow of
+the background windows, 0.5 / 3 / 8 / 15 s after the give) still show **no box on either
+instance**, including the host's vanilla one: every game-side condition of the dialog holds, so
+what is missing is the Scaleform HUD draw of that element in these windowed background test
+instances (a port / renderer matter, not party state). Not fixed here; the probe is the tool for
+the next step (a foreground run with input to see whether the element ever draws in the port).
+Note for shot.py: the watcher only reads log lines written while it runs (start it with the run,
+`--seconds` longer than any queue wait).
