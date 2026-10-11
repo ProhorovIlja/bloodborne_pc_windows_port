@@ -131,7 +131,7 @@ at +0x10/+0x18). Steps:
 | 3 Summon | 0x1e4b440 | Clear 0x02. **Warp**: actor vfunc +0x5f8 (`0x18cd600`, pos, rot). Vfunc +0x610(1) sets PlayerIns+0x52c bit 3. Unless flag 0x01 is set: write `desc[st]+0x24` (0x553d774) into the event module (+0x58) +0x20 and the owner's +0x20→+4 (phantom draw parameter) [inferred meaning]. |
 | 4 Update | 0x1e4b620 | Idle until RETURN_REQUESTED (0x04). |
 | 5 ReturnWait | 0x1e4b650 | If 0x10 is set and the session is not a client: wait for the leave presentation (`0x19704b0`) and count down `return_timer` (20 s default). |
-| 6 Return | 0x1e4b830 | Free the matching NetworkFlow pending slots (+0x80..+0x8c, count +0x90). Then **`ChrIns_SetDisable` 0x18c6390(chr, 1)**, **chr_type (+0x78) = 9**, refresh, restore HP to max and stamina (+0x12c→+0x128, +0x138→+0x134). Revive if dead (vfunc +0x1a8/+0x90). **SetEventFlag(end_event_flag)**. |
+| 6 Return | 0x1e4b830 | Free the matching NetworkFlow pending slots (+0x80..+0x8c, count +0x90). Then **`ChrIns_SetDisable` 0x18c6390(chr, 1)**, **chr_type (+0x78) = 9**, refresh, restore +0x128 (not HP: 106 / 106 on a 719 HP hunter, likely MP) and stamina to max (+0x12c→+0x128, +0x138→+0x134; HP is +0xf8 / max +0xfc, the struct at +0xf0, docs/party/balance.md). Revive if dead (vfunc +0x1a8/+0x90). **SetEventFlag(end_event_flag)**. |
 | 7 Finish | 0x1e4bc00 | Teardown (no function boundary in Ghidra). |
 
 The task never creates the actor; it reconfigures an existing map character. **Removal means

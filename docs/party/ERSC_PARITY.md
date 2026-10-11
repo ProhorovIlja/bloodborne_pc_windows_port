@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-11 (integration `windows-upstream-0.5` @ 580fbd3).
+Last update: 2026-10-11 (agent/sixp: A7, A9; integration `windows-upstream-0.5` @ 0d88184).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -51,15 +51,15 @@ only 100% when it meets it.
 
 | Area | Parity |
 |---|---|
-| A. Session & joining | 70% |
+| A. Session & joining | 76% |
 | B. World & travel | 72% |
-| C. Death & respawn | 64% |
-| D. Progress (anyone can progress) | 57% |
+| C. Death & respawn | 65% |
+| D. Progress (anyone can progress) | 58% |
 | E. Services & UI | 88% |
 | F. Network & robustness | 72% |
-| G. BB-specific (chalice, insight, bath) | 27% |
+| G. BB-specific (chalice, insight, bath) | 37% |
 | H. Bloodborne rule (feels like SP in a party) | 67% |
-| **Overall (unweighted mean of rows)** | **~65%** |
+| **Overall (unweighted mean of rows)** | **~67%** |
 
 ## A. Session & joining
 
@@ -71,9 +71,9 @@ only 100% when it meets it.
 | A4 | Join speed | Seconds after both are in the world *(verify)* | Fast join ~10 s; Continue -> summoned 23 s, fresh 53 s after the restart | 70 | Target Continue <=15 s (flowlive WIP) |
 | A5 | Join any time / late joiner | Yes | Yes, with catch-up of progress + opening skip | 80 | party_catchup |
 | A6 | Leave cleanly | Separating Mist leaves at any time; if the host uses it the session disbands; everyone mists out to close | Leave works (0.4 s) | 75 | Spurious "Session lost" notice (flowlive WIP); host "End party" with 2 guests untested |
-| A7 | Player count | 1-6 players (host + 5) | 3 live-verified; 4 coded (party_fourp), not live (needs 4 slots) | 50 | Target 4 (user decision); 5-6 not planned |
+| A7 | Player count | 1-6 players (host + 5) | Max 4 by user decision (host + 3): one constant (party::kMaxPartyPlayers) sizes the link slots, VITALS, HUD rows and the Party members page; the engine takes the 3rd cooperator through H1 (party_fourp). Live 2026-10-11 with 4 real clients: `cooperators 2 -> 3` on the host, every client sees all four (presence count 4), screenshots show the four together, nobody in a wall | 85 | max 4 by user decision; 100% = 4 verified live. four_players.md "A7". Open: the 4th player got in on 2 of 3 live runs, 57-108 s after the 3rd (its first invites are dropped in the game's session handshake; the third run hit the 240 s queue lease first); boss scaling H2-H4 with 3 cooperators not yet seen live |
 | A8 | Settings in game | ersc_settings.ini: [GAMEPLAY] allow_invaders, death_debuffs, allow_summons, overhead_player_display; [SCALING]; [PASSWORD]; [SAVE]; [LANGUAGE] | All settings in the game's own System menu, Party pages | 90 | bbport_game_menu |
-| A9 | Version check | Same mod + game version required | Party protocol version checked on join (kLinkProtocolVersion), clear reject reason | 70 | Build/patch-set mismatch beyond the protocol number not checked |
+| A9 | Version check | Same mod + game version required | Protocol version, then the bbport build (git describe), eboot.bin, the game params (gameparam.parambnd.dcx), gameplay patches, gameplay mods, the party's installed hook set and the party rules; a mismatch is refused with what differs and what to do, shown in the party UI | 95 | version_check.md; party-link-test, test_simguest (build); live 2026-10-11: 4 clients with equal identities admitted, a guest with other party options refused at the title ("party patches differ ... use the same bbport build and party options"). Not live: two different builds |
 | A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Moved to the 100%+ milestone (I1) |
 | A11 | Joining during a boss fight / cutscene | Joiner spawns near the host | Decision: wait outside until it ends. Not implemented | 0 | |
 
@@ -96,7 +96,7 @@ only 100% when it meets it.
 | C1 | Guest dies alone | Respawns in the same world at the last grace THEY rested at; session not terminated | Respawns alone at a lit lamp in the party's map, keeps echoes, no bloodstain; host plays on | 80 | b2_seamless.md §6.10-6.11 |
 | C2 | Host dies alone | Same rule as any player: respawns at their own last grace, the others play on | Session kept, but the WHOLE party is moved to the host's lamp (one load); guests keep HP and items | 50 | Next: host respawn without moving guests (hostdeath agent) |
 | C3 | Party wipe | Everyone respawns at their last grace; session kept (boss/invasion limbo ends on a wipe) | Same; verified | 90 | §6.8 r8-r15 |
-| C4 | Death penalty | Optional rot: 5 types, one picked at random per death, stacking, removed only by resting at a grace; stops one player dying endlessly while another keeps enemies from respawning | Rot (on by default, System > Party rules, host's setting counts for the party): each death -10 % max HP, max 5 stacks, cleansed by the player's own lamp / headstone use, kept across restarts; one kind (max HP), not 5. Echoes: single-player bloodstain for everyone (user decision; hostdeath work); rot is independent of it | 85 | 2026-10-11 live (balance run 4): host death -> "Rot 1/5" toast, max HP 719 -> 647, lamp warp -> cleansed, 719; guest's tag shows "deaths 1, rot 1". Guest-side death not run live; more kinds (stamina, damage) open. docs/party/balance.md |
+| C4 | Death penalty | Optional rot: 5 types, one picked at random per death, stacking, removed only by resting at a grace; stops one player dying endlessly while another keeps enemies from respawning | Rot (on by default, System > Party rules; the host's setting counts for the party): each death adds a stack (max 5) of a random kind, max HP -10 % or max stamina -10 %; cleansed by the player's own lamp / headstone use; kept across restarts. 2 kinds, not ERSC's 5 (damage / discovery / vials would need SpEffect rows of our own). Echoes: single-player bloodstain for everyone (hostdeath); rot is independent of it | 95 | 2026-10-11 live: host death -> toast, max HP 719 -> 647, lamp warp -> cleansed (run 4); guest's own death in the host's world (boss runs): stacks 3 -> 4, "this one stamina": max stamina 100 -> 90, max HP 503 (70 %), toast "Rot 4/5: max HP -30 %, stamina -10 %". docs/party/balance.md |
 | C5 | Spectate while dead | A death in a boss fight or invasion puts the player in limbo, spectating, until the party wipes or someone rests at a grace | None | 0 | |
 | C6 | Rejoin after a crash / redirect | Rejoin by item | ~4.5 s ring to client after the world is up; crash rejoin ~30 s | 80 | §6.11 |
 | C7 | Resting while others are in a boss room | They are removed from the boss room | A rest is a party move (host load), so nobody stays behind; not tested during a fight | 60 | Test during a boss fight |
@@ -111,7 +111,7 @@ only 100% when it meets it.
 | D4 | Items & pickups | Random drops instanced per player; persistent loot (bosses, scarabs) for everyone in the area; one-time items not re-granted if already owned | Summoned awards, item-get dialog, blood gems for guests | 75 | C3 |
 | D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests | 65 | Full NPC quest lines untested; campaign soak WIP |
 | D6 | Full campaign start to credits | Playable | Not yet soaked end to end | 30 | campaign_soak (edgetravel WIP) |
-| D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Measured: BB scales only bosses (SpEffect 7500/7501: +50 % HP and status resist, +30 poise per cooperator, damage +0); normal enemies none. Six Party settings per extra hunter (System > Party rules: boss/enemy health and damage; all six incl. poise in the overlay's Party tab and bbport.ini - the System menu is at its 12-page limit): boss/enemy HP and poise in % of the vanilla boss step, damage +%; defaults harder than vanilla (boss HP 150 %, boss damage +10 %, enemy HP 50 %); negative poise = ERSC's staggerable note. Host's values to every peer (EVENT balance), rows 7500-7503 written on each, 7503 on every normal enemy | 75 | 2026-10-11 live (balance runs 2-4): host and guest both write identical rows and put 7503 on 149/149 enemies of m24_01; sample enemy max HP 520 -> 650 (x1.25, 1 cooperator) on the host. Boss fight with the new rows and damage / poise effects not measured live. docs/party/balance.md |
+| D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Measured: BB scales only bosses (SpEffect 7500/7501: +50 % HP and status resist, +30 poise per cooperator, damage +0); normal enemies none. Six settings per extra hunter (System > Enemy scaling, overlay Party tab, bbport.ini): boss/enemy HP and poise in % of the vanilla boss step, damage +%; defaults harder than vanilla (boss HP 150 %, boss damage +10 %, enemy HP 50 %); negative poise = ERSC's staggerable note. Host's values to every peer; rows 7500-7503 written on each; 7503 on normal enemies, never on the 34 boss entities | 90 | 2026-10-11 live boss runs (Cleric Beast, 1 cooperator): boss gets 7500, HP 5277 / 5277 on host AND guest (2700 x 1.117 area x 1.75; vanilla x1.5 = 4523); enemies 520 -> 650. Damage A/B (boss_damage 0 vs 100): hits 61-126 (max 239) vs 216-534 on both players. Poise row written, stagger not measured. docs/party/balance.md |
 | D8 | NPC dialogue / talk events synchronised | Yes | Story choices synced (C4); NPC talk with a guest present untested | 25 | Test NPC talk (Gilbert, Eileen) in party |
 | D9 | A grace rest resets the world for everyone | Yes | Lamp rest = host load: enemies respawn in the host's world; guests get the refill and HP (verified) | 85 | guest_services.md §3.3 |
 | D10 | Cutscenes play for the whole party | Synced talk events | Decision: everyone watches. Untested (K11 skips the clinic opening for guests) | 20 | |
@@ -121,7 +121,7 @@ only 100% when it meets it.
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
 | E1 | Rest / level / shop for guests | Everyone uses graces | Doll level-up, shops, workbench, storage; lamps + headstones (on by default); rest heals the guest | 85 | guest_services.md |
-| E2 | Party HUD / names | overhead_player_display: normal / none / ping / soul level / death count | Party HUD, toasts; overhead tags with their own setting (System > Party rules > Above companions): nothing / name / name + level / name + health bar / name + deaths (and rot); level, deaths, rot in a VITALS trailer; HUD HP now from the real HP fields (+0xf8/+0xfc) | 90 | 2026-10-11 live screenshots (balance run 4): host sees "Hunter1 Lv 37", guest sees "Hunter0 deaths 1, rot 1". Ping above heads not offered (Party members page has it) |
+| E2 | Party HUD / names | overhead_player_display: normal / none / ping / soul level / death count | Party HUD, toasts; overhead tags with their own setting (System > Party rules > Above companions): nothing / name / name + level / name + health bar / name + deaths (and rot), in each member's colour, above the game's own phantom label; level, deaths, rot in a VITALS trailer; HUD HP from the real HP fields (+0xf8/+0xfc) | 90 | 2026-10-11 live screenshots: "Hunter1 Lv 37", "Hunter0 deaths 1, rot 1", coloured tag above the game's label. Ping above heads not offered (Party members page has it; I2 pings reuse WorldToScreen) |
 | E3 | Map markers | Party shown on the map | n/a (BB has no map) | — | |
 | E4 | Item / summon messages fast | n/a | Fast multiplayer messages, no bell/sign waits | 90 | fast join patches |
 
@@ -171,4 +171,6 @@ only 100% when it meets it.
 - 2026-10-11: shared lamp for boss fights; per-player enemy drops; PvP host toggle as 100%+ milestone (section I, not counted in the mean).
 - 2026-10-11: I2 pings through walls with distance and player colours (100%+).
 - 2026-10-11: I3 world warper shader-cache builder (100%+).
+- 2026-10-11: C4 95 (2 rot kinds, guest death live), D7 90 (Cleric Beast live on both peers, damage A/B), Enemy scaling page back (MaxPages 16, live), HP offset +0xf8 fixed in party_b2 / guestsvc / phantom - agent/balance.
 - 2026-10-11: C4 85 (rot), D7 75 (enemy scaling measured + settings), E2 90 (overhead display; reusable WorldToScreen + member colours for I2) - agent/balance, docs/party/balance.md.
+- 2026-10-11: A7 (4 players live with 4 real clients on 2 of 3 runs, 85) and A9 (build / params / party hook fingerprint, live mismatch refusal, 95), agent/sixp.
