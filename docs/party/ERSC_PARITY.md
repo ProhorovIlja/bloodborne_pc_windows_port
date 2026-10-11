@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-11 (agent/sixp: A7, A9; integration `windows-upstream-0.5` @ 0d88184).
+Last update: 2026-10-11 (agent/splittravel: B3, B4, B5, H1).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -176,3 +176,4 @@ only 100% when it meets it.
 - 2026-10-11: A7 (4 players live with 4 real clients on 2 of 3 runs, 85) and A9 (build / params / party hook fingerprint, live mismatch refusal, 95), agent/sixp.
 - 2026-10-11: B1 78, D5 70, D6 75, G3 75 - campaign soak new game -> end credits (2 players), Blood Moon catch-up; agent/edgetravel, docs/party/campaign_soak.md.
 - 2026-10-11: D6 note (3-player travel soak), gather to the host's map; summary D 64 - agent/edgetravel.
+- 2026-10-11: B3 90, B4 92, B5 70, H1 78 (splittravel): the lamp / headstone / Hunter's Mark question, alone travel for host and guests, same-map moves without a loading screen (split_travel.md).
