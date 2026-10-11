@@ -253,7 +253,11 @@ struct State {
 // MSB treasure spawns seen on this game (0x17DC300(MapItemMan, entity handle, MsbEvent, pos)):
 // the fixture's pickup targets. Main thread.
 std::mutex g_treasure_mu;
-std::vector<std::array<float, 3>> g_treasure;
+struct Treasure {
+    std::array<float, 3> pos{};
+    std::uint32_t flag = 0;  // 50000000 + item lot (the MSB event's lot; 0 = not found)
+};
+std::vector<Treasure> g_treasure;
 std::mutex g_kick_mu;
 std::vector<std::int32_t> g_kicks_out;
 std::vector<std::pair<std::int32_t, double>> g_kicks_seen;
@@ -279,6 +283,15 @@ State& S() {
                                       {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "treasure spawn on a client (slot)");
             const bool c = PatchBytes(0x17D6838, {0x0f, 0x84, 0x2b, 0x02, 0x00, 0x00},
                                       {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "pickup flag on a client in another world");
+            // Enemy drops are per player too (user decision 2026-10-11): every player's game rolls
+            // each enemy's drop itself (0x17DD0B0 on enemy death); a client kept only isGuestDrop
+            // items (vials, bullets): 0x17DD764 je (not a client: no filter) -> jmp.
+            const char* dr = std::getenv("BB_PARTY_GUEST_DROPS");
+            const bool d = (dr && dr[0] == '0') ||
+                           PatchBytes(0x17DD764, {0x0f, 0x84, 0x3a, 0x02, 0x00, 0x00}, {0xe9, 0x3b, 0x02, 0x00, 0x00, 0x90},
+                                      "full enemy drops on a client");
+            Log("guest enemy drops: %s", dr && dr[0] == '0' ? "vanilla (vials / bullets only)" : d ? "full, own roll per player"
+                                                                                                   : "NOT installed");
             g_st.pickups = a && b && c;
             progress::SetInstancedItems(g_st.pickups);
             Log("guest treasure pickups in the host's world: %s (instanced per player)",
@@ -413,6 +426,9 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
     int own = 0;
     for (std::uint32_t id : r.set) {
         own += progress::WriteFlagOwnSave(id, true) ? 1 : 0;
+    }
+    for (std::uint32_t id : r.clr) {  // a quest step's old state, an elevator's other position
+        own += progress::WriteFlagOwnSave(id, false) ? 1 : 0;
     }
     if (own) {
         st.stats.own_save += std::uint64_t(own);
@@ -567,6 +583,10 @@ struct Fixture {
     bool parsed = false;
     std::vector<std::int32_t> objs, chrs;
     int pickups = 0;  // "pickup=N": the N treasures nearest the guest, one try each
+    int kills = 0;    // "kill=N": N times the nearest live map enemy: ForceDead, then pick up its drop
+    int kill_stage = 0;
+    float kill_pos[3] = {};
+    std::int32_t kill_id = 0;
     double after = 8;
     std::size_t idx = 0;
     int tries = 0, presses = 0;
@@ -589,6 +609,105 @@ void FixtureList(const std::string& v, const char* key, std::vector<std::int32_t
     }
 }
 
+// The local player's position.
+bool MyPos(float out[3]) {
+    std::uint64_t man = 0, player = 0;
+    float me[4] = {};
+    if (!SafeGet(Guest(0x553e878), &man) || !man || !SafeGet(man + 0x60, &player) || !player ||
+        !SafeRead(player + 0xc0, me, sizeof me)) {
+        return false;
+    }
+    std::memcpy(out, me, 12);
+    return true;
+}
+
+// The nearest live map character of the current map's entity range (AABnnnn) within 25 m, by the
+// WorldChrMan id sets (party_guestsvc FindChr's walk) and 0x13C97A0(id).
+std::int32_t NearestEnemy(const float me[3], float pos[3], const std::vector<std::int32_t>& skip) {
+    std::uint64_t wcm = 0;
+    std::int32_t sets = 0;
+    if (!SafeGet(Guest(0x553e878), &wcm) || !wcm || !SafeGet(wcm + 0x90, &sets) || sets <= 0 || sets > 4096) {
+        return 0;
+    }
+    using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::int32_t, std::uint64_t);
+    const Find find = reinterpret_cast<Find>(Guest(0x13c97a0));
+    std::int32_t best = 0;
+    float bd = 25.0f * 25.0f;
+    for (std::int32_t i = 0; i < sets; ++i) {
+        std::uint64_t set = 0, arr = 0;
+        std::int32_t n = 0;
+        if (!SafeGet(wcm + 0x98 + 8 * std::uint64_t(i), &set) || !set || !SafeGet(set + 0xf0, &n) ||
+            !SafeGet(set + 0xf8, &arr) || n <= 0 || n > 100000) {
+            continue;
+        }
+        for (std::int32_t k = 0; k < n; ++k) {
+            std::int32_t id = 0;
+            if (!SafeGet(arr + 8 * std::uint64_t(k), &id) || id < 1000000 || id > 9999999 ||
+                std::find(skip.begin(), skip.end(), id) != skip.end() || id % 10000 >= 700) {
+                continue;  // AAB0000-AAB0699: enemies (NPCs from 700 up)
+            }
+            const std::uint64_t chr = find(id, id, 0);
+            std::uint64_t cm = 0, dm = 0;
+            std::int32_t hp = 0;
+            float p[4] = {};
+            if (!chr || !SafeRead(chr + 0xc0, p, sizeof p) || !SafeGet(chr + 0x3b0, &cm) || !cm ||
+                !SafeGet(cm + 0x20, &dm) || !dm || !SafeGet(dm + 0x128, &hp) || hp <= 0) {
+                continue;
+            }
+            const float dx = p[0] - me[0], dy = p[1] - me[1], dz = p[2] - me[2];
+            const float d = dx * dx + dy * dy + dz * dz;
+            if (d < bd) {
+                bd = d;
+                best = id;
+                std::memcpy(pos, p, 12);
+            }
+        }
+    }
+    return best;
+}
+
+void KillTick(Fixture& f, double now) {
+    static std::vector<std::int32_t> done_ids;
+    float me[3] = {};
+    if (!MyPos(me)) {
+        return;
+    }
+    if (f.kill_stage == 0) {
+        f.kill_id = NearestEnemy(me, f.kill_pos, done_ids);
+        if (!f.kill_id) {
+            Log("test: fixture: no live enemy within 25 m");
+            f.kills = 0;
+            return;
+        }
+        done_ids.push_back(f.kill_id);
+        // Lua ForceDead (0x13320C0(ctx, entity)): the enemy's normal death on this game.
+        reinterpret_cast<void(BB_COOP_SYSV*)(std::uint64_t, std::uint32_t)>(Guest(0x13320c0))(0, std::uint32_t(f.kill_id));
+        Log("test: fixture: enemy %d at (%.1f, %.1f, %.1f) killed by this player (ForceDead)", f.kill_id,
+            f.kill_pos[0], f.kill_pos[1], f.kill_pos[2]);
+        f.kill_stage = 1;
+        f.next = now + 6.0;  // death animation; the drop appears
+        return;
+    }
+    if (f.kill_stage >= 1 && f.kill_stage <= 3) {
+        std::string what;
+        if (f.kill_stage == 1) {
+            PutLocal(f.kill_pos, 0.0f, 1.0f, 0.3f, 0.0f, &what);
+            Log("test: fixture: at enemy %d's spot: %s", f.kill_id, what.c_str());
+        }
+        std::uint32_t pp = 0;
+        const bool up = GuestSvcPromptUp(&pp);
+        runtime_pad_director_press(0x4000);
+        f.release = now + 0.15;
+        Log("test: fixture: drop of enemy %d: prompt %s %u; Cross", f.kill_id, up ? "up" : "not seen", pp);
+        ++f.kill_stage;
+        f.next = now + 2.0;
+        return;
+    }
+    f.kill_stage = 0;
+    --f.kills;
+    f.next = now + 2.0;
+}
+
 void FixtureTick(double now) {
     Fixture& f = g_fx;
     if (!f.parsed) {
@@ -607,6 +726,9 @@ void FixtureTick(double now) {
         if (const std::size_t a = v.find("pickup="); a != std::string::npos) {
             f.pickups = std::atoi(v.c_str() + a + 7);
         }
+        if (const std::size_t a = v.find("kill="); a != std::string::npos) {
+            f.kills = std::atoi(v.c_str() + a + 5);
+        }
         Log("test: fixture: %zu object(s), %zu character(s), %.0f s after a steady world", f.objs.size(),
             f.chrs.size(), f.after);
     }
@@ -619,9 +741,27 @@ void FixtureTick(double now) {
         return;
     }
     const std::size_t total = f.objs.size() + f.chrs.size();
+    if (f.idx >= total && f.pickups <= 0 && f.kills > 0) {
+        KillTick(f, now);
+        return;
+    }
     if (f.idx >= total && f.pickups > 0) {
         // The nearest treasure not tried yet: stand on it, Cross (pick up), next one 5 s later.
+        if (f.presses == 1) {
+            std::uint32_t pp = 0;
+            const bool up = GuestSvcPromptUp(&pp);
+            Log("test: fixture: treasure: prompt %s %u; Cross", up ? "up" : "not seen", pp);
+            runtime_pad_director_press(0x4000);
+            f.release = now + 0.15;
+            f.presses = 0;
+            f.next = now + 5.0;
+            --f.pickups;
+            return;
+        }
         static std::vector<std::array<float, 3>> tried;
+        const char* only = std::getenv("BB_PARTY_WORLDACT_TEST");
+        const char* fl = only ? std::strstr(only, "flag=") : nullptr;
+        const std::uint32_t want = fl ? std::uint32_t(std::strtoul(fl + 5, nullptr, 10)) : 0;
         float me[4] = {};
         std::uint64_t wcm = 0, man = 0, player = 0;
         if (!SafeGet(Guest(0x553e878), &man) || !man || !SafeGet(man + 0x60, &player) || !player ||
@@ -633,9 +773,14 @@ void FixtureTick(double now) {
         float bd = 1e9f;
         {
             std::lock_guard<std::mutex> lk(g_treasure_mu);
-            for (const auto& t : g_treasure) {
-                if (std::find(tried.begin(), tried.end(), t) != tried.end()) {
+            for (const Treasure& tr : g_treasure) {
+                const auto& t = tr.pos;
+                if (std::find(tried.begin(), tried.end(), t) != tried.end() || (want && tr.flag != want)) {
                     continue;
+                }
+                bool taken = false;
+                if (!want && tr.flag && progress::ReadFlag(tr.flag, &taken) && taken) {
+                    continue;  // taken in this guest's view (its own pickups, instanced)
                 }
                 const float dx = t[0] - me[0], dy = t[1] - me[1], dz = t[2] - me[2];
                 const float d = dx * dx + dy * dy + dz * dz;
@@ -645,7 +790,12 @@ void FixtureTick(double now) {
                 }
             }
             if (f.tries == 0) {
-                Log("test: fixture: %zu treasure spawn(s) seen on this game", g_treasure.size());
+                std::size_t with = 0;
+                for (const Treasure& tr : g_treasure) {
+                    with += tr.flag ? 1 : 0;
+                }
+                Log("test: fixture: %zu treasure spawn(s) seen on this game (%zu with a pickup flag)", g_treasure.size(),
+                    with);
             }
         }
         if (bd > 1e8f) {
@@ -772,10 +922,36 @@ BB_COOP_SYSV void TreasureSpawnEntry(std::uint64_t, std::uint64_t, std::uint64_t
     if (!ev || !SafeGet(ev + 0xc, &type) || type != 4 || !pos || !SafeRead(pos, p, sizeof p)) {
         return;
     }
+    // The treasure's item lot: an int of the MSB event whose 50000000 + lot is an item pickup flag
+    // (lot 2410180 -> flag 52410180, as the C3 log shows).
+    Treasure t;
+    t.pos = {p[0], p[1], p[2]};
+    std::int32_t words[48] = {};
+    if (SafeRead(ev, words, sizeof words)) {
+        for (std::int32_t w : words) {
+            if (w >= 1000000 && w < 50000000 &&
+                progress::CategoryOf(50000000u + std::uint32_t(w)) == Category::item_lot_picked) {
+                t.flag = 50000000u + std::uint32_t(w);
+                break;
+            }
+        }
+    }
     std::lock_guard<std::mutex> lk(g_treasure_mu);
     if (g_treasure.size() < 512) {
-        g_treasure.push_back({p[0], p[1], p[2]});
+        g_treasure.push_back(t);
     }
+}
+
+BB_COOP_SYSV void EnemyDropEntry(std::uint64_t, std::uint64_t chr_handle, std::uint64_t npc, std::uint64_t,
+                                 std::uint64_t, std::uint64_t) {
+    Log("enemy drop roll on this game (role %d): chr handle %#x, npc param %p", LocalSessionRole(),
+        unsigned(chr_handle), reinterpret_cast<void*>(npc));
+}
+BB_COOP_SYSV void PickupEntry(std::uint64_t, std::uint64_t handle_ptr, std::uint64_t, std::uint64_t, std::uint64_t,
+                              std::uint64_t) {
+    std::int32_t h = -1;
+    SafeGet(handle_ptr, &h);
+    Log("map item pickup on this game (role %d): item handle %#x", LocalSessionRole(), unsigned(h));
 }
 
 BB_COOP_SYSV void NetKickEntry(std::uint64_t man, std::uint64_t idx, std::uint64_t chr, std::uint64_t state,
@@ -834,6 +1010,11 @@ void Init() {
     const bool b = HookPrologue(0x13AF830, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                                 &NetKickEntry, "ObjAct remote kick (log)");
     Log("ObjAct kick log %s", a && b ? "on" : "partly off");
+    // Enemy drop rolls and map item pickups: logged (rare events; the D4 evidence).
+    HookPrologue(0x17DD0B0, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                 &EnemyDropEntry, "enemy drop roll (log)");
+    HookPrologue(0x17D8570, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                 &PickupEntry, "map item pickup (log)");
     if (std::getenv("BB_PARTY_WORLDACT_TEST")) {
         HookPrologue(0x17DC300, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                      &TreasureSpawnEntry, "MSB treasure spawn (test fixture)");
