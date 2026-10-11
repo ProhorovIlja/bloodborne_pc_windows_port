@@ -20,19 +20,41 @@ loading screens, summons, lost progress or respawns, and every player is free to
 character exactly as in single-player play. Every row below is judged against this rule too: a row is
 only 100% when it meets it.
 
+## Design decisions (user, 2026-10-11) - binding
+
+| Topic | Decision |
+|---|---|
+| Travel by lamp / headstone / Hunter's Mark | Ask at the lamp each time: "Travel alone" or "Travel with party" |
+| Death outside a boss fight | Every player, host included, respawns at their OWN last lamp (even in another map); the others play on |
+| Death during a boss fight | Limbo: spectate until the boss dies, the party wipes, or someone rests |
+| Echoes on death | Like single-player for everyone: echoes drop into a recoverable bloodstain |
+| World item pickups | Instanced per player: each player can take each item once into their own save |
+| NPC quest choices | Shared: the first choice made by anyone applies to the host's world and every player's save |
+| Guest behind the host in story | Guest's own save catches up fully (bosses, Blood Moon, lamps, shortcuts) |
+| Saves | Everyone uses a separate party save; single-player saves untouched |
+| Rest at a lamp | Resets enemies for everyone (ERSC); players in boss rooms are pulled out |
+| Enemy scaling default | Harder than vanilla (ERSC-like boss boosts), adjustable in Party settings |
+| Death debuff ("rot") | Implemented, ON by default, Party setting to turn off |
+| Chalice dungeons | Any player can perform a ritual; the party enters that dungeon together |
+| Host offline | Host needed; the shared world exists only while the host plays |
+| Hunter's Dream | Always shared: everyone in the Dream is in the host's Dream together |
+| Cutscenes | Play for everyone in the party |
+| Joining during a boss fight / cutscene | Joiner waits outside (host's last lamp / fog) until it ends |
+| Friendly fire / PvP, invasions | Not wanted |
+
 ## Summary
 
 | Area | Parity |
 |---|---|
-| A. Session & joining | 77% |
+| A. Session & joining | 70% |
 | B. World & travel | 72% |
 | C. Death & respawn | 57% |
-| D. Progress (anyone can progress) | 55% |
+| D. Progress (anyone can progress) | 52% |
 | E. Services & UI | 82% |
 | F. Network & robustness | 48% |
 | G. BB-specific (chalice, insight, bath) | 27% |
 | H. Bloodborne rule (feels like SP in a party) | 67% |
-| **Overall (unweighted mean of rows)** | **~62%** |
+| **Overall (unweighted mean of rows)** | **~60%** |
 
 ## A. Session & joining
 
@@ -48,6 +70,7 @@ only 100% when it meets it.
 | A8 | Settings in game | ersc_settings.ini: [GAMEPLAY] allow_invaders, death_debuffs, allow_summons, overhead_player_display; [SCALING]; [PASSWORD]; [SAVE]; [LANGUAGE] | All settings in the game's own System menu, Party pages | 90 | bbport_game_menu |
 | A9 | Version check | Same mod + game version required | Party protocol version checked on join (kLinkProtocolVersion), clear reject reason | 70 | Build/patch-set mismatch beyond the protocol number not checked |
 | A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Not wanted (user, 2026-10-11) |
+| A11 | Joining during a boss fight / cutscene | Joiner spawns near the host | Decision: wait outside until it ends. Not implemented | 0 | |
 
 ## B. World & travel
 
@@ -86,6 +109,7 @@ only 100% when it meets it.
 | D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Vanilla co-op scaling only, not measured | 20 | Check; add Party setting |
 | D8 | NPC dialogue / talk events synchronised | Yes | Story choices synced (C4); NPC talk with a guest present untested | 25 | Test NPC talk (Gilbert, Eileen) in party |
 | D9 | A grace rest resets the world for everyone | Yes | Lamp rest = host load: enemies respawn in the host's world; guests get the refill and HP (verified) | 85 | guest_services.md §3.3 |
+| D10 | Cutscenes play for the whole party | Synced talk events | Decision: everyone watches. Untested (K11 skips the clinic opening for guests) | 20 | |
 
 ## E. Services & UI
 
@@ -130,4 +154,4 @@ only 100% when it meets it.
 - 2026-10-11: table created from the state of the integration branch at 580fbd3.
 - 2026-10-11: ERSC column checked against ersc-docs.github.io (settings + FAQ) and the Nexus
   description; rows A9, A10, B7, C7, D8, D9, F6 added.
-- 2026-10-11: Bloodborne rule + section H added (user). A10 friendly fire / PvP not wanted.
+- 2026-10-11: Bloodborne rule + section H added (user). Design decisions table (user's answers); rows A11, D10 added. A10 friendly fire / PvP not wanted.
