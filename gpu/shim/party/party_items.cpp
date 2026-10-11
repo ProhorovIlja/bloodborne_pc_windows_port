@@ -1908,6 +1908,36 @@ BB_COOP_SYSV void HudTickEntry(u64 hud, u64, u64, u64, u64, u64) {
     g_hud_obj = hud;
 }
 
+// 0x1C02290 (functor, Scaleform list item, const u32* index): one GetItemList row from the HUD model.
+std::atomic<u32> g_row_calls{0}, g_row_max_index{0};
+std::atomic<u64> g_hud_update_calls{0};
+BB_COOP_SYSV void ItemRowEntry(u64, u64, u64 index_ptr, u64, u64, u64) {
+    u32 idx = 0;
+    SafeGet(index_ptr, &idx);
+    g_row_calls.fetch_add(1);
+    if (idx > g_row_max_index.load()) {
+        g_row_max_index = idx;
+    }
+}
+BB_COOP_SYSV void HudUpdateEntry(u64, u64, u64, u64, u64, u64) {
+    g_hud_update_calls.fetch_add(1);
+}
+
+// 0x1F5E200 (out, menu res, flags, const wchar16* name): loads menu:/<name>.gfx. Probe: who asks
+// for an empty name.
+using MovieLoadFn = u64(BB_COOP_SYSV*)(u64, u64, u64, u64);
+MovieLoadFn g_movie_load_orig = nullptr;
+BB_COOP_SYSV u64 MovieLoadReplace(u64 out, u64 res, u64 flags, u64 name) {
+    const u64 ret = reinterpret_cast<u64>(__builtin_return_address(0));
+    std::uint16_t first = 0;
+    if (!name || !SafeGet(name, &first) || first == 0) {
+        Log("item-get probe: menu movie with an EMPTY name (flags 0x%llx, name ptr 0x%llx) from guest +0x%llx",
+            static_cast<unsigned long long>(flags), static_cast<unsigned long long>(name),
+            static_cast<unsigned long long>(ret - Guest(0)));
+    }
+    return g_movie_load_orig(out, res, flags, name);
+}
+
 /// BB_PARTY_ITEMGET_PROBE=1: logs every change of the item-get dialog's state - entries in the
 /// list at *0x553B1C0 (+8), the "dialog up" word *0x5562878 +0x130 that 0x16D86E0 sets while the
 /// list is not empty, and the gate of its confirm check (player flag WorldChrMan+0x60 -> +0x58 ->
@@ -1951,6 +1981,53 @@ void ItemGetProbe() {
         hooked = true;
         HookPrologue(0x1bfb2a0, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                      &HudTickEntry, "HUD tick (item-get probe)");
+        HookPrologue(0x1c02290, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                     &ItemRowEntry, "GetItemList row (item-get probe)");
+        HookPrologue(0x1bf7c20, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                     &HudUpdateEntry, "ingameTop update (item-get probe)");
+        void* orig = nullptr;
+        if (ReplacePrologue(0x1f5e200, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                            reinterpret_cast<const void*>(&MovieLoadReplace), &orig, "menu movie load (item-get probe)")) {
+            g_movie_load_orig = reinterpret_cast<MovieLoadFn>(orig);
+        }
+    }
+    // Once: the menu movie tables 0x1F5D0E0 loads from (name pointers; empty names fail to load).
+    static bool tables_dumped = false;
+    if (!tables_dumped && Ptr(kMenuState) && g_hud_obj.load()) {
+        tables_dumped = true;
+        struct T {
+            u64 base;
+            int n;
+            int stride;
+            int name_off;
+        };
+        const T tabs[] = {{0x5595e30, 0x4f, 16, 8}, {0x5595cc0, 0x16, 16, 8}, {0x5356ad0, 9, 8, 0}, {0x5356aa0, 6, 8, 0}};
+        for (const T& t : tabs) {
+            std::string line;
+            for (int i = 0; i < t.n; ++i) {
+                u64 first = 0, name = 0;
+                SafeGet(Guest(t.base + u64(i) * t.stride), &first);
+                SafeGet(Guest(t.base + u64(i) * t.stride + t.name_off), &name);
+                char s[48] = {};
+                if (name) {
+                    SafeRead(name, s, sizeof s - 1);
+                }
+                char b[96];
+                std::snprintf(b, sizeof b, " [%d 0x%llx '%s']", i, static_cast<unsigned long long>(first), s);
+                line += b;
+            }
+            Log("item-get probe: movie table 0x%llx:%s", static_cast<unsigned long long>(t.base), line.c_str());
+        }
+        // The GetItemList row functor's vtable (0x1BF7C20: local functor &0x5344970 over HUD rows).
+        std::string vt;
+        for (int i = 0; i < 8; ++i) {
+            u64 f = 0;
+            SafeGet(Guest(0x5344970 + 8ull * i), &f);
+            char b[32];
+            std::snprintf(b, sizeof b, " +0x%llx", static_cast<unsigned long long>(f ? f - Guest(0) : 0));
+            vt += b;
+        }
+        Log("item-get probe: GetItemList functor vtable 0x5344970:%s", vt.c_str());
     }
     int rows = -1;
     u64 model = 0, cnt = 0;
@@ -1971,6 +2048,12 @@ void ItemGetProbe() {
     }
     static std::int32_t last_blk = -2, last_m84 = -2, last_m25c = -2;
     static int last_g1544 = -2;
+    static double last_rowlog = 0;
+    if (Now() - last_rowlog >= 5.0) {
+        last_rowlog = Now();
+        Log("item-get probe: ingameTop updates %llu, GetItemList row calls %u (max index %u)",
+            static_cast<unsigned long long>(g_hud_update_calls.load()), g_row_calls.load(), g_row_max_index.load());
+    }
     if (rows != last_rows || blk != last_blk || m84 != last_m84 || m25c != last_m25c || g1544 != last_g1544) {
         Log("item-get probe: HUD model rows %d (HUD 0x%llx); open gate *0x5578A38 %d, menu+0x84 %d, GSM+0x1544 %u, "
             "menu+0x25C %d",
