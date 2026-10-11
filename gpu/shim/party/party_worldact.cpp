@@ -584,6 +584,7 @@ struct Fixture {
     bool parsed = false;
     std::vector<std::int32_t> objs, chrs;
     int pickups = 0;  // "pickup=N": the N treasures nearest the guest, one try each
+    std::string map;  // "map=NAME": only while the current map's name contains NAME
     int kills = 0;    // "kill=N": N times the nearest live map enemy: ForceDead, then pick up its drop
     int kill_stage = 0;
     float kill_pos[3] = {};
@@ -744,6 +745,9 @@ void FixtureTick(double now) {
         if (const std::size_t a = v.find("pickup="); a != std::string::npos) {
             f.pickups = std::atoi(v.c_str() + a + 7);
         }
+        if (const std::size_t a = v.find("map="); a != std::string::npos) {
+            f.map = v.substr(a + 4, v.find(';', a) == std::string::npos ? std::string::npos : v.find(';', a) - a - 4);
+        }
         if (const std::size_t a = v.find("kill="); a != std::string::npos) {
             f.kills = std::atoi(v.c_str() + a + 5);
         }
@@ -755,7 +759,8 @@ void FixtureTick(double now) {
         f.release = 0;
     }
     State& st = S();
-    if (f.done || !st.steady || now - st.steady_since < f.after || now < f.next) {
+    if (f.done || !st.steady || now - st.steady_since < f.after || now < f.next ||
+        (!f.map.empty() && MapName(st.map).find(f.map) == std::string::npos)) {
         return;
     }
     const std::size_t total = f.objs.size() + f.chrs.size();
