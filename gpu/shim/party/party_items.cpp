@@ -300,6 +300,13 @@ json::Value ItemsToJson(const std::vector<ItemGrant>& items) {
                 e.push(static_cast<unsigned long long>(it.category));
                 e.push(it.id);
                 e.push(it.count);
+                if (it.has_gem) {
+                    json::Value gem = json::Value::make_array();
+                    for (const std::int32_t x : it.gem) {
+                        gem.push(x);
+                    }
+                    e.push(gem);
+                }
                 list.push(e);
             }
             row.push(list);
@@ -359,19 +366,35 @@ bool ItemsFromJson(const json::Value& v, std::vector<ItemGrant>* out, std::strin
                     throw std::runtime_error("items: the item list is not an array of at most 16");
                 }
                 for (const json::Value& e : list.array) {
-                    if (e.type != json::Value::Type::Array || e.array.size() != 3) {
-                        throw std::runtime_error("items: an item needs [category, id, count]");
+                    if (e.type != json::Value::Type::Array || (e.array.size() != 3 && e.array.size() != 4)) {
+                        throw std::runtime_error("items: an item needs [category, id, count(, gem)]");
                     }
                     const double cat = integer(e.array[0], "category"), id = integer(e.array[1], "item id"),
                                  count = integer(e.array[2], "count");
-                    if (cat < 0 || cat > 15 || !GrantCategorySupported(static_cast<std::uint32_t>(cat)) || id <= 0 ||
-                        id > 2147483647.0 || count < 1 || count > 255) {
+                    if (cat < 0 || cat > 15 || id <= 0 || id > 2147483647.0 || count < 1 || count > 255) {
                         throw std::runtime_error("items: item value out of range");
                     }
                     GrantItem it;
                     it.category = static_cast<std::uint32_t>(cat);
                     it.id = static_cast<std::int32_t>(id);
                     it.count = static_cast<std::int32_t>(count);
+                    if (e.array.size() == 4) {
+                        const json::Value& gem = e.array[3];
+                        if (gem.type != json::Value::Type::Array || gem.array.size() != kGemFields) {
+                            throw std::runtime_error("items: gem data needs 8 integers");
+                        }
+                        for (std::size_t k = 0; k < kGemFields; ++k) {
+                            const double x = integer(gem.array[k], "gem field");
+                            if (x < -1 || x > 2147483647.0) {
+                                throw std::runtime_error("items: gem field out of range");
+                            }
+                            it.gem[k] = static_cast<std::int32_t>(x);
+                        }
+                        it.has_gem = true;
+                    }
+                    if (!GrantItemSupported(it)) {
+                        throw std::runtime_error("items: item category / gem data not accepted");
+                    }
                     g.items.push_back(it);
                 }
             }
@@ -498,11 +521,30 @@ bool GrantCategorySupported(std::uint32_t category) {
     return category == 0 || category == 1 || category == 2 || category == 4;
 }
 
+bool GemDataPlausible(const std::int32_t (&gem)[kGemFields]) {
+    if (gem[0] < 0 || gem[0] > 3 || gem[1] < 0 || gem[1] > 1000) {
+        return false;
+    }
+    for (std::size_t k = 2; k < kGemFields; ++k) {
+        if (gem[k] < -1 || gem[k] > 99999999) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool GrantItemSupported(const GrantItem& it) {
+    if (it.category == 8) {
+        return it.has_gem && it.count == 1 && it.id > 0 && GemDataPlausible(it.gem);
+    }
+    return !it.has_gem && GrantCategorySupported(it.category);
+}
+
 const char* LotPlanResultName(LotPlanResult r) {
     switch (r) {
     case LotPlanResult::Give: return "give";
     case LotPlanResult::Random: return "random lot without the host's item list";
-    case LotPlanResult::Unsupported: return "blood gem / unsupported category";
+    case LotPlanResult::Unsupported: return "blood gem without the host's gem data / unsupported category";
     case LotPlanResult::Missing: return "no ItemLotParam row";
     }
     return "?";
@@ -536,6 +578,17 @@ int SlotCount(const LotRowData& r, int i) {
 }
 
 } // namespace
+
+bool LotChainHasGem(const std::vector<LotRowData>& chain) {
+    for (const LotRowData& r : chain) {
+        for (int i = 0; i < 8; ++i) {
+            if (SlotWeighted(r, i) && SlotHasItem(r, i) && r.category[i] == 8) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 bool LotChainRandom(const std::vector<LotRowData>& chain) {
     for (const LotRowData& r : chain) {
@@ -606,8 +659,13 @@ LotPlan PlanSummonedLot(const std::vector<LotRowData>& chain, const std::vector<
                     continue;
                 }
                 for (int i = 0; i < 8; ++i) {
+                    // A blood gem: the generated id is the slot's plus the area's rank offset.
+                    const bool id_ok = it.category == 8
+                                           ? it.has_gem && it.count == 1 && it.id >= chain[r].id[i] &&
+                                                 it.id - chain[r].id[i] <= kMaxGemIdOffset
+                                           : chain[r].id[i] == it.id;
                     if (SlotWeighted(chain[r], i) && SlotHasItem(chain[r], i) && chain[r].category[i] == it.category &&
-                        chain[r].id[i] == it.id && it.count >= 1 && it.count <= SlotCount(chain[r], i)) {
+                        id_ok && it.count >= 1 && it.count <= SlotCount(chain[r], i)) {
                         used[r] = true;
                         row_of[k] = static_cast<int>(r);
                         ok = true;
@@ -622,7 +680,7 @@ LotPlan PlanSummonedLot(const std::vector<LotRowData>& chain, const std::vector<
                 if (done(r)) {
                     continue;
                 }
-                if (!GrantCategorySupported(host_items[k].category)) {
+                if (!GrantItemSupported(host_items[k])) {
                     p.result = LotPlanResult::Unsupported;
                     p.why = "category " + std::to_string(host_items[k].category);
                     p.items.clear();
@@ -809,7 +867,17 @@ constexpr u64 kSetFlag = 0x13cfcc0;    // void (man, u32 id, u32 on)
 constexpr u64 kWts = 0x5556678;        // WorldTransitionState / GameStateMan slot
 constexpr u64 kWtsOwnWorld = 0x1592;   // 1 in the own world, 0 summoned into another
 
+// Blood gems (docs/party/items.md 10.1).
+constexpr u64 kSprjGaitem = 0x553e990;    // slot: +8 + (handle & 0xffff) * 8 = instance (+8 handle, +0xC item id)
+constexpr u64 kGaitemCreate = 0x1a87590;  // u32* (u32* out, SprjGaitem*, u32 gem id): a new gem instance
+constexpr u64 kGaitemRelease = 0x1a8bc00; // void (u32* handle): reference -1 (frees at 0)
+constexpr u64 kItemGetList = 0x553b1c0;   // the item-get dialog's entries (+8 live list, +0x10 free nodes)
+constexpr u64 kMenuState = 0x5562878;     // +0x130: the item-get dialog is up (0x16D86E0)
+
 using AwardFn = void(BB_COOP_SYSV*)(u64, u32, u32);
+using GiveListFn = void(BB_COOP_SYSV*)(u64, void*);
+using GaitemCreateFn = u32*(BB_COOP_SYSV*)(u32*, u64, u32);
+using GaitemReleaseFn = void(BB_COOP_SYSV*)(u32*);
 using IsFlagFn = u8(BB_COOP_SYSV*)(u64, u32, u8*);
 using SetFlagFn = void(BB_COOP_SYSV*)(u64, u32, u32);
 
@@ -895,12 +963,119 @@ void SeedHostSeq() {
     g_host.SeedSeq(seed);
 }
 
+// ---- Blood gems ----
+
+/// A gem's gaitem instance (SprjGaitem +8 + index * 8; the handle at +8 must match), else 0.
+u64 GemInstance(u32 handle) {
+    const u64 gi = Ptr(kSprjGaitem);
+    if (!gi || !handle || !(handle & 0x800000u) || (handle & 0xffffu) == 0xffffu) {
+        return 0;
+    }
+    u64 inst = 0;
+    u32 h = 0, type = 0;
+    if (!SafeGet(gi + 8 + 8ull * (handle & 0xffffu), &inst) || !inst || !SafeGet(inst + 8, &h) || h != handle ||
+        !SafeGet(inst + 0xc, &type) || (type >> 28) != 8) {
+        return 0;
+    }
+    return inst;
+}
+
+/// Host: the gem behind a give-list handle (id + instance data), as 0x1A87E20 wrote it.
+bool ReadGem(u32 handle, GrantItem* it) {
+    const u64 inst = GemInstance(handle);
+    u32 type = 0;
+    if (!inst || !SafeGet(inst + 0xc, &type) || !SafeRead(inst + 0x18, it->gem, sizeof it->gem)) {
+        return false;
+    }
+    it->category = 8;
+    it->id = static_cast<std::int32_t>(type & 0x0fffffffu);
+    it->count = 1;
+    it->has_gem = true;
+    return GemDataPlausible(it->gem);
+}
+
+std::string GemText(const GrantItem& it) {
+    char b[160];
+    std::snprintf(b, sizeof b, "gem %d (flags %d, rank %d, effects %d %d %d %d %d %d)", it.id, it.gem[0], it.gem[1],
+                  it.gem[2], it.gem[3], it.gem[4], it.gem[5], it.gem[6], it.gem[7]);
+    return b;
+}
+
+/// Guest: the host's gem recreated - a new gaitem instance with the host's id and instance data,
+/// handed to the lot award's own give list 0x17D89F0 (inventory, else storage / the ground, and
+/// the native item-get dialog with its sound, as the host's award showed it). The gem's
+/// GemGenParam row and every effect's GemeffectParam row must exist first.
+bool GiveGem(const GrantItem& it, std::string* why) {
+    if (!it.has_gem || it.category != 8 || it.count != 1) {
+        *why = "no gem data";
+        return false;
+    }
+    if (!GameParamRow("GemGenParam", "GEM_GEN_PARAM_ST", static_cast<u32>(it.id))) {
+        *why = "no GemGenParam row " + std::to_string(it.id);
+        return false;
+    }
+    for (std::size_t k = 2; k < kGemFields; ++k) {
+        if (it.gem[k] != -1 && !GameParamRow("GemeffectParam", "GEMEFFECT_PARAM_ST", static_cast<u32>(it.gem[k]))) {
+            *why = "no GemeffectParam row " + std::to_string(it.gem[k]);
+            return false;
+        }
+    }
+    static const u8 kCreate[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54,
+                                 0x53, 0x48, 0x83, 0xec, 0x28, 0x41, 0x89, 0xd6, 0x48, 0x89, 0xf3};
+    static const u8 kRelease[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53, 0x48, 0x89, 0xfb, 0x8b, 0x33};
+    static const u8 kGive[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54,
+                               0x53, 0x48, 0x81, 0xec, 0xb8, 0x01, 0x00, 0x00, 0x49, 0x89, 0xf7};
+    if (!MatchesOriginal(kGaitemCreate, kCreate, sizeof kCreate) ||
+        !MatchesOriginal(kGaitemRelease, kRelease, sizeof kRelease) || !MatchesOriginal(kGiveList, kGive, sizeof kGive)) {
+        *why = "gaitem / give-list code differs from 1.09";
+        return false;
+    }
+    const u64 gi = Ptr(kSprjGaitem), mim = Ptr(kMapItemMan);
+    if (!gi || !mim) {
+        *why = "no SprjGaitem / MapItemMan";
+        return false;
+    }
+    u32 handle = 0;
+    reinterpret_cast<GaitemCreateFn>(Guest(kGaitemCreate))(&handle, gi, static_cast<u32>(it.id));
+    const u64 inst = GemInstance(handle);
+    u32 type = 0;
+    if (!inst || !SafeGet(inst + 0xc, &type) || type != (0x80000000u | static_cast<u32>(it.id))) {
+        if (handle) {
+            reinterpret_cast<GaitemReleaseFn>(Guest(kGaitemRelease))(&handle);
+        }
+        *why = "no gaitem instance (table full?)";
+        return false;
+    }
+    std::memcpy(reinterpret_cast<void*>(inst + 0x18), it.gem, sizeof it.gem);
+    // ItemList {u32 n; n x {u32 gaitem, u32 id | category << 28, u32 count, u32 -1}} like 0x17DDC50's.
+    u32 list[16] = {};
+    list[0] = 1;
+    list[1] = handle;
+    list[2] = type;
+    list[3] = 1;
+    list[4] = 0xffffffffu;
+    g_in_apply = true;
+    reinterpret_cast<GiveListFn>(Guest(kGiveList))(mim, list);
+    g_in_apply = false;
+    reinterpret_cast<GaitemReleaseFn>(Guest(kGaitemRelease))(&handle); // the inventory keeps its own reference
+    return true;
+}
+
+/// Host: the last give lists with a blood gem that came from a pickup (0x17D8570 -> 0x17D89F0,
+/// not through 0x17DDC50). The treasure's flag reaches OnHostFlagSet a little later (C2's scan),
+/// and the gem the host really got rides along. Main thread only.
+struct RecentGive {
+    double at = 0;
+    std::vector<GrantItem> items;
+};
+std::deque<RecentGive> g_recent_gem_gives;
+
 // ---- The award hook (main thread: EMEVD, Lua) ----
 
 AwardFn g_award_original = nullptr; // the trampoline (ReplacePrologue)
 bool g_capturing = false;           // main thread: the host's own award runs, GiveListEntry records
 std::vector<GrantItem> g_captured;  // its items (category, id, count)
-bool g_captured_bad = false;        // an item the direct give cannot replay (a blood gem)
+bool g_captured_bad = false;        // an item that could not be read (the guest resolves the lot itself)
 
 /// Host side of an award, before the game runs it: the grant to offer once the call returned
 /// (its items captured), else nothing. Guest side: the mark for a lot received while summoned.
@@ -977,37 +1152,68 @@ BB_COOP_SYSV void AwardReplace(u64 mim, u64 lot_arg, u64 host_only_arg) {
         list += (list.empty() ? "" : ", ") + std::to_string(it.category) + ":" + std::to_string(it.id) + "x" +
                 std::to_string(it.count);
     }
+    for (const GrantItem& it : g->items) {
+        if (it.has_gem) {
+            list += " [" + GemText(it) + "]";
+        }
+    }
     Log("host award %s %s; items [%s]%s", DescribeItem(*g).c_str(), queued ? "queued for the party" : "already sent",
-        list.c_str(), g_captured_bad ? " (a blood gem: guests award it in their own world)" : "");
+        list.c_str(), g_captured_bad ? " (an item could not be read: guests resolve the lot themselves)" : "");
 }
 
 // Our own award's inventory adds (evidence for the apply log): ItemList {u32 n, then n x
 // {u32 gaitem, u32 itemId | category << 28, u32 count, u32 -1}} from +4 (0x17D8A42..0x17D8A8A).
 BB_COOP_SYSV void GiveListEntry(u64, u64 list, u64, u64, u64, u64) {
     perf::Scope z(perf::Zone::HookGiveList);
-    if (!list || (!g_in_apply.load() && !g_capturing)) {
+    // Host side: the award's list (g_capturing), or a pickup's list (it may hold a blood gem).
+    const bool host_pickup = !g_in_apply.load() && !g_capturing && g_on.load() && Role() == PartyRole::Host &&
+                             OwnWorld() == 1;
+    if (!list || (!g_in_apply.load() && !g_capturing && !host_pickup)) {
         return;
     }
     u32 n = 0;
     if (!SafeGet(list, &n)) {
         return;
     }
-    if (g_capturing) {
+    if (g_capturing || host_pickup) {
+        std::vector<GrantItem> items;
+        bool bad = false, gem = false;
         for (u32 i = 0; i < n && i < 8; ++i) {
             u32 e[4] = {};
             if (!SafeRead(list + 4 + 16ull * i, e, sizeof e)) {
-                g_captured_bad = true;
+                bad = true;
                 continue;
             }
             GrantItem it;
             it.category = e[1] >> 28;
             it.id = static_cast<std::int32_t>(e[1] & 0x0fffffffu);
             it.count = static_cast<std::int32_t>(e[2]);
-            if (!GrantCategorySupported(it.category) || it.id <= 0 || it.count < 1 || it.count > 255) {
-                g_captured_bad = true;
+            if (it.category == 8) {
+                if (it.count != 1 || !ReadGem(e[0], &it)) {
+                    bad = true;
+                    continue;
+                }
+                gem = true;
+            }
+            if (!GrantItemSupported(it) || it.id <= 0 || it.count < 1 || it.count > 255) {
+                bad = true;
                 continue;
             }
-            g_captured.push_back(it);
+            items.push_back(it);
+        }
+        if (g_capturing) {
+            g_captured.insert(g_captured.end(), items.begin(), items.end());
+            g_captured_bad = g_captured_bad || bad;
+        } else if (gem && !bad) {
+            g_recent_gem_gives.push_back({Now(), items});
+            while (g_recent_gem_gives.size() > 8) {
+                g_recent_gem_gives.pop_front();
+            }
+            for (const GrantItem& it : items) {
+                if (it.has_gem) {
+                    Log("host picked up %s; kept for its treasure flag's report", GemText(it).c_str());
+                }
+            }
         }
         return;
     }
@@ -1262,8 +1468,8 @@ void AttachHostRoll(ItemGrant* g) {
         return;
     }
     const std::vector<LotRowData> chain = LotChain(g->lot);
-    if (!LotChainRandom(chain)) {
-        return;
+    if (!LotChainRandom(chain) || LotChainHasGem(chain)) {
+        return; // a gem cannot be rolled here (no instance data): the guest waits for its own world
     }
     static std::uint64_t salt = static_cast<std::uint64_t>(Clock::now().time_since_epoch().count());
     salt = salt * 6364136223846793005ull + 1442695040888963407ull;
@@ -1417,6 +1623,24 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
     std::string given, notice;
     int gave = 0, native = 0;
     for (const GrantItem& it : plan.items) {
+        char b[256];
+        if (it.category == 8) {
+            // A blood gem: the host's own gem recreated, given through the award's give list
+            // (which also queues the native item-get dialog).
+            std::string why;
+            const u32 added_before = g_added.load();
+            const bool ok = GiveGem(it, &why);
+            gave += ok ? 1 : 0;
+            native += ok ? 1 : 0;
+            std::snprintf(b, sizeof b, "blood %s (%s)", GemText(it).c_str(),
+                          !ok ? why.c_str()
+                              : g_added.load() != added_before ? "inventory add, item-get dialog"
+                                                                 : "given, item-get dialog");
+            given += (given.empty() ? "" : "; ") + std::string(b);
+            std::snprintf(b, sizeof b, "blood gem %d", it.id);
+            notice += (notice.empty() ? "" : ", ") + std::string(b);
+            continue;
+        }
         const u32 bits = it.category << 28;
         const int before = ItemCount(bits, static_cast<u32>(it.id));
         const bool ok = GiveItem(bits, static_cast<u32>(it.id), it.count);
@@ -1425,7 +1649,6 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         const bool shown = ok && ShowItemGet(bits, static_cast<u32>(it.id), it.count);
         gave += ok ? 1 : 0;
         native += shown ? 1 : 0;
-        char b[192];
         std::snprintf(b, sizeof b, "%s %d x%d (held %d -> %d%s%s)", CategoryWord(it.category), it.id, it.count,
                       before, after, ok ? "" : ", GiveItemDirect unavailable",
                       !ok ? "" : shown ? ", item-get dialog" : ", NO item-get dialog");
@@ -1542,6 +1765,25 @@ void OnHostFlagSet(std::uint32_t flag) {
     {
         std::lock_guard<std::mutex> lk(g_host_mu);
         g = ClassifyFlag(static_cast<std::int32_t>(flag), g_host.Captured());
+    }
+    if (g && g->items.empty()) {
+        // A treasure with a blood gem: the gem the host picked up a moment ago (its give list).
+        const std::vector<LotRowData> chain = LotChain(g->lot);
+        if (LotChainHasGem(chain)) {
+            const double now = Now();
+            for (auto it = g_recent_gem_gives.rbegin(); it != g_recent_gem_gives.rend(); ++it) {
+                if (now - it->at > 120.0) {
+                    break;
+                }
+                const LotPlan plan = PlanSummonedLot(chain, it->items, nullptr);
+                if (plan.result == LotPlanResult::Give && plan.why == "host's item list") {
+                    g->items = it->items;
+                    g_recent_gem_gives.erase(std::next(it).base());
+                    Log("host flag %u: lot %d carries the blood gem the host picked up", flag, g->lot);
+                    break;
+                }
+            }
+        }
     }
     if (g) {
         AttachHostRoll(&*g); // main thread (C2's observer)
@@ -1660,12 +1902,187 @@ bool Calm(u64 player, double now) {
     return now - last_hit >= kCalmAfter;
 }
 
+std::atomic<u64> g_hud_obj{0}; // BB_PARTY_ITEMGET_PROBE: the HUD object 0x1BFB2A0 last ran with
+
+BB_COOP_SYSV void HudTickEntry(u64 hud, u64, u64, u64, u64, u64) {
+    g_hud_obj = hud;
+}
+
+// 0x1C02290 (functor, Scaleform list item, const u32* index): one GetItemList row from the HUD model.
+std::atomic<u32> g_row_calls{0}, g_row_max_index{0};
+std::atomic<u64> g_hud_update_calls{0};
+BB_COOP_SYSV void ItemRowEntry(u64, u64, u64 index_ptr, u64, u64, u64) {
+    u32 idx = 0;
+    SafeGet(index_ptr, &idx);
+    g_row_calls.fetch_add(1);
+    if (idx > g_row_max_index.load()) {
+        g_row_max_index = idx;
+    }
+}
+BB_COOP_SYSV void HudUpdateEntry(u64, u64, u64, u64, u64, u64) {
+    g_hud_update_calls.fetch_add(1);
+}
+
+// 0x1F5E200 (out, menu res, flags, const wchar16* name): loads menu:/<name>.gfx. Probe: who asks
+// for an empty name.
+using MovieLoadFn = u64(BB_COOP_SYSV*)(u64, u64, u64, u64);
+MovieLoadFn g_movie_load_orig = nullptr;
+BB_COOP_SYSV u64 MovieLoadReplace(u64 out, u64 res, u64 flags, u64 name) {
+    const u64 ret = reinterpret_cast<u64>(__builtin_return_address(0));
+    std::uint16_t first = 0;
+    if (!name || !SafeGet(name, &first) || first == 0) {
+        Log("item-get probe: menu movie with an EMPTY name (flags 0x%llx, name ptr 0x%llx) from guest +0x%llx",
+            static_cast<unsigned long long>(flags), static_cast<unsigned long long>(name),
+            static_cast<unsigned long long>(ret - Guest(0)));
+    }
+    return g_movie_load_orig(out, res, flags, name);
+}
+
+/// BB_PARTY_ITEMGET_PROBE=1: logs every change of the item-get dialog's state - entries in the
+/// list at *0x553B1C0 (+8), the "dialog up" word *0x5562878 +0x130 that 0x16D86E0 sets while the
+/// list is not empty, and the gate of its confirm check (player flag WorldChrMan+0x60 -> +0x58 ->
+/// +0x38 -> +0x41 bit 7, *0x5540050).
+void ItemGetProbe() {
+    static const bool on = [] {
+        const char* v = std::getenv("BB_PARTY_ITEMGET_PROBE");
+        return v && *v && *v != '0';
+    }();
+    if (!on) {
+        return;
+    }
+    static int last_n = -1, last_up = -1, last_gate = -1;
+    static double since = 0;
+    const u64 list = Ptr(kItemGetList);
+    int n = 0;
+    u64 node = 0;
+    if (list && SafeGet(list + 8, &node)) {
+        while (node && n < 16) {
+            ++n;
+            if (!SafeGet(node, &node)) {
+                break;
+            }
+        }
+    }
+    u32 up = 0;
+    const u64 menu = Ptr(kMenuState);
+    if (menu) {
+        SafeGet(menu + 0x130, &up);
+    }
+    u64 a = Ptr(0x553e878), b = 0, c = 0;
+    u8 flag = 0;
+    const bool chr = a && SafeGet(a + 0x60, &b) && b && SafeGet(b + 0x58, &c) && c && SafeGet(c + 0x38, &c) && c &&
+                     SafeGet(c + 0x41, &flag);
+    const int gate = (chr && (flag & 0x80)) ? 0 : (Ptr(0x5540050) ? 1 : 0);
+    // The HUD model's item-get rows (0x1BFB2A0 copies the list into HUD +0xA88 -> +0x1238, count
+    // +0x13A8, up to 5 a frame).
+    static int last_rows = -2;
+    static bool hooked = false;
+    if (!hooked) {
+        hooked = true;
+        HookPrologue(0x1bfb2a0, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                     &HudTickEntry, "HUD tick (item-get probe)");
+        HookPrologue(0x1c02290, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                     &ItemRowEntry, "GetItemList row (item-get probe)");
+        HookPrologue(0x1bf7c20, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                     &HudUpdateEntry, "ingameTop update (item-get probe)");
+        void* orig = nullptr;
+        if (ReplacePrologue(0x1f5e200, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
+                            reinterpret_cast<const void*>(&MovieLoadReplace), &orig, "menu movie load (item-get probe)")) {
+            g_movie_load_orig = reinterpret_cast<MovieLoadFn>(orig);
+        }
+    }
+    // Once: the menu movie tables 0x1F5D0E0 loads from (name pointers; empty names fail to load).
+    static bool tables_dumped = false;
+    if (!tables_dumped && Ptr(kMenuState) && g_hud_obj.load()) {
+        tables_dumped = true;
+        struct T {
+            u64 base;
+            int n;
+            int stride;
+            int name_off;
+        };
+        const T tabs[] = {{0x5595e30, 0x4f, 16, 8}, {0x5595cc0, 0x16, 16, 8}, {0x5356ad0, 9, 8, 0}, {0x5356aa0, 6, 8, 0}};
+        for (const T& t : tabs) {
+            std::string line;
+            for (int i = 0; i < t.n; ++i) {
+                u64 first = 0, name = 0;
+                SafeGet(Guest(t.base + u64(i) * t.stride), &first);
+                SafeGet(Guest(t.base + u64(i) * t.stride + t.name_off), &name);
+                char s[48] = {};
+                if (name) {
+                    SafeRead(name, s, sizeof s - 1);
+                }
+                char b[96];
+                std::snprintf(b, sizeof b, " [%d 0x%llx '%s']", i, static_cast<unsigned long long>(first), s);
+                line += b;
+            }
+            Log("item-get probe: movie table 0x%llx:%s", static_cast<unsigned long long>(t.base), line.c_str());
+        }
+        // The GetItemList row functor's vtable (0x1BF7C20: local functor &0x5344970 over HUD rows).
+        std::string vt;
+        for (int i = 0; i < 8; ++i) {
+            u64 f = 0;
+            SafeGet(Guest(0x5344970 + 8ull * i), &f);
+            char b[32];
+            std::snprintf(b, sizeof b, " +0x%llx", static_cast<unsigned long long>(f ? f - Guest(0) : 0));
+            vt += b;
+        }
+        Log("item-get probe: GetItemList functor vtable 0x5344970:%s", vt.c_str());
+    }
+    int rows = -1;
+    u64 model = 0, cnt = 0;
+    if (const u64 hud = g_hud_obj.load(); hud && SafeGet(hud + 0xa88, &model) && model && SafeGet(model + 0x13a8, &cnt)) {
+        rows = static_cast<int>(cnt);
+    }
+    // 0x1BFB2A0's open edge (rows 0 -> n): *0x5578A38 < 1, menu +0x84 == 0, GSM +0x1544 == 0
+    // -> menu +0x25C = 1 (and a save request).
+    std::int32_t blk = -1, m84 = -1, m25c = -1;
+    u8 g1544 = 0xff;
+    SafeGet(Guest(0x5578a38), &blk);
+    if (menu) {
+        SafeGet(menu + 0x84, &m84);
+        SafeGet(menu + 0x25c, &m25c);
+    }
+    if (const u64 gsm = Ptr(0x5556678)) {
+        SafeGet(gsm + 0x1544, &g1544);
+    }
+    static std::int32_t last_blk = -2, last_m84 = -2, last_m25c = -2;
+    static int last_g1544 = -2;
+    static double last_rowlog = 0;
+    if (Now() - last_rowlog >= 5.0) {
+        last_rowlog = Now();
+        Log("item-get probe: ingameTop updates %llu, GetItemList row calls %u (max index %u)",
+            static_cast<unsigned long long>(g_hud_update_calls.load()), g_row_calls.load(), g_row_max_index.load());
+    }
+    if (rows != last_rows || blk != last_blk || m84 != last_m84 || m25c != last_m25c || g1544 != last_g1544) {
+        Log("item-get probe: HUD model rows %d (HUD 0x%llx); open gate *0x5578A38 %d, menu+0x84 %d, GSM+0x1544 %u, "
+            "menu+0x25C %d",
+            rows, static_cast<unsigned long long>(g_hud_obj.load()), blk, m84, g1544, m25c);
+        last_rows = rows;
+        last_blk = blk;
+        last_m84 = m84;
+        last_m25c = m25c;
+        last_g1544 = g1544;
+    }
+    if (n != last_n || static_cast<int>(up) != last_up || gate != last_gate) {
+        const double now = Now();
+        Log("item-get probe: %d entr%s in the dialog list, dialog %s, confirm check %s (%.2f s since the last change)", n,
+            n == 1 ? "y" : "ies", up ? "UP" : "down", gate ? "armed" : "held (player busy / no action-button man)",
+            now - since);
+        since = now;
+        last_n = n;
+        last_up = static_cast<int>(up);
+        last_gate = gate;
+    }
+}
+
 } // namespace
 
 void ItemsTick() {
     if (!g_on.load()) {
         return;
     }
+    ItemGetProbe();
     if (!g_test_offered && !g_test.empty()) {
         g_test_offered = true;
         std::lock_guard<std::mutex> lk(g_guest_mu);
