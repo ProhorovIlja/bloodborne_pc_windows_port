@@ -53,13 +53,13 @@ only 100% when it meets it.
 |---|---|
 | A. Session & joining | 70% |
 | B. World & travel | 72% |
-| C. Death & respawn | 57% |
-| D. Progress (anyone can progress) | 52% |
-| E. Services & UI | 82% |
-| F. Network & robustness | 73% |
+| C. Death & respawn | 64% |
+| D. Progress (anyone can progress) | 57% |
+| E. Services & UI | 88% |
+| F. Network & robustness | 72% |
 | G. BB-specific (chalice, insight, bath) | 27% |
 | H. Bloodborne rule (feels like SP in a party) | 67% |
-| **Overall (unweighted mean of rows)** | **~60%** |
+| **Overall (unweighted mean of rows)** | **~65%** |
 
 ## A. Session & joining
 
@@ -96,7 +96,7 @@ only 100% when it meets it.
 | C1 | Guest dies alone | Respawns in the same world at the last grace THEY rested at; session not terminated | Respawns alone at a lit lamp in the party's map, keeps echoes, no bloodstain; host plays on | 80 | b2_seamless.md §6.10-6.11 |
 | C2 | Host dies alone | Same rule as any player: respawns at their own last grace, the others play on | Session kept, but the WHOLE party is moved to the host's lamp (one load); guests keep HP and items | 50 | Next: host respawn without moving guests (hostdeath agent) |
 | C3 | Party wipe | Everyone respawns at their last grace; session kept (boss/invasion limbo ends on a wipe) | Same; verified | 90 | §6.8 r8-r15 |
-| C4 | Death penalty | Optional rot: 5 types, one picked at random per death, stacking, removed only by resting at a grace; stops one player dying endlessly while another keeps enemies from respawning | Vanilla echo loss for the host; guest keeps echoes; no debuff | 40 | Decide: bloodstain for the guest? configurable debuff? |
+| C4 | Death penalty | Optional rot: 5 types, one picked at random per death, stacking, removed only by resting at a grace; stops one player dying endlessly while another keeps enemies from respawning | Rot (on by default, System > Party rules, host's setting counts for the party): each death -10 % max HP, max 5 stacks, cleansed by the player's own lamp / headstone use, kept across restarts; one kind (max HP), not 5. Echoes: single-player bloodstain for everyone (user decision; hostdeath work); rot is independent of it | 85 | 2026-10-11 live (balance run 4): host death -> "Rot 1/5" toast, max HP 719 -> 647, lamp warp -> cleansed, 719; guest's tag shows "deaths 1, rot 1". Guest-side death not run live; more kinds (stamina, damage) open. docs/party/balance.md |
 | C5 | Spectate while dead | A death in a boss fight or invasion puts the player in limbo, spectating, until the party wipes or someone rests at a grace | None | 0 | |
 | C6 | Rejoin after a crash / redirect | Rejoin by item | ~4.5 s ring to client after the world is up; crash rejoin ~30 s | 80 | §6.11 |
 | C7 | Resting while others are in a boss room | They are removed from the boss room | A rest is a party move (host load), so nobody stays behind; not tested during a fight | 60 | Test during a boss fight |
@@ -111,7 +111,7 @@ only 100% when it meets it.
 | D4 | Items & pickups | Random drops instanced per player; persistent loot (bosses, scarabs) for everyone in the area; one-time items not re-granted if already owned | Summoned awards, item-get dialog, blood gems for guests | 75 | C3 |
 | D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests | 65 | Full NPC quest lines untested; campaign soak WIP |
 | D6 | Full campaign start to credits | Playable | Not yet soaked end to end | 30 | campaign_soak (edgetravel WIP) |
-| D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Vanilla co-op scaling only, not measured | 20 | Check; add Party setting |
+| D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Measured: BB scales only bosses (SpEffect 7500/7501: +50 % HP and status resist, +30 poise per cooperator, damage +0); normal enemies none. Six Party settings per extra hunter (System > Party rules: boss/enemy health and damage; all six incl. poise in the overlay's Party tab and bbport.ini - the System menu is at its 12-page limit): boss/enemy HP and poise in % of the vanilla boss step, damage +%; defaults harder than vanilla (boss HP 150 %, boss damage +10 %, enemy HP 50 %); negative poise = ERSC's staggerable note. Host's values to every peer (EVENT balance), rows 7500-7503 written on each, 7503 on every normal enemy | 75 | 2026-10-11 live (balance runs 2-4): host and guest both write identical rows and put 7503 on 149/149 enemies of m24_01; sample enemy max HP 520 -> 650 (x1.25, 1 cooperator) on the host. Boss fight with the new rows and damage / poise effects not measured live. docs/party/balance.md |
 | D8 | NPC dialogue / talk events synchronised | Yes | Story choices synced (C4); NPC talk with a guest present untested | 25 | Test NPC talk (Gilbert, Eileen) in party |
 | D9 | A grace rest resets the world for everyone | Yes | Lamp rest = host load: enemies respawn in the host's world; guests get the refill and HP (verified) | 85 | guest_services.md §3.3 |
 | D10 | Cutscenes play for the whole party | Synced talk events | Decision: everyone watches. Untested (K11 skips the clinic opening for guests) | 20 | |
@@ -121,7 +121,7 @@ only 100% when it meets it.
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
 | E1 | Rest / level / shop for guests | Everyone uses graces | Doll level-up, shops, workbench, storage; lamps + headstones (on by default); rest heals the guest | 85 | guest_services.md |
-| E2 | Party HUD / names | overhead_player_display: normal / none / ping / soul level / death count | Party HUD, toasts | 70 | No overhead names |
+| E2 | Party HUD / names | overhead_player_display: normal / none / ping / soul level / death count | Party HUD, toasts; overhead tags with their own setting (System > Party rules > Above companions): nothing / name / name + level / name + health bar / name + deaths (and rot); level, deaths, rot in a VITALS trailer; HUD HP now from the real HP fields (+0xf8/+0xfc) | 90 | 2026-10-11 live screenshots (balance run 4): host sees "Hunter1 Lv 37", guest sees "Hunter0 deaths 1, rot 1". Ping above heads not offered (Party members page has it) |
 | E3 | Map markers | Party shown on the map | n/a (BB has no map) | — | |
 | E4 | Item / summon messages fast | n/a | Fast multiplayer messages, no bell/sign waits | 90 | fast join patches |
 
@@ -170,4 +170,5 @@ only 100% when it meets it.
 - 2026-10-11: Bloodborne rule + section H added (user). Design decisions table (user's answers); rows A11, D10 added.
 - 2026-10-11: shared lamp for boss fights; per-player enemy drops; PvP host toggle as 100%+ milestone (section I, not counted in the mean).
 - 2026-10-11: I2 pings through walls with distance and player colours (100%+).
-- 2026-10-11: I3 world warper shader-cache builder (100%+). A10 friendly fire / PvP not wanted.
+- 2026-10-11: I3 world warper shader-cache builder (100%+).
+- 2026-10-11: C4 85 (rot), D7 75 (enemy scaling measured + settings), E2 90 (overhead display; reusable WorldToScreen + member colours for I2) - agent/balance, docs/party/balance.md.
