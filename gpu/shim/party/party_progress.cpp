@@ -2423,6 +2423,20 @@ bool ReadFlagOwnSave(u32 id, bool* value) {
     return store.Valid() && store.ReadOwnSave(id, value);
 }
 
+bool HostWorldFlag(u32 id, bool* value) {
+    const int key = PoolKeyOfId(id);
+    if (key < 0 || !WorldMirrorKey(key)) {
+        return false;
+    }
+    Global& g = G();
+    std::lock_guard<std::mutex> lk(g.mu);
+    if (!g.mirror.has_image()) {
+        return false;
+    }
+    *value = GetBit(g.mirror.Group(key).data(), id % kBitsPerBlock);
+    return true;
+}
+
 int FlagLoadMode() {
     const FlagStore store(Manager(), GameOps());
     return store.Valid() ? store.LoadMode() : -1;
