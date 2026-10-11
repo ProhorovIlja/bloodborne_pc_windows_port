@@ -54,12 +54,12 @@ only 100% when it meets it.
 | A. Session & joining | 86% |
 | B. World & travel | 82% |
 | C. Death & respawn | 79% |
-| D. Progress (anyone can progress) | 74% |
+| D. Progress (anyone can progress) | 75% |
 | E. Services & UI | 88% |
 | F. Network & robustness | 78% |
 | G. BB-specific (chalice, insight, bath) | 70% |
 | H. Bloodborne rule (feels like SP in a party) | 76% |
-| **Overall (unweighted mean of rows)** | **~79%** |
+| **Overall (unweighted mean of rows)** | **~80%** |
 
 ## A. Session & joining
 
@@ -98,7 +98,7 @@ only 100% when it meets it.
 | C3 | Party wipe | Everyone respawns at their last grace; session kept (boss/invasion limbo ends on a wipe) | Same; verified | 90 | §6.8 r8-r15 |
 | C4 | Death penalty | Optional rot: 5 types, one picked at random per death, stacking, removed only by resting at a grace; stops one player dying endlessly while another keeps enemies from respawning | Rot (on by default, System > Party rules; the host's setting counts for the party): each death adds a stack (max 5) of a random kind, max HP -10 % or max stamina -10 %; cleansed by the player's own lamp / headstone use; kept across restarts. 2 kinds, not ERSC's 5 (damage / discovery / vials would need SpEffect rows of our own). Echoes: single-player bloodstain for everyone (hostdeath); rot is independent of it | 95 | 2026-10-11 live: host death -> toast, max HP 719 -> 647, lamp warp -> cleansed (run 4); guest's own death in the host's world (boss runs): stacks 3 -> 4, "this one stamina": max stamina 100 -> 90, max HP 503 (70 %), toast "Rot 4/5: max HP -30 %, stamina -10 %". docs/party/balance.md |
 | C5 | Spectate while dead | A death in a boss fight or invasion puts the player in limbo, spectating, until the party wipes or someone rests at a grace | Limbo without a spectator camera: a death while a boss health bar is up (EMEVD 2003[11] HUD slots *0x5562878 +0x1658) waits - host: its death is taken and not revived; guest: its held death outlasts the grace - until the bar goes (then the respawn at the party's lamp: the host's), every member is down (wipe: party respawn at the host's lamp) or a load starts (a rest). The dead camera stays on the body | 50 | 2026-10-11 hostdeath hd13 (Cleric Beast): `host death in a boss fight (boss bar 0: name 500000 chr 1001409f hp 5277): limbo`, host_kill -> `the boss fight is over ... respawn at the lamp here`, revived; hd14c: guest `dead in a boss fight ... limbo`, then host death -> `every member is down too (1 of 1): a wipe`. Open: spectate camera on a living member; boss-room exit for the living on a rest (C7) |
-| C6 | Rejoin after a crash / redirect | Rejoin by item | ~4.5 s ring to client after the world is up; crash rejoin ~30 s after the restart (~34 s after the crash), ~15 s of it after the guest's world is up: the 26 s sign hold for the host's dead transport connection | 80 | 2026-10-11: join_timing.md (profile; another guest port failed - the host's game keeps the old address; early NR expiry experimental, off). Floor without the hold ~22 s after the crash |
+| C6 | Rejoin after a crash / redirect | Rejoin by item | ~4.5 s ring to client after the world is up; crash rejoin ~30 s after the restart (~34 s after the crash), ~15 s of it after the guest's world is up: the 26 s sign hold for the host's dead transport connection | 80 | 2026-10-11: join_timing.md (profile; the 26 s hold for the host game's dead transport connection dominates). Transport RE started (create hook, the scanned 'config copies' are dead memory); experimental, off by default |
 | C7 | Resting while others are in a boss room | They are removed from the boss room | A rest is a party move (host load), so nobody stays behind; not tested during a fight | 60 | Test during a boss fight |
 
 ## D. Progress: anyone can progress
@@ -106,7 +106,7 @@ only 100% when it meets it.
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
 | D1 | Boss kills count for everyone | Yes | Yes (K10); session kept after the kill; the guest sees the host's cleared boss (no boss, no bar) though its own save has it alive; a guest dying after / during the fight now respawns (it lay dead before) | 90 | 2026-10-11: b2_seamless.md §6.13 (watchdog live), event_flags.md §12 visual check with control run |
-| D2 | World state shared (doors, shortcuts, lamps) | Host's world; progression events completed online also progress each player's own world | Host world flags mirrored to guests live (~0.3 s); guest's own save gets C2 progress; boss state visually checked | 85 | event_flags.md §12. 2026-10-11 visual: boss passes; doors inconclusive (chosen doors looked open with and without the flag) |
+| D2 | World state shared (doors, shortcuts, lamps) | Host's world; progression events completed online also progress each player's own world | Host world flags mirrored to guests live (~0.3 s); guest's own save gets C2 progress; doors and boss state checked on screen | 92 | event_flags.md §12. 2026-10-11 visual with control runs: a door the host opened shows open on the guest (shut in the control); the host's cleared boss is absent for the guest |
 | D3 | Guest actions change the host's world | Yes *(verify)* | Guest levers / gates / doors: the host's game gets the guest's ObjAct kick natively (logged) and the object animates in the host's world; the guest's flag changes in its copy of the host's world go to the host as EVENT `world_action` (whitelisted shortcut / world-state / key / NPC flags, host re-validates against its map, rate limit, fuzzed) and into the guest's own save; kick replay when the host's game missed it | 80 | 2026-10-11 live: guest pulls lever 2411310 -> host log `ObjAct kick (another player) ... kick event 12410200` 0.07 s later, host's gate open on its screen (shots), 12410200 set by the host's own event; guest's own save 12410200=1 (world_actions.md 9). Not run: elevator, ladder, one-way door, illusory wall; a neighbour block's constructor flags stay local (own-block rule) |
 | D4 | Items & pickups | Random drops instanced per player; persistent loot (bosses, scarabs) for everyone in the area; one-time items not re-granted if already owned | Instanced world treasure (user decision): three patches spawn treasure for guests and let a guest's pickup set its flag; the world mirror shows each guest its OWN pickups, a guest's pickup goes to its own save only; enemy drops per player (each game rolls each enemy's drop, a guest keeps its full roll); boss rewards / key items for everyone present (C3), item-get dialog, blood gems | 75 | Live: treasure spawned for and taken by a guest in the host's world (Madman's Knowledge, Search Body, item-get on the guest; run 9); per-player enemy drops: the host's kill rolled on both games for the same enemy (handle 0x10014001: host role 3, guest role 6), the guest keeps its full roll (patch 0x17DD764). Own-save write of a guest pickup fixed after run 9, not re-run; a guest's own damage kill not run (world_actions.md 4, 9) |
 | D5 | Quests, NPCs, story | Progress is saved by the host's progression; quest progression "can be erratic" (FAQ advises solo + backups) | Story choices (C4), endings for summoned guests; soak: boss flags of 7 bosses in the guest's own save, late joiner catches up bosses, cutscenes for everyone (Blood Moon, Gehrman refusal, ending) | 70 | 2026-10-11 campaign_soak.md. NPC quest choices ("first choice counts for everyone") not covered; Gehrman refusal cutscene replayed twice on the guest (open 4) |
@@ -164,6 +164,7 @@ only 100% when it meets it.
 
 ## Change log
 
+- 2026-10-11 (overlay, 0.5.2): D2 85 -> 92 (door opened by the host seen open by the guest, control shut); C6 stays 80 (transport RE started, experimental off).
 - 2026-10-11 (overlay): F2 55 -> 75 (UDP hole punching with guest codes, reliable UDP link, NAT sim live), D1 85 -> 90 (guest death after a boss fixed; boss state visual), D2 80 -> 85 (boss visual; doors inconclusive), C6 80 (profiled; the 26 s hold remains).
 - 2026-10-11: table created from the state of the integration branch at 580fbd3.
 - 2026-10-11: ERSC column checked against ersc-docs.github.io (settings + FAQ) and the Nexus
