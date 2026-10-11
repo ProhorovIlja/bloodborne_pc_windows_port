@@ -536,6 +536,7 @@ void HostTick(const GameSnapshot& s) {
             continue;
         }
         std::string list;
+        bool applied_any = false;
         auto apply = [&](std::uint32_t id, bool v) {
             if (!WorldActionAllowed(id, !v, s.map_id)) {
                 ++st.stats.refused;
@@ -546,6 +547,7 @@ void HostTick(const GameSnapshot& s) {
             progress::ReadFlag(id, &before);
             const bool ok = before == v || progress::WriteFlagOwnSave(id, v);
             st.stats.applied += ok && before != v ? 1 : 0;
+            applied_any = applied_any || (ok && before != v);
             list += " " + std::to_string(id) + (v ? "=1" : "=0") + (before == v ? "(was)" : ok ? "" : "(NOT written)") +
                     "[" + progress::CategoryName(progress::CategoryOf(id)) + "]";
         };
@@ -557,6 +559,12 @@ void HostTick(const GameSnapshot& s) {
         }
         for (std::int32_t k : r.kick) {
             ReplayKick(slot, k, Now());
+        }
+        if (applied_any) {
+            // The host's own save holds the host's world: without a request the change waited for
+            // the game's next autosave, and a quit soon after lost it (NPC quest flags read 0 on the
+            // host's Continue while the guest's own save had them).
+            RequestGameSave("guest world action (host's world)");
         }
         if (!list.empty()) {
             Log("host: slot %d changed the host's world (guest in %s, host in %s):%s", slot, MapName(r.map).c_str(),
