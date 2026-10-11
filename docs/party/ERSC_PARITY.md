@@ -52,14 +52,14 @@ only 100% when it meets it.
 | Area | Parity |
 |---|---|
 | A. Session & joining | 86% |
-| B. World & travel | 82% |
+| B. World & travel | 86% |
 | C. Death & respawn | 79% |
 | D. Progress (anyone can progress) | 74% |
 | E. Services & UI | 88% |
 | F. Network & robustness | 78% |
 | G. BB-specific (chalice, insight, bath) | 70% |
 | H. Bloodborne rule (feels like SP in a party) | 76% |
-| **Overall (unweighted mean of rows)** | **~79%** |
+| **Overall (unweighted mean of rows)** | **~80%** |
 
 ## A. Session & joining
 
@@ -84,8 +84,8 @@ only 100% when it meets it.
 | B1 | No tether / roam anywhere | All fog walls / barriers (and their teleports) removed; the whole map is open and the party may split up | Confinement walls opened; players can stand in different map blocks (stale-hit crash fixed); the soak walked the host across Cathedral Ward / Great Bridge with the guest, and hopped through 9 areas | 78 | 2026-10-11: travel.md §7 (146 m split held 2+ min), campaign_soak.md rows 2-10 (no crash in 14 runs). Real stick walk-away not tested |
 | B2 | Fog / boss gates | Gone (no multiplayer fog walls) | Fog gates by pad verified | 80 | b2_seamless.md §6.8 |
 | B3 | Fast travel | Warping never ends the session; players may split up, so warps are per player *(per-player warp inferred)* | Each lamp / headstone / Hunter's Mark asks "Travel with the party?" (game dialog, cursor on YES). YES: party move (one load, B2; a move inside the loaded map is an in-world warp for everyone). NO: only that player moves (split_travel.md) | 90 | split11-13, inworld1-2 (2026-10-11). Open: Mark choice for guests needs BB_PARTY_GUEST_MARK |
-| B4 | Loading screens | One load, no rejoin | A real map change: one load (B2, guests stay clients). Same-map moves (Mark / lamp of this map, party move, a host load into the guest's map) are chr warps: no loading screen | 92 | inworld1-2: host Mark + guest lamp in m24_01, host and guest `in-world warp ... no load`. Open: same-map death respawn (hostdeath revive) |
-| B5 | Independent travel (split party travels apart) | Players may split up (stated); each respawns at their own last grace | Guest alone: into the host's area = one load for the guest only; elsewhere (Dream) = alone host-world load, host does not load; host alone: guests stay, no load; meeting again rebuilds the chrs without a load; session, watchdog, K5, OnLeave_Limit kept | 70 | split13 (guest m24_01 -> Dream -> m24_01, host never loads), split14 (host Dream and back, guest never loads). Open: enemy/flag authority in a map the host is not in (D3), 3+ players apart, guest death apart |
+| B4 | Loading screens | One load, no rejoin | A real map change: one load (B2, guests stay clients). Every lamp warp to the loaded map (lamp menu, headstone, Mark, a host request, test steps) is a chr warp with a camera reset: no loading screen; at the lamp's own spot a no-op | 94 | inworld1-2, vis6-7 (screenshots: no load, camera behind the player). Open: Lua stage warps inside the map, same-map death respawn (hostdeath) |
+| B5 | Independent travel (split party travels apart) | Players may split up (stated); each respawns at their own last grace | Guest alone: into the host's area = one load for the guest only; elsewhere (Dream) = alone host-world load, host does not load; host alone: guests stay, no load; meeting again rebuilds the chrs without a load (records exchanged; draw bit fix: no invisible guest); 3 players apart (host meets both, guests in two maps); a lone guest's world actions go to the host (worldact, checked against its own map); alone travel sets the own last lamp; guest Hunter's Mark on by default | 78 | split13-14, split21-23 (3p), vis4 (meet visible, screenshots). Off by default: enemy kill reconciliation (BB_PARTY_SPLIT_ENEMIES, not verified live). Open: boss kills while apart (D3) |
 | B6 | Scripted transitions, Hunter's Mark, headstones | n/a | All keep the session | 85 | edgetravel 6 cases |
 | B7 | Mount / map waypoints | Torrent for everyone; map waypoints synchronised | n/a (no mount, no map in BB) | — | |
 
@@ -180,3 +180,4 @@ only 100% when it meets it.
 - 2026-10-11: B3 90, B4 92, B5 70, H1 78 (splittravel): the lamp / headstone / Hunter's Mark question, alone travel for host and guests, same-map moves without a loading screen (split_travel.md).
 - 2026-10-11 (guestprog): D3 80, D4 75, D8 75, G2 50, H5 75 - guest world actions, NPC talk, instanced pickups, encounter Insight, Blood Moon catch-up (world_actions.md).
 - 2026-10-11: C1 85, C2 85, C5 50, H1 85, H4 80 (agent/hostdeath, b2_seamless.md §6.13): host revived in place at its lamp (guests stay), host death to another map alone, boss-fight limbo for host and guest, guest bloodstain.
+- 2026-10-11: B4 94, B5 78 (splittravel, 0.5.2): same-map hook for every lamp warp, camera reset, the invisible-guest draw bit, meets exchange records, 3 players apart, worldact for apart guests; enemy reconciliation off by default.
