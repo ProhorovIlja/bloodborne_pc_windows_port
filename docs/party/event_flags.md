@@ -319,6 +319,11 @@ after the guest's m24_01 load: host and guest non-zero mirror groups 39 = 39, **
 except 2010/2020 (session, masked by design). Guest-only bits (guest's own runtime, kept): 5500-5521
 and 9042-9075 (set by the guest's game at its load), 3503, its m24_01 / m27 event completions.
 
+Live door flags: host (Dream, guest present) `set_flag=12400070:12410116` (a Cathedral Ward and a
+Central Yharnam door, shortcut_door) at +55.31 s -> guest `world mirror: blocks changed by the host
+(block:bits): 12400:1 12410:1` at +55.60 s in load mode 1; the guest's next dump has both in its
+visible (overlay) tree. (A door's model follows at the next load of that map: "reproduce" events.)
+
 **Effects seen:** the guest's Hunter's Dream headstone lists the host's lamps (7: 1st Floor
 Sickroom ... Old Yharnam) and no longer crashes; choosing a lamp moves the party (guest_services.md
 3.3). The world lamp prompt is **not** a flag question: see guest_services.md 3.3 (lamp type).
