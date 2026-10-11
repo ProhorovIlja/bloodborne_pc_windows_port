@@ -57,9 +57,9 @@ only 100% when it meets it.
 | D. Progress (anyone can progress) | 57% |
 | E. Services & UI | 88% |
 | F. Network & robustness | 72% |
-| G. BB-specific (chalice, insight, bath) | 27% |
+| G. BB-specific (chalice, insight, bath) | 37% |
 | H. Bloodborne rule (feels like SP in a party) | 67% |
-| **Overall (unweighted mean of rows)** | **~66%** |
+| **Overall (unweighted mean of rows)** | **~67%** |
 
 ## A. Session & joining
 
