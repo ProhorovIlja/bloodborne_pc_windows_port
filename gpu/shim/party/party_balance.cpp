@@ -51,6 +51,7 @@ using Clock = std::chrono::steady_clock;
 
 constexpr u64 kSlotWorldChrMan = 0x553e878;
 constexpr u64 kMaxHpRate = 0x17e46e0;
+constexpr u64 kMaxStaminaRate = 0x17e4a20;  // float(list): the SpEffects' maxStaminaRate (+0x18)
 constexpr u64 kRemoveSpEffect = 0x17e1d90;
 constexpr u32 kBossRow0 = 7500;   // 7500 + k: k + 1 cooperators
 constexpr u32 kEnemyRow = 7503;   // unused in 1.09
@@ -98,8 +99,12 @@ bool g_have_host = false;
 Rules g_host;
 
 std::atomic<u64> g_rot_list{0};         // the local player's SpEffect list (rate hook)
-std::atomic<float> g_rot_factor{1.0f};  // 1 - 0.1 * stacks while rot is on
-std::atomic<int> g_stacks{0}, g_deaths{0};
+std::atomic<float> g_rot_factor{1.0f};  // max HP: 1 - 0.1 * health stacks while rot is on
+std::atomic<float> g_rot_st_factor{1.0f};  // max stamina: 1 - 0.1 * stamina stacks
+std::atomic<int> g_stacks{0}, g_deaths{0};  // all stacks (health + stamina)
+std::atomic<int> g_st_stacks{0};            // of them: stamina rot
+void* g_st_rate_orig = nullptr;
+bool g_st_hooked = false;
 std::atomic<bool> g_rest_pending{false};
 std::atomic<bool> g_hooked{false};
 using RateFn = float(BB_COOP_SYSV*)(u64, u64);
@@ -118,6 +123,7 @@ struct TickState {
     Doping written[4];
     bool have_written[4]{};
     int hp_logged_factor = -1, hp_logged_max = -1;
+    int hits = 0;
     std::string toast;            // a rot notice waiting for the respawn
     Clock::time_point toast_at{};  // alive in the world since  // rot factor (percent) of the last "max HP now" line
     Clock::time_point factor_since{};
@@ -144,6 +150,8 @@ void LoadRot() {
     std::string key;
     int v = 0;
     if (f >> key >> v && key == "stacks") g_stacks = std::clamp(v, 0, kRotMaxStacks);
+    int st = 0;
+    if (f >> key >> st && key == "stamina") g_st_stacks = std::clamp(st, 0, g_stacks.load());
 }
 
 void SaveRot() {
@@ -155,13 +163,20 @@ void SaveRot() {
 }
 
 void UpdateRotFactor(const Rules& r) {
-    g_rot_factor = r.rot ? RotHpFactor(g_stacks.load()) : 1.0f;
+    g_rot_factor = r.rot ? RotHpFactor(g_stacks.load() - g_st_stacks.load()) : 1.0f;
+    g_rot_st_factor = r.rot ? RotHpFactor(g_st_stacks.load()) : 1.0f;
 }
 
 // ---- Hooks ----
 BB_COOP_SYSV float RateHook(u64 list, u64 independent) {
     float r = reinterpret_cast<RateFn>(g_rate_orig)(list, independent);
     if (list && list == g_rot_list.load(std::memory_order_relaxed)) r *= g_rot_factor.load(std::memory_order_relaxed);
+    return r;
+}
+
+BB_COOP_SYSV float StaminaRateHook(u64 list) {
+    float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_st_rate_orig)(list);
+    if (list && list == g_rot_list.load(std::memory_order_relaxed)) r *= g_rot_st_factor.load(std::memory_order_relaxed);
     return r;
 }
 
@@ -258,6 +273,7 @@ void WriteParams(const Rules& r, int n) {
 }
 
 // ---- Enemies ----
+std::string g_boss_line;  // the last boss line logged (only changes are logged)
 u64 g_sample = 0;
 u32 g_sample_handle = ~0u;
 int g_sample_logs = 0;
@@ -294,6 +310,22 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
             const bool doped = HasEffect(chr, 7500) || HasEffect(chr, 7501) || HasEffect(chr, 7502);
             if (doped || boss_soul) {
                 ++bosses;
+                if (doped) {  // evidence: the boss's HP with the party's doping row (same on every peer)
+                    const u64 dm = Field<u64>(Field<u64>(chr, 0x3b0), 0x20);
+                    const int dope = HasEffect(chr, 7502) ? 7502 : HasEffect(chr, 7501) ? 7501 : 7500;
+                    u64 node = 0;
+                    HasEffect(chr, dope, &node);
+                    const u64 list = Field<u64>(chr, 0x1c8);
+                    char b[200];
+                    std::snprintf(b, sizeof b, "boss chr %x: SpEffect %d (flags %x): HP %d / %d base %d, rate %.3f",
+                                  Field<u32>(chr, 8, ~0u), dope, Field<u32>(node, 0x1c), Field<int>(dm, 0xf8, -1),
+                                  Field<int>(dm, 0xfc, -1), Field<int>(dm, 0x100, -1),
+                                  double(list && g_rate_orig ? reinterpret_cast<RateFn>(g_rate_orig)(list, 0) : -1.0f));
+                    if (g_boss_line != b) {
+                        g_boss_line = b;
+                        Log("%s", b);
+                    }
+                }
                 if (HasEffect(chr, int(kEnemyRow)) && RemoveEffect(chr, int(kEnemyRow))) ++removed;
                 continue;
             }
@@ -402,8 +434,15 @@ void Init() {
                         &g_rate_orig, "balance: max HP rate (rot)")) {
         g_hooked = true;
     }
+    // The second rot kind (ERSC has five): max stamina, through the stamina rate 0x17e4a20.
+    if (ReplacePrologue(kMaxStaminaRate, {0x55, 0x48, 0x89, 0xe5, 0x48, 0x83, 0xec, 0x10},
+                        reinterpret_cast<const void*>(&StaminaRateHook), &g_st_rate_orig,
+                        "balance: max stamina rate (rot)")) {
+        g_st_hooked = true;
+    }
     SetLampUseObserver(&OnLampUse);
-    Log("on: rot hook %s, %d rot stack(s) kept from the last game", g_hooked ? "in" : "NOT in", g_stacks.load());
+    Log("on: rot hooks HP %s, stamina %s; %d rot stack(s) (%d stamina) kept from the last game",
+        g_hooked ? "in" : "NOT in", g_st_hooked ? "in" : "NOT in", g_stacks.load(), g_st_stacks.load());
 }
 
 void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
@@ -434,20 +473,29 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     if (in_world && s.player == st.last_player && st.last_hp > 0 && hp == 0 && max_hp > 1) {
         ++g_deaths;
         st.last_death = now;
+        bool stamina_kind = false;
         if (r.rot && g_stacks.load() < kRotMaxStacks) {
+            // One kind picked at random per death (ERSC): max HP or, with the hook in, max stamina.
+            stamina_kind = g_st_hooked && (std::chrono::steady_clock::now().time_since_epoch().count() >> 10) % 2 == 1;
             ++g_stacks;
+            if (stamina_kind) ++g_st_stacks;
             SaveRot();
         }
-        const int k = g_stacks.load();
-        Log("death %d; rot %s, %d stack(s): max HP x%.2f", g_deaths.load(), r.rot ? "on" : "off", k,
-            double(RotHpFactor(k)));
+        const int k = g_stacks.load(), ks = g_st_stacks.load(), kh = k - ks;
+        Log("death %d; rot %s, %d stack(s) (this one %s): max HP x%.2f, max stamina x%.2f", g_deaths.load(),
+            r.rot ? "on" : "off", k, stamina_kind ? "stamina" : "health", double(RotHpFactor(kh)), double(RotHpFactor(ks)));
         if (r.rot) {
             char b[160];
-            std::snprintf(b, sizeof b, "Rot %d/%d: max HP -%d %% until you rest at a lamp", k, kRotMaxStacks,
-                          k * kRotHpPercentPerStack);
+            std::snprintf(b, sizeof b, "Rot %d/%d: max HP -%d %%, stamina -%d %% until you rest at a lamp", k,
+                          kRotMaxStacks, kh * kRotHpPercentPerStack, ks * kRotHpPercentPerStack);
             st.toast = b;  // shown once the player is back on its feet (the death's travel notice comes first)
             st.toast_at = Clock::time_point{};
         }
+    }
+    // Evidence for damage scaling: the local player's hits (first 40 per game).
+    if (in_world && s.player == st.last_player && st.last_hp > 0 && hp >= 0 && hp < st.last_hp && st.hits < 40) {
+        ++st.hits;
+        Log("hit: HP %d -> %d (-%d), max %d", st.last_hp, hp, st.last_hp - hp, max_hp);
     }
     if (!st.toast.empty()) {
         if (!(in_world && hp > 0)) {
@@ -467,8 +515,9 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         if (st.last_death != Clock::time_point{} && since_death < 20.0) {
             Log("lamp warp %.0f s after a death: the respawn, not a rest", since_death);
         } else if (g_stacks.load() > 0) {
-            Log("lamp rest: rot cleansed (%d stack(s))", g_stacks.load());
+            Log("lamp rest: rot cleansed (%d stack(s), %d stamina)", g_stacks.load(), g_st_stacks.load());
             g_stacks = 0;
+            g_st_stacks = 0;
             SaveRot();
             if (r.rot) party::status::SetLastEvent("The rot is cleansed");
         }
@@ -476,7 +525,8 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     UpdateRotFactor(r);
     // Evidence: the local max HP once a rot change has settled (3 s, in the world).
     {
-        const int f = static_cast<int>(std::lround(g_rot_factor.load() * 100.0f));
+        const int f = static_cast<int>(std::lround(g_rot_factor.load() * 100.0f)) +
+                      1000 * static_cast<int>(std::lround(g_rot_st_factor.load() * 100.0f));
         if (f != st.last_factor) {
             st.last_factor = f;
             st.factor_since = now;
@@ -485,7 +535,8 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
             std::chrono::duration<double>(now - st.factor_since).count() >= 3.0) {
             st.hp_logged_factor = f;
             st.hp_logged_max = max_hp;
-            Log("max HP now %d (HP %d), rot factor %d %% (%d stack(s))", max_hp, hp, f, g_stacks.load());
+            Log("max HP now %d (HP %d), max stamina %d, rot factor HP %d %% stamina %d %% (%d stack(s))", max_hp, hp,
+                Field<int>(dm, 0x138, -1), f % 1000, f / 1000, g_stacks.load());
         }
     }
     g_rot_list.store(in_world ? Field<u64>(s.player, 0x1c8) : 0, std::memory_order_relaxed);
