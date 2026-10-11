@@ -511,3 +511,39 @@ instances (a port / renderer matter, not party state). Not fixed here; the probe
 the next step (a foreground run with input to see whether the element ever draws in the port).
 Note for shot.py: the watcher only reads log lines written while it runs (start it with the run,
 `--seconds` longer than any queue wait).
+
+Bisect (2026-10-11, coordinator's list):
+* Window focus: the game cannot see it (`sceSystemServiceGetStatus` always reports foreground;
+  `BB_WINDOW_BACKGROUND` only makes the SDL window non-focusable).
+* Party patches (fast messages / hidden banners): ruled out - a **solo** run without `BB_PARTY`
+  (patches: Skip Online/Offline Choice, Skip Intro, Intel Black Tonemap Fix only; native award via
+  `BB_PARTY_ITEMS_TEST`) shows the same: list, dialog up, HUD rows, and no box (r9).
+* Upscaler / UI composition: `BB_UPSCALER=none` (no UI composition) - no box either (r12).
+* The empty-name movie loads at boot (`open(/app0/dvdroot_ps4/menu/.gfx) -> not found`, x3) are
+  the **Skip Intro** patch: it zeroes the logo movie names `Logo_Fromsoft` / `Logo_Jstudio` /
+  `Logo_SCE` (0x4999138 / 0x4999154 / 0x499916E, loaded by name through 0x1F604F0 from 0x1F6052D);
+  unrelated to the item-get box.
+* The box is the `GetItemList` clip of `menu/fe.gfx` (root depth, placed at stage (954, 785),
+  bottom centre; sprite 240 = five rows `Item_0_0..Item_4_0`, sprite 239 = one row: background,
+  RepositoryIcon, ItemIcon, ItemNum, ItemName; one frame, no animation). The HUD update
+  `0x1BF7C20` binds it every frame (`GetItemList`, row template `Item_%d_0`, binder `0x1B16D10`)
+  to the HUD model rows through the functor at vtable `0x5344970`, whose row method `0x1C02290`
+  sets a row visible with icon, `ItemName` text and `ItemNum` when the row's count (+0x40) > 0.
+  Probe (r14, solo): the ingameTop update runs ~30x/s and calls the row method for rows 0..4
+  (5 per update) while the model holds the award - the game's whole data path to Scaleform is
+  live, and still nothing is drawn at the bottom centre. Next: a frame capture (RenderDoc) of a
+  foreground run with the list up, to see whether the row draws are issued and what they render.
+
+**Resolved (2026-10-11): the box was always drawn; the screenshots were cropped.** A full-resolution
+dump of the presented frame (`BB_FINAL_DUMP_TRIGGER`, r17, solo) shows the dialog at the bottom
+centre: `Poison Knife 8` and the `OK` prompt. `tools/mp/shot.py` ran DPI-unaware: on this 200 %
+display `GetClientRect` gave the logical size (416x234) of an 833x468 client while `PrintWindow`
+drew physical pixels, so every shot was only the top-left quarter of the frame (the HUD gauges -
+which is why nothing looked wrong - but never the bottom-centre box or the top-right Insight /
+echoes counter). Fix: `shot.py` makes itself per-monitor DPI aware before enumerating windows.
+Frame capture (`BB_CAPTURE_TRIGGER`, r16) agrees: after the give the UI pass gains the row
+background (masked by a Scaleform stencil pass) and 4 text draws from the glyph cache.
+Live (r18, 2 instances, guest summoned, fixed shot.py, 2 s after each give): host and guest show
+the same dialog - `Clear Deep Sea 1` (the host's blood gem, recreated on the guest), then
+`Clear Deep Sea 1` + `Poison Knife 8` with `OK`. No game or port change was needed; the
+bisect notes above stay as the record of what was ruled out.
