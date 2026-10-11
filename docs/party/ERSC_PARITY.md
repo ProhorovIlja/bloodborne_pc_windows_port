@@ -30,9 +30,9 @@ only 100% when it meets it.
 |---|---|
 | Travel by lamp / headstone / Hunter's Mark | Ask at the lamp each time: "Travel alone" or "Travel with party" |
 | Death outside a boss fight | Every player, host included, respawns at their OWN last lamp (even in another map); the others play on |
-| Death during a boss fight | Limbo: spectate until the boss dies, the party wipes, or someone rests |
+| Death during a boss fight | Limbo: spectate until the boss dies, the party wipes, or someone rests. Boss fights use a SHARED lamp: after a boss-fight death or wipe everyone respawns at the same lamp (changed 2026-10-11) |
 | Echoes on death | Like single-player for everyone: echoes drop into a recoverable bloodstain |
-| World item pickups | Instanced per player: each player can take each item once into their own save |
+| Item pickups and enemy drops | Instanced per player: each player can take each world item once into their own save, and every enemy drop is per player too (changed 2026-10-11) |
 | NPC quest choices | Shared: the first choice made by anyone applies to the host's world and every player's save |
 | Guest behind the host in story | Guest's own save catches up fully (bosses, Blood Moon, lamps, shortcuts) |
 | Saves | Everyone uses a separate party save; single-player saves untouched |
@@ -45,7 +45,7 @@ only 100% when it meets it.
 | Cutscenes | Play for everyone in the party |
 | Joining during a boss fight / cutscene | Joiner waits outside (host's last lamp / fog) until it ends |
 | Party size | Max 4 players (host + 3) for now; 100% on A7 = 4 verified live |
-| Friendly fire / PvP, invasions | Not wanted |
+| Friendly fire / PvP, invasions | Not part of 100%. PvP / friendly fire the host can switch on and off is a "100%+" milestone (section I) |
 
 ## Summary
 
@@ -56,7 +56,7 @@ only 100% when it meets it.
 | C. Death & respawn | 64% |
 | D. Progress (anyone can progress) | 57% |
 | E. Services & UI | 88% |
-| F. Network & robustness | 73% |
+| F. Network & robustness | 72% |
 | G. BB-specific (chalice, insight, bath) | 27% |
 | H. Bloodborne rule (feels like SP in a party) | 67% |
 | **Overall (unweighted mean of rows)** | **~65%** |
@@ -74,7 +74,7 @@ only 100% when it meets it.
 | A7 | Player count | 1-6 players (host + 5) | 3 live-verified; 4 coded (party_fourp), not live (needs 4 slots) | 50 | Target 4 (user decision); 5-6 not planned |
 | A8 | Settings in game | ersc_settings.ini: [GAMEPLAY] allow_invaders, death_debuffs, allow_summons, overhead_player_display; [SCALING]; [PASSWORD]; [SAVE]; [LANGUAGE] | All settings in the game's own System menu, Party pages | 90 | bbport_game_menu |
 | A9 | Version check | Same mod + game version required | Party protocol version checked on join (kLinkProtocolVersion), clear reject reason | 70 | Build/patch-set mismatch beyond the protocol number not checked |
-| A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Not wanted (user, 2026-10-11) |
+| A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Moved to the 100%+ milestone (I1) |
 | A11 | Joining during a boss fight / cutscene | Joiner spawns near the host | Decision: wait outside until it ends. Not implemented | 0 | |
 
 ## B. World & travel
@@ -154,10 +154,19 @@ only 100% when it meets it.
 | H4 | No unnecessary respawns | Only the dead player respawns; enemies reset on a grace rest | Guest death respawns only the guest; host death respawns the whole party; enemies reset on a lamp rest only | 60 | C2 |
 | H5 | Character freedom as in single-player | Every player has their own character, inventory, levels | Guests: Doll level-up, shops, workbench, storage, own inventory and consumables. Untested: runes / Memory Altar, covenants, gestures, outfits, bath shop and Insight purchases, chalice ritual by a guest | 70 | G2, guest services audit |
 
+## I. 100%+ milestone (after every row above is 100%)
+
+| # | Feature | ERSC | bbport now | % | Evidence / next |
+|---|---|---|---|---|---|
+| I1 | PvP / friendly fire the host can switch on and off | Judicator's Rulebook (host toggles friendly fire / PvP) | None | — | Not started; after 100% |
+| I2 | Pings: mark a spot / see party members through walls | ERSC syncs map waypoints; overhead_player_display has a "player ping" mode | None. Plan: a ping button places a marker; every party member (and each ping) shows through walls with its distance in metres and the player's colour. Drawn in world space, either by the game's Scaleform HUD (world-to-screen transformed, like enemy HP bars / lock-on) or by the port's overlay projecting world positions with the game camera's view-projection | — | Not started; after 100%. Overlaps E2 (names over party members): reuse its projection |
+
 ## Change log
 
 - 2026-10-11: table created from the state of the integration branch at 580fbd3.
 - 2026-10-11: ERSC column checked against ersc-docs.github.io (settings + FAQ) and the Nexus
   description; rows A9, A10, B7, C7, D8, D9, F6 added.
-- 2026-10-11: C4 85 (rot), D7 75 (enemy scaling measured + settings), E2 90 (overhead display) - agent/balance, docs/party/balance.md.
-- 2026-10-11: Bloodborne rule + section H added (user). Design decisions table (user's answers); rows A11, D10 added. A10 friendly fire / PvP not wanted.
+- 2026-10-11: Bloodborne rule + section H added (user). Design decisions table (user's answers); rows A11, D10 added.
+- 2026-10-11: shared lamp for boss fights; per-player enemy drops; PvP host toggle as 100%+ milestone (section I, not counted in the mean).
+- 2026-10-11: I2 pings through walls with distance and player colours (100%+). A10 friendly fire / PvP not wanted.
+- 2026-10-11: C4 85 (rot), D7 75 (enemy scaling measured + settings), E2 90 (overhead display; reusable WorldToScreen + member colours for I2) - agent/balance, docs/party/balance.md.
