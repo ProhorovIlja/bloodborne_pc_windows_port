@@ -13,6 +13,13 @@ behaviour marked *(verify)* is from memory or weak sources and is not confirmed 
 
 Last update: 2026-10-11 (integration `windows-upstream-0.5` @ 580fbd3).
 
+## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
+
+Seamless co-op must feel like a party making progress the way single-player does: no unnecessary
+loading screens, summons, lost progress or respawns, and every player is free to build their
+character exactly as in single-player play. Every row below is judged against this rule too: a row is
+only 100% when it meets it.
+
 ## Summary
 
 | Area | Parity |
@@ -24,6 +31,7 @@ Last update: 2026-10-11 (integration `windows-upstream-0.5` @ 580fbd3).
 | E. Services & UI | 82% |
 | F. Network & robustness | 48% |
 | G. BB-specific (chalice, insight, bath) | 27% |
+| H. Bloodborne rule (feels like SP in a party) | 67% |
 | **Overall (unweighted mean of rows)** | **~62%** |
 
 ## A. Session & joining
@@ -107,8 +115,19 @@ Last update: 2026-10-11 (integration `windows-upstream-0.5` @ 580fbd3).
 | G2 | Insight, Messengers' bath, Insight items | — | Untested for guests | 10 | |
 | G3 | Blood Moon / world phase changes | — | Untested in party (part of the soak) | 25 | |
 
+## H. Bloodborne rule: a party that plays like single-player
+
+| # | Feature | ERSC | bbport now | % | Evidence / next |
+|---|---|---|---|---|---|
+| H1 | No unnecessary loading screens | One load per warp; a death loads only the dead player | One load per party travel (B2); a host death still loads every guest | 65 | C2 (hostdeath) removes the guests' load |
+| H2 | No repeated summons | Join once per play session | The session survives travel, bosses, deaths and wipes; Continue party game re-joins automatically; a crash or redirect needs a re-join (~4.5 s) | 75 | A4, C6 |
+| H3 | No progress lost by anyone | Online progression also progresses your own world | Guest's own save gets kills, flags, items, story and lamps (C2/C3/C4 + mirror); full campaign not soaked; Insight / echoes for the guest partly unverified | 65 | D6 soak, G2 |
+| H4 | No unnecessary respawns | Only the dead player respawns; enemies reset on a grace rest | Guest death respawns only the guest; host death respawns the whole party; enemies reset on a lamp rest only | 60 | C2 |
+| H5 | Character freedom as in single-player | Every player has their own character, inventory, levels | Guests: Doll level-up, shops, workbench, storage, own inventory and consumables. Untested: runes / Memory Altar, covenants, gestures, outfits, bath shop and Insight purchases, chalice ritual by a guest | 70 | G2, guest services audit |
+
 ## Change log
 
 - 2026-10-11: table created from the state of the integration branch at 580fbd3.
 - 2026-10-11: ERSC column checked against ersc-docs.github.io (settings + FAQ) and the Nexus
   description; rows A9, A10, B7, C7, D8, D9, F6 added.
+- 2026-10-11: Bloodborne rule + section H added (user). A10 friendly fire / PvP not wanted.
