@@ -17,14 +17,14 @@ Last update: 2026-10-11 (integration `windows-upstream-0.5` @ 580fbd3).
 
 | Area | Parity |
 |---|---|
-| A. Session & joining | 70% |
+| A. Session & joining | 77% |
 | B. World & travel | 72% |
 | C. Death & respawn | 57% |
 | D. Progress (anyone can progress) | 55% |
 | E. Services & UI | 82% |
 | F. Network & robustness | 48% |
 | G. BB-specific (chalice, insight, bath) | 27% |
-| **Overall (unweighted mean of rows)** | **~60%** |
+| **Overall (unweighted mean of rows)** | **~62%** |
 
 ## A. Session & joining
 
@@ -39,7 +39,7 @@ Last update: 2026-10-11 (integration `windows-upstream-0.5` @ 580fbd3).
 | A7 | Player count | 1-6 players (host + 5) | 3 live-verified; 4 coded (party_fourp), not live (needs 4 slots) | 50 | 5-6 not planned yet |
 | A8 | Settings in game | ersc_settings.ini: [GAMEPLAY] allow_invaders, death_debuffs, allow_summons, overhead_player_display; [SCALING]; [PASSWORD]; [SAVE]; [LANGUAGE] | All settings in the game's own System menu, Party pages | 90 | bbport_game_menu |
 | A9 | Version check | Same mod + game version required | Party protocol version checked on join (kLinkProtocolVersion), clear reject reason | 70 | Build/patch-set mismatch beyond the protocol number not checked |
-| A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | 0 | Low priority |
+| A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Not wanted (user, 2026-10-11) |
 
 ## B. World & travel
 
