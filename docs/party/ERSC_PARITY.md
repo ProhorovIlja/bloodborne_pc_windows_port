@@ -140,7 +140,7 @@ only 100% when it meets it.
 
 | # | Feature | ERSC analogue | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| G1 | Chalice dungeons in party | Catacombs work in co-op | Guest summoned into the host's dungeon live; no full clear; two one-off crashes | 45 | chalice full clear (bossk10 WIP) |
+| G1 | Chalice dungeons in party | Catacombs work in co-op | 2026-10-11: Pthumeru layer 1 cleared live in a party (runs c11-c15): host ritual -> guest summoned by quick join; lever + door; layer boss debug kill keeps the session (K10 both roles, guest send-home dropped); guest gets its own boss lots; the lift down to the next layer carries host and guest (y 31.5 -> 10.5, both alive); lamp exit puts both in the Dream with one load (B2 re-join). Guest ritual: chalices now shared both ways, so the host opens the altar and glyph-searches the guest's dungeon (c17: altar menu, glyph dialog and board lookup reached; the IME glyph lost its 8th char, fixed); host entry + summon into the guest's dungeon not yet verified live (c18 queued). Two old crashes not reproduced in 8 runs at 1792 MiB | 75 | c18: host enters a guest-made dungeon by glyph, party summoned |
 | G2 | Insight, Messengers' bath, Insight items | — | Untested for guests | 10 | |
 | G3 | Blood Moon / world phase changes | — | Untested in party (part of the soak) | 25 | |
 
