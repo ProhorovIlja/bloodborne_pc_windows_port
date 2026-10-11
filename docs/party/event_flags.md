@@ -329,7 +329,13 @@ visible (overlay) tree. (A door's model follows at the next load of that map: "r
   alive (`BB_PARTY_PROGRESS_TEST_CLEAR` on the guest only); both stand in the arena: no boss, no
   boss bar, no fog on the guest's screen. Control (boss alive for both, same spots): the *Cleric
   Beast* bar appears on the guest's screen within 6 s.
-* **Doors: inconclusive.** Doors 2411308 / 2411306 (event 12410110 slots 3 / 4; their open flag is
+* **Doors: passes** (2026-10-11, runs `D2 door visual 5: test|ctl`, camera reset by an in-process
+  R3 tap after each placement). Door 2411309 (event 12410110 slot 6, open flag 12410116, unset in
+  both base saves): the host sets 12410116 in the Dream, then warps; in its m24_01 the guest sees
+  the double door **open** (doorway into the next room). Control (no flag): the same spot shows it
+  **shut**. Door 2410701 (slot 2, 12410112) also shows open in the test; its control shot was not
+  comparable (camera on an enemy).
+* Earlier door picks were inconclusive: Doors 2411308 / 2411306 (event 12410110 slots 3 / 4; their open flag is
   the event's own slot flag 12410113 / 12410114, not a parameter) looked open in the test *and*
   the control run from the spots used, and door 2411301 (slot 7) is already open in the base save
   (12410117). The flags themselves reach the guest's overlay (live door flags above); a door that
