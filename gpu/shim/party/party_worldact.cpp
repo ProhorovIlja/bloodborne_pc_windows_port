@@ -364,7 +364,11 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         // What the guest's own game wrote while loading the map (client branches of events end
         // early and set their completion flags) stays local.
         for (const auto& [id, v] : changes) {
-            st.known.insert(std::uint64_t(id) * 2 + (v ? 1 : 0));
+            // Item pickups never: the overlay's item bits are the own pool's (instanced items), so
+            // a difference is always a pickup this guest made (also one during a map change).
+            if (!(st.pickups && progress::CategoryOf(id) == Category::item_lot_picked)) {
+                st.known.insert(std::uint64_t(id) * 2 + (v ? 1 : 0));
+            }
         }
         st.baselined = true;
         Log("guest: %zu local flag difference(s) in the host's world held back as the baseline (%s)",
@@ -375,17 +379,25 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
     r.map = s.map_id;
     std::vector<std::uint32_t> local, picked;
     for (const auto& [id, v] : changes) {
-        const std::uint64_t k = std::uint64_t(id) * 2 + (v ? 1 : 0);
-        if (st.known.count(k)) {
-            continue;
-        }
-        st.known.insert(k);
         if (v && progress::CategoryOf(id) == Category::item_lot_picked && st.pickups) {
             // D4: the guest picked up the host world's treasure - instanced: its own save only.
             if (progress::WriteFlagOwnSave(id, true)) {
                 ++st.stats.own_save;
                 picked.push_back(id);
             }
+            continue;
+        }
+        const std::uint64_t k = std::uint64_t(id) * 2 + (v ? 1 : 0);
+        if (st.known.count(k)) {
+            continue;
+        }
+        st.known.insert(k);
+        // A map flag only of the block the guest stands in: a streamed-in neighbour block runs its
+        // constructors (NPC states, live run 9: m24_00's 12400501.. while in m24_01) - not the
+        // guest's doing; once the guest's map is that block, the new baseline holds them back.
+        if (id >= 10000000u && id / 100000u % 100u != 0 &&
+            (id / 100000u % 100u != (s.map_id >> 24) || id / 10000u % 10u != ((s.map_id >> 16) & 0xffu))) {
+            local.push_back(id);
             continue;
         }
         if (!WorldActionAllowed(id, !v, s.map_id)) {
