@@ -632,7 +632,8 @@ std::int32_t NearestEnemy(const float me[3], float pos[3], const std::vector<std
     using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::int32_t, std::uint64_t);
     const Find find = reinterpret_cast<Find>(Guest(0x13c97a0));
     std::int32_t best = 0;
-    float bd = 25.0f * 25.0f;
+    float bd = 45.0f * 45.0f;
+    int seen = 0, dead = 0;
     for (std::int32_t i = 0; i < sets; ++i) {
         std::uint64_t set = 0, arr = 0;
         std::int32_t n = 0;
@@ -650,8 +651,12 @@ std::int32_t NearestEnemy(const float me[3], float pos[3], const std::vector<std
             std::uint64_t cm = 0, dm = 0;
             std::int32_t hp = 0;
             float p[4] = {};
-            if (!chr || !SafeRead(chr + 0xc0, p, sizeof p) || !SafeGet(chr + 0x3b0, &cm) || !cm ||
-                !SafeGet(cm + 0x20, &dm) || !dm || !SafeGet(dm + 0x128, &hp) || hp <= 0) {
+            if (!chr || !SafeRead(chr + 0xc0, p, sizeof p)) {
+                continue;
+            }
+            ++seen;
+            if (SafeGet(chr + 0x3b0, &cm) && cm && SafeGet(cm + 0x20, &dm) && dm && SafeGet(dm + 0x128, &hp) && hp <= 0) {
+                ++dead;
                 continue;
             }
             const float dx = p[0] - me[0], dy = p[1] - me[1], dz = p[2] - me[2];
@@ -662,6 +667,9 @@ std::int32_t NearestEnemy(const float me[3], float pos[3], const std::vector<std
                 std::memcpy(pos, p, 12);
             }
         }
+    }
+    if (!best) {
+        Log("test: fixture: enemies of the map ids seen: %d (%d dead), none alive within 45 m", seen, dead);
     }
     return best;
 }
@@ -675,7 +683,7 @@ void KillTick(Fixture& f, double now) {
     if (f.kill_stage == 0) {
         f.kill_id = NearestEnemy(me, f.kill_pos, done_ids);
         if (!f.kill_id) {
-            Log("test: fixture: no live enemy within 25 m");
+            Log("test: fixture: no live enemy within 45 m");
             f.kills = 0;
             return;
         }
@@ -747,15 +755,25 @@ void FixtureTick(double now) {
     }
     if (f.idx >= total && f.pickups > 0) {
         // The nearest treasure not tried yet: stand on it, Cross (pick up), next one 5 s later.
-        if (f.presses == 1) {
+        static std::array<float, 3> cur{};
+        if (f.presses >= 1) {
+            // Around the treasure (8 directions x 0.8 / 1.3 m, facing it) until a prompt shows.
             std::uint32_t pp = 0;
-            const bool up = GuestSvcPromptUp(&pp);
-            Log("test: fixture: treasure: prompt %s %u; Cross", up ? "up" : "not seen", pp);
-            runtime_pad_director_press(0x4000);
-            f.release = now + 0.15;
-            f.presses = 0;
-            f.next = now + 5.0;
-            --f.pickups;
+            const bool up = GuestSvcPromptUp(&pp) && pp != 10010110;  // 10010110: a stale talk text
+            if (up || f.presses > 16) {
+                Log("test: fixture: treasure: prompt %s %u after %d spot(s); Cross", up ? "up" : "not seen", pp,
+                    f.presses);
+                runtime_pad_director_press(0x4000);
+                f.release = now + 0.15;
+                f.presses = 0;
+                f.next = now + 5.0;
+                --f.pickups;
+                return;
+            }
+            std::string what;
+            PutLocal(cur.data(), 0.0f, 1.0f, f.presses <= 8 ? 0.8f : 1.3f, float(f.presses % 8) * 45.0f, &what);
+            ++f.presses;
+            f.next = now + 0.8;
             return;
         }
         static std::vector<std::array<float, 3>> tried;
@@ -806,7 +824,8 @@ void FixtureTick(double now) {
         if (f.presses == 0) {
             tried.push_back(best);
             std::string what;
-            PutLocal(best.data(), 0.0f, 1.0f, 0.4f, 0.0f, &what);
+            cur = best;
+            PutLocal(best.data(), 0.0f, 1.0f, 0.8f, 0.0f, &what);
             Log("test: fixture: treasure at (%.1f, %.1f, %.1f), %.1f m away: %s", best[0], best[1], best[2],
                 std::sqrt(bd), what.c_str());
             f.presses = 1;
