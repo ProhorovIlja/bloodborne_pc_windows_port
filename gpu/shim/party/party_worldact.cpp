@@ -691,6 +691,9 @@ struct Fixture {
     int pickups = 0;  // "pickup=N": the N treasures nearest the guest, one try each
     std::string map;  // "map=NAME": only while the current map's name contains NAME
     int kills = 0;    // "kill=N": N times the nearest live map enemy: ForceDead, then pick up its drop
+    std::int32_t loot = 0;  // "loot=ENTITY": wait until that enemy is dead (killed anywhere), then pick up its drop
+    int loot_stage = 0;
+    double loot_since = 0;
     bool attack = false;  // "attack": kill with the weapon (R1 taps) instead of ForceDead
     bool has_near = false;  // "near=X:Y:Z": the treasure nearest that point, not the player
     float near[3] = {};
@@ -774,6 +777,9 @@ std::uint64_t NearestEnemy(const float me[3], float pos[3], const std::vector<st
             SafeGet(chr + 0x78, &type);
             if ((ent >= 10000000 && ent <= 10000010) || type == 0 || type == 1 || type == 2 || type == 8 || type == 12) {
                 continue;  // a player (the host or another guest: chr type 0/1/2/8/12), not an enemy
+            }
+            if (type == 4) {
+                continue;  // live (Central Yharnam lamp): a type-4 chr at the lamp took no damage - not hostile
             }
             if (hp >= 999) {
                 continue;  // live: an untouchable 999-HP chr stands on the lamp (the lamp's own chr)
@@ -907,6 +913,9 @@ void FixtureTick(double now) {
         if (const std::size_t a = v.find("near="); a != std::string::npos) {
             f.has_near = std::sscanf(v.c_str() + a + 5, "%f:%f:%f", &f.near[0], &f.near[1], &f.near[2]) == 3;
         }
+        if (const std::size_t a = v.find("loot="); a != std::string::npos) {
+            f.loot = std::atoi(v.c_str() + a + 5);
+        }
         if (const std::size_t a = v.find("kill="); a != std::string::npos) {
             f.kills = std::atoi(v.c_str() + a + 5);
         }
@@ -923,6 +932,58 @@ void FixtureTick(double now) {
         return;
     }
     const std::size_t total = f.objs.size() + f.chrs.size();
+    if (f.idx >= total && f.pickups <= 0 && f.loot > 0) {
+        // The enemy's chr (0x13C97A0(entity)); its HP from the data module +0xF8 (max +0xFC).
+        using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::int32_t, std::uint64_t);
+        const std::uint64_t chr = reinterpret_cast<Find>(Guest(0x13c97a0))(f.loot, f.loot, 0);
+        std::uint64_t cm = 0, dm = 0;
+        std::int32_t hp = -1;
+        float p[4] = {};
+        const bool ok = chr && SafeRead(chr + 0xc0, p, sizeof p) && SafeGet(chr + 0x3b0, &cm) && cm &&
+                        SafeGet(cm + 0x20, &dm) && dm && SafeGet(dm + 0xf8, &hp);
+        if (f.loot_stage == 0) {
+            if (!f.loot_since) {
+                f.loot_since = now;
+                Log("test: fixture: loot: waiting for enemy %d to die (%s, HP %d)", f.loot, ok ? "here" : "not found", hp);
+            }
+            if (ok && hp <= 0) {
+                std::memcpy(f.kill_pos, p, 12);
+                Log("test: fixture: loot: enemy %d is dead at (%.1f, %.1f, %.1f); its drop next", f.loot, p[0], p[1], p[2]);
+                f.loot_stage = 1;
+                f.next = now + 5.0;  // death animation, the drop appears
+            } else if (now - f.loot_since > 120) {
+                Log("test: fixture: loot: enemy %d did not die", f.loot);
+                f.loot = 0;
+            } else {
+                static int waits = 0;
+                Log("test: fixture: loot: %s waiting, enemy HP %d", StepTag(++waits).c_str(), hp);  // keeps the reaper away
+                f.next = now + 2.0;
+            }
+            return;
+        }
+        if (f.loot_stage <= 10) {
+            static std::uint64_t picks0 = 0;
+            if (f.loot_stage == 1) {
+                picks0 = g_pickups.load();
+            } else if (g_pickups.load() > picks0) {
+                Log("test: fixture: loot: enemy %d's drop picked up after %d spot(s)", f.loot, f.loot_stage - 1);
+                f.loot = 0;
+                f.next = now + 3.0;
+                return;
+            }
+            std::string what;
+            PutLocal(f.kill_pos, 0.0f, 1.0f, f.loot_stage <= 5 ? 0.5f : 1.0f, float(f.loot_stage % 5) * 72.0f, &what);
+            runtime_pad_director_press(0x4000);
+            f.release = now + 0.15;
+            Log("test: fixture: loot %s: Cross at the drop", StepTag(f.loot_stage).c_str());
+            ++f.loot_stage;
+            f.next = now + 1.2;
+            return;
+        }
+        Log("test: fixture: loot: no pickup at enemy %d's spot", f.loot);
+        f.loot = 0;
+        return;
+    }
     if (f.idx >= total && f.pickups <= 0 && f.kills > 0) {
         KillTick(f, now);
         return;
@@ -946,7 +1007,9 @@ void FixtureTick(double now) {
                 return;
             }
             std::string what;
-            PutLocal(cur.data(), 0.0f, 1.0f, f.presses <= 8 ? 0.6f : 1.1f, float(f.presses % 8) * 45.0f, &what);
+            // 0.0 / 0.3 m first (the item glow is often off the MSB point), then 0.6 / 1.1 m around it.
+            const float dd = f.presses <= 2 ? 0.3f * float(f.presses - 1) : f.presses <= 9 ? 0.6f : 1.1f;
+            PutLocal(cur.data(), 0.0f, 1.0f, dd, float(f.presses % 8) * 45.0f, &what);
             Log("test: fixture: treasure %s: Cross", StepTag(f.presses).c_str());
             runtime_pad_director_press(0x4000);
             f.release = now + 0.15;
