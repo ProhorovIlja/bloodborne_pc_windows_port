@@ -298,6 +298,9 @@ struct Treasure {
     std::uint32_t flag = 0;  // 50000000 + item lot (the MSB event's lot; 0 = not found)
 };
 std::vector<Treasure> g_treasure;
+std::atomic<int> g_tgate[8];  // TreasureGate results (test fixture)
+std::atomic<int> g_rec[4];     // record inserts by kind, [0] removes (test fixture)
+std::atomic<std::uint64_t> g_rec_man{0};  // the MapItemMan the last insert went to
 std::mutex g_kick_mu;
 std::vector<std::int32_t> g_kicks_out;
 std::vector<std::pair<std::int32_t, double>> g_kicks_seen;
@@ -332,7 +335,14 @@ State& S() {
                                       {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "treasure spawn on a client (slot)");
             const bool c = PatchBytes(0x17D6838, {0x0f, 0x84, 0x2b, 0x02, 0x00, 0x00},
                                       {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "pickup flag on a client in another world");
-            g_st.pickups = a && b && c;
+            // The host's map item sync (net handler 0x17D2F30: "clear kind 3" for -1 / 3) dropped every
+            // treasure record a guest had just spawned (live 2026-10-12: 53 records -> 0 at the join
+            // sync, no 0x17D6780 removal): the guest keeps its own treasure, the host never sends any.
+            const bool d = PatchBytes(0x17D34A0, {0xe8, 0x9b, 0x26, 0x00, 0x00}, {0x0f, 0x1f, 0x44, 0x00, 0x00},
+                                      "keep own treasure at the host's item sync (all kinds)");
+            const bool e = PatchBytes(0x17D40AB, {0xe8, 0x90, 0x1a, 0x00, 0x00}, {0x0f, 0x1f, 0x44, 0x00, 0x00},
+                                      "keep own treasure at the host's item sync (treasure)");
+            g_st.pickups = a && b && c && d && e;
             progress::SetInstancedItems(g_st.pickups);
             Log("guest treasure pickups in the host's world: %s (instanced per player)",
                 g_st.pickups ? "on" : "NOT installed");
@@ -901,6 +911,23 @@ void KillTick(Fixture& f, double now) {
 
 void FixtureTick(double now) {
     Fixture& f = g_fx;
+    if (const std::uint64_t m = g_rec_man.load()) {
+        // Test diagnostics: the treasure record count on this game, logged when it changes.
+        static int last = -1;
+        std::uint64_t node = 0;
+        int c = 0;
+        SafeGet(m + 0x28, &node);
+        for (; node && c < 4096; ++c) {
+            if (!SafeGet(node, &node)) {
+                break;
+            }
+        }
+        if (c != last) {
+            Log("test: treasure records on this game: %d -> %d (inserts %d, removes %d, role %d)", last, c,
+                g_rec[3].load(), g_rec[0].load(), LocalSessionRole());
+            last = c;
+        }
+    }
     if (!f.parsed) {
         f.parsed = true;
         const char* t = std::getenv("BB_PARTY_WORLDACT_TEST");
@@ -1005,7 +1032,10 @@ void FixtureTick(double now) {
                     (list == man + 0x18 ? n18 : n38) = c;
                 }
                 Log("test: fixture: grab: no treasure record with flag %u (%d kind-3 records, first flags%s; kind-1 %d, "
-                    "kind-2 %d)", f.grab, count, seen.c_str(), n18, n38);
+                    "kind-2 %d; MapItemMan %p, inserts went to %p); inserts k1 %d k2 %d k3 %d, removes %d; spawn gates: pass %d, no gd %d, role %d, slot %d, chr type %d, handle %d, entity %d",
+                    f.grab, count, seen.c_str(), n18, n38, reinterpret_cast<void*>(man), reinterpret_cast<void*>(g_rec_man.load()), g_rec[1].load(), g_rec[2].load(), g_rec[3].load(), g_rec[0].load(),
+                    g_tgate[0].load(), g_tgate[1].load(), g_tgate[2].load(),
+                    g_tgate[3].load(), g_tgate[4].load(), g_tgate[5].load(), g_tgate[6].load());
             } else {
                 bool vis = false, own = false, host = false;
                 progress::ReadFlag(f.grab, &vis);
@@ -1324,12 +1354,64 @@ BB_COOP_SYSV void LocalKickEntry(std::uint64_t man, std::uint64_t idx, std::uint
         }
     }
 }
-BB_COOP_SYSV void TreasureSpawnEntry(std::uint64_t, std::uint64_t, std::uint64_t ev, std::uint64_t pos, std::uint64_t,
-                                     std::uint64_t) {
+// The gates of 0x17DC300 before its lot roll, evaluated like the game does (test fixture diagnostics):
+// 0 passes, 1 no player GameData, 2 role 6, 3 session slot, 4 chr-type byte [2], 5 handle -1,
+// 6 handle's map block / entity index out of range.
+int TreasureGate(std::uint64_t handle, std::int32_t* role_out, std::int32_t* type_out) {
+    std::uint64_t holder = 0, gd = 0, rolep = 0, gp = 0, slotp = 0, tab = 0;
+    if (!SafeGet(Guest(0x553b130), &holder) || !holder || !SafeGet(holder + 8, &gd) || !gd) {
+        return 1;
+    }
+    std::int32_t role = -1, slot = 0;
+    std::uint32_t type = 0;
+    if (SafeGet(Guest(0x5540290), &rolep) && rolep) {
+        SafeGet(rolep + 0x124, &role);
+    }
+    *role_out = role;
+    SafeGet(gd + 0xa4, &type);
+    *type_out = std::int32_t(type);
+    if (role == 6 && !S().pickups) {
+        return 2;
+    }
+    if (SafeGet(Guest(0x5556678), &gp) && gp && SafeGet(gp + 0x16f8, &slotp) && slotp) {
+        SafeGet(slotp + 0x98, &slot);
+        if (slot != -1 && !S().pickups) {
+            return 3;
+        }
+    }
+    std::uint8_t may = 0;
+    SafeGet(Guest(type <= 13 ? 0x47348a0 + std::uint64_t(type) * 12 + 2 : 0x47348a0 + 0xa8 + 2), &may);
+    if (!may) {
+        return 4;
+    }
+    const std::uint32_t h = std::uint32_t(handle);
+    if (h == 0xffffffffu) {
+        return 5;
+    }
+    std::int32_t nb = 0, cnt = 0;
+    std::uint64_t blocks = 0, data = 0;
+    const std::uint32_t b = (h >> 20) & 0xff, i = h & 0xfffff;
+    if (!SafeGet(Guest(0x553b168), &tab) || !tab || !SafeGet(tab + 0x20, &nb) || std::int32_t(b) >= nb ||
+        !SafeGet(tab + 0x28, &blocks) || !SafeGet(blocks + b * 0x1f8ull + 0xc8, &cnt) || cnt <= std::int32_t(i) ||
+        !SafeGet(blocks + b * 0x1f8ull + 0xd0, &data) || !data) {
+        return 6;
+    }
+    return 0;
+}
+BB_COOP_SYSV void TreasureSpawnEntry(std::uint64_t, std::uint64_t handle, std::uint64_t ev, std::uint64_t pos,
+                                     std::uint64_t, std::uint64_t) {
     std::int32_t type = -1;
     float p[3] = {};
     if (!ev || !SafeGet(ev + 0xc, &type) || type != 4 || !pos || !SafeRead(pos, p, sizeof p)) {
         return;
+    }
+    {
+        std::int32_t role = -1, ctype = -1;
+        const int g = TreasureGate(handle, &role, &ctype);
+        if (g_tgate[g].fetch_add(1) < 2) {
+            Log("test: treasure spawn: handle %#x role %d chr type %d -> gate %d (0 = all gates pass)", unsigned(handle),
+                role, ctype, g);
+        }
     }
     // The treasure's item lot: an int of the MSB event whose 50000000 + lot is an item pickup flag
     // (lot 2410180 -> flag 52410180, as the C3 log shows).
@@ -1348,6 +1430,33 @@ BB_COOP_SYSV void TreasureSpawnEntry(std::uint64_t, std::uint64_t, std::uint64_t
     std::lock_guard<std::mutex> lk(g_treasure_mu);
     if (g_treasure.size() < 512) {
         g_treasure.push_back(t);
+    }
+}
+
+// Test fixture diagnostics: MapItemMan record inserts by kind (0x17DC300's tail) and removals.
+template <int K>
+BB_COOP_SYSV void RecordInsertEntry(std::uint64_t man, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t,
+                                    std::uint64_t) {
+    g_rec_man.store(man);
+    if (g_rec[K].fetch_add(1) < 2) {
+        Log("test: MapItemMan record insert kind %d (MapItemMan %p, role %d)", K, reinterpret_cast<void*>(man),
+            LocalSessionRole());
+    }
+}
+template <int K>
+BB_COOP_SYSV void RecordClearEntry(std::uint64_t man, std::uint64_t a1, std::uint64_t a2, std::uint64_t, std::uint64_t,
+                                   std::uint64_t) {
+    Log("test: MapItemMan treasure clear %s (MapItemMan %p, args %#llx %#llx, role %d)",
+        K == 0 ? "all 0x17D57C0" : "0x17D5B40 (net handler 0x17D2F30)", reinterpret_cast<void*>(man),
+        static_cast<unsigned long long>(a1), static_cast<unsigned long long>(a2), LocalSessionRole());
+}
+BB_COOP_SYSV void RecordRemoveEntry(std::uint64_t, std::uint64_t handle_ptr, std::uint64_t set_flag, std::uint64_t,
+                                    std::uint64_t, std::uint64_t) {
+    std::int32_t h = -1;
+    SafeGet(handle_ptr, &h);
+    if (g_rec[0].fetch_add(1) < 4) {
+        Log("test: MapItemMan record remove: handle %#x, set flag %d (role %d)", unsigned(h), int(set_flag & 0xff),
+            LocalSessionRole());
     }
 }
 
@@ -1436,6 +1545,14 @@ void Init() {
     if (std::getenv("BB_PARTY_WORLDACT_TEST")) {
         HookPrologue(0x17DC300, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                      &TreasureSpawnEntry, "MSB treasure spawn (test fixture)");
+        const std::initializer_list<std::uint8_t> pro = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56,
+                                                         0x41, 0x55, 0x41, 0x54, 0x53};
+        HookPrologue(0x17D4C40, pro, &RecordInsertEntry<1>, "MapItemMan insert kind 1 (test)");
+        HookPrologue(0x17D5320, pro, &RecordInsertEntry<2>, "MapItemMan insert kind 2 (test)");
+        HookPrologue(0x17D4FB0, pro, &RecordInsertEntry<3>, "MapItemMan insert kind 3 (test)");
+        HookPrologue(0x17D6780, pro, &RecordRemoveEntry, "MapItemMan remove (test)");
+        HookPrologue(0x17D57C0, pro, &RecordClearEntry<0>, "MapItemMan clear treasure (test)");
+        HookPrologue(0x17D5B40, pro, &RecordClearEntry<1>, "MapItemMan clear treasure, net (test)");
     }
 }
 
