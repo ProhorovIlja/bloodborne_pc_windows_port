@@ -51,7 +51,7 @@ only 100% when it meets it.
 
 | Area | Parity |
 |---|---|
-| A. Session & joining | 86% |
+| A. Session & joining | 87% |
 | B. World & travel | 86% |
 | C. Death & respawn | 86% |
 | D. Progress (anyone can progress) | 85% |
@@ -59,7 +59,7 @@ only 100% when it meets it.
 | F. Network & robustness | 78% |
 | G. BB-specific (chalice, insight, bath) | 77% |
 | H. Bloodborne rule (feels like SP in a party) | 76% |
-| **Overall (unweighted mean of rows)** | **~83%** |
+| **Overall (unweighted mean of rows)** | **~84%** |
 
 ## A. Session & joining
 
@@ -75,7 +75,7 @@ only 100% when it meets it.
 | A8 | Settings in game | ersc_settings.ini: [GAMEPLAY] allow_invaders, death_debuffs, allow_summons, overhead_player_display; [SCALING]; [PASSWORD]; [SAVE]; [LANGUAGE] | All settings in the game's own System menu, Party pages | 90 | bbport_game_menu |
 | A9 | Version check | Same mod + game version required | Protocol version, then the bbport build (git describe), eboot.bin, the game params (gameparam.parambnd.dcx), gameplay patches, gameplay mods, the party's installed hook set and the party rules; a mismatch is refused with what differs and what to do, shown in the party UI | 95 | version_check.md; party-link-test, test_simguest (build); live 2026-10-11: 4 clients with equal identities admitted, a guest with other party options refused at the title ("party patches differ ... use the same bbport build and party options"). Not live: two different builds |
 | A10 | Host toggles friendly fire / PvP | Judicator's Rulebook | None | — | Moved to the 100%+ milestone (I1) |
-| A11 | Joining during a boss fight / cutscene | Joiner spawns near the host | Decision: wait outside until it ends. The host does not ring while its boss bar is up (EMEVD 2003[11], off at 2003[12]/[15]/[53] or a load) or a cutscene plays; a bell already ringing is dropped as the fight starts; the joiner waits at the host's lamp in its own world and does not follow the host's travels in its map | 75 | 2026-10-11 flowlive live (Cleric Beast, a11_* fixtures): joiner rang 37.9 s, fight 42.4-108.9 s with no summon, summoned 111 s after the kill; earlier run: the host died in the fight, the joiner joined after the respawn. Not yet: cutscene case live |
+| A11 | Joining during a boss fight / cutscene | Joiner spawns near the host | Decision: wait outside until it ends. The host does not ring while its boss bar is up (EMEVD 2003[11], off at 2003[12]/[15]/[53] or a load) or a cutscene plays; a bell already ringing is dropped as the fight starts; the title join and the direct summon are refused for the same reason ("wait":"boss"|"cutscene"): the joiner Continues into its own world and waits at the host's lamp, and does not follow the host's travels in its map. Both Party status lines say why ("Waiting: the host is in a boss fight" / "Joiners wait: you are in a boss fight"; dsum_busy events every 10 s and at the end) | 85 | 2026-10-13 a11 live (Cleric Beast, a11_* fixtures, direct summon + title join default on): before the fix the title-joined guest Continued straight into the arena mid-fight (screenshot); after: title join refused 48.7 s ("Waiting: the host is in a boss fight"), guest in its own world at the lamp, direct summon refused 69.1 s, kill 75.7 s, bar off 82.1 s, guest summoned beside the host (cooperators 0 -> 1 at 105 s, screenshots). 2026-10-11: bell-only run, host died in the fight then joined after the respawn. Not yet: cutscene case live (same code path, CutscenePlaying) |
 
 ## B. World & travel
 
@@ -164,6 +164,7 @@ only 100% when it meets it.
 
 ## Change log
 
+- 2026-10-13 (a11): A11 75 -> 85: the title join and the direct summon (both default on) ignored the boss-fight / cutscene hold (live: guest Continued into the Cleric Beast fight); both refused with the reason now, wait notice on both sides; A 86 -> 87, overall ~84%.
 - 2026-10-12 (inworld, 0.5.9): H1 86 -> 87: scripted same-map stage warps checked against every EMEVD warp: none reaches `BB_PARTY_STAGE_INWORLD` (cutscene warps bypass the funnel, Chalice layers need the load), open item closed, switch stays off.
 - 2026-10-12 (prologuetravel, 0.5.8): B3 decision: party travel (lamp, headstone, host death, any broadcast) never moves a member in its prologue or alone in its own world (2-PC LAN: a guest in the Dream was warped into the clinic, an unsummoned guest sent home by the host's prologue death).
 - 2026-10-12 (splittravel, 0.5.6): B4 94 -> 95 (scripted stage warps in the loaded map, off), B5 82 -> 85 (Continue after an alone travel keeps the own save spot, c7), H1 85 -> 86; B 85 -> 86.
