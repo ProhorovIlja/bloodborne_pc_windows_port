@@ -289,6 +289,8 @@ struct State {
 // MSB treasure spawns seen on this game (0x17DC300(MapItemMan, entity handle, MsbEvent, pos)):
 // the fixture's pickup targets. Main thread.
 std::atomic<std::uint64_t> g_pickups{0};  // map item pickups on this game (PickupEntry)
+std::mutex g_drop_mu;
+std::vector<std::uint32_t> g_drop_chrs;     // chr handles whose drop this game rolled (EnemyDropEntry)
 std::atomic<double> g_pickup_at{-1e9};     // Now() of the last one
 std::mutex g_treasure_mu;
 struct Treasure {
@@ -338,9 +340,10 @@ State& S() {
         // Enemy drops per player (user decision 2026-10-11): every player's game rolls each enemy's
         // drop itself (0x17DD0B0 on enemy death; live: the same enemy rolled on host and guest);
         // a client keeps only isGuestDrop items (vials, bullets) unless 0x17DD764 je -> jmp.
-        // Opt-in (=1) for 0.5.2.
+        // On by default (live 2026-10-12, fresh characters: the guest kept "Iosefka's Blood Vial" from
+        // its own roll of a clinic enemy the host killed); BB_PARTY_GUEST_DROPS=0 turns it off.
         const char* dr = std::getenv("BB_PARTY_GUEST_DROPS");
-        if (g_st.enabled && dr && dr[0] == '1') {
+        if (g_st.enabled && !(dr && dr[0] == '0')) {
             const bool d = PatchBytes(0x17DD764, {0x0f, 0x84, 0x3a, 0x02, 0x00, 0x00},
                                       {0xe9, 0x3b, 0x02, 0x00, 0x00, 0x90}, "full enemy drops on a client");
             Log("guest enemy drops: %s", d ? "full, own roll per player" : "NOT installed");
@@ -692,6 +695,11 @@ struct Fixture {
     std::string map;  // "map=NAME": only while the current map's name contains NAME
     int kills = 0;    // "kill=N": N times the nearest live map enemy: ForceDead, then pick up its drop
     std::int32_t loot = 0;  // "loot=ENTITY": wait until that enemy is dead (killed anywhere), then pick up its drop
+    std::uint32_t grab = 0;  // "grab=FLAG": the treasure with that pickup flag, picked up through the game's own
+                             // pickup function 0x17D8570 (what Cross on it calls) - no standing spot needed
+    bool lootall = false;    // "lootall": every enemy whose drop this game rolls: stand on it, Cross x5
+    std::size_t lootall_idx = 0;
+    int lootall_stage = 0;
     int loot_stage = 0;
     double loot_since = 0;
     bool attack = false;  // "attack": kill with the weapon (R1 taps) instead of ForceDead
@@ -868,6 +876,9 @@ void KillTick(Fixture& f, double now) {
         Log("test: fixture: R1 %s, enemy HP %d", StepTag(f.kill_stage - 10).c_str(), read ? hp : -1);
         return;
     }
+    if (f.kill_stage >= 1 && f.kill_stage <= 3 && std::getenv("BB_PARTY_WORLDACT_NOWALK")) {
+        f.kill_stage = 4;  // no walk to the corpse: the drop is taken through the pickup function (lootall)
+    }
     if (f.kill_stage >= 1 && f.kill_stage <= 3) {
         std::string what;
         if (f.kill_stage == 1) {
@@ -913,6 +924,10 @@ void FixtureTick(double now) {
         if (const std::size_t a = v.find("near="); a != std::string::npos) {
             f.has_near = std::sscanf(v.c_str() + a + 5, "%f:%f:%f", &f.near[0], &f.near[1], &f.near[2]) == 3;
         }
+        if (const std::size_t a = v.find("grab="); a != std::string::npos) {
+            f.grab = std::uint32_t(std::strtoul(v.c_str() + a + 5, nullptr, 10));
+        }
+        f.lootall = v.find("lootall") != std::string::npos;
         if (const std::size_t a = v.find("loot="); a != std::string::npos) {
             f.loot = std::atoi(v.c_str() + a + 5);
         }
@@ -932,6 +947,120 @@ void FixtureTick(double now) {
         return;
     }
     const std::size_t total = f.objs.size() + f.chrs.size();
+    if (f.idx >= total && (f.grab || f.lootall)) {
+        // MapItemMan (*0x553D6E0) record lists (0x17D81A0): kind 3 (treasure) at +0x28, kind 2 (enemy
+        // drops) at +0x38; node +0 next, +0x20 handle, +0x28 pickup flag, +0x54 item count, items from
+        // +0x58 (16 bytes: +0 id with category bits, +4 count). The pickup 0x17D8570(man, &handle) is
+        // what Cross on the item calls.
+        std::uint64_t man = 0;
+        if (!SafeGet(Guest(0x553d6e0), &man) || !man) {
+            return;
+        }
+        auto items = [](std::uint64_t node) {
+            std::int32_t n = 0;
+            SafeGet(node + 0x54, &n);
+            std::string out;
+            for (std::int32_t i = 0; i < n && i < 8; ++i) {
+                std::uint32_t id = 0, cnt = 0;
+                SafeGet(node + 0x58 + std::uint64_t(i) * 16, &id);
+                SafeGet(node + 0x58 + std::uint64_t(i) * 16 + 4, &cnt);
+                char b[48];
+                std::snprintf(b, sizeof b, " %#x x%u", id, cnt);
+                out += b;
+            }
+            return out.empty() ? std::string(" (none)") : out;
+        };
+        using Pick = void(BB_COOP_SYSV*)(std::uint64_t, std::int32_t*);
+        const Pick pick = reinterpret_cast<Pick>(Guest(0x17d8570));
+        if (f.grab) {
+            std::uint64_t node = 0;
+            SafeGet(man + 0x28, &node);
+            std::uint64_t hit = 0;
+            int count = 0;
+            std::string seen;
+            for (int guard = 0; node && guard < 4096; ++guard, ++count) {
+                std::uint32_t flag = 0;
+                SafeGet(node + 0x28, &flag);
+                if (flag == f.grab) {
+                    hit = node;
+                }
+                if (count < 6) {
+                    seen += " " + std::to_string(flag);
+                }
+                if (!SafeGet(node, &node)) {
+                    break;
+                }
+            }
+            if (!hit) {
+                int n18 = 0, n38 = 0;
+                for (std::uint64_t list : {man + 0x18, man + 0x38}) {
+                    std::uint64_t q = 0;
+                    SafeGet(list, &q);
+                    int c = 0;
+                    for (; q && c < 4096; ++c) {
+                        if (!SafeGet(q, &q)) {
+                            break;
+                        }
+                    }
+                    (list == man + 0x18 ? n18 : n38) = c;
+                }
+                Log("test: fixture: grab: no treasure record with flag %u (%d kind-3 records, first flags%s; kind-1 %d, "
+                    "kind-2 %d)", f.grab, count, seen.c_str(), n18, n38);
+            } else {
+                bool vis = false, own = false, host = false;
+                progress::ReadFlag(f.grab, &vis);
+                progress::ReadFlagOwnSave(f.grab, &own);
+                progress::HostWorldFlag(f.grab, &host);
+                std::int32_t handle = 0;
+                SafeGet(hit + 0x20, &handle);
+                const std::uint64_t picks0 = g_pickups.load();
+                const std::string what = items(hit);
+                pick(man, &handle);
+                Log("test: fixture: grab: treasure flag %u (handle %#x, items%s) picked up through 0x17D8570: %s; "
+                    "before: visible %d, own save %d, host %d", f.grab, unsigned(handle), what.c_str(),
+                    g_pickups.load() > picks0 ? "pickup ran" : "pickup did NOT run", int(vis), int(own), int(host));
+            }
+            f.grab = 0;
+            f.next = now + 3.0;
+            return;
+        }
+        // lootall: every enemy drop record this game holds, once.
+        static std::vector<std::int32_t> done;
+        std::uint64_t node = 0;
+        SafeGet(man + 0x38, &node);
+        for (int guard = 0; node && guard < 4096; ++guard) {
+            std::int32_t handle = 0;
+            SafeGet(node + 0x20, &handle);
+            if (std::find(done.begin(), done.end(), handle) == done.end()) {
+                done.push_back(handle);
+                const std::string what = items(node);
+                const std::uint64_t picks0 = g_pickups.load();
+                std::int32_t h = handle;
+                pick(man, &h);
+                Log("test: fixture: lootall: enemy drop record %#x (items%s) picked up through 0x17D8570: %s", unsigned(handle),
+                    what.c_str(), g_pickups.load() > picks0 ? "pickup ran" : "pickup did NOT run");
+                f.next = now + 2.0;
+                return;
+            }
+            if (!SafeGet(node, &node)) {
+                break;
+            }
+        }
+        // Same text while waiting (the reaper sees an idle run); a hard 25 s timeout.
+        static double since = 0;
+        if (!since) {
+            since = now;
+        }
+        if (now - since > 25.0) {
+            Log("test: fixture: lootall: FAILED / done: no new drop record for 25 s; stopping");
+            f.lootall = false;
+            f.done = true;
+            return;
+        }
+        Log("test: fixture: lootall: no new drop record yet");
+        f.next = now + 5.0;
+        return;
+    }
     if (f.idx >= total && f.pickups <= 0 && f.loot > 0) {
         // The enemy's chr (0x13C97A0(entity)); its HP from the data module +0xF8 (max +0xFC).
         using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::int32_t, std::uint64_t);
@@ -951,13 +1080,12 @@ void FixtureTick(double now) {
                 Log("test: fixture: loot: enemy %d is dead at (%.1f, %.1f, %.1f); its drop next", f.loot, p[0], p[1], p[2]);
                 f.loot_stage = 1;
                 f.next = now + 5.0;  // death animation, the drop appears
-            } else if (now - f.loot_since > 120) {
+            } else if (now - f.loot_since > 30) {
                 Log("test: fixture: loot: enemy %d did not die", f.loot);
                 f.loot = 0;
             } else {
-                static int waits = 0;
-                Log("test: fixture: loot: %s waiting, enemy HP %d", StepTag(++waits).c_str(), hp);  // keeps the reaper away
-                f.next = now + 2.0;
+                Log("test: fixture: loot: waiting for the enemy to die");  // same text: the reaper sees idleness
+                f.next = now + 5.0;
             }
             return;
         }
@@ -1227,6 +1355,10 @@ BB_COOP_SYSV void EnemyDropEntry(std::uint64_t, std::uint64_t chr_handle, std::u
                                  std::uint64_t, std::uint64_t) {
     Log("enemy drop roll on this game (role %d): chr handle %#x, npc param %p", LocalSessionRole(),
         unsigned(chr_handle), reinterpret_cast<void*>(npc));
+    std::lock_guard<std::mutex> lk(g_drop_mu);
+    if (g_drop_chrs.size() < 64) {
+        g_drop_chrs.push_back(std::uint32_t(chr_handle));
+    }
 }
 BB_COOP_SYSV void PickupEntry(std::uint64_t, std::uint64_t handle_ptr, std::uint64_t, std::uint64_t, std::uint64_t,
                               std::uint64_t) {
@@ -1294,8 +1426,7 @@ void Init() {
                                 &NetKickEntry, "ObjAct remote kick (log)");
     Log("ObjAct kick log %s", a && b ? "on" : "partly off");
     // Enemy drop rolls and map item pickups: logged (the D4 evidence) - only with D4 on or a test.
-    const bool d4 = st.pickups || std::getenv("BB_PARTY_WORLDACT_TEST") ||
-                    (std::getenv("BB_PARTY_GUEST_DROPS") && std::getenv("BB_PARTY_GUEST_DROPS")[0] == '1');
+    const bool d4 = st.pickups || std::getenv("BB_PARTY_WORLDACT_TEST");
     if (d4) {
     HookPrologue(0x17DD0B0, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                  &EnemyDropEntry, "enemy drop roll (log)");
