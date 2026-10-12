@@ -53,13 +53,13 @@ only 100% when it meets it.
 |---|---|
 | A. Session & joining | 86% |
 | B. World & travel | 85% |
-| C. Death & respawn | 83% |
+| C. Death & respawn | 86% |
 | D. Progress (anyone can progress) | 82% |
 | E. Services & UI | 90% |
 | F. Network & robustness | 78% |
 | G. BB-specific (chalice, insight, bath) | 74% |
 | H. Bloodborne rule (feels like SP in a party) | 76% |
-| **Overall (unweighted mean of rows)** | **~82%** |
+| **Overall (unweighted mean of rows)** | **~83%** |
 
 ## A. Session & joining
 
@@ -99,7 +99,7 @@ only 100% when it meets it.
 | C4 | Death penalty | Optional rot: 5 types, one picked at random per death, stacking, removed only by resting at a grace; stops one player dying endlessly while another keeps enemies from respawning | Rot (on by default, System > Party rules; the host's setting counts for the party): each death adds a stack (max 5) of a random kind, max HP -10 % or max stamina -10 %; cleansed by the player's own lamp / headstone use; kept across restarts. Kinds 3-5 (stamina cost, rally, item discovery) coded behind BB_PARTY_ROT_ALL_KINDS=1 (off: not verified live). Echoes: single-player bloodstain for everyone (hostdeath); rot is independent of it | 95 | 2026-10-11 live: host death -> toast, max HP 719 -> 647, lamp warp -> cleansed; guest's own death: max stamina 100 -> 90, max HP 503 (70 %), toast. Kinds 3-5 chosen in live deaths ("this one: rally / stamina cost"), effect not yet observed. docs/party/balance.md |
 | C5 | Spectate while dead | A death in a boss fight or invasion puts the player in limbo, spectating, until the party wipes or someone rests at a grace | Limbo while a boss bar is up (EMEVD 2003[11] HUD slots): host death taken but not revived, guest's held death outlasts its grace, until the boss dies (respawn at the host's lamp), everyone is down (wipe) or a load starts. The dead player SPECTATES: its camera follows a living party member (its dissolved chr carried 3 m behind it); peers hide its dead copy (no body, no plate) | 80 | 2026-10-12 hostdeath spec3/spec4 (Cleric Beast): host died in the fight, its screen followed the guest fighting the boss; the guest saw no host body or plate; boss killed -> host revived at its lamp. Open: guest-side spectating not run live; no member switch (follows the first living one) |
 | C6 | Rejoin after a crash / redirect | Rejoin by item | ~4.5 s ring to client after the world is up; crash rejoin ~30 s after the restart (~34 s after the crash), ~15 s of it after the guest's world is up: the 26 s sign hold for the host's dead transport connection | 80 | 2026-10-11: join_timing.md (profile; the 26 s hold for the host game's dead transport connection dominates). Transport RE started (create hook; the scanned 'config copies' are dead memory); experimental, off by default |
-| C7 | Resting while others are in a boss room | They are removed from the boss room | A rest is a party move (host load), so nobody stays behind; not tested during a fight | 60 | Test during a boss fight; 2026-10-12 hostdeath c7a: a host lamp warp during a boss fight became split travel's in-world party move (no load): the guest was moved out, but the fight / enemies are not reset (should be a real rest) |
+| C7 | Resting while others are in a boss room | They are removed from the boss room | A rest is a party move; during a boss fight it is always a real load (the fight and the enemies reset, everyone is taken out of the boss room), never split travel's in-world move | 85 | 2026-10-12 hostdeath c7c (Cleric Beast): guest in the arena, host rested at lamp 2412952 -> real load for both, both at the lamp, no boss bar (screenshots). Open: a guest's own rest during a fight (alone travel) not run |
 
 ## D. Progress: anyone can progress
 
@@ -191,3 +191,4 @@ only 100% when it meets it.
 - 2026-10-12: C1 85 -> 90 (agent/hostdeath): guest Continue drift fixed (B2 arrival by the host's own travel + chr warp), guest bloodstain recoverable in its own world.
 - 2026-10-12 (hostdeath): wipes after split travel: member_down op (clash with split's dead-enemies op), dead guest revived on an in-world follow; no forced transform in the dead follow / solo re-join.
 - 2026-10-12: C5 50 -> 80 (agent/hostdeath): spectate in boss-fight limbo (camera follows a living member, dead copy hidden on peers).
+- 2026-10-12: C7 60 -> 85 (agent/hostdeath): a rest during a boss fight is a real load; bell join waits for the host's map, gather to the lamp nearest the host.
