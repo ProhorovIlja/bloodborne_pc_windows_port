@@ -234,12 +234,24 @@ void Log(const char* fmt, ...) {
     va_start(ap, fmt);
     std::vsnprintf(line, sizeof line, fmt, ap);
     va_end(ap);
-    std::printf("Party world: %s\n", line);
+    std::printf("Party: world: %s\n", line);  // "Party: ": the harness reaper counts it as activity
     std::fflush(stdout);
 }
 
 double Now() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+/// A tag that differs from step to step without digits: the harness reaper blanks numbers when it
+/// counts distinct "Party:" lines, so a fixture's repeated steps need words to stay "active".
+std::string StepTag(int n) {
+    std::string t;
+    n = n < 0 ? 0 : n;
+    do {
+        t.insert(t.begin(), char('a' + n % 26));
+        n /= 26;
+    } while (n > 0);
+    return "step-" + t;
 }
 
 std::vector<std::uint32_t> ParseIds(const char* v) {
@@ -750,7 +762,7 @@ std::uint64_t NearestEnemy(const float me[3], float pos[3], const std::vector<st
                 continue;
             }
             ++seen;
-            if (!SafeGet(chr + 0x3b0, &cm) || !cm || !SafeGet(cm + 0x20, &dm) || !dm || !SafeGet(dm + 0x128, &hp) ||
+            if (!SafeGet(chr + 0x3b0, &cm) || !cm || !SafeGet(cm + 0x20, &dm) || !dm || !SafeGet(dm + 0xf8, &hp) ||
                 hp <= 0) {
                 ++dead;
                 continue;
@@ -760,8 +772,11 @@ std::uint64_t NearestEnemy(const float me[3], float pos[3], const std::vector<st
             std::int32_t ent = 0, type = -1;
             SafeGet(chr + 0x3b8, &ent);
             SafeGet(chr + 0x78, &type);
-            if (ent >= 10000000 && ent <= 10000010) {
-                continue;  // a player (the host or another guest), not an enemy
+            if ((ent >= 10000000 && ent <= 10000010) || type == 0 || type == 1 || type == 2 || type == 8 || type == 12) {
+                continue;  // a player (the host or another guest: chr type 0/1/2/8/12), not an enemy
+            }
+            if (hp >= 999) {
+                continue;  // live: an untouchable 999-HP chr stands on the lamp (the lamp's own chr)
             }
             if (d < 30.0f * 30.0f && logged < 6) {
                 ++logged;
@@ -828,7 +843,7 @@ void KillTick(Fixture& f, double now) {
         if (SafeRead(kill_chr + 0xc0, p, sizeof p)) {
             std::memcpy(f.kill_pos, p, 12);
         }
-        const bool read = SafeGet(kill_chr + 0x3b0, &cm) && cm && SafeGet(cm + 0x20, &dm) && dm && SafeGet(dm + 0x128, &hp);
+        const bool read = SafeGet(kill_chr + 0x3b0, &cm) && cm && SafeGet(cm + 0x20, &dm) && dm && SafeGet(dm + 0xf8, &hp);
         if ((read && hp <= 0) || f.kill_stage >= 70) {
             Log("test: fixture: enemy (chr +0x3B8 %d) %s after %d weapon tap(s)", f.kill_id,
                 read && hp <= 0 ? "killed by this player's weapon" : "still alive", f.kill_stage - 10);
@@ -844,9 +859,7 @@ void KillTick(Fixture& f, double now) {
         f.release = now + 0.12;
         ++f.kill_stage;
         f.next = now + 0.7;
-        if ((f.kill_stage - 10) % 10 == 1) {
-            Log("test: fixture: R1 #%d, enemy HP %d", f.kill_stage - 10, read ? hp : -1);
-        }
+        Log("test: fixture: R1 %s, enemy HP %d", StepTag(f.kill_stage - 10).c_str(), read ? hp : -1);
         return;
     }
     if (f.kill_stage >= 1 && f.kill_stage <= 3) {
@@ -934,6 +947,7 @@ void FixtureTick(double now) {
             }
             std::string what;
             PutLocal(cur.data(), 0.0f, 1.0f, f.presses <= 8 ? 0.6f : 1.1f, float(f.presses % 8) * 45.0f, &what);
+            Log("test: fixture: treasure %s: Cross", StepTag(f.presses).c_str());
             runtime_pad_director_press(0x4000);
             f.release = now + 0.15;
             ++f.presses;
@@ -973,6 +987,21 @@ void FixtureTick(double now) {
                 }
             }
             if (f.tries == 0) {
+                // The nearest treasures with their pickup flag and this player's view (taken or not).
+                std::vector<std::pair<float, const Treasure*>> near;
+                const float* from = f.has_near ? f.near : me;
+                for (const Treasure& tr : g_treasure) {
+                    const float dx = tr.pos[0] - from[0], dy = tr.pos[1] - from[1], dz = tr.pos[2] - from[2];
+                    near.emplace_back(std::sqrt(dx * dx + dy * dy + dz * dz), &tr);
+                }
+                std::sort(near.begin(), near.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+                for (std::size_t i = 0; i < near.size() && i < 8; ++i) {
+                    bool taken = false;
+                    const bool known = near[i].second->flag && progress::ReadFlag(near[i].second->flag, &taken);
+                    Log("test: fixture: treasure %zu: (%.1f, %.1f, %.1f) %.1f m, flag %u %s", i, near[i].second->pos[0],
+                        near[i].second->pos[1], near[i].second->pos[2], near[i].first, near[i].second->flag,
+                        !known ? "?" : taken ? "taken" : "NOT taken");
+                }
                 std::size_t with = 0;
                 for (const Treasure& tr : g_treasure) {
                     with += tr.flag ? 1 : 0;
@@ -981,9 +1010,9 @@ void FixtureTick(double now) {
                     with);
             }
         }
-        if (bd > 1e8f) {
+        if (bd > 60.0f * 60.0f) {
             f.pickups = 0;
-            Log("test: fixture: no treasure left to try");
+            Log("test: fixture: no untaken treasure within 60 m (nearest %.0f m)", std::sqrt(bd));
             return;
         }
         if (f.presses == 0) {
