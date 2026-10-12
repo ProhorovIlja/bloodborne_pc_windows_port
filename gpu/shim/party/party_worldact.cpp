@@ -342,7 +342,12 @@ State& S() {
                                       "keep own treasure at the host's item sync (all kinds)");
             const bool e = PatchBytes(0x17D40AB, {0xe8, 0x90, 0x1a, 0x00, 0x00}, {0x0f, 0x1f, 0x44, 0x00, 0x00},
                                       "keep own treasure at the host's item sync (treasure)");
-            g_st.pickups = a && b && c && d && e;
+            // A client's treasure record gets no handle of its own (0x17D4FB0 numbers records only on
+            // the host: role 6 / slot gates), so all of them kept handle 0x3 and a pickup's lookup
+            // (0x17D81A0, first match) found another record: number them like the host does.
+            const bool g = PatchBytes(0x17D52D9, {0x74, 0x26}, {0x66, 0x90}, "own treasure handles on a client (role 6)");
+            const bool h = PatchBytes(0x17D52E6, {0x75, 0x1c}, {0x66, 0x90}, "own treasure handles on a client (slot)");
+            g_st.pickups = a && b && c && d && e && g && h;
             progress::SetInstancedItems(g_st.pickups);
             Log("guest treasure pickups in the host's world: %s (instanced per player)",
                 g_st.pickups ? "on" : "NOT installed");
@@ -1045,7 +1050,49 @@ void FixtureTick(double now) {
                 SafeGet(hit + 0x20, &handle);
                 const std::uint64_t picks0 = g_pickups.load();
                 const std::string what = items(hit);
+                std::uint16_t f48 = 0;
+                SafeGet(hit + 0x48, &f48);
+                Log("test: fixture: grab: record flags +0x48 %#x (0x40 live, 0x80 host-owned)", unsigned(f48));
+                using Find = std::uint64_t(BB_COOP_SYSV*)(std::uint64_t, std::int32_t);
+                const std::uint64_t found = reinterpret_cast<Find>(Guest(0x17d81a0))(man, handle);
+                std::string hs;
+                {
+                    std::uint64_t q = 0;
+                    SafeGet(man + 0x28, &q);
+                    for (int g = 0; q && g < 12; ++g) {
+                        std::int32_t hh = 0, ff = 0;
+                        std::uint16_t fl = 0;
+                        SafeGet(q + 0x20, &hh);
+                        SafeGet(q + 0x28, &ff);
+                        SafeGet(q + 0x48, &fl);
+                        char b[64];
+                        std::snprintf(b, sizeof b, " [%#x %d %#x]", unsigned(hh), ff, unsigned(fl));
+                        hs += b;
+                        if (!SafeGet(q, &q)) {
+                            break;
+                        }
+                    }
+                }
+                Log("test: fixture: grab: lookup 0x17D81A0(%#x) -> %p (record %p); list [handle flag bits]:%s, next handle %#x",
+                    unsigned(handle), reinterpret_cast<void*>(found), reinterpret_cast<void*>(hit), hs.c_str(),
+                    [&] { std::uint32_t c = 0; SafeGet(man + 0xc, &c); return c; }());
+                const int rm0 = g_rec[0].load();
                 pick(man, &handle);
+                {
+                    bool still = false;
+                    std::uint64_t q = 0;
+                    SafeGet(man + 0x28, &q);
+                    for (int g = 0; q && g < 4096; ++g) {
+                        still = still || q == hit;
+                        if (!SafeGet(q, &q)) {
+                            break;
+                        }
+                    }
+                    std::uint16_t f2 = 0;
+                    SafeGet(hit + 0x48, &f2);
+                    Log("test: fixture: grab: after the pickup: record %s, removes %d -> %d, flags %#x", still ? "still listed" : "gone",
+                        rm0, g_rec[0].load(), unsigned(f2));
+                }
                 Log("test: fixture: grab: treasure flag %u (handle %#x, items%s) picked up through 0x17D8570: %s; "
                     "before: visible %d, own save %d, host %d", f.grab, unsigned(handle), what.c_str(),
                     g_pickups.load() > picks0 ? "pickup ran" : "pickup did NOT run", int(vis), int(own), int(host));
