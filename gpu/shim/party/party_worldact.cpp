@@ -320,10 +320,10 @@ State& S() {
         g_st.watch = ParseIds(std::getenv("BB_PARTY_WORLD_WATCH"));
         Log("guest world actions %s (levers, doors, shortcuts, elevators, NPC talk -> the host's world)",
             g_st.enabled ? "on" : "off");
-        // 0.5.2: off by default (opt-in, =1) until the own-save write of a guest's pickup and a
-        // guest's full drop have been verified live (docs/party/world_actions.md 4, 10).
+        // On by default since 0.5.9 (live 2026-10-12: a guest and the host each took their own copy
+        // of the same clinic treasure, docs/party/world_actions.md 4); BB_PARTY_GUEST_PICKUP=0 off.
         const char* pk = std::getenv("BB_PARTY_GUEST_PICKUP");
-        if (g_st.enabled && pk && pk[0] == '1') {
+        if (g_st.enabled && !(pk && pk[0] == '0')) {
             // D4, instanced world items (items.md 2.4): MSB treasure is spawned on a client too
             // (0x17DC300: role 6 / session slot gates), and its pickup sets the pickup flag and runs
             // its Lua event there (0x17D6780: the "client in another world" skip) - into the
@@ -347,7 +347,11 @@ State& S() {
             // (0x17D81A0, first match) found another record: number them like the host does.
             const bool g = PatchBytes(0x17D52D9, {0x74, 0x26}, {0x66, 0x90}, "own treasure handles on a client (role 6)");
             const bool h = PatchBytes(0x17D52E6, {0x75, 0x1c}, {0x66, 0x90}, "own treasure handles on a client (slot)");
-            g_st.pickups = a && b && c && d && e && g && h;
+            // ... and the pickup flag itself (+0x28 of the record, the lot's getItemFlag) is set past a
+            // second "client in another world" gate in 0x17D6780 (0x17D6AF6).
+            const bool k = PatchBytes(0x17D6AF6, {0x0f, 0x84, 0x5c, 0x05, 0x00, 0x00},
+                                      {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00}, "pickup flag on a client (lot flag)");
+            g_st.pickups = a && b && c && d && e && g && h && k;
             progress::SetInstancedItems(g_st.pickups);
             Log("guest treasure pickups in the host's world: %s (instanced per player)",
                 g_st.pickups ? "on" : "NOT installed");
@@ -1052,7 +1056,9 @@ void FixtureTick(double now) {
                 const std::string what = items(hit);
                 std::uint16_t f48 = 0;
                 SafeGet(hit + 0x48, &f48);
-                Log("test: fixture: grab: record flags +0x48 %#x (0x40 live, 0x80 host-owned)", unsigned(f48));
+                std::int32_t f24 = 0;
+                SafeGet(hit + 0x24, &f24);
+                Log("test: fixture: grab: record flags +0x48 %#x (0x40 live, 0x80 host-owned), +0x24 %d", unsigned(f48), f24);
                 using Find = std::uint64_t(BB_COOP_SYSV*)(std::uint64_t, std::int32_t);
                 const std::uint64_t found = reinterpret_cast<Find>(Guest(0x17d81a0))(man, handle);
                 std::string hs;

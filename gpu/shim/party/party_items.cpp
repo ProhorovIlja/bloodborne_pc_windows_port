@@ -283,6 +283,10 @@ std::optional<ItemGrant> ClassifyFlag(std::int32_t flag, const std::map<std::int
     return g;
 }
 
+bool InstancedTreasureFlag(std::int32_t flag, bool instanced, bool captured) {
+    return instanced && !captured && flag >= 50000000 && flag < 60000000 && flag / 100000 % 100 != 0;
+}
+
 json::Value ItemsToJson(const std::vector<ItemGrant>& items) {
     json::Value v = json::Value::make_object();
     json::Value a = json::Value::make_array();
@@ -1764,7 +1768,13 @@ void OnHostFlagSet(std::uint32_t flag) {
     bool queued = false;
     {
         std::lock_guard<std::mutex> lk(g_host_mu);
-        g = ClassifyFlag(static_cast<std::int32_t>(flag), g_host.Captured());
+        const auto& cap = g_host.Captured();
+        if (InstancedTreasureFlag(static_cast<std::int32_t>(flag), progress::InstancedItems(),
+                                  cap.count(static_cast<std::int32_t>(flag)) != 0)) {
+            Log("host flag %u: map treasure, per player (guests pick up their own)", flag);
+            return;
+        }
+        g = ClassifyFlag(static_cast<std::int32_t>(flag), cap);
     }
     if (g && g->items.empty()) {
         // A treasure with a blood gem: the gem the host picked up a moment ago (its give list).
@@ -1836,7 +1846,8 @@ bool TakeHostFullItems(int* slot, std::vector<ItemGrant>* out) {
     }
     std::set<std::int32_t> seen;
     for (const LotFlag& e : kLotFlags) {
-        if (!seen.insert(e.flag).second || !IsFlag(man, e.flag)) {
+        if (!seen.insert(e.flag).second || !IsFlag(man, e.flag) ||
+            InstancedTreasureFlag(e.flag, progress::InstancedItems(), captured.count(e.flag) != 0)) {
             continue;
         }
         if (std::optional<ItemGrant> g = ClassifyFlag(e.flag, captured)) {
