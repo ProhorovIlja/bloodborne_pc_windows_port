@@ -341,10 +341,14 @@ Policy Policy::FromEnv() {
     Policy p = Defaults();
     // NPC quest choices are shared (user decision 2026-10-11): on unless BB_PARTY_PROGRESS_NPC=0.
     if (EnvOn("BB_PARTY_PROGRESS_NPC", true)) {
-        p.mode[static_cast<int>(Category::npc_quest)] = SyncMode::SetOnly;
+        p.mode[static_cast<int>(Category::npc_quest)] = SyncMode::Follow;
     }
     p.mirror_overlay = EnvOn("BB_PARTY_PROGRESS_MIRROR", false);
     return p;
+}
+
+int NpcStateGroup(u32 id) {
+    return id >= 1000 && id <= 1999 ? int((id - 1000) / 20) : -1;
 }
 
 bool HostCandidate(u32 id, Category cat) {
@@ -1014,10 +1018,19 @@ void GuestApplier::QueueSnapshot(const FlagSnapshot& snap) {
     QueueSnapshot(snap, SnapshotPlan{});
 }
 
-GuestApplier::SnapshotPlan GuestApplier::PlanSnapshot(const FlagSnapshot& snap, const Policy& policy) {
-    SnapshotPlan plan;
-    plan.valid = true;
-    plan.policy = policy;
+namespace {
+// The (id, value) pairs a snapshot writes under `policy`, in block / bit order.
+std::vector<std::pair<u32, bool>> SnapshotWrites(const FlagSnapshot& snap, const Policy& policy) {
+    std::vector<std::pair<u32, bool>> out;
+    std::array<bool, 50> npc_group{};  // NPC state machines the host has any bit of
+    for (const auto& [block, bits] : snap.blocks) {
+        for (u32 b : bits) {
+            const int g = b < kBitsPerBlock ? NpcStateGroup(block * kBitsPerBlock + b) : -1;
+            if (g >= 0) {
+                npc_group[std::size_t(g)] = true;
+            }
+        }
+    }
     for (const auto& [block, bits] : snap.blocks) {
         const auto* mask = CandidateMask(block);
         if (!mask) {
@@ -1036,11 +1049,22 @@ GuestApplier::SnapshotPlan GuestApplier::PlanSnapshot(const FlagSnapshot& snap, 
             const u32 id = block * kBitsPerBlock + b;
             const bool v = GetBit(set.data(), b);
             const SyncMode m = ModeFor(policy, id);
-            if (m == SyncMode::State || (m == SyncMode::SetOnly && v)) {
-                plan.flags.emplace_back(id, v);
+            const int g = NpcStateGroup(id);
+            if (m == SyncMode::State || (m != SyncMode::Off && v) ||
+                (m == SyncMode::Follow && g >= 0 && npc_group[std::size_t(g)])) {
+                out.emplace_back(id, v);
             }
         }
     }
+    return out;
+}
+} // namespace
+
+GuestApplier::SnapshotPlan GuestApplier::PlanSnapshot(const FlagSnapshot& snap, const Policy& policy) {
+    SnapshotPlan plan;
+    plan.valid = true;
+    plan.policy = policy;
+    plan.flags = SnapshotWrites(snap, policy);
     return plan;
 }
 
@@ -1075,6 +1099,9 @@ bool GuestApplier::ApplyOne(const FlagStore& store, const Policy& policy, u32 id
         ++n_.already;
     } else if (store.WriteOwnSave(id, value)) {
         ++n_.applied;
+        if (m == SyncMode::Follow && !value) {
+            ++n_.npc_cleared;  // D8: the host's quest step took this state away
+        }
     } else {
         ++n_.failed;
         return false;
@@ -1123,34 +1150,10 @@ std::size_t GuestApplier::Apply(const FlagStore& store, const Policy& policy, bo
             }
             continue;
         }
-        if (it.plan.valid && it.plan.policy == policy) {
-            for (const auto& [id, v] : it.plan.flags) {
-                apply(id, v);
-            }
-            continue;
-        }
-        for (const auto& [block, bits] : it.snap.blocks) {
-            const auto* mask = CandidateMask(block);
-            if (!mask) {
-                continue;
-            }
-            std::array<u8, kBlockBytes> set{};
-            for (u32 b : bits) {
-                if (b < kBitsPerBlock) {
-                    PutBit(set.data(), b, true);
-                }
-            }
-            for (u32 b = 0; b < kBitsPerBlock; ++b) {
-                if (!GetBit(mask->data(), b)) {
-                    continue;
-                }
-                const u32 id = block * kBitsPerBlock + b;
-                const bool v = GetBit(set.data(), b);
-                const SyncMode m = ModeFor(policy, id);
-                if (m == SyncMode::State || (m == SyncMode::SetOnly && v)) {
-                    apply(id, v);
-                }
-            }
+        const std::vector<std::pair<u32, bool>> writes =
+            it.plan.valid && it.plan.policy == policy ? it.plan.flags : SnapshotWrites(it.snap, policy);
+        for (const auto& [id, v] : writes) {
+            apply(id, v);
         }
     }
     items_.clear();
@@ -1730,6 +1733,7 @@ struct Global {
     std::string dump_dir;
     int scan_ms = 1000;
     std::vector<u32> test_clear;  // BB_PARTY_PROGRESS_TEST_CLEAR: cleared once, first steady own world
+    std::vector<u32> test_set;    // BB_PARTY_PROGRESS_TEST_SET: set once, same place (after the clears)
     std::vector<u32> test_read;
     FlagSnapshot host_snap;       // guest: the host's last full snapshot (late-joiner catch-up)
     bool have_host_snap = false;   // BB_PARTY_PROGRESS_TEST_READ: own-save values logged at each steady load
@@ -2027,9 +2031,10 @@ void GuestTick(Global& g, const FlagStore& store, u32 map_id) {
         return;  // kept for later (mode 0 outside the post-load window)
     }
     const auto& c = g.applier.counters();
-    Log("guest applied %zu flags in load mode %d (already %llu, skipped %llu, failed %llu; cursor %llu; %zu boss "
-        "flag(s) of this map held back: written silently once summoned or elsewhere)", n,
-        store.LoadMode(), static_cast<unsigned long long>(c.already - before.already),
+    Log("guest applied %zu flags in load mode %d (NPC state cleared %llu, already %llu, skipped %llu, failed %llu; "
+        "cursor %llu; %zu boss flag(s) of this map held back: written silently once summoned or elsewhere)", n,
+        store.LoadMode(), static_cast<unsigned long long>(c.npc_cleared - before.npc_cleared),
+        static_cast<unsigned long long>(c.already - before.already),
         static_cast<unsigned long long>(c.skipped - before.skipped),
         static_cast<unsigned long long>(c.failed - before.failed),
         static_cast<unsigned long long>(g.applier.cursor().last_seq()), g.applier.Held());
@@ -2196,6 +2201,19 @@ void Init() {
                 p = *end ? end + 1 : end;
             }
         }
+        if (const char* t = std::getenv("BB_PARTY_PROGRESS_TEST_SET"); t && t[0]) {
+            for (const char* p = t; *p;) {
+                char* end = nullptr;
+                const unsigned long id = std::strtoul(p, &end, 10);
+                if (end == p) {
+                    break;
+                }
+                if (id && !NeverWritable(u32(id))) {
+                    g.test_set.push_back(u32(id));
+                }
+                p = *end ? end + 1 : end;
+            }
+        }
         if (!g.enabled) {
             Log("off (BB_PARTY_PROGRESS=0)");
             return;
@@ -2303,19 +2321,27 @@ void Tick(const GameSnapshot& s) {
         WriteDumps(g, store, s);
         g.label = keep;
     }
-    if (!g.test_clear.empty() && store.LoadMode() == 0) {
-        // Test fixture (a guest save that lacks some host progress): before anything is applied.
-        std::string list;
-        for (u32 id : g.test_clear) {
-            bool before = false, after = false;
-            store.ReadOwnSave(id, &before);
-            store.WriteOwnSave(id, false);
-            store.ReadOwnSave(id, &after);
-            list += (list.empty() ? "" : ",") + std::to_string(id) + ":" + std::to_string(int(before)) + "->" +
-                    std::to_string(int(after));
+    if ((!g.test_clear.empty() || !g.test_set.empty()) && store.LoadMode() == 0) {
+        // Test fixture (a guest save that lacks some host progress, or holds a stale NPC state):
+        // before anything is applied.
+        for (const bool on : {false, true}) {
+            std::vector<u32>& ids = on ? g.test_set : g.test_clear;
+            if (ids.empty()) {
+                continue;
+            }
+            std::string list;
+            for (u32 id : ids) {
+                bool before = false, after = false;
+                store.ReadOwnSave(id, &before);
+                store.WriteOwnSave(id, on);
+                store.ReadOwnSave(id, &after);
+                list += (list.empty() ? "" : ",") + std::to_string(id) + ":" + std::to_string(int(before)) + "->" +
+                        std::to_string(int(after));
+            }
+            Log("test: %s in the own save (%s): %s", on ? "set" : "cleared", CategoryName(CategoryOf(ids.front())),
+                list.c_str());
+            ids.clear();
         }
-        Log("test: cleared in the own save (%s): %s", CategoryName(CategoryOf(g.test_clear.front())), list.c_str());
-        g.test_clear.clear();
         g.dump_session = true;
     }
     if (g.stable == kStableFrames && !g.test_read.empty()) {
