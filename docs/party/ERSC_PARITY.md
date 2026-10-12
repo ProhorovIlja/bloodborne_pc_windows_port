@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-11 (agent/guestprog: D3, D4, D10, G2 for 0.5.2).
+Last update: 2026-10-12 (agent/guestprog: D10).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -54,12 +54,12 @@ only 100% when it meets it.
 | A. Session & joining | 86% |
 | B. World & travel | 84% |
 | C. Death & respawn | 79% |
-| D. Progress (anyone can progress) | 81% |
+| D. Progress (anyone can progress) | 82% |
 | E. Services & UI | 90% |
 | F. Network & robustness | 78% |
 | G. BB-specific (chalice, insight, bath) | 74% |
 | H. Bloodborne rule (feels like SP in a party) | 76% |
-| **Overall (unweighted mean of rows)** | **~81%** |
+| **Overall (unweighted mean of rows)** | **~82%** |
 
 ## A. Session & joining
 
@@ -114,7 +114,7 @@ only 100% when it meets it.
 | D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Measured: BB scales only bosses (SpEffect 7500/7501: +50 % HP and status resist per cooperator, damage +0; the rows' +30 poise is inert: the engine counts changeSuperArmorPoint only with stateInfo 155). Six settings per extra hunter (System > Enemy scaling, overlay Party tab, bbport.ini); defaults harder than vanilla (boss HP 150 %, boss damage +10 %, enemy HP 50 %, boss poise made real); negative poise = ERSC's staggerable note. Host's values to every peer; rows 7500-7503 written on each; 7503 on normal enemies, never on the 34 boss + 66 chalice boss entities | 95 | 2026-10-11 live (Cleric Beast, 1 cooperator): boss HP 5277 / 5277 on host AND guest (vanilla 4523), poise bonus +30 counted by the engine's sum, damage A/B 0 vs 100 %: hits 61-239 vs 216-534; enemies 520 -> 650; Enemy scaling page with six sliders screenshotted in the game's System menu. 2 cooperators (7501) not runnable: the test pool is 2 clients. Stagger frames not measured. docs/party/balance.md |
 | D8 | NPC dialogue / talk events synchronised | Yes | Guests talk to world NPCs (IsClientPlayer answered 0 for world talk scripts); quest flags the talk sets go to the host's world and the guest's own save (world_action npc_quest, set and clear); NPC quest sync to every guest's save on by default (shared quest choices, user decision) | 70 | 2026-10-11 live: Gilbert (talk prompt, dialogue), Iosefka at the clinic door: guest `set 1143 72410337 12410739 (npc_quest)` -> host `slot 1 changed the host's world ... 1143=1 72410337=1`. Cathedral Ward run: Oedon Chapel Dweller -> host 72400310=1, Eileen -> host 72400520=1. Next: a quest choice with an item gift, Alfred |
 | D9 | A grace rest resets the world for everyone | Yes | Lamp rest = host load: enemies respawn in the host's world; guests get the refill and HP (verified) | 85 | guest_services.md §3.3 |
-| D10 | Cutscenes play for the whole party | Synced talk events | Host-triggered scenes play for every guest (C4 live mirror); NEW: a scene a guest's own event plays in the host's world goes to the host (EVENT story_up), the host plays it and sends it to every guest; the triggering guest keeps its own copy | 65 | 2026-10-11 live (test hook `up:21000040`): host and guest played the same remo at the same moment for 54 s (screenshots: identical frames); the party HUD name panel stays visible during cutscenes (cosmetic). A real guest-triggered story event not run |
+| D10 | Cutscenes play for the whole party | Synced talk events | Host-triggered scenes play for every guest (C4 live mirror); NEW: a scene a guest's own event plays in the host's world goes to the host (EVENT story_up), the host plays it and sends it to every guest; the triggering guest keeps its own copy | 70 | 2026-10-12 live (test hook `up:21000040`): host and guest played the same remo at the same moment for 54 s; the party HUD panel and name tags now hide while a cutscene plays and come back after it (screenshots of both instances: no panel during the scene, panel and the partner's tag in place after). A real guest-triggered story event not run |
 
 ## E. Services & UI
 
@@ -185,3 +185,4 @@ only 100% when it meets it.
 - 2026-10-11: C1 85, C2 85, C5 50, H1 85, H4 80 (agent/hostdeath, b2_seamless.md §6.13): host revived in place at its lamp (guests stay), host death to another map alone, boss-fight limbo for host and guest, guest bloodstain.
 - 2026-10-11: B4 94, B5 78 (splittravel, 0.5.2): same-map hook for every lamp warp, camera reset, the invisible-guest draw bit, meets exchange records, 3 players apart, worldact for apart guests; enemy reconciliation off by default.
 - 2026-10-11 (guestprog, 0.5.2): D3 85, D4 75 (instanced treasure / full guest drops opt-in), D10 65 (guest-triggered cutscenes for the party), G2 55; gate and time-of-day catch-up opt-in.
+- 2026-10-12 (guestprog): D10 70 - party HUD hidden during cutscenes (live). Guest pickup / drop opt-ins stay off: the live fixture could not reach a treasure or a live enemy reliably (not verified).
