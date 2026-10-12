@@ -57,7 +57,7 @@ only 100% when it meets it.
 | D. Progress (anyone can progress) | 84% |
 | E. Services & UI | 90% |
 | F. Network & robustness | 78% |
-| G. BB-specific (chalice, insight, bath) | 74% |
+| G. BB-specific (chalice, insight, bath) | 77% |
 | H. Bloodborne rule (feels like SP in a party) | 76% |
 | **Overall (unweighted mean of rows)** | **~83%** |
 
@@ -141,7 +141,7 @@ only 100% when it meets it.
 | # | Feature | ERSC analogue | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
 | G1 | Chalice dungeons in party | Catacombs work in co-op | 2026-10-11 (0.5.2): Pthumeru layer 1 cleared live in a party (c11-c15, c20, c22, c25, c26): summon by quick join; lever + door; layer boss kill keeps the session (K10 both roles); each player's own boss loot (screenshots: item-get on both); the lift carries both (31.5 -> 10.5); the guest called the lift with the top lever (c22, c25; not in c26b); lamp exit puts both in the Dream with one load. Any player's ritual: chalices shared both ways; the host's altar offers "Enter the party's dungeon" for a guest's dungeon, also one from an earlier session (no glyph typing; c20: host entered, guest summoned, boss, loot, lift). Not verified: the one-press prompt walk (BB_PARTY_ALTAR_AUTO, off by default), the bottom lift lever, the guest's single load with its own copy, layer 2 and deeper | 85 | layer 2 walk; one-press entry live; bottom lever |
-| G2 | Insight, Messengers' bath, Insight items | — | Boss Insight (native +1 + director N-1); NEW: a host's non-boss Insight (first encounter, story) also goes to every guest present; Insight items white-enabled; Bath Messengers incl. the Insight shop open to guests (own echoes / Insight / stock) | 55 | Insight-shop purchase by a guest verified live earlier (guest_services.md 5: Insight 6 -> 5 in the guest's own save); encounter / story Insight for guests unit-tested, not run live |
+| G2 | Insight, Messengers' bath, Insight items | — | Boss Insight (native +1 + director N-1); NEW: a host's non-boss Insight (first encounter, story) also goes to every guest present; Insight items white-enabled; Bath Messengers incl. the Insight shop open to guests (own echoes / Insight / stock); NEW (0.6.1): the guest's Insight cap is a rolling budget (20 per 60 s, 10 per event) instead of one event per 30 s, which dropped a boss kill's Insight that came soon after its first-encounter Insight | 65 | Live 2026-10-13 (host9350 probe, 2 instances): story +1 then boss kill 3 s later -> guest Insight 6 -> 7 -> 8 -> 9; Insight-shop purchase by a guest verified live earlier (guest_services.md 5). Not run: a real walked-in story trigger, Madman's Knowledge use by a guest |
 | G3 | Blood Moon / world phase changes | — | Blood Moon live in a party (13201803, cutscene 32000000 on host and summoned guest, time of day into the guest's own save, event warp followed); evening -> night by Amelia's skull (12401803, cutscene 24000030 on both, host flag saved); a guest behind gets the host's time of day at the next summon | 82 | 2026-10-11 campaign_soak.md rows 5b, 7b, 13, 13b. The time-of-day catch-up only moves upward |
 
 ## H. Bloodborne rule: a party that plays like single-player
@@ -198,3 +198,4 @@ only 100% when it meets it.
 - 2026-10-12: C7 60 -> 85 (agent/hostdeath): a rest during a boss fight is a real load; bell join waits for the host's map, gather to the lamp nearest the host.
 - 2026-10-12 (guestprog): D4 80 - per-player enemy drops on by default (live on fresh characters); guest treasure stays opt-in.
 - 2026-10-12 (treasure): D4 80 -> 90 - per-player world treasure for guests on by default (the host's item sync cleared a guest's treasure records, which also had no handles, and its pickup flag was skipped: patched; live).
+- 2026-10-13 (insight, 0.6.1): G2 65 - guest Insight rolling budget (an encounter +1 no longer swallows the boss kill's Insight), live host9350 probe run.
