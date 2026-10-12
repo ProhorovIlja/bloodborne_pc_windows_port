@@ -53,7 +53,7 @@ User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
 6. **Cutscene played twice on a client** (open 4): the host-world copy of the event also runs on the
    client and played its own 2002 scene 0.1 s after the live mirror (run 5f, Mergo 26000010).
    party_story remembers mirrored events; party_b2 skips a client's 2002[1..7] of such an event
-   for 10 min. Not verified live yet, so it is **opt-in** for 0.5.2: `BB_PARTY_STORY_DEDUPE=1`.
+   for 10 min. Opt-in for 0.5.2; **on by default since 0.6.1** (`BB_PARTY_STORY_DEDUPE=0` turns it off; still not verified live).
    In run 9c (skull, without the switch) the guest saw the scene once.
 7. **The host's world change by a guest was not saved by the host** (NPC quest row): party_worldact
    now requests a save on the host after it applied a guest's world action.
