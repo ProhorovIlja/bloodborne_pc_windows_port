@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-11 (agent/guestprog: D3, D4, D10, G2 for 0.5.2).
+Last update: 2026-10-12 (agent/guestprog: D10).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -52,14 +52,14 @@ only 100% when it meets it.
 | Area | Parity |
 |---|---|
 | A. Session & joining | 86% |
-| B. World & travel | 84% |
+| B. World & travel | 85% |
 | C. Death & respawn | 79% |
-| D. Progress (anyone can progress) | 81% |
+| D. Progress (anyone can progress) | 82% |
 | E. Services & UI | 90% |
 | F. Network & robustness | 78% |
 | G. BB-specific (chalice, insight, bath) | 74% |
 | H. Bloodborne rule (feels like SP in a party) | 76% |
-| **Overall (unweighted mean of rows)** | **~81%** |
+| **Overall (unweighted mean of rows)** | **~82%** |
 
 ## A. Session & joining
 
@@ -85,7 +85,7 @@ only 100% when it meets it.
 | B2 | Fog / boss gates | Gone (no multiplayer fog walls) | Fog gates by pad verified | 80 | b2_seamless.md §6.8 |
 | B3 | Fast travel | Warping never ends the session; players may split up, so warps are per player *(per-player warp inferred)* | Each lamp / headstone / Hunter's Mark asks "Travel with the party?" (game dialog, cursor on YES). YES: party move (one load, B2; a move inside the loaded map is an in-world warp for everyone). NO: only that player moves (split_travel.md) | 90 | split11-13, inworld1-2 (2026-10-11). Open: Mark choice for guests needs BB_PARTY_GUEST_MARK |
 | B4 | Loading screens | One load, no rejoin | A real map change: one load (B2, guests stay clients). Every lamp warp to the loaded map (lamp menu, headstone, Mark, a host request, test steps) is a chr warp with a camera reset: no loading screen; at the lamp's own spot a no-op | 94 | inworld1-2, vis6-7 (screenshots: no load, camera behind the player). Open: Lua stage warps inside the map, same-map death respawn (hostdeath) |
-| B5 | Independent travel (split party travels apart) | Players may split up (stated); each respawns at their own last grace | Guest alone: into the host's area = one load for the guest only; elsewhere (Dream) = alone host-world load, host does not load; host alone: guests stay, no load; meeting again rebuilds the chrs without a load (records exchanged; draw bit fix: no invisible guest); 3 players apart (host meets both, guests in two maps); a lone guest's world actions go to the host (worldact, checked against its own map); alone travel sets the own last lamp; guest Hunter's Mark on by default | 78 | split13-14, split21-23 (3p), vis4 (meet visible, screenshots). Off by default: enemy kill reconciliation (BB_PARTY_SPLIT_ENEMIES, not verified live). Open: boss kills while apart (D3) |
+| B5 | Independent travel (split party travels apart) | Players may split up (stated); each respawns at their own last grace | Guest alone: into the host's area = one load for the guest only; elsewhere (Dream) = alone host-world load, host does not load; host alone: guests stay, no load; meeting again rebuilds the chrs without a load (records exchanged; draw bit fix: no invisible guest); 3 players apart (host meets both, guests in two maps); a lone guest's world actions go to the host (worldact, checked against its own map); alone travel sets the own last lamp; guest Hunter's Mark on by default | 82 | split13-14, split21-23 (3p), vis4 (meet visible, screenshots). Off by default: enemy kill reconciliation (BB_PARTY_SPLIT_ENEMIES, not verified live). Open: boss kills while apart (D3); 2026-10-12: re-created guests drawn (root cause, split31-36), alone travel without grey screens (split32-36) |
 | B6 | Scripted transitions, Hunter's Mark, headstones | n/a | All keep the session | 85 | edgetravel 6 cases |
 | B7 | Mount / map waypoints | Torrent for everyone; map waypoints synchronised | n/a (no mount, no map in BB) | — | |
 
@@ -114,7 +114,7 @@ only 100% when it meets it.
 | D7 | Enemy scaling | Customisable per-player scaling as a % of the vanilla formula (Nightreign doc: health_scaling=100 = vanilla per extra player); enemy and boss health / damage / posture; in 3-4 player parties big enemies' poise drops (more staggerable) | Measured: BB scales only bosses (SpEffect 7500/7501: +50 % HP and status resist per cooperator, damage +0; the rows' +30 poise is inert: the engine counts changeSuperArmorPoint only with stateInfo 155). Six settings per extra hunter (System > Enemy scaling, overlay Party tab, bbport.ini); defaults harder than vanilla (boss HP 150 %, boss damage +10 %, enemy HP 50 %, boss poise made real); negative poise = ERSC's staggerable note. Host's values to every peer; rows 7500-7503 written on each; 7503 on normal enemies, never on the 34 boss + 66 chalice boss entities | 95 | 2026-10-11 live (Cleric Beast, 1 cooperator): boss HP 5277 / 5277 on host AND guest (vanilla 4523), poise bonus +30 counted by the engine's sum, damage A/B 0 vs 100 %: hits 61-239 vs 216-534; enemies 520 -> 650; Enemy scaling page with six sliders screenshotted in the game's System menu. 2 cooperators (7501) not runnable: the test pool is 2 clients. Stagger frames not measured. docs/party/balance.md |
 | D8 | NPC dialogue / talk events synchronised | Yes | Guests talk to world NPCs (IsClientPlayer answered 0 for world talk scripts); quest flags the talk sets go to the host's world and the guest's own save (world_action npc_quest, set and clear); NPC quest sync to every guest's save on by default (shared quest choices, user decision) | 70 | 2026-10-11 live: Gilbert (talk prompt, dialogue), Iosefka at the clinic door: guest `set 1143 72410337 12410739 (npc_quest)` -> host `slot 1 changed the host's world ... 1143=1 72410337=1`. Cathedral Ward run: Oedon Chapel Dweller -> host 72400310=1, Eileen -> host 72400520=1. Next: a quest choice with an item gift, Alfred |
 | D9 | A grace rest resets the world for everyone | Yes | Lamp rest = host load: enemies respawn in the host's world; guests get the refill and HP (verified) | 85 | guest_services.md §3.3 |
-| D10 | Cutscenes play for the whole party | Synced talk events | Host-triggered scenes play for every guest (C4 live mirror); NEW: a scene a guest's own event plays in the host's world goes to the host (EVENT story_up), the host plays it and sends it to every guest; the triggering guest keeps its own copy | 65 | 2026-10-11 live (test hook `up:21000040`): host and guest played the same remo at the same moment for 54 s (screenshots: identical frames); the party HUD name panel stays visible during cutscenes (cosmetic). A real guest-triggered story event not run |
+| D10 | Cutscenes play for the whole party | Synced talk events | Host-triggered scenes play for every guest (C4 live mirror); NEW: a scene a guest's own event plays in the host's world goes to the host (EVENT story_up), the host plays it and sends it to every guest; the triggering guest keeps its own copy | 70 | 2026-10-12 live (test hook `up:21000040`): host and guest played the same remo at the same moment for 54 s; the party HUD panel and name tags now hide while a cutscene plays and come back after it (screenshots of both instances: no panel during the scene, panel and the partner's tag in place after). A real guest-triggered story event not run |
 
 ## E. Services & UI
 
@@ -185,3 +185,5 @@ only 100% when it meets it.
 - 2026-10-11: C1 85, C2 85, C5 50, H1 85, H4 80 (agent/hostdeath, b2_seamless.md §6.13): host revived in place at its lamp (guests stay), host death to another map alone, boss-fight limbo for host and guest, guest bloodstain.
 - 2026-10-11: B4 94, B5 78 (splittravel, 0.5.2): same-map hook for every lamp warp, camera reset, the invisible-guest draw bit, meets exchange records, 3 players apart, worldact for apart guests; enemy reconciliation off by default.
 - 2026-10-11 (guestprog, 0.5.2): D3 85, D4 75 (instanced treasure / full guest drops opt-in), D10 65 (guest-triggered cutscenes for the party), G2 55; gate and time-of-day catch-up opt-in.
+- 2026-10-12 (guestprog): D10 70 - party HUD hidden during cutscenes (live). Guest pickup / drop opt-ins stay off: the live fixture could not reach a treasure or a live enemy reliably (not verified).
+- 2026-10-12: B5 (splittravel): invisible re-created guest fixed at the root (STEP_Create creates phantoms hidden; a rewound chr is shown as InGameStart does), the grey-screen regression fixed (summoned placement written for every host-world load), shot.py --grey detector.
