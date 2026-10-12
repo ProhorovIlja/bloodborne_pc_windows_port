@@ -44,7 +44,7 @@ only 100% when it meets it.
 | Hunter's Dream | Always shared: everyone in the Dream is in the host's Dream together |
 | Cutscenes | Play for everyone in the party |
 | Joining during a boss fight / cutscene | Joiner waits outside (host's last lamp / fog) until it ends |
-| Party size | Max 4 players (host + 3) for now; 100% on A7 = 4 verified live |
+| Party size | Max 4 players (host + 3) supported; 5-player test runs allowed (2026-10-12) to try host + 4 |
 | Friendly fire / PvP, invasions | Not part of 100%. PvP / friendly fire the host can switch on and off is a "100%+" milestone (section I) |
 
 ## Summary
