@@ -52,7 +52,7 @@ only 100% when it meets it.
 | Area | Parity |
 |---|---|
 | A. Session & joining | 88% |
-| B. World & travel | 86% |
+| B. World & travel | 87% |
 | C. Death & respawn | 86% |
 | D. Progress (anyone can progress) | 85% |
 | E. Services & UI | 90% |
@@ -81,7 +81,7 @@ only 100% when it meets it.
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| B1 | No tether / roam anywhere | All fog walls / barriers (and their teleports) removed; the whole map is open and the party may split up | Confinement walls opened; players can stand in different map blocks (stale-hit crash fixed); the soak walked the host across Cathedral Ward / Great Bridge with the guest, and hopped through 9 areas | 78 | 2026-10-11: travel.md §7 (146 m split held 2+ min), campaign_soak.md rows 2-10 (no crash in 14 runs). Real stick walk-away not tested (driver ready, not run before the 0.5.2 wrap-up) |
+| B1 | No tether / roam anywhere | All fog walls / barriers (and their teleports) removed; the whole map is open and the party may split up | Confinement walls opened; players can stand in different map blocks (stale-hit crash fixed); the soak walked the host across Cathedral Ward / Great Bridge with the guest, and hopped through 9 areas; a guest walking away by the real left stick, up to 140 m from the host and through two opened confinement walls, stays in the session (no leash: nothing sends it home) | 85 | 2026-10-11: travel.md §7 (146 m split held 2+ min), campaign_soak.md rows 2-10 (no crash in 14 runs). 2026-10-13: travel.md §7.1 (stick walk-away, 5 min apart, host role 3 / guest 6, cooperators 1 throughout, no send-home). Open: a stick walk across a stage-record (block) boundary, e.g. Great Bridge -> Cathedral Ward |
 | B2 | Fog / boss gates | Gone (no multiplayer fog walls) | Fog gates by pad verified | 80 | b2_seamless.md §6.8 |
 | B3 | Fast travel | Warping never ends the session; players may split up, so warps are per player *(per-player warp inferred)* | Each lamp / headstone / Hunter's Mark asks "Travel with the party?" (game dialog, cursor on YES). YES: party move (one load, B2; a move inside the loaded map is an in-world warp for everyone). NO: only that player moves (split_travel.md). Decision (2026-10-12): a party travel moves only members in the host's session (summoned, joining, or sent home by it moments ago); a member in its prologue or alone in its own world is never moved (host: not sent when nobody is in its world; guest: `travel #N ignored: in own world (prologue)`) | 90 | split11-13, inworld1-2 (2026-10-11). Open: Mark choice for guests needs BB_PARTY_GUEST_MARK |
 | B4 | Loading screens | One load, no rejoin | A real map change: one load (B2, guests stay clients). Every lamp warp to the loaded map (lamp menu, headstone, Mark, a host request, test steps) is a chr warp with a camera reset: no loading screen; at the lamp's own spot a no-op | 95 | inworld1-2, vis6-7 (screenshots: no load, camera behind the player). Open: Lua stage warps inside the map, same-map death respawn (hostdeath) 2026-10-12 (0.5.6): scripted stage warps (EMEVD 2003[14] / Lua WarpNextStage) to a point of the loaded map resolved (MSB region table) and moved in-world without a load (st1, `BB_PARTY_STAGE_INWORLD`, off: no real scripted warp exercised). |
@@ -164,6 +164,7 @@ only 100% when it meets it.
 
 ## Change log
 
+- 2026-10-13 (b1): B1 78 -> 85: real left-stick walk-away of a guest (new test step `guest_stick=X:Z[:R[:STEPS]]` / `obj:ENTITY:DIST:ANGLE`): Great Bridge walk, then through the opened confinement walls 2411997 / 2411999, up to 140 m from the host for 5 min: no send-home, no leave, cooperators 1 on both; no leash exists (phantom_limits.md §4 confirmed live); B 86 -> 87, overall ~84%.
 - 2026-10-13 (h5): H5 75 -> 85: the Memory Altar is t210699 at chr 2100203 (not a Bath Messenger; t210690 is unused) and opens for a guest in the host's Dream (live: prompt "Memory Altar", talk allowed); the Dream mirror's appearance editor restored (port of bbhost's dream_mirror_layout, generated mod layer, BB_DREAM_MIRROR, default on), its talk live on a guest; mods.py no longer writes into the game folder through a junction on Python 3.10/3.11; H 78 -> 80, overall ~84%.
 - 2026-10-13 (cutscene): D10 70 -> 72: story dedupe on by default (a guest no longer sees a mirrored scene a second time from its own copy of the event); not verified live (no scene fired, black shots: desktop locked); D 85, overall ~84% unchanged.
 - 2026-10-13 (a7): A7 85 -> 90: the late-joiner bug (a title-joined guest without chrs for later joiners, 48 s first sync) no longer reproduces with the flowlive fix: 3-player live run, every peer sees every chr; A 87 -> 88, overall ~84%.
