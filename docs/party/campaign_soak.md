@@ -115,3 +115,18 @@ User design decisions (ERSC_PARITY.md "Design decisions"), per milestone:
    whether a body is under it; worth checking against the user's "health bars floating in midair".
 7. **Visual: the party member plate (bottom left, "Hunter1 13 m") stays on screen during cutscenes**
    on both windows (run 9c, skull scene). Cosmetic.
+
+## H3 slice: does the guest's own save keep the host's progress (2026-10-13, agent h3)
+
+Base save copies (`savedata_20261010`, title join + summon in m21). Run 1: host `set_flag` of lamps
+13407800 / 13507800, shortcuts 13401210 / 13501101, boss 13401800, cutscene 13401801 (all 0 in both
+saves, `BB_PARTY_PROGRESS_TEST_READ`); the guest applied all 6 in load mode 1 and requested a save
+0 s later (its `savedata_party` file written the same second); the run then killed both games.
+Run 2 (Continue): the guest's first read is `own 1` for all six, so nothing was lost by the kill.
+The host's own read was 0: `set_flag` is a bare test write that no game save follows (a real lamp /
+lever / boss triggers the game's own save), so it is not a product gap.
+Not covered: echoes from a host kill (`host_kill=0` picked 2410740, not loaded; no Echoes change),
+an item picked by the guest, the guest's Leave path (the guest never loaded its own world).
+Notes for the next run: the guest's `BB_PARTY_PROGRESS_TEST_CLEAR` only runs in load mode 0, so a
+title-joined guest never clears; a `guest_*` travel step never fired for a title-joined guest
+(no (re)join event on its clock), so `--crash-when` on it did not trigger.
