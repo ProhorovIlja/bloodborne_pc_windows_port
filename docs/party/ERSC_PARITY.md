@@ -56,7 +56,7 @@ only 100% when it meets it.
 | C. Death & respawn | 86% |
 | D. Progress (anyone can progress) | 85% |
 | E. Services & UI | 90% |
-| F. Network & robustness | 78% |
+| F. Network & robustness | 80% |
 | G. BB-specific (chalice, insight, bath) | 77% |
 | H. Bloodborne rule (feels like SP in a party) | 76% |
 | **Overall (unweighted mean of rows)** | **~84%** |
@@ -129,8 +129,8 @@ only 100% when it meets it.
 
 | # | Feature | ERSC | bbport now | % | Evidence / next |
 |---|---|---|---|---|---|
-| F1 | Real internet play (latency/loss) | Works over Steam | Network simulator on both transports (UDP game traffic, TCP party link) + scripted outages; party events reliable and ordered (TCP + replay cursor). Live 2026-10-11 at 60 ms/1 %, 150 ms/3 % and a 5 s total outage mid-session: bell join 5-11 s, B2 travel, guest/host deaths, boss clear, mirror parity all fine, 0 link drops | 75 | network_robustness.md §3; party-link-test netsim (300 events in order through 5 % loss + 1.5 s outage); a real 2-PC internet test still open |
-| F2 | NAT traversal | Steam relay | Host: one port UDP+TCP (9307), UPnP on by default, manual-forward hint, STUN address in the code. **No port: UDP hole punching** - each guest's code `BBG1-...` (its STUN endpoint) to the host (*Add a guest code*), the host punches, the party link falls back to a reliable UDP stream on the same port (`party_rudp`), the game's UDP shares the mapping. Guest-guest punch with host relay. Symmetric NAT / CGNAT on both sides cannot be punched -> another host or a VPN; member relay considered, not built | 75 | 2026-10-11: network_robustness.md §3b/§4; live NAT-sim run (`nat=1`, no TCP listener): link over UDP 0.6 s after the punch, bell join, B2 travel; party-link-test rudp + NAT cases. No real router tested |
+| F1 | Real internet play (latency/loss) | Works over Steam | Network simulator on both transports (UDP game traffic, TCP party link) + scripted outages; party events reliable and ordered (TCP + replay cursor). Live 2026-10-11 at 60 ms/1 %, 150 ms/3 % and a 5 s total outage mid-session: bell join 5-11 s, B2 travel, guest/host deaths, boss clear, mirror parity all fine, 0 link drops | 80 | network_robustness.md §3, §3c (2026-10-13: the default title join and the bell direct summon under `dsl` + NAT sim: bell -> client 3.1 s, host cooperators 1 7.9 s after the bell, 173 s stable, 0 drops); party-link-test netsim (300 events in order through 5 % loss + 1.5 s outage); a real 2-PC internet test still open |
+| F2 | NAT traversal | Steam relay | Host: one port UDP+TCP (9307), UPnP on by default, manual-forward hint, STUN address in the code. **No port: UDP hole punching** - each guest's code `BBG1-...` (its STUN endpoint) to the host (*Add a guest code*), the host punches, the party link falls back to a reliable UDP stream on the same port (`party_rudp`), the game's UDP shares the mapping. Guest-guest punch with host relay. Symmetric NAT / CGNAT on both sides cannot be punched -> another host or a VPN; member relay considered, not built | 78 | 2026-10-11: network_robustness.md §3b/§4; 2026-10-13 §3c: direct summon and title join through the NAT sim (link over UDP 0.15 s after the switch); live NAT-sim run (`nat=1`, no TCP listener): link over UDP 0.6 s after the punch, bell join, B2 travel; party-link-test rudp + NAT cases. No real router tested |
 | F3 | Security | n/a | Hardening + fuzzing of party events | 80 | party-security-test |
 | F4 | Invasions | allow_invaders=1 enables invaders (hairpin item); no warp or rest during an invasion | None (serverless) | — | Not planned |
 | F5 | Watchdog / desync recovery | n/a | Watchdog, B1 fallback; a 5 s outage mid-session survives without desync (no reconnect, client kept, mirror parity); link reconnect + event replay tested | 80 | network_robustness.md §3 (2026-10-11 outage run); party-link-test |
@@ -167,6 +167,7 @@ only 100% when it meets it.
 - 2026-10-13 (cutscene): D10 70 -> 72: story dedupe on by default (a guest no longer sees a mirrored scene a second time from its own copy of the event); not verified live (no scene fired, black shots: desktop locked); D 85, overall ~84% unchanged.
 - 2026-10-13 (a7): A7 85 -> 90: the late-joiner bug (a title-joined guest without chrs for later joiners, 48 s first sync) no longer reproduces with the flowlive fix: 3-player live run, every peer sees every chr; A 87 -> 88, overall ~84%.
 - 2026-10-13 (a11): A11 75 -> 85: the title join and the direct summon (both default on) ignored the boss-fight / cutscene hold (live: guest Continued into the Cleric Beast fight); both refused with the reason now, wait notice on both sides; A 86 -> 87, overall ~84%.
+- 2026-10-13 (netsim2, 0.6.1): F1 75 -> 80, F2 75 -> 78: the default join paths (title join, bell direct summon) live under `dsl` + NAT sim, 173 s stable; F 78 -> 80 %.
 - 2026-10-12 (inworld, 0.5.9): H1 86 -> 87: scripted same-map stage warps checked against every EMEVD warp: none reaches `BB_PARTY_STAGE_INWORLD` (cutscene warps bypass the funnel, Chalice layers need the load), open item closed, switch stays off.
 - 2026-10-12 (prologuetravel, 0.5.8): B3 decision: party travel (lamp, headstone, host death, any broadcast) never moves a member in its prologue or alone in its own world (2-PC LAN: a guest in the Dream was warped into the clinic, an unsummoned guest sent home by the host's prologue death).
 - 2026-10-12 (splittravel, 0.5.6): B4 94 -> 95 (scripted stage warps in the loaded map, off), B5 82 -> 85 (Continue after an alone travel keeps the own save spot, c7), H1 85 -> 86; B 85 -> 86.
