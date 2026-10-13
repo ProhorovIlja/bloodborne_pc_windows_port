@@ -78,6 +78,13 @@ std::string RequestToJson(const Request& r) {
         }
         v.set("kick", std::move(k));
     }
+    if (!r.fog.empty()) {
+        json::Value f = json::Value::make_array();
+        for (std::uint32_t id : r.fog) {
+            f.push(static_cast<unsigned>(id));
+        }
+        v.set("fog", std::move(f));
+    }
     return json::dump(v, 0);
 }
 
@@ -118,7 +125,23 @@ bool RequestFromJson(const std::string& text, Request* out, std::string* error) 
                 r.kick.push_back(std::int32_t(id));
             }
         }
-        if (set.size() > kMaxSet || clr.size() > kMaxClear || (set.empty() && clr.empty() && r.kick.empty())) {
+        if (const json::Value* fog = v.find("fog")) {
+            if (fog->type != json::Value::Type::Array || fog->array.size() > kMaxFog) {
+                throw std::runtime_error("bad fog list");
+            }
+            for (const json::Value& x : fog->array) {
+                const std::uint64_t id = json::as_u64(x, "fog");
+                if (id > 0xffffffffull || !BossGateByGuestFlag(std::uint32_t(id))) {
+                    throw std::runtime_error("not a boss fog flag");
+                }
+                if (std::find(r.fog.begin(), r.fog.end(), std::uint32_t(id)) != r.fog.end()) {
+                    throw std::runtime_error("duplicate fog");
+                }
+                r.fog.push_back(std::uint32_t(id));
+            }
+        }
+        if (set.size() > kMaxSet || clr.size() > kMaxClear ||
+            (set.empty() && clr.empty() && r.kick.empty() && r.fog.empty())) {
             throw std::runtime_error("bad world_action size");
         }
         auto take = [](const std::vector<json::Value>& a, bool clear, std::vector<std::uint32_t>* to) {
@@ -227,6 +250,15 @@ const BossGate* BossGateByEvent(std::int32_t guest_event) {
     return nullptr;
 }
 
+const BossGate* BossGateByGuestFlag(std::uint32_t guest_flag) {
+    for (const BossGate& g : BossGates()) {
+        if (g.guest_flag == guest_flag) {
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
 bool BossGateSkipCondition(std::int32_t event_id, int bank, int id, std::uint32_t flag) {
     if (bank != 3 || id != 0) {
         return false;
@@ -321,6 +353,7 @@ struct State {
     double steady_since = 0, last_scan = 0;
     bool steady = false, baselined = false;
     std::set<std::uint64_t> known;  // id * 2 + value: local changes already sent or held back
+    std::set<std::uint32_t> fog_in;  // guest: boss fogs it went through (B2), reported once
     bool pickups = false;           // D4 patches in: the guest sees and takes the host world's treasure
     Stats stats;
 } g_st;
@@ -482,6 +515,7 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.steady = false;
         st.baselined = false;
         st.map = s.map_id;
+        st.fog_in.clear();
         return;
     }
     if (!st.steady) {
@@ -574,7 +608,24 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         }
         g_kicks_out.clear();
     }
-    if (r.set.empty() && r.clr.empty() && r.kick.empty()) {
+    for (const BossGate& g : BossGates()) {
+        // B2: a boss fog this guest went through (its guest-entry event set the flag in the
+        // overlay; the host's game does not get it): the host opens the fight.
+        if (g.guest_flag / 100000u % 100u != (s.map_id >> 24) || g.guest_flag / 10000u % 10u != ((s.map_id >> 16) & 0xffu)) {
+            continue;
+        }
+        bool in = false;
+        progress::ReadFlag(g.guest_flag, &in);
+        const bool was = st.fog_in.count(g.guest_flag) != 0;
+        if (in && !was && r.fog.size() < kMaxFog) {
+            st.fog_in.insert(g.guest_flag);
+            r.fog.push_back(g.guest_flag);
+            Log("guest: went through boss fog (event %u, flag %u): the host opens the fight", g.guest_event, g.guest_flag);
+        } else if (!in && was) {
+            st.fog_in.erase(g.guest_flag);
+        }
+    }
+    if (r.set.empty() && r.clr.empty() && r.kick.empty() && r.fog.empty()) {
         return;
     }
     // The guest's own save keeps what it did (its own world after the session).
@@ -700,6 +751,28 @@ void HostTick(const GameSnapshot& s) {
         for (std::int32_t k : r.kick) {
             ReplayKick(slot, k, Now());
         }
+        for (std::uint32_t f : r.fog) {
+            // B2: the guest went through a boss fog before the host: the host's game sets its
+            // host-entered flag, which starts the boss (its `ボスが動き出す` waits on it). The
+            // host still walks in through its own fog.
+            const BossGate* g = BossGateByGuestFlag(f);
+            bool host_in = false, dead = false;
+            if (!g) {
+                continue;
+            }
+            progress::ReadFlag(g->host_flag, &host_in);
+            progress::ReadFlag(g->boss_flag, &dead);
+            if (!BossGateHostOpens(*g, true, host_in, dead, s.map_id)) {
+                Log("host: boss fog: slot %d went in (flag %u); nothing to open (host in %d, boss dead %d, host in %s)",
+                    slot, f, host_in ? 1 : 0, dead ? 1 : 0, MapName(s.map_id).c_str());
+                continue;
+            }
+            const bool ok = progress::WriteFlagOwnSave(g->host_flag, true);
+            bool after = false;
+            progress::ReadFlag(g->host_flag, &after);
+            Log("host: boss fog: slot %d went in first (event %u): host-entered flag %u%s -> %d; the boss starts, "
+                "the host's own fog stays", slot, g->guest_event, g->host_flag, ok ? "" : " NOT written", after ? 1 : 0);
+        }
         if (applied_any) {
             // The host's own save holds the host's world: without a request the change waited for
             // the game's next autosave, and a quit soon after lost it (NPC quest flags read 0 on the
@@ -710,40 +783,6 @@ void HostTick(const GameSnapshot& s) {
             Log("host: slot %d changed the host's world (guest in %s, host in %s):%s", slot, MapName(r.map).c_str(),
                 MapName(s.map_id).c_str(), list.c_str());
         }
-    }
-}
-
-// B2: a guest went through a boss fog before the host (the guest's skip in seamless_rules; its
-// guest-entered flag is network-synced to the host's game): the host's game sets its host-entered
-// flag, which starts the boss (`ボスが動き出す` waits on it). The host still has its own fog.
-void BossGateHostTick(const GameSnapshot& s) {
-    static const bool on = [] {
-        const char* e = std::getenv("BB_PARTY_GUEST_FOG_FIRST");
-        return !(e && e[0] == '0');
-    }();
-    static double last = 0;
-    const double now = Now();
-    if (!on || now - last < 0.5 || !s.world_up || s.loading || s.cooperators <= 0 ||
-        progress::FlagLoadMode() != 0) {
-        return;
-    }
-    last = now;
-    for (const BossGate& g : BossGates()) {
-        bool guest_in = false, host_in = false, dead = false;
-        if (!progress::ReadFlag(g.guest_flag, &guest_in) || !guest_in) {
-            continue;
-        }
-        progress::ReadFlag(g.host_flag, &host_in);
-        progress::ReadFlag(g.boss_flag, &dead);
-        if (!BossGateHostOpens(g, guest_in, host_in, dead, s.map_id)) {
-            continue;
-        }
-        const bool ok = progress::WriteFlagOwnSave(g.host_flag, true);
-        bool after = false;
-        progress::ReadFlag(g.host_flag, &after);
-        Log("host: boss fog: a guest went in first (flag %u, event %u): host-entered flag %u set%s -> %d; the boss "
-            "starts, the host's own fog stays", g.guest_flag, g.guest_event, g.host_flag, ok ? "" : " (NOT written)",
-            after ? 1 : 0);
     }
 }
 
@@ -1758,7 +1797,6 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
             st.steady_since = Now();
         }
         HostTick(s);
-        BossGateHostTick(s);
     }
 }
 
