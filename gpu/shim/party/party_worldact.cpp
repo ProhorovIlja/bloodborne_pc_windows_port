@@ -200,6 +200,47 @@ const std::vector<GateRule>& GateRules() {
     return rules;
 }
 
+const std::vector<BossGate>& BossGates() {
+    // flag_tool.py emevd --all-ops, every `ゲストがボス部屋入場` event: {event, its last 3[0] flag
+    // (= the flag `ボスが動き出す` waits on), the flag it sets, its boss flag}.
+    static const std::vector<BossGate> gates = {
+        {12204891, 12204800, 12204801, 12201800}, {12304811, 12304800, 12304801, 12301800},
+        {12304731, 12304700, 12304701, 12301700}, {12404841, 12404800, 12404801, 12401800},
+        {12414731, 12414700, 12414701, 12411700}, {12414811, 12414800, 12414801, 12411800},
+        {12424811, 12424800, 12424801, 12421800}, {12424711, 12424700, 12424701, 12421700},
+        {12504811, 12504800, 12504801, 12501800}, {12604846, 12604800, 12604801, 12601800},
+        {12604861, 12604850, 12604851, 12601850}, {12704841, 12704800, 12704801, 12701800},
+        {12804881, 12804800, 12804801, 12801800}, {13304871, 13304800, 13304801, 13301800},
+        {13404801, 13404808, 13404809, 13401800}, {13404851, 13404858, 13404859, 13401850},
+        {13504801, 13504808, 13504809, 13501800}, {13504851, 13504858, 13504859, 13501850},
+        {13604801, 13604808, 13604809, 13601800},
+    };
+    return gates;
+}
+
+const BossGate* BossGateByEvent(std::int32_t guest_event) {
+    for (const BossGate& g : BossGates()) {
+        if (static_cast<std::int32_t>(g.guest_event) == guest_event) {
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
+bool BossGateSkipCondition(std::int32_t event_id, int bank, int id, std::uint32_t flag) {
+    if (bank != 3 || id != 0) {
+        return false;
+    }
+    const BossGate* g = BossGateByEvent(event_id);
+    return g && g->host_flag == flag;
+}
+
+bool BossGateHostOpens(const BossGate& g, bool guest_in, bool host_in, bool boss_dead, std::uint32_t host_map) {
+    const std::uint32_t area = g.host_flag / 100000 % 100, block = g.host_flag / 10000 % 10;
+    return guest_in && !host_in && !boss_dead && host_map != 0xffffffffu && (host_map >> 24) == area &&
+           ((host_map >> 16) & 0xff) == block;
+}
+
 } // namespace coop::worldact
 
 #ifndef BB_PARTY_WORLDACT_NO_GAME
@@ -669,6 +710,40 @@ void HostTick(const GameSnapshot& s) {
             Log("host: slot %d changed the host's world (guest in %s, host in %s):%s", slot, MapName(r.map).c_str(),
                 MapName(s.map_id).c_str(), list.c_str());
         }
+    }
+}
+
+// B2: a guest went through a boss fog before the host (the guest's skip in seamless_rules; its
+// guest-entered flag is network-synced to the host's game): the host's game sets its host-entered
+// flag, which starts the boss (`ボスが動き出す` waits on it). The host still has its own fog.
+void BossGateHostTick(const GameSnapshot& s) {
+    static const bool on = [] {
+        const char* e = std::getenv("BB_PARTY_GUEST_FOG_FIRST");
+        return !(e && e[0] == '0');
+    }();
+    static double last = 0;
+    const double now = Now();
+    if (!on || now - last < 0.5 || !s.world_up || s.loading || s.cooperators <= 0 ||
+        progress::FlagLoadMode() != 0) {
+        return;
+    }
+    last = now;
+    for (const BossGate& g : BossGates()) {
+        bool guest_in = false, host_in = false, dead = false;
+        if (!progress::ReadFlag(g.guest_flag, &guest_in) || !guest_in) {
+            continue;
+        }
+        progress::ReadFlag(g.host_flag, &host_in);
+        progress::ReadFlag(g.boss_flag, &dead);
+        if (!BossGateHostOpens(g, guest_in, host_in, dead, s.map_id)) {
+            continue;
+        }
+        const bool ok = progress::WriteFlagOwnSave(g.host_flag, true);
+        bool after = false;
+        progress::ReadFlag(g.host_flag, &after);
+        Log("host: boss fog: a guest went in first (flag %u, event %u): host-entered flag %u set%s -> %d; the boss "
+            "starts, the host's own fog stays", g.guest_flag, g.guest_event, g.host_flag, ok ? "" : " (NOT written)",
+            after ? 1 : 0);
     }
 }
 
@@ -1683,6 +1758,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
             st.steady_since = Now();
         }
         HostTick(s);
+        BossGateHostTick(s);
     }
 }
 
