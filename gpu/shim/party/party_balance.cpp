@@ -413,7 +413,8 @@ void CensusTick(const GameSnapshot& s) {
     const u64 wcm = Slot(kSlotWorldChrMan);
     if (!wcm) return;
     std::vector<EnemyCensusEntry> cur;
-    for (const auto& e : LoadedEnemyList(wcm)) cur.push_back({e.id, e.alive});
+    const auto list = LoadedEnemyList(wcm);
+    for (const auto& e : list) cur.push_back({e.id, e.alive});
     if (!have || map != s.map_id) {
         const auto d = DiffEnemyCensus({}, cur);
         Log("enemy census: baseline in %s: %d alive, %d dead", MapName(s.map_id).c_str(), d.alive, d.dead);
@@ -436,6 +437,11 @@ void CensusTick(const GameSnapshot& s) {
     }
     if (!d.died.empty()) {
         Log("enemy census: %zu died (%s); %d alive, %d dead", d.died.size(), ids(d.died).c_str(), d.alive, d.dead);
+        for (size_t i = 0; i < d.died.size() && i < 4; ++i)
+            for (const auto& e : list)
+                if (e.id == d.died[i])
+                    Log("enemy census: %u (entity %u) kill echoes: %s; own Echoes %d", e.id, e.entity,
+                        DescribeKillEchoGates(e.chr).c_str(), s.echoes);
     }
     if (d.Changed() || ++quiet >= 15) {
         if (!d.Changed()) Log("enemy census: steady: %d alive, %d dead, 0 respawned", d.alive, d.dead);
@@ -792,6 +798,22 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
 std::vector<EnemyKillCandidate> LoadedEnemies() {
     const u64 wcm = Slot(kSlotWorldChrMan);
     return wcm ? LoadedEnemyList(wcm) : std::vector<EnemyKillCandidate>{};
+}
+
+// H3: the kill-echo payer 0x18C5070 (docs/party/items.md 2) pays the LOCAL player (no attacker
+// check) when the dead chr's +0x1E1 has neither 0x40000 (echoes paid; set by the payer) nor 0x200000,
+// NpcParam soul (+0x28) > 0 and NpcParam byte +0x149 bit 4 clear. The per-frame death path 0x18BD9D0
+// skips the payer for a remote-controlled chr ([[chr+0x18]+0x30]+0x18 bit 0).
+std::string DescribeKillEchoGates(u64 chr) {
+    u64 f = 0;
+    SafeRead(chr + 0x1e1, &f, 5);
+    const u64 npc = Field<u64>(Field<u64>(chr, 0x3c8), 8);
+    const u64 rc = Field<u64>(Field<u64>(chr, 0x18), 0x30);
+    char b[200];
+    std::snprintf(b, sizeof b, "+0x1e1 %010llx (paid %d), remote %d, soul %d, npc+0x149 %02x", (unsigned long long)f,
+                  (f & 0x40000) ? 1 : 0, rc ? (Field<u8>(rc, 0x18, 0) & 1) : 0, npc ? Field<int>(npc, 0x28, -1) : -1,
+                  npc ? unsigned(Field<u8>(npc, 0x149, 0)) : 0u);
+    return b;
 }
 
 int EnemyHp(u64 chr) {
