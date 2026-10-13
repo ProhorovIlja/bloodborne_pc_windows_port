@@ -23,6 +23,7 @@
 #include "coop_hooks.h"
 #include "game_state.h"
 #include "party_async_io.h"
+#include "party_enemy_census.h"
 #include "party_link.h"
 #include "party_status.h"
 #include "party_travel.h"
@@ -356,6 +357,78 @@ bool IsPlayer(u64 wcm, u64 chr) {
     return chr == Field<u64>(wcm, 0x60);
 }
 
+// H4 (BB_PARTY_ENEMY_CENSUS=1): every second in a steady world, the loaded map's enemies (team 23,
+// entity id chr +0x3B8, alive = HP > 0); a change is logged, and an enemy that was dead and is alive
+// again without a load in between is logged as a RESPAWN (only a rest / wipe load may do that).
+void CensusTick(const GameSnapshot& s) {
+    static const bool on = [] {
+        const char* v = std::getenv("BB_PARTY_ENEMY_CENSUS");
+        return v && *v && *v != '0';
+    }();
+    if (!on) return;
+    static std::vector<EnemyCensusEntry> prev;
+    static bool have = false;
+    static u32 map = 0;
+    static Clock::time_point next{};
+    static int quiet = 0;
+    const auto now = Clock::now();
+    if (!s.world_up || s.loading || !s.player) {
+        if (have && s.loading) Log("enemy census: a load: the next census is a new baseline");
+        if (s.loading) have = false;
+        return;
+    }
+    if (now < next) return;
+    next = now + std::chrono::seconds(1);
+    const u64 wcm = Slot(kSlotWorldChrMan);
+    if (!wcm) return;
+    std::vector<EnemyCensusEntry> cur;
+    const int sets = std::min(Field<int>(Field<u64>(wcm, 8), 0x18, -2) + 2, kMaxSets);
+    for (int set = 0; set < sets; ++set) {
+        const u64 tab = Field<u64>(wcm, 0x850 + u64(set) * 8);
+        const int count = Field<int>(tab, 0, 0);
+        const u64 entries = Field<u64>(tab, 8);
+        if (!tab || !entries || count <= 0 || count > kMaxPerSet) continue;
+        for (int i = 0; i < count; ++i) {
+            const u64 chr = Field<u64>(entries + u64(i) * 0x38, 0);
+            if (!chr || IsPlayer(wcm, chr)) continue;
+            const u64 npc = Field<u64>(Field<u64>(chr, 0x3c8), 8);
+            if (!npc || Field<u8>(npc, 0x12f, 0xff) != kEnemyTeam) continue;
+            const u64 dm = Field<u64>(Field<u64>(chr, 0x3b0), 0x20);
+            const int hp = dm ? Field<int>(dm, 0xf8, -1) : -1;
+            if (hp < 0) continue;
+            cur.push_back({Field<u32>(chr, 0x3b8, 0), hp > 0});
+        }
+    }
+    if (!have || map != s.map_id) {
+        const auto d = DiffEnemyCensus({}, cur);
+        Log("enemy census: baseline in %s: %d alive, %d dead", MapName(s.map_id).c_str(), d.alive, d.dead);
+        prev = cur;
+        have = true;
+        map = s.map_id;
+        quiet = 0;
+        return;
+    }
+    const auto d = DiffEnemyCensus(prev, cur);
+    auto ids = [](const std::vector<u32>& v) {
+        std::string o;
+        for (size_t i = 0; i < v.size() && i < 12; ++i) o += (i ? " " : "") + std::to_string(v[i]);
+        if (v.size() > 12) o += " ...";
+        return o.empty() ? std::string("-") : o;
+    };
+    if (!d.respawned.empty()) {
+        Log("enemy census: RESPAWN without a load: %zu enemies alive again (%s); %d alive, %d dead",
+            d.respawned.size(), ids(d.respawned).c_str(), d.alive, d.dead);
+    }
+    if (!d.died.empty()) {
+        Log("enemy census: %zu died (%s); %d alive, %d dead", d.died.size(), ids(d.died).c_str(), d.alive, d.dead);
+    }
+    if (d.Changed() || ++quiet >= 15) {
+        if (!d.Changed()) Log("enemy census: steady: %d alive, %d dead, 0 respawned", d.alive, d.dead);
+        quiet = 0;
+    }
+    prev = CarryEnemyCensus(prev, cur);
+}
+
 void EnemyPass(const GameSnapshot& s, bool scale) {
     const u64 wcm = Slot(kSlotWorldChrMan);
     if (!wcm || !s.player) return;
@@ -573,6 +646,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         }
     }
 
+    CensusTick(s);
     const bool in_world = s.world_up && !s.loading && s.player;
     // C4: the local player's death, the lamp rest, the rate factor.
     const u64 dm = in_world ? Field<u64>(Field<u64>(s.player, 0x3b0), 0x20) : 0;
