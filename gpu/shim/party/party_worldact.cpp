@@ -1563,6 +1563,29 @@ bool StandAtObject(std::int32_t entity, float dist, float angle_deg, std::string
     return PutLocal(t, m[6], m[14], dist, angle_deg, what);
 }
 
+bool ObjectPoint(std::int32_t entity, float dist, float angle_deg, float out[3]) {
+    std::uint32_t idx = 0xffffffffu;
+    using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::uint32_t*);
+    const std::uint64_t fn = Guest(0x13c9af0);
+    const std::uint64_t rec = fn ? reinterpret_cast<Find>(fn)(entity, &idx) : 0;
+    float m[16] = {};
+    if (!rec || !SafeRead(rec + 0x230, m, sizeof m)) {
+        return false;
+    }
+    // The same point StandAtObject puts the player on (PutLocal's geometry), without the warp.
+    float px = m[6], pz = m[14];
+    float h = std::sqrt(px * px + pz * pz);
+    if (h < 1e-3f) {
+        px = 0, pz = 1, h = 1;
+    }
+    px /= h, pz /= h;
+    const float a = angle_deg * 3.14159265f / 180.0f;
+    out[0] = m[7] + (px * std::cos(a) + pz * std::sin(a)) * dist;
+    out[1] = m[11];
+    out[2] = m[15] + (-px * std::sin(a) + pz * std::cos(a)) * dist;
+    return true;
+}
+
 bool StandAtChr(std::int32_t entity, float dist, float angle_deg, std::string* what) {
     using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::int32_t, std::uint64_t);
     const std::uint64_t fn = Guest(0x13c97a0);
