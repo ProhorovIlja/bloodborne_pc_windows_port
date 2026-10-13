@@ -377,6 +377,7 @@ std::vector<EnemyKillCandidate> LoadedEnemyList(u64 wcm) {
             if (hp < 0) continue;
             EnemyKillCandidate e;
             e.id = Field<u32>(chr, 0x3b8, 0);
+            e.entity = Field<u32>(chr, 0x1f0, 0);
             e.alive = hp > 0;
             e.chr = chr;
             const u64 phys = Field<u64>(Field<u64>(Field<u64>(Field<u64>(chr, 0x58), 8), 0x3b0), 0x68);
