@@ -2214,6 +2214,12 @@ void Init() {
                 p = *end ? end + 1 : end;
             }
         }
+        if (EnvOn("BB_PARTY_RESTARTED", false) && (!g.test_clear.empty() || !g.test_set.empty())) {
+            // A crash restart (run.bat) must read what the save kept, not re-apply the fixture.
+            Log("test clear / set skipped: restarted after a crash");
+            g.test_clear.clear();
+            g.test_set.clear();
+        }
         if (!g.enabled) {
             Log("off (BB_PARTY_PROGRESS=0)");
             return;
