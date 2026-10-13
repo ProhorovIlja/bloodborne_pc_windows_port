@@ -58,7 +58,7 @@ only 100% when it meets it.
 | E. Services & UI | 90% |
 | F. Network & robustness | 80% |
 | G. BB-specific (chalice, insight, bath) | 77% |
-| H. Bloodborne rule (feels like SP in a party) | 78% |
+| H. Bloodborne rule (feels like SP in a party) | 80% |
 | **Overall (unweighted mean of rows)** | **~84%** |
 
 ## A. Session & joining
@@ -152,7 +152,7 @@ only 100% when it meets it.
 | H2 | No repeated summons | Join once per play session | The session survives travel, bosses, deaths and wipes; Continue party game re-joins automatically; a crash or redirect needs a re-join (~4.5 s); a crashed guest is back ~12 s after its restart (2026-10-12: the host releases the dead game connection at once, was ~28 s); after Leave, Join party re-summons (2026-10-11 flowlive: NP context re-registered, signaling resolve retried); a guest's join is ~12 s from its world to the host's (join_timing.md 2026-10-11) | 80 | A4, C6 |
 | H3 | No progress lost by anyone | Online progression also progresses your own world | Guest's own save gets kills, flags, items, story and lamps (C2/C3/C4 + mirror). Live h3 (2026-10-13): host world changes in lamp / shortcut / boss / cutscene categories reached the summoned guest's own save, which was saved 0 s later and still held all 6 after the guest's game was killed and Continued (own 1/1 at the next title join). Not measured: regular-enemy echoes (host_kill=0 hit an unloaded entity), an item picked by the guest, a full campaign soak | 70 | D6 soak, G2; echoes from a host kill live; guest pickup -> own save after a crash |
 | H4 | No unnecessary respawns | Only the dead player respawns; enemies reset on a grace rest | Only the dead player respawns (host revive in place, guest lone respawn); a wipe respawns everyone; enemies reset on a lamp rest only | 80 | C2 (hostdeath 2026-10-11) |
-| H5 | Character freedom as in single-player | Every player has their own character, inventory, levels | Guests: Doll level-up, shops (vials, bullets), workbench, storage, mirror, dress-up, Insight shop, own inventory and consumables; world NPCs (D8); world treasure (D4, instanced). Static audit (world_actions.md 8): Memory Altar t210690 has no client test; equipment / outfits / gestures are menu-local. Chalice ritual by a guest stays host-only (G1) | 75 | Talk-script IsClientPlayer scan of every talkesdbnd; not run live: Memory Altar, covenants |
+| H5 | Character freedom as in single-player | Every player has their own character, inventory, levels | Guests: Doll level-up, shops (vials, bullets), workbench, storage, Memory Altar (runes, covenants), dress-up, Insight shop, own inventory and consumables; world NPCs (D8); world treasure (D4, instanced). Beyond vanilla: the Hunter's Dream mirror opens the appearance editor ("Put on Disguise", the developers' cut feature, ported from bbhost; launcher switch, default on, every player edits their own hunter). Equipment / outfits / gestures are menu-local. Chalice ritual by a guest stays host-only (G1) | 85 | Live h5 (2026-10-13, guest in the host's Dream): Memory Altar (chr 2100203, t210699) prompt 70000008 "Memory Altar", talk allowed, Cross x4; mirror chr 2100202 spawned from the generated layout on both games (same party mod hash), t210696 allowed, prompt 70000006 "Put on Disguise", Cross x4. Not seen: the editor's screen (desktop locked: black shots), a rune actually memorized, a covenant joined; the editor opens without character creation's frame (bbhost's ChrMake_BG hook not ported) |
 
 ## I. 100%+ milestone (after every row above is 100%)
 
@@ -164,6 +164,7 @@ only 100% when it meets it.
 
 ## Change log
 
+- 2026-10-13 (h5): H5 75 -> 85: the Memory Altar is t210699 at chr 2100203 (not a Bath Messenger; t210690 is unused) and opens for a guest in the host's Dream (live: prompt "Memory Altar", talk allowed); the Dream mirror's appearance editor restored (port of bbhost's dream_mirror_layout, generated mod layer, BB_DREAM_MIRROR, default on), its talk live on a guest; mods.py no longer writes into the game folder through a junction on Python 3.10/3.11; H 78 -> 80, overall ~84%.
 - 2026-10-13 (cutscene): D10 70 -> 72: story dedupe on by default (a guest no longer sees a mirrored scene a second time from its own copy of the event); not verified live (no scene fired, black shots: desktop locked); D 85, overall ~84% unchanged.
 - 2026-10-13 (a7): A7 85 -> 90: the late-joiner bug (a title-joined guest without chrs for later joiners, 48 s first sync) no longer reproduces with the flowlive fix: 3-player live run, every peer sees every chr; A 87 -> 88, overall ~84%.
 - 2026-10-13 (a11): A11 75 -> 85: the title join and the direct summon (both default on) ignored the boss-fight / cutscene hold (live: guest Continued into the Cleric Beast fight); both refused with the reason now, wait notice on both sides; A 86 -> 87, overall ~84%.
