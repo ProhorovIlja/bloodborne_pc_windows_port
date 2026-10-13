@@ -466,6 +466,68 @@ std::vector<ItemGrant> FilterPeerItems(const std::vector<ItemGrant>& in, std::si
     return out;
 }
 
+bool GuestGiftShareable(std::int32_t lot, std::int32_t flag) {
+    return flag > 0 && ItemLotFlag(lot) == flag && !ItemLotDenied(lot, flag) &&
+           !InstancedTreasureFlag(flag, true, false);
+}
+
+std::string GiftUpToJsonText(std::int32_t lot, std::int32_t flag) {
+    json::Value v = json::Value::make_object();
+    v.set("lot", lot);
+    v.set("flag", flag);
+    return json::dump(v, 0);
+}
+
+bool GiftUpFromJsonText(const std::string& text, std::int32_t* lot, std::int32_t* flag, std::string* error) {
+    auto fail = [&](const char* why) {
+        if (error) {
+            *error = why;
+        }
+        return false;
+    };
+    json::Value v;
+    std::string err;
+    if (!json::parse(text, v, err) || v.type != json::Value::Type::Object) {
+        return fail("gift_up: not a JSON object");
+    }
+    const json::Value* l = v.find("lot");
+    const json::Value* f = v.find("flag");
+    auto integer = [](const json::Value* x, std::int32_t* out) {
+        // Range first: converting 1e300 to an integer is undefined.
+        if (!x || x->type != json::Value::Type::Number || !(x->number >= -2147483648.0 && x->number <= 2147483647.0) ||
+            x->number != static_cast<double>(static_cast<long long>(x->number))) {
+            return false;
+        }
+        *out = static_cast<std::int32_t>(x->number);
+        return true;
+    };
+    std::int32_t a = 0, b = 0;
+    if (!integer(l, &a) || !integer(f, &b)) {
+        return fail("gift_up: lot / flag must be 32-bit integers");
+    }
+    if (!GuestGiftShareable(a, b)) {
+        return fail("gift_up: not a shareable gift (unknown lot / flag pair, denied, or map treasure)");
+    }
+    *lot = a;
+    *flag = b;
+    return true;
+}
+
+bool GiftRateLimit::Take(int slot, double now) {
+    if (slot < 0 || slot >= 8) {
+        return false;
+    }
+    if (now - start_[slot] >= kWindow) {
+        start_[slot] = now;
+        used_[slot] = 0;
+    }
+    if (used_[slot] >= kPerWindow) {
+        return false;
+    }
+    ++used_[slot];
+    return true;
+}
+
 std::string ItemsToJsonText(const std::vector<ItemGrant>& items) {
     return json::dump(ItemsToJson(items), 0);
 }
@@ -924,6 +986,22 @@ std::vector<std::uint32_t> g_host_test_flags;
 std::size_t g_host_test_next = 0;
 double g_host_test_coop = 0, g_host_test_poll = 0, g_host_test_last = 0;
 
+// D5 gifts (party_items.h GuestGiftShareable): guest reports to post, host awards to take.
+struct GiftDue {
+    int slot = -1;
+    std::int32_t lot = 0, flag = 0;
+};
+std::mutex g_gift_mu;
+std::deque<std::string> g_gift_up;  // guest: EVENT gift_up bodies (under g_gift_mu)
+std::deque<GiftDue> g_gift_due;     // host: under g_gift_mu
+GiftRateLimit g_gift_rate;          // host: under g_gift_mu
+double g_gift_last = 0;             // host, main thread: the last gift award
+// BB_PARTY_GIFT_TEST=<lot> (live check): a summoned guest awards the lot through the game's own
+// 0x17DDC50 (hostOnly 0, as a talk gift) once its world has been steady for 20 s.
+std::int32_t g_gift_test = 0;
+double g_gift_test_since = 0;
+bool g_gift_test_done = false;
+
 u64 Ptr(u64 slot_off) {
     u64 p = 0;
     return SafeGet(Guest(slot_off), &p) ? p : 0;
@@ -1121,9 +1199,19 @@ std::optional<ItemGrant> AwardEntry(u64 lot_arg, u64 host_only_arg) {
         m.lot = lot;
         m.flag = flag;
         m.source = ItemSource::Mark;
-        std::lock_guard<std::mutex> lk(g_guest_mu);
-        g_guest.Offer({m});
+        {
+            std::lock_guard<std::mutex> lk(g_guest_mu);
+            g_guest.Offer({m});
+        }
         Log("guest received lot %d while summoned: flag %d goes into the own save (pool)", lot, flag);
+        if (GuestGiftShareable(lot, flag)) {
+            // D5: an NPC's gift in the host's world (shared quest choices): the host takes it too.
+            std::lock_guard<std::mutex> lk(g_gift_mu);
+            if (g_gift_up.size() < 64) {
+                g_gift_up.push_back(GiftUpToJsonText(lot, flag));
+                Log("gift: lot %d (flag %d) reported to the host (the NPC moved on in its world too)", lot, flag);
+            }
+        }
     }
     return std::nullopt;
 }
@@ -1296,6 +1384,11 @@ std::vector<long> EnvList(const char* name) {
 }
 
 void ParseHostTest() {
+    for (const long lot : EnvList("BB_PARTY_GIFT_TEST")) {
+        g_gift_test = static_cast<std::int32_t>(lot);
+        Log("BB_PARTY_GIFT_TEST: a summoned guest awards lot %d itself (shareable %d)", g_gift_test,
+            GuestGiftShareable(g_gift_test, ItemLotFlag(g_gift_test)) ? 1 : 0);
+    }
     for (const long lot : EnvList("BB_PARTY_ITEMS_HOST_TEST")) {
         g_host_test.push_back(static_cast<std::int32_t>(lot));
     }
@@ -2089,6 +2182,91 @@ void ItemGetProbe() {
 
 } // namespace
 
+namespace {
+
+/// Main thread: the guest's gift test and the host's gift awards.
+void GiftTick(double now) {
+    const PartyRole role = Role();
+    const int own = OwnWorld();
+    if (g_gift_test > 0 && !g_gift_test_done && role == PartyRole::Guest) {
+        const GameSnapshot q = ReadGameState(false);
+        if (own != 0 || !q.world_up || q.loading || LoadMode(Ptr(kFlagMan)) != 1) {
+            g_gift_test_since = 0;
+        } else if (!g_gift_test_since) {
+            g_gift_test_since = now;
+        } else if (now - g_gift_test_since >= 20.0 && Ptr(kMapItemMan)) {
+            g_gift_test_done = true;
+            Log("gift test: awarding lot %d through 0x17DDC50 (hostOnly 0) in the host's world", g_gift_test);
+            reinterpret_cast<AwardFn>(Guest(kAwardLot))(Ptr(kMapItemMan), static_cast<u32>(g_gift_test), 0);
+        }
+    }
+    if (role != PartyRole::Host || own != 1 || now - g_gift_last < 2.0) {
+        return;
+    }
+    GiftDue d;
+    {
+        std::lock_guard<std::mutex> lk(g_gift_mu);
+        if (g_gift_due.empty()) {
+            return;
+        }
+        d = g_gift_due.front();
+    }
+    const GameSnapshot q = ReadGameState(false);
+    const u64 mim = Ptr(kMapItemMan);
+    if (!q.world_up || q.loading || !mim || LoadMode(Ptr(kFlagMan)) != 0) {
+        return;  // keep it until the host's own world is steady
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_gift_mu);
+        g_gift_due.pop_front();
+    }
+    g_gift_last = now;
+    if (IsFlag(Ptr(kFlagMan), d.flag)) {
+        Log("gift from slot %d: lot %d already in the host's world (flag %d set); nothing to give", d.slot, d.lot, d.flag);
+        return;
+    }
+    Log("gift from slot %d: lot %d (flag %d) awarded in the host's world; C3 hands it to the party", d.slot, d.lot, d.flag);
+    // The game's own award (hostOnly 1, as EMEVD 2003[4]): the award hook captures it and C3
+    // broadcasts it; the guest that talked holds the flag already (its mark) and skips it.
+    reinterpret_cast<AwardFn>(Guest(kAwardLot))(mim, static_cast<u32>(d.lot), 1);
+    Log("gift from slot %d: flag %d is now %d", d.slot, d.flag, IsFlag(Ptr(kFlagMan), d.flag) ? 1 : 0);
+}
+
+} // namespace
+
+bool PopGuestGift(std::string* body) {
+    std::lock_guard<std::mutex> lk(g_gift_mu);
+    if (g_gift_up.empty()) {
+        return false;
+    }
+    *body = std::move(g_gift_up.front());
+    g_gift_up.pop_front();
+    return true;
+}
+
+bool OnHostGiftUp(int slot, const std::string& body, std::string* why) {
+    std::int32_t lot = 0, flag = 0;
+    if (!GiftUpFromJsonText(body, &lot, &flag, why)) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lk(g_gift_mu);
+    if (!g_gift_rate.Take(slot, Now())) {
+        if (why) {
+            *why = "gift_up: rate limit";
+        }
+        return false;
+    }
+    if (g_gift_due.size() >= 32) {
+        if (why) {
+            *why = "gift_up: queue full";
+        }
+        return false;
+    }
+    g_gift_due.push_back({slot, lot, flag});
+    Log("gift from slot %d: lot %d (flag %d) queued for the host's world", slot, lot, flag);
+    return true;
+}
+
 void ItemsTick() {
     if (!g_on.load()) {
         return;
@@ -2100,6 +2278,7 @@ void ItemsTick() {
         g_guest.Offer(g_test);
     }
     HostTestTick(Now());
+    GiftTick(Now());
     const GameSnapshot gs = ReadGameState(false);
     ItemApplyState s;
     s.world_up = gs.world_up && gs.map_id != 0xffffffffu; // the player stands in a map
