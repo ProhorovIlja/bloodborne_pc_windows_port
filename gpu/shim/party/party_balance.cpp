@@ -647,7 +647,44 @@ void Init() {
     Log("on: rot kinds%s; %d stack(s) kept from the last game", kinds.c_str(), g_stacks.load());
 }
 
+// H3 (party_enemy_census.h KillEchoTracker): every 0.5 s in a party session, an enemy seen alive
+// and then dead whose kill-echo payer has not run 3 s later gets it called here, on each player's
+// game: the payer pays its own player (a guest the full kill echoes, items.md 5) and marks the chr
+// paid, so the game's own later call pays nothing twice. BB_PARTY_KILL_ECHOES=0: off.
+void KillEchoTick(const GameSnapshot& s) {
+    static const bool on = !EnvIsZero("BB_PARTY_KILL_ECHOES");
+    static KillEchoTracker tracker;
+    static Clock::time_point next{};
+    static const auto t0 = Clock::now();
+    const bool party = (s.session_role == RoleHost && s.cooperators > 0) || s.session_role == RoleClient;
+    if (!on) return;
+    if (!s.world_up || s.loading || !s.player || !party) {
+        tracker.Reset();
+        return;
+    }
+    const auto now = Clock::now();
+    if (now < next) return;
+    next = now + std::chrono::milliseconds(500);
+    const u64 wcm = Slot(kSlotWorldChrMan);
+    if (!wcm) return;
+    std::vector<KillEchoObs> obs;
+    for (const auto& e : LoadedEnemyList(wcm)) {
+        KillEchoObs o;
+        o.chr = e.chr;
+        o.alive = e.alive;
+        SafeRead(e.chr + 0x1e1, &o.flags, 5);
+        obs.push_back(o);
+    }
+    for (const u64 chr : tracker.Update(obs, std::chrono::duration<double>(now - t0).count())) {
+        const int before = ReadGameState(false).echoes;
+        reinterpret_cast<void(BB_COOP_SYSV*)(u64)>(Guest(0x18c5070))(chr);
+        Log("kill echoes: entity %u paid by the party (not paid 3 s after its death): own Echoes %d -> %d; %s",
+            Field<u32>(chr, 0x1f0, 0), before, ReadGameState(false).echoes, DescribeKillEchoGates(chr).c_str());
+    }
+}
+
 void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
+    KillEchoTick(s);
     if (!On()) return;
     TickState& st = S();
     const auto now = Clock::now();
