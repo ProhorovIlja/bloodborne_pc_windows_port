@@ -4,6 +4,7 @@
 // memory ops, policy, diff, JSON, BBPF) and builds without the game (BB_PARTY_PROGRESS_NO_GAME,
 // tests/test_party_progress.cpp); the second half is the game glue (hooks, tick, globals).
 #include "party_progress.h"
+#include "party_death_rules.h"
 #include "party_async_io.h"
 #include "party_perf.h"
 #ifndef BB_PARTY_PROGRESS_NO_GAME
@@ -1331,7 +1332,9 @@ const MirrorTables& Mirror() {
             const u32 first = block * kBitsPerBlock;
             for (u32 bit = 0; bit < kBitsPerBlock; ++bit) {
                 const u32 id = first + bit;
-                if ((id >= 2000 && id <= 2099) || (id >= 9020 && id <= 9026)) {
+                // Lamp / headstone "used" triggers are per player: mirrored, the host's headstone ran the
+                // guest's warp event too (playtest 1 bug 20).
+                if ((id >= 2000 && id <= 2099) || (id >= 9020 && id <= 9026) || deathrules::LampTriggerFlag(id)) {
                     PutBit(mask.data(), bit, false);
                 }
             }
@@ -1823,10 +1826,22 @@ bool Capturing() {
     return G().capture.load(std::memory_order_relaxed) && !Global::self_write;
 }
 
-BB_COOP_SYSV void OnSetEventFlag(u64 man, u64 id, u64, u64, u64, u64) {
+std::atomic<LocalFlagSetObserver> g_local_set_observer{nullptr};
+std::atomic<bool> g_set_flag_hooked{false};
+
+void NoteLocalSet(u32 id) {
+    if (const LocalFlagSetObserver obs = g_local_set_observer.load(std::memory_order_relaxed); obs && !Global::self_write) {
+        obs(id);
+    }
+}
+
+BB_COOP_SYSV void OnSetEventFlag(u64 man, u64 id, u64 on, u64, u64, u64) {
     perf::Scope z(perf::Zone::HookSetFlag);
     if (Capturing() && man == Manager()) {
         NoteId(u32(id));
+    }
+    if (u32(on) && man == Manager()) {
+        NoteLocalSet(u32(id));
     }
 }
 
@@ -1842,6 +1857,9 @@ BB_COOP_SYSV void OnSetEventFlagValue(u64 man, u64 first, u64 bits, u64, u64, u6
 
 BB_COOP_SYSV void OnBroadcastSetFlag(u64, u64 id, u64, u64, u64, u64) {
     perf::Scope z(perf::Zone::HookBroadcastFlag);
+    if (std::int32_t(u32(id)) >= 0) {
+        NoteLocalSet(u32(id));
+    }
     if (Capturing() && std::int32_t(u32(id)) >= 0) {
         NoteId(u32(id));
     }
@@ -2285,8 +2303,9 @@ int InstallHooks() {
         return 0;
     }
     int n = 0;
-    n += HookPrologue(kSetEventFlag, {0x41, 0x89, 0xd0, 0x8b, 0x4f, 0x1c}, &OnSetEventFlag,
-                      "progress: SetEventFlag") ? 1 : 0;
+    g_set_flag_hooked = HookPrologue(kSetEventFlag, {0x41, 0x89, 0xd0, 0x8b, 0x4f, 0x1c}, &OnSetEventFlag,
+                                     "progress: SetEventFlag");
+    n += g_set_flag_hooked ? 1 : 0;
     n += HookPrologue(kSetEventFlagValue, {0x55, 0x41, 0x57, 0x41, 0x56}, &OnSetEventFlagValue,
                       "progress: SetEventFlagValue") ? 1 : 0;
     n += HookPrologue(kBroadcastSetFlag, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57}, &OnBroadcastSetFlag,
@@ -2438,6 +2457,14 @@ void Tick(const GameSnapshot& s) {
 
 void SetItemFlagObserver(ItemFlagObserver fn) {
     G().item_observer = fn;
+}
+
+void SetLocalFlagSetObserver(LocalFlagSetObserver fn) {
+    g_local_set_observer = fn;
+}
+
+bool LocalFlagSetHooked() {
+    return g_set_flag_hooked.load();
 }
 
 void SetBeforeApplyHook(BeforeApplyHook fn) {
