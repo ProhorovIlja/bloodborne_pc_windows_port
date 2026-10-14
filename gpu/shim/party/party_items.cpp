@@ -29,7 +29,10 @@
 #include <chrono>
 #include <cstdarg>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
+#include "../net/bbnet_internal.h"
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -234,7 +237,10 @@ bool ItemLotDenied(std::int32_t lot, std::int32_t flag) {
         return true;
     }
     switch (lot) {
-    case 10000: case 10010: case 10011: case 10040: case 10050: // Messenger gifts (per player)
+    // Messenger gifts (per player). Not 10040, the Eye of a Blood-drunk Hunter (DLC entry): its
+    // event 12101028 needs chr type 0, so it never runs on a summoned guest; the host's copy is
+    // replayed to everyone (flag 50000100) or a guest who never stands in its own Dream lacks it.
+    case 10000: case 10010: case 10011: case 10050:
     case 10500: case 11500: case 12500:                         // covenant gems (common 9440)
     case 17010: case 24060: case 28000: case 32020:             // common 9100 (repeatable)
     case 43000:                                                 // 13501940 (repeatable)
@@ -289,8 +295,27 @@ std::optional<ItemGrant> ClassifyFlag(std::int32_t flag, const std::map<std::int
     return g;
 }
 
+bool SharedKeyTreasureLot(std::int32_t lot) {
+    switch (lot) {
+    case 2400450:  // Hunter Chief Emblem (Cathedral Ward; the plaza gate 12400760)
+    case 2800290:  // Upper Cathedral Key (Yahar'gul; ObjAct 2400100)
+    case 2600550:  // Iron Door Key (Nightmare of Mensis; ObjAct 2600020/2600021)
+    case 2600610:  // Iron Door Key (second copy)
+    case 3200720:  // Lecture Theatre Key (Byrgenwerth; ObjAct 3200030)
+    case 3500800:  // Underground Cell Key (Research Hall; ObjAct 3500040)
+    case 2200360:  // Rune Workshop Tool (Hemwick; the Memory Altar)
+    case 2411000:  // Blood Gem Workshop Tool (Central Yharnam; blood gems at the workbench)
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool InstancedTreasureFlag(std::int32_t flag, bool instanced, bool captured) {
-    return instanced && !captured && flag >= 50000000 && flag < 60000000 && flag / 100000 % 100 != 0;
+    if (!(instanced && !captured && flag >= 50000000 && flag < 60000000 && flag / 100000 % 100 != 0)) {
+        return false;
+    }
+    return !SharedKeyTreasureLot(ItemLotForFlag(flag));
 }
 
 json::Value ItemsToJson(const std::vector<ItemGrant>& items) {
@@ -901,6 +926,13 @@ LotFit ClassifyLotFit(const std::vector<LotSlotState>& slots, std::string* why) 
         }
     }
     return fit;
+}
+
+int SummonedRegiveCount(int expect, int now, int count) {
+    if (expect < 0 || now < 0 || count <= 0 || now >= expect) {
+        return 0;
+    }
+    return std::min(count, expect - now);
 }
 
 bool LedgerSkipSuspicious(const std::vector<LotSlotState>& slots) {
@@ -1782,6 +1814,146 @@ bool OwnSaveFlag(std::int64_t id) {
     return id >= 0 && progress::ReadFlagOwnSave(static_cast<u32>(id), &v) && v;
 }
 
+// ---- goods given while summoned: given again after a load that dropped them (H3, par_c6) ----
+struct SummonedGive {
+    u32 bits = 0;
+    u32 id = 0;
+    int count = 0;
+    int expect = -1;  // held right after the give (or the last re-give)
+};
+std::mutex g_sgive_mu;
+std::vector<SummonedGive> g_sgives;
+bool g_sgives_loaded = false;
+
+std::filesystem::path SummonedGivesPath() {
+    std::string dir = bbnet::settings().user_dir;
+    if (dir.empty()) {
+        if (const char* u = std::getenv("BB_GPU_USER_DIR")) dir = u;
+        else if (const char* u2 = std::getenv("BB_USER_DIR")) dir = u2;
+        else dir = std::string(std::getenv("BB_DATA_DIR") ? std::getenv("BB_DATA_DIR") : ".") + "/user";
+    }
+    return std::filesystem::path(dir) / "party_summoned_gives.txt";
+}
+
+/// Caller holds g_sgive_mu. Kept on disk so a crash while summoned does not forget them.
+void SaveSummonedGives() {
+    std::error_code ec;
+    const std::filesystem::path path = SummonedGivesPath();
+    if (g_sgives.empty()) {
+        std::filesystem::remove(path, ec);
+        return;
+    }
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream f(tmp, std::ios::trunc);
+        for (const SummonedGive& g : g_sgives) {
+            f << g.bits << ' ' << g.id << ' ' << g.count << ' ' << g.expect << "\n";
+        }
+    }
+    std::filesystem::rename(tmp, path, ec);
+}
+
+void LoadSummonedGives() {
+    std::lock_guard<std::mutex> lk(g_sgive_mu);
+    if (g_sgives_loaded) {
+        return;
+    }
+    g_sgives_loaded = true;
+    std::ifstream f(SummonedGivesPath());
+    SummonedGive g;
+    while (f >> g.bits >> g.id >> g.count >> g.expect) {
+        g_sgives.push_back(g);
+    }
+    if (!g_sgives.empty()) {
+        Log("goods given while summoned before the last exit: %zu kept for the check after the next load", g_sgives.size());
+    }
+}
+
+void NoteSummonedGive(u32 bits, u32 id, int count, int after) {
+    if (after < 0 || count <= 0) {
+        return;
+    }
+    std::lock_guard<std::mutex> lk(g_sgive_mu);
+    for (SummonedGive& g : g_sgives) {
+        if (g.bits == bits && g.id == id) {
+            g.count += count;
+            g.expect = after;
+            SaveSummonedGives();
+            return;
+        }
+    }
+    g_sgives.push_back({bits, id, count, after});
+    SaveSummonedGives();
+}
+
+/// Main thread: 3 s into the first steady OWN world (load mode 0) after a load, the goods given
+/// while summoned that the own data lacks are given again (no item-get dialog: the player saw it
+/// at the first give) and a save is requested, which keeps them for good; the list is cleared.
+/// Live (par_c6 verify run): goods given while summoned show in the own data once the session
+/// ends (Oedon Tomb Key 0 -> 1 at session idle), but a save requested while summoned never wrote
+/// them to disk: the next summon load (which reads the save) and a restart had them at 0. Nothing
+/// is given while summoned (the summoned view is rebuilt from the save at each load; a re-give
+/// there could double up when the session ends).
+void SummonedGivesTick(const GameSnapshot& gs, int load_mode, double now) {
+    static bool armed = true;  // a load (or the start) since the last check
+    static double steady_at = -1;
+    if (load_mode != 0) {
+        armed = true;  // checked at the next own world
+        steady_at = -1;
+        return;
+    }
+    if (!gs.world_up || gs.loading || gs.map_id == 0xffffffffu || !gs.player_rec) {
+        armed = true;
+        steady_at = -1;
+        return;
+    }
+    if (!armed) {
+        return;
+    }
+    if (steady_at < 0) {
+        steady_at = now;
+    }
+    if (now - steady_at < 3.0) {
+        return;
+    }
+    armed = false;
+    LoadSummonedGives();
+    std::lock_guard<std::mutex> lk(g_sgive_mu);
+    if (g_sgives.empty()) {
+        return;
+    }
+    std::string text;
+    int regave = 0;
+    for (SummonedGive& g : g_sgives) {
+        const int held = ItemCount(g.bits, g.id);
+        const int n = SummonedRegiveCount(g.expect, held, g.count);
+        if (n <= 0) {
+            continue;
+        }
+        const bool ok = GiveItem(g.bits, g.id, n);
+        const int after = ItemCount(g.bits, g.id);
+        char b[128];
+        std::snprintf(b, sizeof b, "%s %u x%d (held %d -> %d%s)", CategoryWord(g.bits >> 28), g.id, n, held, after,
+                      ok ? "" : ", GiveItemDirect unavailable");
+        text += (text.empty() ? "" : "; ") + std::string(b);
+        regave += ok ? 1 : 0;
+        if (ok && after >= 0) {
+            g.expect = after;
+        }
+    }
+    if (!text.empty()) {
+        Log("goods given while summoned are missing in the own world; given again: %s", text.c_str());
+    }
+    if (OwnWorld() == 1) {
+        RequestGameSave("C3 goods given while summoned, kept at home");
+        Log("own world: %zu good(s) given while summoned are in the own save now; list cleared", g_sgives.size());
+        g_sgives.clear();
+    }
+    SaveSummonedGives();
+    (void)regave;
+    (void)load_mode;
+}
+
 enum class SummonedResult { Given, Skipped, Defer };
 
 /// While summoned (load mode 1: the live flag store is the host's overlay, where the host's flag
@@ -1879,6 +2051,9 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         const int after = ItemCount(bits, static_cast<u32>(it.id));
         // The game's own "item acquired" dialog entry, as the host's lot award shows it.
         const bool shown = ok && ShowItemGet(bits, static_cast<u32>(it.id), it.count);
+        if (ok) {
+            NoteSummonedGive(bits, static_cast<u32>(it.id), it.count, after);
+        }
         gave += ok ? 1 : 0;
         native += shown ? 1 : 0;
         std::snprintf(b, sizeof b, "%s %d x%d (held %d -> %d%s%s)", CategoryWord(it.category), it.id, it.count,
@@ -2453,6 +2628,52 @@ bool OnHostGiftUp(int slot, const std::string& body, std::string* why) {
     return true;
 }
 
+/// H3 diagnostic (par_c6): the unique key goods of the ledger lots (Oedon Tomb Key, badges, ...):
+/// their held counts are logged once in each world and every change after that, with the state
+/// (map, load mode, session), so a key that vanishes from a save shows where (live: a guest's
+/// Oedon Tomb Key given while summoned was gone after its next restart while its done flag stayed).
+void KeyGoodsWatchTick(const GameSnapshot& gs, int load_mode, double now) {
+    static double next = 0;
+    static std::map<std::int32_t, int> last;
+    static bool baseline = false;
+    if (!gs.world_up || gs.loading || gs.map_id == 0xffffffffu || !gs.player_rec) {
+        baseline = false;  // a load: the next world logs its baseline again
+        next = now + 3.0;
+        return;
+    }
+    if (now < next) {
+        return;
+    }
+    next = now + 5.0;
+    std::map<std::int32_t, int> held;
+    for (const LedgerRow& r : kLedger) {
+        for (const LotSlotState& sl : LotSlots(r.lot)) {
+            if (sl.category == 4 && sl.max_num == 1 && sl.max_storage <= 0 && sl.owned >= 0) {
+                held[static_cast<std::int32_t>(sl.id)] = sl.owned;
+            }
+        }
+    }
+    if (held.empty()) {
+        return;
+    }
+    std::string text;
+    for (const auto& [id, n] : held) {
+        const auto it = last.find(id);
+        if (!baseline) {
+            text += (text.empty() ? "" : ", ") + std::to_string(id) + " x" + std::to_string(n);
+        } else if (it != last.end() && it->second != n) {
+            text += (text.empty() ? "" : ", ") + std::to_string(id) + " " + std::to_string(it->second) + " -> " +
+                    std::to_string(n);
+        }
+    }
+    if (!text.empty()) {
+        Log("key goods %s: %s (%s, load mode %d)", baseline ? "changed" : "held", text.c_str(), Describe(gs).c_str(),
+            load_mode);
+    }
+    last = std::move(held);
+    baseline = true;
+}
+
 void ItemsTick() {
     if (!g_on.load()) {
         return;
@@ -2478,6 +2699,8 @@ void ItemsTick() {
     s.cutscene = CutscenePlaying();
     s.boss_quiet = BossQuiet(Now());
     ItemGetWatchTick(gs, Now());
+    KeyGoodsWatchTick(gs, s.load_mode, Now());
+    SummonedGivesTick(gs, s.load_mode, Now());
     static ItemApplyMode gate_logged = ItemApplyMode::None;
     const ItemApplyMode mode_now = ItemApplyModeNow(s);
     if (mode_now != gate_logged) {
@@ -2487,6 +2710,23 @@ void ItemsTick() {
             : mode_now == ItemApplyMode::Summoned ? "open: summoned (direct give, own pool)"
                                                   : "closed",
             Describe(gs).c_str(), s.load_mode, s.own_world);
+    }
+    {
+        // Playtest 1 #19: no item grants into a prologue world (this guest's, or while the host is
+        // in its own prologue); they wait in the queue.
+        static bool held = false;
+        const char* why = nullptr;
+        if (coop::PartyPrologueHold(&why)) {
+            if (!held) {
+                held = true;
+                Log("item grants held: %s (#19: no sync into a prologue world)", why);
+            }
+            return;
+        }
+        if (held) {
+            held = false;
+            Log("item grants: prologue over; the queue goes on");
+        }
     }
     std::optional<ItemGrant> g;
     ItemApplyMode mode;
