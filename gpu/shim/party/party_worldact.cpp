@@ -363,8 +363,33 @@ const BossGate* BossGateByIntroEvent(std::int32_t event_id) {
     return nullptr;
 }
 
-bool FirstFightPositionCondition(int bank, int id) {
-    return bank == 3 && (id == 2 || id == 3);
+const FirstFightSpot* FirstFightSpotFor(std::uint32_t intro_event) {
+    // flag_tool / MSB: the region of each first-fight event's 3[2] (origin y + 0.5 m), or 2 m off
+    // the 3[3] target's MSB spot (Darkbeast Paarl 2300810 within 16 m, Micolash 2600850 within 32 m).
+    static const FirstFightSpot spots[] = {
+        {12201802, {-336.14f, 2.10f, 726.64f}},    // Witch of Hemwick, region 2202805
+        {12301802, {-136.33f, -126.33f, 53.89f}},  // Blood-starved Beast, region 2302805
+        {12301702, {113.50f, -120.31f, -63.68f}},  // Darkbeast Paarl, 2300810
+        {12401802, {57.70f, 35.21f, 322.60f}},     // Vicar Amelia, region 2402805
+        {12411702, {-136.52f, -26.92f, 52.77f}},   // Cleric Beast, region 2412805
+        {12411802, {-48.76f, -40.42f, 72.44f}},    // Father Gascoigne, region 2412815
+        {12501802, {62.81f, 109.37f, -371.63f}},   // Martyr Logarius, region 2502805
+        {12601802, {146.46f, 1124.75f, -37.90f}},  // Mergo's Wet Nurse, region 2602805
+        {12601852, {176.82f, 1038.48f, -35.82f}},  // Micolash, 2600850
+        {12701802, {-335.60f, -187.48f, 485.44f}}, // Shadows of Yharnam, region 2702805
+        {12801802, {402.90f, -125.00f, -237.50f}}, // the One Reborn, region 2802805
+        {13301802, {-98.85f, 1461.50f, -46.33f}},  // Amygdala, region 3302805
+    };
+    for (const FirstFightSpot& f : spots) {
+        if (f.intro_event == intro_event) {
+            return &f;
+        }
+    }
+    return nullptr;
+}
+
+bool FirstFightVisitDone(bool host_flag_on, bool flag9180_on, bool cutscene, double visit_s) {
+    return host_flag_on || flag9180_on || cutscene || visit_s >= kFirstFightVisitSeconds;
 }
 
 FogAction HostFogAction(const BossGate& g, bool guest_starts_on, bool intro_done, bool host_in, bool boss_dead,
@@ -891,29 +916,39 @@ void ReplayKick(int slot, std::int32_t kick_event, double now) {
 }
 
 namespace {
-// P5 / D10: the host's first-fight event armed for a guest's start (HostFirstFightSkip reads it on
-// the game thread) and a start that waits for the host to reach the boss's block.
-std::atomic<std::int32_t> g_ff_event{0};
-std::atomic<double> g_ff_until{0.0};
-std::atomic<std::int32_t> g_ff_logged{0};
+// P5 / D10: a guest's start of a first fight on the host: the host's chr visits its first-fight
+// event's region for a moment (FirstFightSpotFor) and is put back once the event went on.
 struct FirstFightWait {
     std::uint32_t guest_event = 0;
     int slot = -1;
     double since = 0;
-    bool armed = false;
+    int phase = 0;  // 0 waits for the host in the block, 1 visiting, 2 back (waits for the event's end)
+    int tries = 0;
+    double visit_at = 0;
+    alignas(16) float back_pos[4] = {};
+    alignas(16) float back_rot[4] = {};
 };
 std::mutex g_ff_mu;
 std::vector<FirstFightWait> g_ff_wait;
 
-void ArmFirstFight(const BossGate& g, int slot) {
-    g_ff_logged.store(0);
-    g_ff_until.store(Now() + kFirstFightArmSeconds);
-    g_ff_event.store(static_cast<std::int32_t>(g.intro_flag));
-    Log("host: boss fog: slot %d went in before the host's first fight here (guest event %u): the host's "
-        "first-fight event %u runs now as if the host had walked in (its scene plays for the whole party; "
-        "position condition passed for %.0f s)",
-        slot, g.guest_event, g.intro_flag, kFirstFightArmSeconds);
-    party::status::SetLastEvent("Boss fight started by a party member");
+bool LocalChrPose(float pos[4], float rot[4]) {
+    std::uint64_t man = 0, player = 0, a = 0, b = 0, c = 0, d = 0;
+    return SafeGet(Guest(0x553e878), &man) && man && SafeGet(man + 0x60, &player) && player &&
+           SafeGet(player + 0x58, &a) && a && SafeGet(a + 8, &b) && b && SafeGet(b + 0x3b0, &c) && c &&
+           SafeGet(c + 0x68, &d) && d && SafeRead(d + 0x1e0, pos, 16) && SafeRead(d + 0x1d0, rot, 16);
+}
+
+bool WarpLocalChr(const float pos[4], const float rot[4]) {
+    std::uint64_t man = 0, player = 0, vt = 0, fn = 0;
+    if (!SafeGet(Guest(0x553e878), &man) || !man || !SafeGet(man + 0x60, &player) || !player ||
+        !SafeGet(player, &vt) || !SafeGet(vt + 0x5f8, &fn) || !fn) {
+        return false;
+    }
+    alignas(16) float p[4] = {pos[0], pos[1], pos[2], 1.0f};
+    alignas(16) float r[4] = {rot[0], rot[1], rot[2], rot[3]};
+    using WarpFn = void(BB_COOP_SYSV*)(std::uint64_t, const float*, const float*, std::uint64_t);
+    reinterpret_cast<WarpFn>(fn)(player, p, r, 1);
+    return true;
 }
 
 void FirstFightRequest(const BossGate& g, int slot, std::uint32_t host_map) {
@@ -921,21 +956,28 @@ void FirstFightRequest(const BossGate& g, int slot, std::uint32_t host_map) {
     for (FirstFightWait& w : g_ff_wait) {
         if (w.guest_event == g.guest_event) {
             w.slot = slot;
-            w.since = Now();
             return;
         }
     }
-    g_ff_wait.push_back({g.guest_event, slot, Now(), false});
+    FirstFightWait w;
+    w.guest_event = g.guest_event;
+    w.slot = slot;
+    w.since = Now();
+    g_ff_wait.push_back(w);
     if (!BossGateInBlock(g, host_map)) {
         Log("host: boss fog: slot %d went in before the host's first fight (guest event %u), the host stands in "
             "%s: the fight starts once the host is in the boss's block (up to %.0f s)",
             slot, g.guest_event, MapName(host_map).c_str(), kFirstFightWaitSeconds);
         party::status::SetLastEvent("A party member waits in a boss arena: go there to start the fight");
+    } else {
+        Log("host: boss fog: slot %d went in before the host's first fight here (guest event %u): the host's "
+            "first-fight event %u starts now (its scene plays for the whole party)", slot, g.guest_event, g.intro_flag);
     }
 }
 
-// Host tick: arms the first-fight event of a waiting start once the host is in the boss's block,
-// and drops starts that ran (intro flag on), whose boss died, or that waited too long.
+// Host tick: runs a waiting start once the host stands steady in the boss's block, puts the host
+// back after the visit, and drops starts that ran (intro flag on), whose boss died, or that waited
+// too long.
 void FirstFightTick(const GameSnapshot& s) {
     std::lock_guard<std::mutex> lk(g_ff_mu);
     if (g_ff_wait.empty()) {
@@ -943,30 +985,58 @@ void FirstFightTick(const GameSnapshot& s) {
     }
     const double now = Now();
     for (auto it = g_ff_wait.begin(); it != g_ff_wait.end();) {
-        const BossGate* g = BossGateByEvent(static_cast<std::int32_t>(it->guest_event));
-        bool intro = false, dead = false;
+        FirstFightWait& w = *it;
+        const BossGate* g = BossGateByEvent(static_cast<std::int32_t>(w.guest_event));
+        const FirstFightSpot* spot = g ? FirstFightSpotFor(g->intro_flag) : nullptr;
+        bool intro = false, dead = false, host_in = false, f9180 = false;
         if (g) {
             progress::ReadFlag(g->intro_flag, &intro);
             progress::ReadFlag(g->boss_flag, &dead);
+            progress::ReadFlag(g->host_flag, &host_in);
         }
-        if (!g || intro || dead || now - it->since > kFirstFightWaitSeconds) {
+        progress::ReadFlag(9180, &f9180);
+        const bool cutscene = CutscenePlaying();
+        if (w.phase == 1 && FirstFightVisitDone(host_in, f9180, cutscene, now - w.visit_at)) {
+            const bool ok = WarpLocalChr(w.back_pos, w.back_rot);
+            Log("host: first fight (guest event %u): visit over after %.2f s (boss started %d, 9180 %d, cutscene %d): "
+                "the host is put back at (%.2f, %.2f, %.2f)%s", w.guest_event, now - w.visit_at, host_in ? 1 : 0,
+                f9180 ? 1 : 0, cutscene ? 1 : 0, w.back_pos[0], w.back_pos[1], w.back_pos[2],
+                ok ? "" : " (warp NOT possible)");
+            w.phase = (host_in || f9180 || cutscene) ? 2 : 0;  // a visit that started nothing: try again
+            w.visit_at = now;
+        }
+        if (!g || !spot || intro || dead || now - w.since > kFirstFightWaitSeconds || w.tries > kFirstFightVisitTries) {
             if (g && intro) {
                 Log("host: first fight of guest event %u started (first-fight event %u done, %.1f s after the "
-                    "guest's start)", it->guest_event, g->intro_flag, now - it->since);
+                    "guest's start)", w.guest_event, g->intro_flag, now - w.since);
             } else if (g) {
-                Log("host: first-fight start for guest event %u dropped (%s)", it->guest_event,
-                    dead ? "boss dead" : "the host did not come within the wait");
+                Log("host: first-fight start for guest event %u dropped (%s)", w.guest_event,
+                    dead ? "boss dead"
+                    : !spot ? "no spot"
+                    : w.tries > kFirstFightVisitTries ? "the event did not start"
+                                                      : "the host did not come within the wait");
             }
-            if (g && g_ff_event.load() == static_cast<std::int32_t>(g->intro_flag)) {
-                g_ff_event.store(0);
+            if (w.phase == 1) {
+                WarpLocalChr(w.back_pos, w.back_rot);
             }
             it = g_ff_wait.erase(it);
             continue;
         }
-        const bool ready = s.world_up && !s.loading && BossGateInBlock(*g, s.map_id);
-        if (ready && (!it->armed || now > g_ff_until.load())) {
-            it->armed = true;
-            ArmFirstFight(*g, it->slot);
+        const bool ready = s.world_up && !s.loading && BossGateInBlock(*g, s.map_id) && !cutscene &&
+                           progress::FlagLoadMode() == 0 && now - w.visit_at > 1.0;
+        if (w.phase == 0 && ready && w.tries < kFirstFightVisitTries && LocalChrPose(w.back_pos, w.back_rot)) {
+            alignas(16) const float to[4] = {spot->pos[0], spot->pos[1], spot->pos[2], 1.0f};
+            if (WarpLocalChr(to, w.back_rot)) {
+                ++w.tries;
+                w.phase = 1;
+                w.visit_at = now;
+                Log("host: first fight (guest event %u, try %d): the host's chr visits its first-fight event %u's spot "
+                    "(%.2f, %.2f, %.2f) from (%.2f, %.2f, %.2f)", w.guest_event, w.tries, g->intro_flag, to[0], to[1],
+                    to[2], w.back_pos[0], w.back_pos[1], w.back_pos[2]);
+                party::status::SetLastEvent("Boss fight started by a party member");
+            }
+        } else if (w.phase == 0 && w.tries >= kFirstFightVisitTries && now - w.visit_at > 5.0) {
+            w.tries = kFirstFightVisitTries + 1;  // dropped on the next tick
         }
         ++it;
     }
@@ -2152,22 +2222,6 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
         FirstFightTick(s);
         HostTick(s);
     }
-}
-
-bool HostFirstFightSkip(std::int32_t event_id, int bank, int id) {
-    const std::int32_t armed = g_ff_event.load(std::memory_order_relaxed);
-    if (armed == 0 || armed != event_id || !FirstFightPositionCondition(bank, id)) {
-        return false;
-    }
-    if (Now() > g_ff_until.load()) {
-        g_ff_event.store(0);
-        return false;
-    }
-    if (g_ff_logged.exchange(event_id) != event_id) {
-        Log("host: first-fight event %d: position condition %d[%d] passed (a guest started the fight)", event_id,
-            bank, id);
-    }
-    return true;
 }
 
 bool GuestFirstFightEnabled() {
