@@ -282,6 +282,15 @@ bool BossGateWaitsForHost(const BossGate& g, bool intro_done, bool host_in, bool
     return g.intro_flag != 0 && !intro_done && !host_in && !boss_dead;
 }
 
+bool BossFogNoticeDue(const BossGate& g, bool read, bool intro_done, bool host_in, bool boss_dead, float dist_m) {
+    return read && BossGateWaitsForHost(g, intro_done, host_in, boss_dead) && dist_m >= 0.0f &&
+           dist_m <= kBossFogNoticeRange;
+}
+
+const float* PickPlayerPos(bool physics_ok, const float* physics, bool drawn_ok, const float* drawn) {
+    return physics_ok && physics ? physics : drawn_ok && drawn ? drawn : nullptr;
+}
+
 bool BossGateInBlock(const BossGate& g, std::uint32_t map) {
     const std::uint32_t area = g.host_flag / 100000 % 100, block = g.host_flag / 10000 % 10;
     return map != 0xffffffffu && (map >> 24) == area && ((map >> 16) & 0xff) == block;
@@ -886,12 +895,20 @@ void FixtureList(const std::string& v, const char* key, std::vector<std::int32_t
 // The local player's position.
 bool MyPos(float out[3]) {
     std::uint64_t man = 0, player = 0;
-    float me[4] = {};
-    if (!SafeGet(Guest(0x553e878), &man) || !man || !SafeGet(man + 0x60, &player) || !player ||
-        !SafeRead(player + 0xc0, me, sizeof me)) {
+    if (!SafeGet(Guest(0x553e878), &man) || !man || !SafeGet(man + 0x60, &player) || !player) {
         return false;
     }
-    std::memcpy(out, me, 12);
+    // The physics position first (PickPlayerPos: +0xC0 goes stale on a guest in the host's world).
+    std::uint64_t a = 0, b = 0, c = 0, d = 0;
+    float phys[3] = {}, drawn[4] = {};
+    const bool phys_ok = SafeGet(player + 0x58, &a) && a && SafeGet(a + 8, &b) && b && SafeGet(b + 0x3b0, &c) && c &&
+                         SafeGet(c + 0x68, &d) && d && SafeRead(d + 0x1e0, phys, sizeof phys);
+    const bool drawn_ok = SafeRead(player + 0xc0, drawn, sizeof drawn);
+    const float* p = PickPlayerPos(phys_ok, phys, drawn_ok, drawn);
+    if (!p) {
+        return false;
+    }
+    std::memcpy(out, p, 12);
     return true;
 }
 
@@ -1824,14 +1841,13 @@ void FogWaitTick(const GameSnapshot& s) {
             const float dx = fog[0] - me[0], dy = fog[1] - me[1], dz = fog[2] - me[2];
             d = std::sqrt(dx * dx + dy * dy + dz * dz);
         }
-        const bool waits = read && BossGateWaitsForHost(g, intro, host_in, dead);
         // Diagnostics: the gate's state whenever it changes (distance bucket: near / 20 m / far).
         char buf[160];
         std::snprintf(buf, sizeof buf, " [%u: read %d intro %d host %d dead %d fog %s%s]", g.guest_event, read ? 1 : 0,
                       intro ? 1 : 0, host_in ? 1 : 0, dead ? 1 : 0, !found ? "not loaded" : !have_me ? "?" : "",
                       !found || !have_me ? "" : d <= kBossFogNoticeRange ? "near" : d <= 20.0f ? "within 20 m" : "far");
         state += buf;
-        if (waits && found && have_me && d <= kBossFogNoticeRange && !hit) {
+        if (BossFogNoticeDue(g, read, intro, host_in, dead, found && have_me ? d : -1.0f) && !hit) {
             hit = &g;
             hit_d = d;
         }
