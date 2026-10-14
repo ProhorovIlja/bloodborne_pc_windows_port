@@ -2698,6 +2698,18 @@ void DeadAfterClearTick(const GameSnapshot& s, double now) {
         fired = false;
         return;
     }
+    // Regression run 0.6.1 (live wipe): the guest died 10 s before the host's respawn travel came;
+    // this watchdog fired 4.5 s into the follow (still before its load), ended the session and the
+    // guest re-joined ~50 s later. A guest following the host's travel is revived by that load.
+    bool following = false;
+    {
+        std::lock_guard<std::mutex> lk(S().mu);
+        following = S().gphase != GuestPhase::Idle;
+    }
+    if (!deathrules::DeadWatchdogFires(1e9, 0, false, following)) {
+        dead_since = 0;
+        return;
+    }
     if (dead_since <= 0) dead_since = now;
     // 12 s after a K10 on this load (the normal path fires ~8.6 s after the death), 15 s otherwise
     // (live: a death in the Cleric Beast's arena during the fight was not processed either).
@@ -2705,8 +2717,9 @@ void DeadAfterClearTick(const GameSnapshot& s, double now) {
     // The game's death state did run when B2 held the death (HoldGuestDeath) - also once the hold
     // was consumed by a lone respawn or a dead follow that is still loading (hostdeath hd22: this
     // watchdog redirected a guest 8 s into its lone respawn, which ended the session).
-    if (fired || now - dead_since < limit || g_death_held_at.load() >= dead_since ||
-        g_last_hold_at.load() >= dead_since || g_dead_follow.load() || g_solo_respawn.load()) {
+    const bool held = g_death_held_at.load() >= dead_since || g_last_hold_at.load() >= dead_since ||
+                      g_dead_follow.load() || g_solo_respawn.load();
+    if (fired || !deathrules::DeadWatchdogFires(now - dead_since, limit, held, false)) {
         return;
     }
     fired = true;
@@ -7641,12 +7654,20 @@ bool HostTravelHeldForJoin(std::string* who) {
         }
     }
     v.joiner_in_world = members > 0 && missing == 0;
+    if (party::PartyLink* link = party::runtime_link()) {
+        for (const party::RosterEntry& r : link->roster()) {
+            if (r.slot != party::kHostSlot && r.connected &&
+                (r.state == party::MemberState::Joining || r.state == party::MemberState::Loading)) {
+                v.joiner_loading = true;
+            }
+        }
+    }
     const bool held = dsummon::HostTravelHeld(v);
     if (held && who) {
         char b[160];
         if (v.since_title < v.since_served) {
-            std::snprintf(b, sizeof b, "a member is joining from its title (room sent %.1f s ago, %d of %d member chr(s) missing)",
-                          v.since_title, missing, members);
+            std::snprintf(b, sizeof b, "a member is joining from its title (room sent %.1f s ago, %d of %d member chr(s) missing%s)",
+                          v.since_title, missing, members, v.joiner_loading ? ", its loading screen is up" : "");
         } else {
             std::snprintf(b, sizeof b, "a member is joining (room sent %.1f s ago, %s, %d of %d member chr(s) missing)",
                           v.since_served, v.since_done <= v.since_served ? (v.done_ok ? "joined" : "failed") : "no answer yet",
