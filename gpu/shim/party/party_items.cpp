@@ -28,7 +28,10 @@
 #include <chrono>
 #include <cstdarg>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
+#include "../net/bbnet_internal.h"
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -924,6 +927,13 @@ LotFit ClassifyLotFit(const std::vector<LotSlotState>& slots, std::string* why) 
     return fit;
 }
 
+int SummonedRegiveCount(int expect, int now, int count) {
+    if (expect < 0 || now < 0 || count <= 0 || now >= expect) {
+        return 0;
+    }
+    return std::min(count, expect - now);
+}
+
 bool LedgerSkipSuspicious(const std::vector<LotSlotState>& slots) {
     if (slots.empty()) {
         return false;
@@ -1802,6 +1812,146 @@ bool OwnSaveFlag(std::int64_t id) {
     return id >= 0 && progress::ReadFlagOwnSave(static_cast<u32>(id), &v) && v;
 }
 
+// ---- goods given while summoned: given again after a load that dropped them (H3, par_c6) ----
+struct SummonedGive {
+    u32 bits = 0;
+    u32 id = 0;
+    int count = 0;
+    int expect = -1;  // held right after the give (or the last re-give)
+};
+std::mutex g_sgive_mu;
+std::vector<SummonedGive> g_sgives;
+bool g_sgives_loaded = false;
+
+std::filesystem::path SummonedGivesPath() {
+    std::string dir = bbnet::settings().user_dir;
+    if (dir.empty()) {
+        if (const char* u = std::getenv("BB_GPU_USER_DIR")) dir = u;
+        else if (const char* u2 = std::getenv("BB_USER_DIR")) dir = u2;
+        else dir = std::string(std::getenv("BB_DATA_DIR") ? std::getenv("BB_DATA_DIR") : ".") + "/user";
+    }
+    return std::filesystem::path(dir) / "party_summoned_gives.txt";
+}
+
+/// Caller holds g_sgive_mu. Kept on disk so a crash while summoned does not forget them.
+void SaveSummonedGives() {
+    std::error_code ec;
+    const std::filesystem::path path = SummonedGivesPath();
+    if (g_sgives.empty()) {
+        std::filesystem::remove(path, ec);
+        return;
+    }
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream f(tmp, std::ios::trunc);
+        for (const SummonedGive& g : g_sgives) {
+            f << g.bits << ' ' << g.id << ' ' << g.count << ' ' << g.expect << "\n";
+        }
+    }
+    std::filesystem::rename(tmp, path, ec);
+}
+
+void LoadSummonedGives() {
+    std::lock_guard<std::mutex> lk(g_sgive_mu);
+    if (g_sgives_loaded) {
+        return;
+    }
+    g_sgives_loaded = true;
+    std::ifstream f(SummonedGivesPath());
+    SummonedGive g;
+    while (f >> g.bits >> g.id >> g.count >> g.expect) {
+        g_sgives.push_back(g);
+    }
+    if (!g_sgives.empty()) {
+        Log("goods given while summoned before the last exit: %zu kept for the check after the next load", g_sgives.size());
+    }
+}
+
+void NoteSummonedGive(u32 bits, u32 id, int count, int after) {
+    if (after < 0 || count <= 0) {
+        return;
+    }
+    std::lock_guard<std::mutex> lk(g_sgive_mu);
+    for (SummonedGive& g : g_sgives) {
+        if (g.bits == bits && g.id == id) {
+            g.count += count;
+            g.expect = after;
+            SaveSummonedGives();
+            return;
+        }
+    }
+    g_sgives.push_back({bits, id, count, after});
+    SaveSummonedGives();
+}
+
+/// Main thread: 3 s into the first steady OWN world (load mode 0) after a load, the goods given
+/// while summoned that the own data lacks are given again (no item-get dialog: the player saw it
+/// at the first give) and a save is requested, which keeps them for good; the list is cleared.
+/// Live (par_c6 verify run): goods given while summoned show in the own data once the session
+/// ends (Oedon Tomb Key 0 -> 1 at session idle), but a save requested while summoned never wrote
+/// them to disk: the next summon load (which reads the save) and a restart had them at 0. Nothing
+/// is given while summoned (the summoned view is rebuilt from the save at each load; a re-give
+/// there could double up when the session ends).
+void SummonedGivesTick(const GameSnapshot& gs, int load_mode, double now) {
+    static bool armed = true;  // a load (or the start) since the last check
+    static double steady_at = -1;
+    if (load_mode != 0) {
+        armed = true;  // checked at the next own world
+        steady_at = -1;
+        return;
+    }
+    if (!gs.world_up || gs.loading || gs.map_id == 0xffffffffu || !gs.player_rec) {
+        armed = true;
+        steady_at = -1;
+        return;
+    }
+    if (!armed) {
+        return;
+    }
+    if (steady_at < 0) {
+        steady_at = now;
+    }
+    if (now - steady_at < 3.0) {
+        return;
+    }
+    armed = false;
+    LoadSummonedGives();
+    std::lock_guard<std::mutex> lk(g_sgive_mu);
+    if (g_sgives.empty()) {
+        return;
+    }
+    std::string text;
+    int regave = 0;
+    for (SummonedGive& g : g_sgives) {
+        const int held = ItemCount(g.bits, g.id);
+        const int n = SummonedRegiveCount(g.expect, held, g.count);
+        if (n <= 0) {
+            continue;
+        }
+        const bool ok = GiveItem(g.bits, g.id, n);
+        const int after = ItemCount(g.bits, g.id);
+        char b[128];
+        std::snprintf(b, sizeof b, "%s %u x%d (held %d -> %d%s)", CategoryWord(g.bits >> 28), g.id, n, held, after,
+                      ok ? "" : ", GiveItemDirect unavailable");
+        text += (text.empty() ? "" : "; ") + std::string(b);
+        regave += ok ? 1 : 0;
+        if (ok && after >= 0) {
+            g.expect = after;
+        }
+    }
+    if (!text.empty()) {
+        Log("goods given while summoned are missing in the own world; given again: %s", text.c_str());
+    }
+    if (OwnWorld() == 1) {
+        RequestGameSave("C3 goods given while summoned, kept at home");
+        Log("own world: %zu good(s) given while summoned are in the own save now; list cleared", g_sgives.size());
+        g_sgives.clear();
+    }
+    SaveSummonedGives();
+    (void)regave;
+    (void)load_mode;
+}
+
 enum class SummonedResult { Given, Skipped, Defer };
 
 /// While summoned (load mode 1: the live flag store is the host's overlay, where the host's flag
@@ -1899,6 +2049,9 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         const int after = ItemCount(bits, static_cast<u32>(it.id));
         // The game's own "item acquired" dialog entry, as the host's lot award shows it.
         const bool shown = ok && ShowItemGet(bits, static_cast<u32>(it.id), it.count);
+        if (ok) {
+            NoteSummonedGive(bits, static_cast<u32>(it.id), it.count, after);
+        }
         gave += ok ? 1 : 0;
         native += shown ? 1 : 0;
         std::snprintf(b, sizeof b, "%s %d x%d (held %d -> %d%s%s)", CategoryWord(it.category), it.id, it.count,
@@ -2545,6 +2698,7 @@ void ItemsTick() {
     s.boss_quiet = BossQuiet(Now());
     ItemGetWatchTick(gs, Now());
     KeyGoodsWatchTick(gs, s.load_mode, Now());
+    SummonedGivesTick(gs, s.load_mode, Now());
     static ItemApplyMode gate_logged = ItemApplyMode::None;
     const ItemApplyMode mode_now = ItemApplyModeNow(s);
     if (mode_now != gate_logged) {
