@@ -1717,6 +1717,9 @@ bool Apply(const ItemGrant& g) {
             // #16: the ledger says given, the player holds none of the lot's unique items.
             Log("%s: its done flag %lld is set but none of its unique items is held; giving it after all",
                 DescribeItem(g).c_str(), static_cast<long long>(done));
+            if (g.flag >= 0) {
+                SetFlag(man, done, false); // the award's roll skips rows whose flag is set; it sets it again
+            }
         } else {
             Log("skip %s: already given (flag %lld set)", DescribeItem(g).c_str(), static_cast<long long>(done));
             return false;
@@ -1795,8 +1798,10 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         }
         return SummonedResult::Skipped;
     }
+    bool regive = false;
     if (OwnSaveFlag(done)) {
         if ((BossLedgerLot(g) || g.source == ItemSource::Own) && LedgerSkipSuspicious(LotSlots(g.lot))) {
+            regive = true;
             Log("%s: its done flag %lld is set but none of its unique items is held (%s); giving it after all",
                 DescribeItem(g).c_str(), static_cast<long long>(done), HeldSummary(g.lot).c_str());
         } else {
@@ -1806,7 +1811,9 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         }
     }
     const std::vector<LotRowData> chain = LotChain(g.lot);
-    const LotPlan plan = PlanSummonedLot(chain, g.items, [](std::int32_t f) { return OwnSaveFlag(f); });
+    // A re-give ignores the row flags (the done flag is one of them and is set).
+    const LotPlan plan =
+        PlanSummonedLot(chain, g.items, [regive](std::int32_t f) { return !regive && OwnSaveFlag(f); });
     if (plan.result != LotPlanResult::Give) {
         Log("%s: not while summoned (%s: %s); waits for the own world", DescribeItem(g).c_str(),
             LotPlanResultName(plan.result), plan.why.c_str());
