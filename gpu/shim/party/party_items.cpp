@@ -233,7 +233,10 @@ bool ItemLotDenied(std::int32_t lot, std::int32_t flag) {
         return true;
     }
     switch (lot) {
-    case 10000: case 10010: case 10011: case 10040: case 10050: // Messenger gifts (per player)
+    // Messenger gifts (per player). Not 10040, the Eye of a Blood-drunk Hunter (DLC entry): its
+    // event 12101028 needs chr type 0, so it never runs on a summoned guest; the host's copy is
+    // replayed to everyone (flag 50000100) or a guest who never stands in its own Dream lacks it.
+    case 10000: case 10010: case 10011: case 10050:
     case 10500: case 11500: case 12500:                         // covenant gems (common 9440)
     case 17010: case 24060: case 28000: case 32020:             // common 9100 (repeatable)
     case 43000:                                                 // 13501940 (repeatable)
@@ -288,8 +291,27 @@ std::optional<ItemGrant> ClassifyFlag(std::int32_t flag, const std::map<std::int
     return g;
 }
 
+bool SharedKeyTreasureLot(std::int32_t lot) {
+    switch (lot) {
+    case 2400450:  // Hunter Chief Emblem (Cathedral Ward; the plaza gate 12400760)
+    case 2800290:  // Upper Cathedral Key (Yahar'gul; ObjAct 2400100)
+    case 2600550:  // Iron Door Key (Nightmare of Mensis; ObjAct 2600020/2600021)
+    case 2600610:  // Iron Door Key (second copy)
+    case 3200720:  // Lecture Theatre Key (Byrgenwerth; ObjAct 3200030)
+    case 3500800:  // Underground Cell Key (Research Hall; ObjAct 3500040)
+    case 2200360:  // Rune Workshop Tool (Hemwick; the Memory Altar)
+    case 2411000:  // Blood Gem Workshop Tool (Central Yharnam; blood gems at the workbench)
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool InstancedTreasureFlag(std::int32_t flag, bool instanced, bool captured) {
-    return instanced && !captured && flag >= 50000000 && flag < 60000000 && flag / 100000 % 100 != 0;
+    if (!(instanced && !captured && flag >= 50000000 && flag < 60000000 && flag / 100000 % 100 != 0)) {
+        return false;
+    }
+    return !SharedKeyTreasureLot(ItemLotForFlag(flag));
 }
 
 json::Value ItemsToJson(const std::vector<ItemGrant>& items) {
