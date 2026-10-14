@@ -1800,10 +1800,21 @@ bool Capturing() {
     return G().capture.load(std::memory_order_relaxed) && !Global::self_write;
 }
 
-BB_COOP_SYSV void OnSetEventFlag(u64 man, u64 id, u64, u64, u64, u64) {
+std::atomic<LocalFlagSetObserver> g_local_set_observer{nullptr};
+
+void NoteLocalSet(u32 id) {
+    if (const LocalFlagSetObserver obs = g_local_set_observer.load(std::memory_order_relaxed); obs && !Global::self_write) {
+        obs(id);
+    }
+}
+
+BB_COOP_SYSV void OnSetEventFlag(u64 man, u64 id, u64 on, u64, u64, u64) {
     perf::Scope z(perf::Zone::HookSetFlag);
     if (Capturing() && man == Manager()) {
         NoteId(u32(id));
+    }
+    if (u32(on) && man == Manager()) {
+        NoteLocalSet(u32(id));
     }
 }
 
@@ -1819,6 +1830,9 @@ BB_COOP_SYSV void OnSetEventFlagValue(u64 man, u64 first, u64 bits, u64, u64, u6
 
 BB_COOP_SYSV void OnBroadcastSetFlag(u64, u64 id, u64, u64, u64, u64) {
     perf::Scope z(perf::Zone::HookBroadcastFlag);
+    if (std::int32_t(u32(id)) >= 0) {
+        NoteLocalSet(u32(id));
+    }
     if (Capturing() && std::int32_t(u32(id)) >= 0) {
         NoteId(u32(id));
     }
@@ -2398,6 +2412,10 @@ void Tick(const GameSnapshot& s) {
 
 void SetItemFlagObserver(ItemFlagObserver fn) {
     G().item_observer = fn;
+}
+
+void SetLocalFlagSetObserver(LocalFlagSetObserver fn) {
+    g_local_set_observer = fn;
 }
 
 void SetBeforeApplyHook(BeforeApplyHook fn) {
