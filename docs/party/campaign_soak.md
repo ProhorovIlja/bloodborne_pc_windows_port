@@ -130,3 +130,45 @@ an item picked by the guest, the guest's Leave path (the guest never loaded its 
 Notes for the next run: the guest's `BB_PARTY_PROGRESS_TEST_CLEAR` only runs in load mode 0, so a
 title-joined guest never clears; a `guest_*` travel step never fired for a title-joined guest
 (no (re)join event on its clock), so `--crash-when` on it did not trigger.
+
+## Device lost on the guest's Moonside Lake load (2026-10-15, agent devlost)
+
+parg's G3 run 1 (2026-10-14) ended with the guest's game losing the GPU (device lost) on its m32
+load right after the host's lamp travel to Moonside Lake 3202952 with Rom dead; the Blood Moon
+scene 32000000 started on the host while the guest was loading. Its hang shader dump went with
+parg's environment.
+
+Re-run on one PC (RTX 3070, 2 loopback instances, 720p, breadcrumbs on, test saves, host
+`BB_PARTY_DIRECTOR_TEST=host_flag=13201800@5%m,` then `host_warp=3202952@12%m,host_warp=2412951@12%m`
+repeated; the `%m` keeps a `host_warp` after a flag step from waiting for a re-join):
+
+| Session | What | Guest loads | Guest m32 loads | Device lost |
+| --- | --- | --- | --- | --- |
+| r2 | Rom dead; each arrival at the Lake ran the Blood Moon scene on the host and sent it to the loading guest (5 x `story ... cutscene 32000000 sent to the party`) | 20 | 5 | none |
+| r3 | Rom dead + 13201803 + 9800..9802 (Blood Moon world) set first | 14 | 3 | none |
+
+Both sessions were ended from outside after 606 s / 430 s (both games `exit 4294967295` at the
+same moment, no crash log, no harness verdict: not this run's doing). Screenshots every 20 s of both
+windows: the guest at the Lake with Queen Yharnam, Central Yharnam, loading screens; no glitch.
+Not reproduced in 8 Lake loads of the guest (34 loads in all).
+
+A lead from 2026-10-06 (docs/CHANGES_2026-10-06.md): the one GPU hang the breadcrumbs located so far
+was the particle compute shader `cs 2da7fe60` (indirect dispatch after `cs 4ca76892`); its two
+loops run up to a count read from a read-only buffer (binding 3, dwords 0 and 580 of the emitter
+data), so stale or not yet uploaded emitter data during a load would make them run for billions of
+iterations (a TDR). Unconfirmed: the m32 dump was lost.
+
+New diagnostics so the next occurrence is caught (any player, no switch needed):
+`out\device_lost_<time>.log` written before the game closes (VK_EXT_device_fault address / vendor
+info where the driver has it, VRAM in use against the budget, the breadcrumbs report), the stuck
+command's guest code `out\hang_shader_<hash>.bin` and its SPIR-V from the shader cache
+`out\hang_shader_<hash>_<perm>.spv`; the launcher's automatic support bundle starts on a device-lost
+report and takes all of them. A second thread seeing the device lost waits (up to 5 s) for the
+report before asserting. Checked live with `BB_DEVICE_LOST_REPORT_TEST=240` on the guest: the report,
+`GPU breadcrumbs: on; device fault info (VK_EXT_device_fault): on`, a dispatch's `.bin` (64 KiB)
+and `.spv` (valid SPIR-V 1.6, spirv-dis).
+
+The other device lost seen this cycle (port7's try of Mrsuss60 25f95440's timer change, not
+merged: `read_tsc` through the process counter at a pinned 1 GHz) came ~7.7 s into boot after a
+GPU library assertion: a guest-side timing change, not a shader or a load; common to both is only
+that neither left a report on disk, which the new `device_lost_*.log` covers.
