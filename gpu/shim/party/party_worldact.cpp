@@ -848,8 +848,8 @@ bool PutLocal(const float target[3], float px, float pz, float dist, float angle
 // BB_PARTY_WORLDACT_TEST (live tests, the guest): "obj=E[/E...];chr=E[/E...];after=S": S s
 // (default 8) after the guest's world became steady in the host's world, for each map object
 // (lever, door) and then each character (NPC): stand around it (8 directions x 1.0 / 1.6 m) until
-// an action prompt shows, press Cross (then three more for a talk: the dialogue lines), wait,
-// next.
+// an action prompt shows, press Cross (then three more for a talk: the dialogue lines; "talk=N": N
+// presses in all), wait, next.
 struct Fixture {
     bool parsed = false;
     std::vector<std::int32_t> objs, chrs;
@@ -871,6 +871,7 @@ struct Fixture {
     float kill_pos[3] = {};
     std::int32_t kill_id = 0;
     double after = 8;
+    int talk = 4;  // "talk=N": Cross presses at a character (the first opens the talk), default 4
     std::size_t idx = 0;
     int tries = 0, presses = 0;
     double next = 0, release = 0;
@@ -1117,6 +1118,9 @@ void FixtureTick(double now) {
         f.lootall = v.find("lootall") != std::string::npos;
         if (const std::size_t a = v.find("loot="); a != std::string::npos) {
             f.loot = std::atoi(v.c_str() + a + 5);
+        }
+        if (const std::size_t a = v.find("talk="); a != std::string::npos) {
+            f.talk = std::clamp(std::atoi(v.c_str() + a + 5), 1, 12);
         }
         if (const std::size_t a = v.find("kill="); a != std::string::npos) {
             f.kills = std::atoi(v.c_str() + a + 5);
@@ -1473,7 +1477,7 @@ void FixtureTick(double now) {
     const std::int32_t ent = obj ? f.objs[f.idx] : f.chrs[f.idx - f.objs.size()];
     std::uint32_t prompt = 0;
     if (f.presses > 0) {
-        if (!obj && f.presses < 4) {
+        if (!obj && f.presses < f.talk) {
             runtime_pad_director_press(0x4000);  // talk: the next dialogue lines
             f.release = now + 0.15;
             ++f.presses;
