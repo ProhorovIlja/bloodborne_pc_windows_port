@@ -1005,6 +1005,21 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         }
     }
     g_rot_list.store(in_world ? Field<u64>(s.player, 0x1c8) : 0, std::memory_order_relaxed);
+    // C4 evidence: one action's stamina use (a drop of 8+ in one tick from a full bar), with the
+    // stamina-cost factor in force, at most one line per 5 s (a roll or a swing at full stamina
+    // costs the same every time, so lines before and after a "stamina cost" stack compare).
+    {
+        static int last_st = -1;
+        static std::chrono::steady_clock::time_point next_st{};
+        const int stn = in_world && hp > 0 ? Field<int>(dm, 0x134, -1) : -1;
+        const int stmax = Field<int>(dm, 0x138, -1);
+        if (stn >= 0 && last_st >= 0 && last_st == stmax && last_st - stn >= 8 && now >= next_st) {
+            next_st = now + std::chrono::seconds(5);
+            Log("stamina used from a full bar: %d (%d -> %d); stamina cost x%.2f (%d rot stack(s))", last_st - stn,
+                last_st, stn, double(g_kind_value[kRotStaminaCost].load()), g_stacks.load());
+        }
+        last_st = stn;
+    }
     if (g_stacks.load() > 0 && in_world && hp > 0 && now >= st.next_rot_log) {
         st.next_rot_log = now + std::chrono::seconds(20);
         std::string b;
