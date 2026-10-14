@@ -50,6 +50,8 @@ namespace coop::balance {
 
 namespace {
 
+std::atomic<bool> g_lamp_menu_opened{false};  // NoteLampMenuOpened (direct lamp travel)
+
 using u8 = std::uint8_t;
 using u16 = std::uint16_t;
 using u32 = std::uint32_t;
@@ -658,6 +660,10 @@ int LocalRotStacks() {
     return InForce().rot ? g_stacks.load() : 0;
 }
 
+void NoteLampMenuOpened() {
+    g_lamp_menu_opened = true;
+}
+
 void Init() {
     if (!On()) {
         Log("off (BB_PARTY_BALANCE=0 or no party)");
@@ -844,7 +850,8 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         float pos[3] = {}, d[3] = {};
         u32 lamp = 0;
         float spot_m = -1, obj_m = -1;
-        if (dialog && !st.dialog_was && hp > 0 && LocalPos(s.player, pos)) {
+        const bool lamp_menu = g_lamp_menu_opened.exchange(false);
+        if (((dialog && !st.dialog_was) || lamp_menu) && hp > 0 && LocalPos(s.player, pos)) {
             lamp = NearestLampSpot(s.map_id, pos, d);
             spot_m = lamp ? std::sqrt(d[0] * d[0] + d[2] * d[2]) : -1.0f;
             // The lamp itself stands a few m from its revive spot (Central Yharnam 2412951: 4.6 m,
