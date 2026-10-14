@@ -205,7 +205,8 @@ treasure the host picks up, NPC gifts), exactly once, even across crashes and re
    Backbone 50700000, Kin Coldblood 51001900, 25700000/75002400 (item names missing from the FMG), 22502610,
    Tear Stone 14000 (and 9040 NPC slots with flag -1).
 3. Deny list (never replay; per-player or repeatable): lots whose flag is in 6000-8999 (Messenger gifts
-   10000/10010/10040/10050, DLC/costume 6670-6678), covenant gems `common 9440`, rune/gem use `9500`,
+   10000/10010/10050, DLC/costume 6670-6678; 10040 the Eye of a Blood-drunk Hunter is replayed since
+   2026-10-14, quest_audit.md F3), covenant gems `common 9440`, rune/gem use `9500`,
    repeatables `common 9100` / `13501940` (何度でも), DLC messenger hats `12105064`, PvP/covenant lots
    5500-5950, 16581, 5020, chalice-dungeon lots (area 29, flag -1 boss lots 1100xxxxx).
 
