@@ -22,7 +22,22 @@ bool NpcGiftTrigger(std::uint32_t id) {
     return !(id == 9043u || id == 9044u || id == 9053u || id == 9065u || id == 9068u || id == 9070u);
 }
 
+std::int32_t RepeatGiftLot(std::uint32_t trigger) {
+    // common.emevd event 0: InitializeEvent(slot 0..4, 9100, trigger, lot).
+    switch (trigger) {
+    case 72410359u: return 24060;  // Blue Elixir x3
+    case 72410310u: return 23000;  // Iosefka's Blood Vial
+    case 72400398u: return 32020;  // Blood of Adella
+    case 72400489u: return 28000;  // Blood of Arianna
+    case 9043u: return 17010;      // Queenly Flesh
+    default: return -1;
+    }
+}
+
 bool WorldActionAllowed(std::uint32_t id, bool clear, std::uint32_t host_map) {
+    if (RepeatGiftLot(id) > 0) {
+        return false;  // P2: the guest's own gift (its own grant), never the host's 9100
+    }
     const int key = progress::PoolKeyOfId(id);
     if (key < 0 || !progress::WorldMirrorKey(key) || progress::NeverWritable(id) ||
         !progress::GetBit(progress::WorldMirrorMask(key).data(), id % progress::kBitsPerBlock)) {
@@ -313,6 +328,61 @@ bool BossGateHostOpens(const BossGate& g, bool guest_in, bool host_in, bool boss
            ((host_map >> 16) & 0xff) == block;
 }
 
+bool BossGateGuestStarts(const BossGate& g) {
+    // The guest-entry events whose host first-fight event (EMEVD, flag_tool emevd + an instruction
+    // dump) has one position condition: Witch of Hemwick 12201802 (3[2] 2202805), Blood-starved
+    // Beast 12301802 (3[2] 2302805), Darkbeast Paarl 12301702 (3[3] 16 m), Vicar Amelia 12401802
+    // (3[2] 2402805, scene 24000060), Cleric Beast 12411702 (3[2] 2412805), Father Gascoigne
+    // 12411802 (3[2] 2412815, scene 24010010), Logarius 12501802 (3[2] 2502805, scene 25000020),
+    // Mergo's Wet Nurse 12601802 (3[2] 2602805, scene 26000010), Micolash 12601852 (3[3] 32 m,
+    // scene 26000060), Shadows of Yharnam 12701802 (3[2] 2702805), the One Reborn 12801802 (3[2]
+    // 2802805, scene 28000000), Amygdala 13301802 (3[2] 3302805).
+    switch (g.guest_event) {
+    case 12204891: case 12304811: case 12304731: case 12404841: case 12414731: case 12414811:
+    case 12504811: case 12604846: case 12604861: case 12704841: case 12804881: case 13304871:
+        return g.intro_flag != 0;
+    default:
+        return false;
+    }
+}
+
+bool BossGateSkipFirstFight(std::int32_t event_id, int bank, int id, std::uint32_t flag) {
+    if (bank != 3 || id != 0) {
+        return false;
+    }
+    const BossGate* g = BossGateByEvent(event_id);
+    return g && BossGateGuestStarts(*g) && g->intro_flag == flag;
+}
+
+const BossGate* BossGateByIntroEvent(std::int32_t event_id) {
+    for (const BossGate& g : BossGates()) {
+        if (g.intro_flag != 0 && static_cast<std::int32_t>(g.intro_flag) == event_id) {
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
+bool FirstFightPositionCondition(int bank, int id) {
+    return bank == 3 && (id == 2 || id == 3);
+}
+
+FogAction HostFogAction(const BossGate& g, bool guest_starts_on, bool intro_done, bool host_in, bool boss_dead,
+                        std::uint32_t host_map) {
+    if (boss_dead || host_in) {
+        return FogAction::none;
+    }
+    if (g.intro_flag == 0 || intro_done) {
+        return BossGateHostOpens(g, true, host_in, boss_dead, host_map) ? FogAction::open : FogAction::none;
+    }
+    // First fight: writing host_flag alone would start a boss whose first-fight event never ran
+    // (Amelia stays disabled until it does) and replay its scene when the host walks in later.
+    if (!guest_starts_on || !BossGateGuestStarts(g)) {
+        return FogAction::none;
+    }
+    return BossGateInBlock(g, host_map) ? FogAction::start_first : FogAction::wait_host;
+}
+
 } // namespace coop::worldact
 
 #ifndef BB_PARTY_WORLDACT_NO_GAME
@@ -325,6 +395,7 @@ bool BossGateHostOpens(const BossGate& g, bool guest_in, bool host_in, bool boss
 #include "party_guestsvc.h"
 #include "party_status.h"
 #include "party_droproll.h"
+#include "party_items.h"
 
 #include <atomic>
 #include <chrono>
@@ -410,7 +481,15 @@ std::atomic<double> g_pickup_at{-1e9};     // Now() of the last one
 // the guest tick sends them to the host while it stands in the host's world, else drops them.
 std::mutex g_gift_mu;
 std::vector<std::uint32_t> g_gift_sets;
+std::vector<std::uint32_t> g_repeat_sets;  // P2: repeatable gift triggers (RepeatGiftLot) this game set
 void OnLocalGiftSet(std::uint32_t id) {
+    if (RepeatGiftLot(id) > 0) {
+        std::lock_guard<std::mutex> lk(g_gift_mu);
+        if (g_repeat_sets.size() < 16) {
+            g_repeat_sets.push_back(id);
+        }
+        return;
+    }
     if (!NpcGiftTrigger(id)) {
         return;
     }
@@ -423,6 +502,12 @@ std::vector<std::uint32_t> TakeGiftSets() {
     std::lock_guard<std::mutex> lk(g_gift_mu);
     std::vector<std::uint32_t> out;
     out.swap(g_gift_sets);
+    return out;
+}
+std::vector<std::uint32_t> TakeRepeatSets() {
+    std::lock_guard<std::mutex> lk(g_gift_mu);
+    std::vector<std::uint32_t> out;
+    out.swap(g_repeat_sets);
     return out;
 }
 std::mutex g_treasure_mu;
@@ -582,6 +667,9 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         if (const std::vector<std::uint32_t> g = TakeGiftSets(); !g.empty()) {
             Log("guest: NPC gift trigger(s) %s set outside the host's steady world: kept local", IdList(g).c_str());
         }
+        if (s.session_role != 6) {
+            TakeRepeatSets();  // its own world: its own 9100 awards them
+        }
         return;
     }
     if (!st.steady) {
@@ -623,6 +711,23 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
     // P1: the guest's talk handed over an NPC gift. Its own 9040 slot ended at load (client), and the
     // overlay bit already read 1 then (no change to see): the trigger goes to the host, whose 9040
     // awards the lot; C3 gives it to every member (ledger / lot flag), the guest included.
+    // P2: a repeatable gift (Blood of Arianna ...) the guest's talk asked for in the host's world:
+    // the guest's own, given here (the host's 9100 never sees the trigger), the trigger cleared again.
+    for (std::uint32_t id : TakeRepeatSets()) {
+        const std::int32_t lot = RepeatGiftLot(id);
+        bool host_set = false;
+        if (progress::HostWorldFlag(id, &host_set) && host_set) {
+            // The host's own talk set it (its 9100 awards the host): not this guest's gift.
+            Log("guest: repeatable NPC gift trigger %u is set in the host's world too: the host's own gift; "
+                "nothing given here", id);
+            continue;
+        }
+        const bool queued = OfferRepeatGift(lot);
+        const bool cleared = WriteEventFlag(id, false);
+        Log("guest: repeatable NPC gift trigger %u set by its talk in the host's world: lot %d %s; trigger %s "
+            "(common 9100 does that on the host only)", id, lot,
+            queued ? "given to this guest (own grant)" : "NOT queued (items off)", cleared ? "cleared" : "NOT cleared");
+    }
     for (std::uint32_t id : TakeGiftSets()) {
         bool given = false;
         if (progress::HostWorldFlag(id, &given) && given) {
@@ -785,6 +890,89 @@ void ReplayKick(int slot, std::int32_t kick_event, double now) {
     Log("host: slot %d's ObjAct kick %d: no such ObjAct in the host's loaded world", slot, kick_event);
 }
 
+namespace {
+// P5 / D10: the host's first-fight event armed for a guest's start (HostFirstFightSkip reads it on
+// the game thread) and a start that waits for the host to reach the boss's block.
+std::atomic<std::int32_t> g_ff_event{0};
+std::atomic<double> g_ff_until{0.0};
+std::atomic<std::int32_t> g_ff_logged{0};
+struct FirstFightWait {
+    std::uint32_t guest_event = 0;
+    int slot = -1;
+    double since = 0;
+    bool armed = false;
+};
+std::mutex g_ff_mu;
+std::vector<FirstFightWait> g_ff_wait;
+
+void ArmFirstFight(const BossGate& g, int slot) {
+    g_ff_logged.store(0);
+    g_ff_until.store(Now() + kFirstFightArmSeconds);
+    g_ff_event.store(static_cast<std::int32_t>(g.intro_flag));
+    Log("host: boss fog: slot %d went in before the host's first fight here (guest event %u): the host's "
+        "first-fight event %u runs now as if the host had walked in (its scene plays for the whole party; "
+        "position condition passed for %.0f s)",
+        slot, g.guest_event, g.intro_flag, kFirstFightArmSeconds);
+    party::status::SetLastEvent("Boss fight started by a party member");
+}
+
+void FirstFightRequest(const BossGate& g, int slot, std::uint32_t host_map) {
+    std::lock_guard<std::mutex> lk(g_ff_mu);
+    for (FirstFightWait& w : g_ff_wait) {
+        if (w.guest_event == g.guest_event) {
+            w.slot = slot;
+            w.since = Now();
+            return;
+        }
+    }
+    g_ff_wait.push_back({g.guest_event, slot, Now(), false});
+    if (!BossGateInBlock(g, host_map)) {
+        Log("host: boss fog: slot %d went in before the host's first fight (guest event %u), the host stands in "
+            "%s: the fight starts once the host is in the boss's block (up to %.0f s)",
+            slot, g.guest_event, MapName(host_map).c_str(), kFirstFightWaitSeconds);
+        party::status::SetLastEvent("A party member waits in a boss arena: go there to start the fight");
+    }
+}
+
+// Host tick: arms the first-fight event of a waiting start once the host is in the boss's block,
+// and drops starts that ran (intro flag on), whose boss died, or that waited too long.
+void FirstFightTick(const GameSnapshot& s) {
+    std::lock_guard<std::mutex> lk(g_ff_mu);
+    if (g_ff_wait.empty()) {
+        return;
+    }
+    const double now = Now();
+    for (auto it = g_ff_wait.begin(); it != g_ff_wait.end();) {
+        const BossGate* g = BossGateByEvent(static_cast<std::int32_t>(it->guest_event));
+        bool intro = false, dead = false;
+        if (g) {
+            progress::ReadFlag(g->intro_flag, &intro);
+            progress::ReadFlag(g->boss_flag, &dead);
+        }
+        if (!g || intro || dead || now - it->since > kFirstFightWaitSeconds) {
+            if (g && intro) {
+                Log("host: first fight of guest event %u started (first-fight event %u done, %.1f s after the "
+                    "guest's start)", it->guest_event, g->intro_flag, now - it->since);
+            } else if (g) {
+                Log("host: first-fight start for guest event %u dropped (%s)", it->guest_event,
+                    dead ? "boss dead" : "the host did not come within the wait");
+            }
+            if (g && g_ff_event.load() == static_cast<std::int32_t>(g->intro_flag)) {
+                g_ff_event.store(0);
+            }
+            it = g_ff_wait.erase(it);
+            continue;
+        }
+        const bool ready = s.world_up && !s.loading && BossGateInBlock(*g, s.map_id);
+        if (ready && (!it->armed || now > g_ff_until.load())) {
+            it->armed = true;
+            ArmFirstFight(*g, it->slot);
+        }
+        ++it;
+    }
+}
+} // namespace
+
 void HostTick(const GameSnapshot& s) {
     State& st = S();
     std::deque<std::pair<int, Request>> in;
@@ -837,13 +1025,23 @@ void HostTick(const GameSnapshot& s) {
             // host-entered flag, which starts the boss (its `ボスが動き出す` waits on it). The
             // host still walks in through its own fog.
             const BossGate* g = BossGateByGuestFlag(f);
-            bool host_in = false, dead = false;
+            bool host_in = false, dead = false, intro = false;
             if (!g) {
                 continue;
             }
             progress::ReadFlag(g->host_flag, &host_in);
             progress::ReadFlag(g->boss_flag, &dead);
-            if (!BossGateHostOpens(*g, true, host_in, dead, s.map_id)) {
+            if (g->intro_flag) {
+                progress::ReadFlag(g->intro_flag, &intro);
+            }
+            const FogAction act = HostFogAction(*g, GuestFirstFightEnabled(), intro, host_in, dead, s.map_id);
+            if (act == FogAction::start_first || act == FogAction::wait_host) {
+                // P5 / D10: a guest went through the fog of a first fight: the host's first-fight
+                // event runs as if the host had walked in (its scene plays for everyone).
+                FirstFightRequest(*g, slot, s.map_id);
+                continue;
+            }
+            if (act != FogAction::open) {
                 Log("host: boss fog: slot %d went in (flag %u); nothing to open (host in %d, boss dead %d, host in %s)",
                     slot, f, host_in ? 1 : 0, dead ? 1 : 0, MapName(s.map_id).c_str());
                 continue;
@@ -1903,7 +2101,9 @@ void FogWaitTick(const GameSnapshot& s) {
                       intro ? 1 : 0, host_in ? 1 : 0, dead ? 1 : 0, !found ? "not loaded" : !have_me ? "?" : "",
                       !found || !have_me ? "" : d <= kBossFogNoticeRange ? "near" : d <= 20.0f ? "within 20 m" : "far");
         state += buf;
-        if (BossFogNoticeDue(g, read, intro, host_in, dead, found && have_me ? d : -1.0f) && !hit) {
+        // P5: a guest-startable first fight has its fog prompt (FogFirstSkip): no "host first" notice.
+        const bool guest_starts = GuestFirstFightEnabled() && BossGateGuestStarts(g);
+        if (!guest_starts && BossFogNoticeDue(g, read, intro, host_in, dead, found && have_me ? d : -1.0f) && !hit) {
             hit = &g;
             hit_d = d;
         }
@@ -1949,8 +2149,33 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
             st.steady = true;
             st.steady_since = Now();
         }
+        FirstFightTick(s);
         HostTick(s);
     }
+}
+
+bool HostFirstFightSkip(std::int32_t event_id, int bank, int id) {
+    const std::int32_t armed = g_ff_event.load(std::memory_order_relaxed);
+    if (armed == 0 || armed != event_id || !FirstFightPositionCondition(bank, id)) {
+        return false;
+    }
+    if (Now() > g_ff_until.load()) {
+        g_ff_event.store(0);
+        return false;
+    }
+    if (g_ff_logged.exchange(event_id) != event_id) {
+        Log("host: first-fight event %d: position condition %d[%d] passed (a guest started the fight)", event_id,
+            bank, id);
+    }
+    return true;
+}
+
+bool GuestFirstFightEnabled() {
+    static const bool on = [] {
+        const char* e = std::getenv("BB_PARTY_GUEST_FIRST_FIGHT");
+        return !(e && e[0] == '0');
+    }();
+    return on;
 }
 
 Stats GetStats() {
