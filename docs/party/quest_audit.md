@@ -49,8 +49,9 @@ The ten things most likely to go wrong in the next ~5 hours, and what to do in g
    guest's next solo death to the Gaol). The guest's own save gets 9421 / 9423 (key_event: "kidnap
    done") and, once it goes home and rings again, the Gaol as its own last lamp (the bell's gather
    lamp warp to the host's lamp) - the same state as a solo kidnap, never a pending one.
-   *Open (minor):* the host's +1 Insight at the end of 9422 (SpEffect 4680, host only) is not
-   shared with the guests.
+   *Fixed in 0.6.2:* the host's +1 Insight at the end of 9422 (SpEffect 4680 through 2004[8],
+   host only) reaches the guests present as story Insight (EVENT "phantom" {kind "insight"},
+   `HostOnlySpEffectInsight`; unit-tested, not yet seen live).
 2. **Blood-starved Beast reward (Pthumeru Chalice)**: lot 80000000, flag 5000 (global) -> shared
    with every member through C3; the guest's item box waits for the boss banner to end. No intro
    cutscene, so the guest may go through the fog first (B2). *If the chalice is missing on the
@@ -229,7 +230,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 
 | Event | ids | Host | Guest | Risk | Fix |
 |---|---|---|---|---|---|
-| Hypogean Gaol (kidnap) | common 9421 (respawn 2802959), 9422 (remo 28000010 in m28, sets 9423, SpEffect 4680; `End if Client`) | wakes in a cell | follows the respawn with one loading screen, beside the host (live, P7); its loading screen holds through the host's waking scene; misses the host's +1 Insight of 9422 | ok / minor (Insight) | F1, checklist 1 |
+| Hypogean Gaol (kidnap) | common 9421 (respawn 2802959), 9422 (remo 28000010 in m28, sets 9423, SpEffect 4680; `End if Client`) | wakes in a cell | follows the respawn with one loading screen, beside the host (live, P7); its loading screen holds through the host's waking scene; gets the host's +1 Insight of 9422 (0.6.2, story Insight path) | ok | F1, checklist 1 |
 | First-sacrifice multiplayer block | 12800160: SpEffects 9120/9121 while 9802 is off | | cutscenes_endings.md 5.2: unknown effect on summons in m28 | major (untested) | P6 |
 | Time of day | 12800400 (sets 2800 never_sync, 70002802), gates 12800402/12800403 by 9802 | | mirrored | ok | |
 | Upper Cathedral Key | lot 2800290 (treasure) | picks up | was per player | major | F2 |
