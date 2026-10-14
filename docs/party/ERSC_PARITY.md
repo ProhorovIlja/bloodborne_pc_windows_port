@@ -59,7 +59,7 @@ only 100% when it meets it.
 | F. Network & robustness | 86% |
 | G. BB-specific (chalice, insight, bath) | 87% |
 | H. Bloodborne rule (feels like SP in a party) | 87% |
-| **Overall (unweighted mean of rows)** | **~84%** |
+| **Overall (unweighted mean of the 47 scored rows; "not planned" rows and section I excluded)** | **~88%** |
 
 ## A. Session & joining
 
