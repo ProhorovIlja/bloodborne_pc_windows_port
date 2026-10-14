@@ -4,7 +4,7 @@ Static audit of every co-op relevant event of Bloodborne 1.09 (EMEVD event scrip
 ObjActParam, NpcParam, talk ESDs, MSBs) against what the party code does today
 (`windows-upstream-0.5` after 0.6.1 packaging). Goal: find before the next Internet session
 (the host and the guest, continuing from Old Yharnam) the key items, doors, warps, fog walls and
-NPC steps that can break co-op. Nothing here was run live; "verified" means checked in the data
+NPC steps that can break co-op. Nothing here was run live (except P1 and P7, marked live); "verified" means checked in the data
 and the code, not on screen.
 
 How it was made (repeatable, game data read-only from an agent game copy):
@@ -36,14 +36,21 @@ The ten things most likely to go wrong in the next ~5 hours, and what to do in g
    (12400780 / 12700500 need chr type 0); a guest killed by a Snatcher just dies (party death).
    The host's grab-death sets 9420, common 9421 moves the host's respawn point to the Hypogean Gaol
    (ReturnPoint 2802959, Yahar'gul) and the host's death becomes the party's respawn load; the
-   guests replay it as a lamp warp to the host's last lamp record, which should then be the Gaol
-   too (inferred: `2003[23]` writing GSM +0x1528 was not traced).
-   *In game:* expect everyone to wake up in the Hypogean Gaol (a cell, Yahar'gul) with a host-only
-   cutscene. If the guests land at the host's old lamp instead, the host lights the Gaol's lamp
-   and rests (party travel) or the guests ring the bell. Avoid the grab if you do not want to go
-   to Yahar'gul yet: kill Snatchers from range or let the guest tank them.
+   guests replay it as a lamp warp to the host's last lamp record, which is then the Gaol
+   (**P7 done**: `2003[23]` is the dispatcher case 0x17C10A5, it writes GSM +0x1528 = {row +4, row +8}
+   of the ReturnPointParam row; live: host `respawn load for the whole party at lamp 2802959`, guest
+   `replay ... host_death ... last lamp 0x2ac50f via lamp warp`, one loading screen, guest placed
+   0.5 m beside the host in the cell).
+   *In game:* everyone wakes up in the Hypogean Gaol (a cell, Yahar'gul) with one loading screen;
+   the host sees the waking scene, the guest's loading screen waits for it ("Waiting: the host is
+   watching a cutscene"). Avoid the grab if you do not want to go to Yahar'gul yet: kill Snatchers
+   from range or let the guest tank them.
    *Fixed here:* 9420 is no longer copied into the guest's own save (it would have sent the
-   guest's next solo death to the Gaol).
+   guest's next solo death to the Gaol). The guest's own save gets 9421 / 9423 (key_event: "kidnap
+   done") and, once it goes home and rings again, the Gaol as its own last lamp (the bell's gather
+   lamp warp to the host's lamp) - the same state as a solo kidnap, never a pending one.
+   *Open (minor):* the host's +1 Insight at the end of 9422 (SpEffect 4680, host only) is not
+   shared with the guests.
 2. **Blood-starved Beast reward (Pthumeru Chalice)**: lot 80000000, flag 5000 (global) -> shared
    with every member through C3; the guest's item box waits for the boss banner to end. No intro
    cutscene, so the guest may go through the fog first (B2). *If the chalice is missing on the
@@ -51,12 +58,14 @@ The ten things most likely to go wrong in the next ~5 hours, and what to do in g
    `lot 80000000`.
 3. **NPC gifts when the guest is the one who talks** (Djura's Powder Keg Hunter Badge in Old
    Yharnam, Eileen's badges, Alfred, Gilbert's Flamesprayer, the Oedon Chapel Dweller, the old
-   woman's / old man's gifts, Patches). These gifts are common event 9040, which ends at once on a
-   client (chr type 0 only), and that marks the gift as given (flags 9042-9075) in the guest's view
-   of the host's world. What the NPC then says to the guest, and whether the host's NPC still
-   offers the gift, is **unverified**. *In game:* let the **host** do the gift conversations
-   (Djura first!); the gift then reaches the guest through C3. If a guest already talked and
-   nobody got the badge: note the time, keep the logs, carry on (badges only unlock shop items).
+   woman's / old man's gifts, Patches). **P1 done (live):** the talk script's trigger flag
+   (9042-9077) set on the guest goes to the host as a world action; the host's common event 9040
+   awards the lot and C3 gives it to every member once. Live (Eileen, Cathedral Ward, test save):
+   before the fix the guest heard "Here, to welcome the new hunter", got only the gesture, no Bold
+   Hunter's Marks, and Eileen's state 72400520 moved on in the host's world (gift lost for
+   everyone); with the fix guest log `NPC gift trigger 9074 set by its talk: to the host`, host
+   `award lot 35000`, guest `gave ... lot 35000 ... goods 1400 x4 (held 2 -> 6)`, both saves 1400 x6,
+   the host's own talk afterwards gave nothing more. *In game:* either player may talk.
 4. **Vicar Amelia: the first fight starts with the host.** Her intro (12401802, remo 24000060)
    runs only on the host (chr type 0), so the guest-first fog does not apply. *In game:* the host
    goes through the fog first; the guest follows. Reward lot 50000001 (goods 4001) is a ledger lot
@@ -139,7 +148,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 |---|---|---|---|---|---|
 | Lamps | Old Yharnam 2302950, Church of the Good Chalice 2302951, Graveyard of the Darkbeast 2302952 (objects 12307800/820/840) | lights | lamps via the host, mirror + C2 | ok | |
 | 12 ladders | 12301000-12301011 (2009[0]) | kicks down | mirrored; own-save set-only | ok | |
-| Djura (tower) | talk t230323, NpcParam 6300 (solid); NPC state block 1xxx; gift trigger 9071 -> lot 33000 Powder Keg Hunter Badge + Bold Hunter's Mark (flag 50001700) | talk, gift through common 9040 | can talk (6300 has no ghost bit); its 9040 instance ended at load, so its view says "gift given" | major (unverified) | host talks (checklist 3); P1 |
+| Djura (tower) | talk t230323, NpcParam 6300 (solid); NPC state block 1xxx; gift trigger 9071 -> lot 33000 Powder Keg Hunter Badge + Bold Hunter's Mark (flag 50001700) | talk, gift through common 9040 | can talk (6300 has no ghost bit); its 9040 instance ended at load, so its view says "gift given"; its talk's trigger 9071 now goes to the host (P1) | ok (P1 fixed; same path as Eileen, live) | either talks (checklist 3); P1 |
 | "Beast guardian" talk suppression | 12300750 / 12300751 (world_state) | | mirrored | ok | |
 | Blood-starved Beast | defeat 12301800, host entry 12301802 (no remo), guest entry 12304811, late guest 12301803; sets 2300 (area gate, never_sync), 9453 | fight | B2 guest fog first allowed (no intro) | ok | |
 | Blood-starved Beast reward | lot 80000000 Pthumeru Chalice, flag 5000 | gets it | C3 replay (flag 5000), popup after the banner | ok | checklist 2 |
@@ -155,9 +164,9 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Oedon Tomb doors | ObjAct 2410001 / 2410080 need goods 4000 | opens | can open with its own key; door state mirrored | ok | |
 | Cainhurst Summons letter | 12410510 (clinic), lot 2410990 flag 52410990, `2003[4]` | award | captured award -> shared | ok | |
 | Blood Gem Workshop Tool | lot 2411000 (treasure) | picks up | was per player | minor | F2 |
-| Fake Iosefka gifts | t241314 -> 9047-9053 (common 9040 slots 7-13, ledger lots) | | same as Djura | major (unverified) | P1 |
-| Gilbert (window) | t241319 -> 9066 Flamesprayer (lot 29000, ledger 23) | | same as Djura | major (unverified) | P1 |
-| Gascoigne's daughter | t241320 -> 9067 Tiny Music Box (lot 30000, ledger 24); Red Messenger Ribbon / brooch (12410713, lots 2410910/2410920) | | window talk works (D8) | major (unverified) | P1 |
+| Fake Iosefka gifts | t241314 -> 9047-9053 (common 9040 slots 7-13, ledger lots) | | same as Djura | ok (P1 fixed, live with Eileen) | P1 |
+| Gilbert (window) | t241319 -> 9066 Flamesprayer (lot 29000, ledger 23) | | same as Djura | ok (P1 fixed, live with Eileen) | P1 |
+| Gascoigne's daughter | t241320 -> 9067 Tiny Music Box (lot 30000, ledger 24); Red Messenger Ribbon / brooch (12410713, lots 2410910/2410920) | | window talk works (D8) | ok (P1 fixed, live with Eileen) | P1 |
 | Central Yharnam lift | 12410321-12410325, state 12410350/351 (`State`) | | mirror; world action refused (lift kick only) | ok | |
 | Big Amygdala on the bridge | 12410815 (Insight >= 20, local) | | per player | minor | checklist 10 |
 | Moon-presence / Arianna's child (night 3) | 12410833/834 | | npc_quest Follow | ok | |
@@ -173,9 +182,9 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Vicar Amelia | defeat 12401800 (sets 2400-2402 never_sync), host entry 12401802 remo 24000060 (chr type 0), 9455 | intro + fight | intro only as the live mirror; fog: host first | major (wall until the host enters) | checklist 4; P5 |
 | Amelia reward | lot 50000001 goods 4001 (ledger 35); ObjAct 2400080 needs goods 4001 | gets it | ledger replay | ok | |
 | Amelia's skull -> night | 12401803 (host only), remo 24000030 tod 2 | plays, world -> night | live mirror; time-of-day catch-up into the own save (upward) | minor | checklist 5 |
-| Snatchers | spawn 12400791 / 12400797 (9453 and not 9802); kidnap 12400780 (chr type 0) sets 9420 | kidnapped -> Gaol | dies normally; follows the host's respawn | major | F1, checklist 1 |
+| Snatchers | spawn 12400791 / 12400797 (9453 and not 9802); kidnap 12400780 (chr type 0) sets 9420 | kidnapped -> Gaol | dies normally; follows the host's respawn (live, P7) | ok | F1, checklist 1 |
 | Insight checks | 12404000 (host only): Insight >= 15 -> 12404002, >= 40 -> 12404001, >= 50 -> 12404003 (Cathedral Ward variants, DLC Amygdala) | | zone 4 flags: the host's values via the vanilla join snapshot | minor | |
-| Oedon Chapel NPCs | Dweller 113010 (t240312 -> gift 9045 Pebble), lonely old woman 6090 (t240316 -> 9054-9057 sedatives), old man 6080 (t240317/t240338 -> 9059-9064 pellets), Arianna 6110-6113 (Blood of Arianna: common 9100, repeatable, denied), Adella (9100, denied), Alfred 6151/6155 (t240333/t240343 -> 9072/9073), Eileen 6161 (t240325/t240341/t240342 -> 9074/9075 Crow Hunter Badge) | talk, gifts | solid since playtest 1; gifts as Djura; Blood of Arianna / Adella never for a guest | major (unverified) / minor | P1, P2 |
+| Oedon Chapel NPCs | Dweller 113010 (t240312 -> gift 9045 Pebble), lonely old woman 6090 (t240316 -> 9054-9057 sedatives), old man 6080 (t240317/t240338 -> 9059-9064 pellets), Arianna 6110-6113 (Blood of Arianna: common 9100, repeatable, denied), Adella (9100, denied), Alfred 6151/6155 (t240333/t240343 -> 9072/9073), Eileen 6161 (t240325/t240341/t240342 -> 9074/9075 Crow Hunter Badge) | talk, gifts | solid since playtest 1; gifts as Djura; Blood of Arianna / Adella never for a guest | ok (P1 fixed) / minor (9100: P2) | P1, P2 |
 | Beast beggar (suspicious beggar) | NpcParam 504020 (ghost bit kept as an enemy row), t240217 | talk | ghost on the guest: cannot talk | minor | P3 |
 | NPC "scared" flag | 9432 (key_event; cleared at every m24_00 load by ev 50) | | harmless | ok | |
 | Upper Cathedral Ward gate | ObjAct 2400100 needs Upper Cathedral Key (Yahar'gul treasure 2800290) | | key now shared (F2) | ok after F2 | |
@@ -220,7 +229,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 
 | Event | ids | Host | Guest | Risk | Fix |
 |---|---|---|---|---|---|
-| Hypogean Gaol (kidnap) | common 9421 (respawn 2802959), 9422 (remo 28000010 in m28, sets 9423, SpEffect 4680; `End if Client`) | wakes in a cell | follows the respawn; no cutscene | major (path inferred) | F1, checklist 1 |
+| Hypogean Gaol (kidnap) | common 9421 (respawn 2802959), 9422 (remo 28000010 in m28, sets 9423, SpEffect 4680; `End if Client`) | wakes in a cell | follows the respawn with one loading screen, beside the host (live, P7); its loading screen holds through the host's waking scene; misses the host's +1 Insight of 9422 | ok / minor (Insight) | F1, checklist 1 |
 | First-sacrifice multiplayer block | 12800160: SpEffects 9120/9121 while 9802 is off | | cutscenes_endings.md 5.2: unknown effect on summons in m28 | major (untested) | P6 |
 | Time of day | 12800400 (sets 2800 never_sync, 70002802), gates 12800402/12800403 by 9802 | | mirrored | ok | |
 | Upper Cathedral Key | lot 2800290 (treasure) | picks up | was per player | major | F2 |
@@ -228,7 +237,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Altar warp to the Lecture Building | 12800430 (`End if Client`, action 2800020 at 2801500, `2003[49] 3202959`) | question | cannot use it | minor | checklist 8 |
 | Amygdala grab (Tonsil Stone) | 12800401 (visible at Insight >= 40 or Blood Moon, local), 12800431 (event message 10 of 2800745 + goods 4310 on the local player, remo 28000040/28001040, `2003[49] 3202958`; **no client guard**) | question | a guest holding the Tonsil Stone runs its own copy too (its own question) | minor | P4 |
 | Tonsil Stone | lot 39000 (common 9040 slot 36, ledger 28, done 9076); its trigger 9076 is in no talk ESD (set by another path; Patches' state 9782 checks the stone) | award | ledger replay | ok (who triggers it: unverified) | |
-| Patches | t280322 -> 9069 (Madman's Knowledge) | | gifts as Djura | minor | P1 |
+| Patches | t280322 -> 9069 (Madman's Knowledge) | | gifts as Djura (P1 fixed) | minor | P1 |
 | NPC summons | 12804400-12804431 | | | minor | |
 
 ### Upper Cathedral Ward, Lumenwood Garden, Altar of Despair (m24_02)
@@ -253,7 +262,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Martyr Logarius | defeat 12501800 (2500, 9460), host entry 12501802 remo 25000020 | intro + fight | host first | major | P5 |
 | Unopened Summons | 12500600 lot 2500910 flag 52500910 (award) | | shared | ok | |
 | Queenly Flesh | 12500020, lot 2500920 | | | ok | |
-| Annalise / Yurie / Alfred | 6040 (t250307 -> 9042 lot 17000 Cainhurst Badge), 6150 (t250324) | | solid; gifts as Djura | major (unverified) | P1 |
+| Annalise / Yurie / Alfred | 6040 (t250307 -> 9042 lot 17000 Cainhurst Badge), 6150 (t250324) | | solid; gifts as Djura | ok (P1 fixed, live with Eileen) | P1 |
 | Church marks | 12500206 / 12500220 (world_state toggles) | | | minor | |
 
 ### Nightmare Frontier (m33_00)
@@ -307,18 +316,18 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
 
 ## Proposals (not done here)
 
-* **P1 NPC gifts triggered by a guest.** Common event 9040 slots 2-37 award the NPC gifts
-  (Djura, Eileen, Alfred, Gilbert, the music box, the Dweller, the old woman / old man, Patches,
-  Annalise) when the talk ESD sets the slot's own flag (9042-9077, confirmed in the ESDs). The
-  event needs chr type 0, so on a summoned guest it ends at load and its completion flags
-  9042-9075 are set in the guest's overlay (event_flags.md 12 lists them as guest-only bits).
-  Check live first (2 instances, guest talks to Djura with `BB_PARTY_WORLDACT_TEST=chr=...`):
-  what the ESD says, whether the NPC's 1xxx state moves, whether the host's Djura still offers
-  the badge. Fix direction: mirror 9042-9077 from the host (not guest-local), let a guest's set of
-  one of them go up as a world action (category `key_event` for exactly that range), so the
-  host's own 9040 instance awards the gift and C3 gives it to every member. Repeatable gifts
-  (common 9100: Blood of Arianna / Adella, Queenly Flesh) need an own grant like the Old Hunter
-  Bell instead.
+* **P1 NPC gifts triggered by a guest. DONE (kidnap agent, 2026-10-14, live).** Common event 9040
+  slots 2-37 award the NPC gifts when the talk ESD sets the slot's own flag (9042-9077; each id is
+  in its ESD exactly once, as the SetEventFlag argument: the gift branch is chosen by the NPC's own
+  state flags, not by this one). On a client 9040 ends at load (chr type 0 only) and its slot flag
+  reads 1 in the guest's overlay from then on (watch: `9074: visible 1, own save 0, host image 0`),
+  so the guest's talk set nothing new, awarded nothing, and the NPC state (npc_quest) still moved
+  on in the host's world. Fix: `party_worldact` observes this game's own SetEventFlag calls
+  (`progress::AddLocalFlagSetObserver`); a gift trigger (`NpcGiftTrigger`) the guest's talk sets
+  while it stands in the host's world goes up as a set-only world action
+  (`WorldActionAllowed`), unless the host's image already has it; the host's 9040 awards the lot,
+  C3 hands it to every member (ledger / lot flag), the guest's own save gets the trigger. Live:
+  see checklist 3.
 * **P2 Repeatable NPC gifts for guests** (9100 slots): `MessengerGiftLot`-style own grant.
 * **P3 Remaining ghost NPCs**: the beast beggar 504020/504030, Willem 513000 and the DLC talk
   NPCs (402080-402300, 405100, 409000, 451100) still have the ghost bit. They are enemy-family
@@ -334,10 +343,15 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
 * **P6 Yahar'gul before the Blood Moon** (12800160 SpEffects 9120/9121, the Gaol): verify a
   summon / B2 travel into m28 with 9802 off before the players get kidnapped (only reachable by a
   kidnap before Rom).
-* **P7 Kidnap respawn trace**: confirm that `2003[23]` (respawn point) writes GSM +0x1528, so a
-  host's kidnap respawn and the guests' replay land in the same place (decompile the 2003[23]
-  handler in the EMEVD dispatcher 0x17C0420); otherwise send the guests to the host's new map
-  after the host's load.
+* **P7 Kidnap respawn trace. DONE (kidnap agent, 2026-10-14, live).** The EMEVD dispatcher
+  0x17C0420 switches on the 2003 instruction id (jump table 0x17C2C38); id 23 (`復活ポイント設定`,
+  set respawn point) is the case at 0x17C10A5: row lookup 0x1F26B40, then `GSM +0x1528 =
+  {row +4 | row +8 << 32}` (0x17C1145). (Id 20 writes +0x1530 the same way.) So the host's last
+  lamp record is the Gaol before its death funnel, and the guests' host_death replay lands there.
+  Live (2 instances, test save, host in Cathedral Ward, `host_flag=9420` then `host_die`):
+  one loading screen for both, guest 0.5 m beside the host in the cell, no stuck or half state.
+  A guest cannot be kidnapped in the host's world (12400780 / 12700500 end unless the local chr
+  type is 0; a summoned guest is type 1 within 0.3 s of arriving).
 * **P8 Scripted warp question**: consider skipping the travel question for scripted `2003[49]`
   warps that are story transitions (Blood Moon 2802958, DLC 3402959, carriage 2502959, Lecture
   Building 3202958 / 3202959 / 2602959 / 3302959) and always travel with the party, as the
