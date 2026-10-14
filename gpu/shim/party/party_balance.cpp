@@ -24,6 +24,7 @@
 #include "game_state.h"
 #include "party_async_io.h"
 #include "party_enemy_census.h"
+#include "party_ids.h"
 #include "party_director.h"
 #include "party_link.h"
 #include "party_status.h"
@@ -113,7 +114,10 @@ void* g_kind_orig[kRotKinds]{};
 std::atomic<float> g_rot_factor{1.0f};  // max HP (the HP hook)
 std::atomic<int> g_stacks{0}, g_deaths{0};  // all stacks
 std::atomic<bool> g_rest_pending{false};
+std::atomic<bool> g_rest_alive{true};  // the local player was alive when that lamp warp ran
+std::atomic<int> g_hp_now{-1};          // the local HP at the last in-world tick (-1 unknown)
 std::atomic<bool> g_hooked{false};
+constexpr u64 kSlotMenuManBal = 0x5562878;  // MenuMan: +0x78 the dialog kind up (0 none), as party_split
 using RateFn = float(BB_COOP_SYSV*)(u64, u64);
 void* g_rate_orig = nullptr;
 
@@ -132,6 +136,10 @@ struct TickState {
     int hp_logged_factor = -1, hp_logged_max = -1;
     int hits = 0;
     Clock::time_point next_rot_log{};
+    bool up_since_death = true;   // alive in the world again since the last death
+    bool dialog_was = false;      // a dialog was up at the last in-world tick (#21 lamp menu)
+    int last_level = -1;          // the own level (a level up at the Doll is a rest too)
+    Clock::time_point next_rest_note{};
     std::string toast;            // a rot notice waiting for the respawn
     Clock::time_point toast_at{};  // alive in the world since  // rot factor (percent) of the last "max HP now" line
     Clock::time_point factor_since{};
@@ -232,8 +240,48 @@ BB_COOP_SYSV float DiscoveryHook(u64 list) {  // 0x17e8010 the sum of itemDropRa
 }
 
 void OnLampUse(u32 id) {
+    g_rest_alive = g_hp_now.load() != 0;  // unknown counts as alive
     g_rest_pending = true;
     (void)id;
+}
+
+/// The local chr's physics position (+0x58 -> +8 -> +0x3B0 -> +0x68, +0x1E0).
+bool LocalPos(u64 player, float out[3]) {
+    const u64 pm = Field<u64>(Field<u64>(Field<u64>(Field<u64>(player, 0x58), 8), 0x3b0), 0x68);
+    return pm && SafeRead(pm + 0x1e0, out, 12);
+}
+
+/// The nearest lamp revive spot of the loaded map to `pos` (its ReturnPointParam id, 0 = none).
+u32 NearestLampSpot(u32 map_id, const float pos[3], float d[3]) {
+    u32 best = 0;
+    float best2 = 1e30f;
+    const std::size_t n = sizeof(ids::kPartyReturnSpotIds) / sizeof(ids::kPartyReturnSpotIds[0]);
+    for (std::size_t i = 0; i < n; ++i) {
+        const u32 id = ids::kPartyReturnSpotIds[i];
+        if (ids::EntityMap(id) != (map_id & 0xffff0000u)) continue;
+        const float* p = &ids::kPartyReturnSpots[i * 4];
+        const float dx = pos[0] - p[0], dy = pos[1] - p[1], dz = pos[2] - p[2];
+        if (dx * dx + dz * dz < best2) {
+            best2 = dx * dx + dz * dz;
+            best = id;
+            d[0] = dx, d[1] = dy, d[2] = dz;
+        }
+    }
+    return best;
+}
+
+/// The rot goes (a rest: the lamp's menu, a lamp warp that is no respawn, a level up).
+void CleanseRot(const Rules& r, const char* why, Clock::time_point now, TickState& st) {
+    if (g_stacks.load() > 0) {
+        Log("%s: rot cleansed (%d stack(s))", why, g_stacks.load());
+        g_stacks = 0;
+        for (auto& c : g_kind) c = 0;
+        SaveRot();
+        if (r.rot) party::status::SetLastEvent("The rot is cleansed");
+    } else if (now >= st.next_rest_note) {
+        st.next_rest_note = now + std::chrono::seconds(10);
+        Log("%s: a rest (no rot to cleanse)", why);
+    }
 }
 
 // ---- SpEffects ----
@@ -714,6 +762,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     if (in_world && s.player == st.last_player && st.last_hp > 0 && hp == 0 && max_hp > 1) {
         ++g_deaths;
         st.last_death = now;
+        st.up_since_death = false;
         int kind = -1;
         // Playtest 1 #19: the prologue is played alone (its first death is scripted): no rot.
         const bool prologue = coop::LocalPrologueHold();
@@ -775,16 +824,36 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     }
     st.last_player = in_world ? s.player : 0;
     st.last_hp = in_world ? hp : -1;
+    if (in_world && hp >= 0) g_hp_now = hp;
+    if (in_world && hp > 0 && s.player == st.last_player) st.up_since_death = true;
     if (g_rest_pending.exchange(false)) {
-        const double since_death = std::chrono::duration<double>(now - st.last_death).count();
-        if (st.last_death != Clock::time_point{} && since_death < 20.0) {
-            Log("lamp warp %.0f s after a death: the respawn, not a rest", since_death);
-        } else if (g_stacks.load() > 0) {
-            Log("lamp rest: rot cleansed (%d stack(s))", g_stacks.load());
-            g_stacks = 0;
-            for (auto& c : g_kind) c = 0;
-            SaveRot();
-            if (r.rot) party::status::SetLastEvent("The rot is cleansed");
+        const double since_death = st.last_death != Clock::time_point{}
+                                       ? std::chrono::duration<double>(now - st.last_death).count()
+                                       : -1.0;
+        if (LampWarpIsRespawn(g_rest_alive.load(), since_death, st.up_since_death)) {
+            Log("lamp warp %.0f s after a death (%s): the respawn, not a rest", since_death,
+                g_rest_alive.load() ? "not up again yet" : "dead at the warp");
+        } else {
+            CleanseRot(r, "lamp rest", now, st);
+        }
+    }
+    // Playtest 1 #21: the lamp's menu opened (also when nobody travels) is a rest, as ERSC's grace.
+    {
+        const int dialog = in_world ? Field<int>(Slot(kSlotMenuManBal), 0x78, 0) : 0;
+        float pos[3] = {}, d[3] = {};
+        u32 lamp = 0;
+        if (dialog && !st.dialog_was && hp > 0 && LocalPos(s.player, pos)) lamp = NearestLampSpot(s.map_id, pos, d);
+        if (lamp && LampMenuRest(true, hp > 0, d[0], d[1], d[2])) {
+            char why[96];
+            std::snprintf(why, sizeof why, "lamp menu at lamp %u (%.1f m, dialog %d)", lamp,
+                          std::sqrt(d[0] * d[0] + d[2] * d[2]), dialog);
+            CleanseRot(r, why, now, st);
+        }
+        if (in_world) st.dialog_was = dialog != 0;
+        // A level up (the Doll) is a rest too.
+        if (in_world && s.level > 0) {
+            if (st.last_level > 0 && s.level > st.last_level) CleanseRot(r, "level up", now, st);
+            st.last_level = s.level;
         }
     }
     UpdateRotFactor(r);

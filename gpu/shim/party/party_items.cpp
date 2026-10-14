@@ -18,6 +18,7 @@
 
 #ifndef BB_PARTY_ITEMS_NO_GAME
 #include "coop_hooks.h"
+#include "party_npctalk.h"
 #include "game_state.h"
 #include "party_director.h"
 #include "party_progress.h"
@@ -1299,6 +1300,7 @@ std::optional<ItemGrant> AwardEntry(u64 lot_arg, u64 host_only_arg) {
     const PartyRole role = Role();
     const int own = OwnWorld();
     const std::int32_t flag = ItemLotFlag(lot);
+    npctalk::NoteAward(lot);  // an NPC's gift during a conversation: shown to the party (D8)
     Log("award lot %d (hostOnly %d, flag %d) in %s world, role %s", lot, host_only ? 1 : 0, flag,
         own == 1 ? "the own" : own == 0 ? "another's" : "an unknown",
         role == PartyRole::Host ? "host" : role == PartyRole::Guest ? "guest" : "none");
