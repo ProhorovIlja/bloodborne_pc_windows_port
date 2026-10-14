@@ -947,6 +947,15 @@ bool LedgerSkipSuspicious(const std::vector<LotSlotState>& slots) {
     return true;
 }
 
+bool LotHasKeyItem(const std::vector<LotSlotState>& slots) {
+    for (const LotSlotState& s : slots) {
+        if (s.category == 4 && s.goods_type == 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::size_t GuestItems::Offer(const std::vector<ItemGrant>& items) {
     std::size_t taken = 0;
     for (const ItemGrant& g : items) {
@@ -1639,16 +1648,20 @@ void FillGoodsLimits(LotSlotState* s) {
     s->owned = ItemCount(0x40000000u, static_cast<u32>(s->id));
     if (const u64 goods = GameParamRow("EquipParamGoods", "EQUIP_PARAM_GOODS_ST", static_cast<u32>(s->id))) {
         std::int16_t mx = -1, rep = -1;
+        u8 type = 0xff;
         if (SafeGet(goods + 0x36, &mx) && SafeGet(goods + 0x49, &rep)) {
             s->max_num = mx;
             s->max_storage = rep;
+        }
+        if (SafeGet(goods + 0x3A, &type)) {
+            s->goods_type = type;
         }
     }
 }
 
 // ItemLotParam (ITEMLOT_PARAM_ST, 1.09 paramdef): lotItemId01..08 s32 +0x00, lotItemCategory01..08
 // u32 +0x20, lotItemBasePoint01..08 u16 +0x40, lotItemNum01..08 u8 +0x8A. EquipParamGoods
-// (EQUIP_PARAM_GOODS_ST): maxNum s16 +0x36, maxRepositoryNum s16 +0x49.
+// (EQUIP_PARAM_GOODS_ST): maxNum s16 +0x36, goodsType u8 +0x3A, maxRepositoryNum s16 +0x49.
 /// A flagless lot whose awarding event is a boss defeat (its ledger row's done flag is a
 /// boss_defeated flag): boss rewards (keys, badges) are never handed to an NPC or used up.
 bool BossLedgerLot(const ItemGrant& g) {
@@ -1889,11 +1902,11 @@ void NoteSummonedGive(u32 bits, u32 id, int count, int after) {
 /// Main thread: 3 s into the first steady OWN world (load mode 0) after a load, the goods given
 /// while summoned that the own data lacks are given again (no item-get dialog: the player saw it
 /// at the first give) and a save is requested, which keeps them for good; the list is cleared.
-/// Live (par_c6 verify run): goods given while summoned show in the own data once the session
-/// ends (Oedon Tomb Key 0 -> 1 at session idle), but a save requested while summoned never wrote
-/// them to disk: the next summon load (which reads the save) and a restart had them at 0. Nothing
-/// is given while summoned (the summoned view is rebuilt from the save at each load; a re-give
-/// there could double up when the session ends).
+/// par_c6 read the Oedon Tomb Key at 0 after summon loads and title joins as a save that lost it;
+/// verify_c6 (live) showed the save keeps it: a summoned guest's inventory never shows key items
+/// (goodsType 1), and the own world (from the save, after crashes) holds them. This check stays as
+/// a safety net; it found nothing missing live. Nothing is given while summoned (a key reads 0
+/// there by design; a re-give there could double up when the session ends).
 void SummonedGivesTick(const GameSnapshot& gs, int load_mode, double now) {
     static bool armed = true;  // a load (or the start) since the last check
     static double steady_at = -1;
@@ -1974,7 +1987,17 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
     }
     bool regive = false;
     if (OwnSaveFlag(done)) {
-        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && LedgerSkipSuspicious(LotSlots(g.lot))) {
+        const std::vector<LotSlotState> slots = LotSlots(g.lot);
+        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && LedgerSkipSuspicious(slots) && LotHasKeyItem(slots)) {
+            // verify_c6 (live): the summoned view never holds key items (LotHasKeyItem); the own
+            // save does. Re-giving here put an item-get box up at every title join (lot 31000,
+            // Oedon Tomb Key) for a key the guest had all along. The own world checks it.
+            Log("%s: its done flag %lld is set; its key item reads 0 here, as every key item of a summoned "
+                "guest does (%s): checked in the own world",
+                DescribeItem(g).c_str(), static_cast<long long>(done), HeldSummary(g.lot).c_str());
+            return SummonedResult::Defer;
+        }
+        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && LedgerSkipSuspicious(slots)) {
             regive = true;
             Log("%s: its done flag %lld is set but none of its unique items is held (%s); giving it after all",
                 DescribeItem(g).c_str(), static_cast<long long>(done), HeldSummary(g.lot).c_str());
@@ -2667,8 +2690,8 @@ void KeyGoodsWatchTick(const GameSnapshot& gs, int load_mode, double now) {
         }
     }
     if (!text.empty()) {
-        Log("key goods %s: %s (%s, load mode %d)", baseline ? "changed" : "held", text.c_str(), Describe(gs).c_str(),
-            load_mode);
+        Log("key goods %s: %s (%s, load mode %d%s)", baseline ? "changed" : "held", text.c_str(), Describe(gs).c_str(),
+            load_mode, load_mode == 1 ? "; summoned: key items (goodsType 1) are not shown here, the own save keeps them" : "");
     }
     last = std::move(held);
     baseline = true;
