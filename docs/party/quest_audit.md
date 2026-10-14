@@ -49,8 +49,9 @@ The ten things most likely to go wrong in the next ~5 hours, and what to do in g
    guest's next solo death to the Gaol). The guest's own save gets 9421 / 9423 (key_event: "kidnap
    done") and, once it goes home and rings again, the Gaol as its own last lamp (the bell's gather
    lamp warp to the host's lamp) - the same state as a solo kidnap, never a pending one.
-   *Open (minor):* the host's +1 Insight at the end of 9422 (SpEffect 4680, host only) is not
-   shared with the guests.
+   *Fixed (parg, live):* the host's +1 Insight at the end of 9422 (SpEffect 4680, host only) now
+   reaches every guest present (`DirectInsight`, party_phantom.h): live, host 6 -> 7 at the end of
+   the waking scene, `event 9422 gave the host 1 Insight`, guest `+1 here`, 14 -> 15.
 2. **Blood-starved Beast reward (Pthumeru Chalice)**: lot 80000000, flag 5000 (global) -> shared
    with every member through C3; the guest's item box waits for the boss banner to end. No intro
    cutscene, so the guest may go through the fog first (B2). *If the chalice is missing on the
@@ -93,11 +94,33 @@ The ten things most likely to go wrong in the next ~5 hours, and what to do in g
    the host's lift position (world mirror) and its own lever kicks go to the host. *If a lift
    looks stuck on one screen:* the other player rides it once or pulls the lever; a rest fixes
    everything.
-10. **Insight differs per player**: the Yahar'gul Amygdala (12800401, Insight >= 40 or Blood
-    Moon), Central Yharnam's big Amygdala (12410815, Insight >= 20), the Witch / Cathedral Ward
-    checks (host only) are decided per game. Two players with very different Insight may see
-    different monsters. *In game:* nothing to fix; mention it if one player is hit by something
-    the other cannot see.
+10. **Insight differs per player** (decided per player, as in vanilla co-op; parg audit of every
+    `3[26]` Insight check in the EMEVD, 21 events):
+    * *Scenery, per player:* Central Yharnam's big Amygdala (12410815, Insight >= 20 or Blood Moon)
+      and the Yahar'gul Amygdala (12800401, >= 40 or Blood Moon) are event characters (display
+      mask + enable, SpEffect 5686), not fights (no defeat event, no reward; the grab is an event):
+      each game shows its own. The
+      Yahar'gul grab (12800431) needs the Tonsil Stone on the local player (P4). Whispers (common
+      9200, Insight >= 60) and the Dream's music (12100310, >= 50) are sound only.
+    * *Decided by the host for everyone:* the Witch of Hemwick checks (12204844 / 12204010), the
+      Cathedral Ward checks (12404000 -> 12404001-003, the DLC Amygdala), the Upper Cathedral check
+      (12425290) and the Bath Messenger's Insight animation (12105043) run only for chr type 0 / not
+      on a client; their zone flags come from the host's world, so both games agree.
+    * *Real enemies:* the only Insight-gated enemies are the "madness spirits" (`SAN値で狂気の悪霊出現`,
+      12414000 / 12504000 / 12604000 / 12905406 with their despawn twins). Their spawn waits for
+      chr type 0 (the host) as well as the Insight, so they exist only in the host's game; a guest
+      can neither see, hit nor be hit by them (hits are decided on the victim's game); their kill
+      echoes go to the host only (the guest's game has no such enemy to see die), as in vanilla. Only 12905406 is ever started
+      (chalice layout m29_01_00_56); the m24_01 / m25 / m26 ones are cut content (no
+      InitializeEvent anywhere). Nothing to fix: no enemy whose existence or HP differs while both
+      can fight it.
+    * *Insight gains:* every host source reaches the guests present: 9350 boss kills (N - 1 on top
+      of the native +1) and first encounters / story (N), the kidnap's +1 (9422) and the Chalice
+      Dungeon boss events (12901588/589/591, 12901708/712/718/722), which give Insight with a bare
+      SpEffect 4680 outside 9350 (parg). A player's own items (Madman's Knowledge, Great One's
+      Wisdom) and the Insight shop are local. Not shared on purpose: the NPC summon cost (xx04410,
+      SpEffect 4682) and its refund (9183) are the summoner's own.
+    *In game:* nothing to do; one player may hear whispers or see an Amygdala the other does not.
 
 Also keep in mind: the guest should pick up its own copies of ordinary treasure (instanced, D4);
 boss rewards, key items from bosses and NPC event awards arrive by themselves.
@@ -229,7 +252,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 
 | Event | ids | Host | Guest | Risk | Fix |
 |---|---|---|---|---|---|
-| Hypogean Gaol (kidnap) | common 9421 (respawn 2802959), 9422 (remo 28000010 in m28, sets 9423, SpEffect 4680; `End if Client`) | wakes in a cell | follows the respawn with one loading screen, beside the host (live, P7); its loading screen holds through the host's waking scene; misses the host's +1 Insight of 9422 | ok / minor (Insight) | F1, checklist 1 |
+| Hypogean Gaol (kidnap) | common 9421 (respawn 2802959), 9422 (remo 28000010 in m28, sets 9423, SpEffect 4680; `End if Client`) | wakes in a cell | follows the respawn with one loading screen, beside the host (live, P7); its loading screen holds through the host's waking scene; the host's +1 Insight of 9422 reaches the guest (parg, live) | ok | F1, checklist 1 |
 | First-sacrifice multiplayer block | 12800160: SpEffects 9120/9121 while 9802 is off | | cutscenes_endings.md 5.2: unknown effect on summons in m28 | major (untested) | P6 |
 | Time of day | 12800400 (sets 2800 never_sync, 70002802), gates 12800402/12800403 by 9802 | | mirrored | ok | |
 | Upper Cathedral Key | lot 2800290 (treasure) | picks up | was per player | major | F2 |
