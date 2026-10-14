@@ -1827,11 +1827,22 @@ bool Capturing() {
 }
 
 std::atomic<LocalFlagSetObserver> g_local_set_observer{nullptr};
+// Further observers (AddLocalFlagSetObserver): the guest's NPC gift triggers (party_worldact).
+constexpr int kExtraLocalSetObservers = 3;
+std::atomic<LocalFlagSetObserver> g_local_set_extra[kExtraLocalSetObservers]{};
 std::atomic<bool> g_set_flag_hooked{false};
 
 void NoteLocalSet(u32 id) {
-    if (const LocalFlagSetObserver obs = g_local_set_observer.load(std::memory_order_relaxed); obs && !Global::self_write) {
+    if (Global::self_write) {
+        return;
+    }
+    if (const LocalFlagSetObserver obs = g_local_set_observer.load(std::memory_order_relaxed)) {
         obs(id);
+    }
+    for (auto& slot : g_local_set_extra) {
+        if (const LocalFlagSetObserver obs = slot.load(std::memory_order_relaxed)) {
+            obs(id);
+        }
     }
 }
 
@@ -2457,6 +2468,19 @@ void Tick(const GameSnapshot& s) {
 
 void SetItemFlagObserver(ItemFlagObserver fn) {
     G().item_observer = fn;
+}
+
+bool AddLocalFlagSetObserver(LocalFlagSetObserver fn) {
+    for (auto& slot : g_local_set_extra) {
+        LocalFlagSetObserver cur = slot.load();
+        if (cur == fn) {
+            return true;
+        }
+        if (!cur && slot.compare_exchange_strong(cur, fn)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void SetLocalFlagSetObserver(LocalFlagSetObserver fn) {
