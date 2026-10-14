@@ -8,7 +8,7 @@
 // item_lot_picked key_event cutscene_seen world_state session_runtime never_sync
 // time_of_day (9800-9802: applied only through the cutscene replay path, never silently).
 // Ids no row covers: treat as never_sync.
-// ---- 82 override rows (area gates, endings, cutscene/time-of-day flags)
+// ---- 83 override rows (area gates, endings, cutscene/time-of-day flags)
 {2100u, 2100u, Category::never_sync, "area gate (TBL1 0x47304B0: ON blocks the host bell / summons in the area)"},
 {2200u, 2200u, Category::never_sync, "area gate (TBL1 0x47304B0: ON blocks the host bell / summons in the area)"},
 {2300u, 2300u, Category::never_sync, "area gate (TBL1 0x47304B0: ON blocks the host bell / summons in the area)"},
@@ -78,6 +78,7 @@
 {21u, 23u, Category::never_sync, "ending reached A/B/C -> staff roll / NG+; C4 replay only"},
 {6600u, 6604u, Category::never_sync, "ending bookkeeping (6600 A, 6601 B, 6602 C, 6603 any, 6604 ending reached -> NG+ key item strip)"},
 {9180u, 9180u, Category::never_sync, "a cutscene is playing (runtime)"},
+{9420u, 9420u, Category::never_sync, "Snatcher kidnap trigger (transient: common 9421 moves the respawn point to the Hypogean Gaol and clears it)"},
 {9800u, 9802u, Category::time_of_day, "9800 evening, 9801 night, 9802 Blood Moon; cutscene replay only (C4)"},
 {9900u, 9901u, Category::never_sync, "C ending: 9900 three cords eaten, 9901 cord count value"},
 {9905u, 9905u, Category::never_sync, "C ending: cord count event"},
