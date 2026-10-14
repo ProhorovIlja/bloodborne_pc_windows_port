@@ -7,6 +7,9 @@
 #include "party_death_rules.h"
 #include "party_async_io.h"
 #include "party_perf.h"
+#ifndef BB_PARTY_PROGRESS_NO_GAME
+#include "party_director.h"  // PartyPrologueHold (#19)
+#endif
 
 #include "../net/json.h"
 
@@ -1438,6 +1441,25 @@ void GuestWorldMirror::Receive(const WorldImage& img) {
     }
 }
 
+int GuestWorldMirror::TestCorrupt() {
+    if (!have_ || image_.empty()) {
+        return -1;
+    }
+    int pick = -1;
+    for (int key : WorldMirrorKeys()) {  // a group the host has bits in, else the first mirror key
+        if (pick < 0 || NonZero(image_[key])) {
+            pick = key;
+            if (NonZero(image_[key])) {
+                break;
+            }
+        }
+    }
+    if (pick >= 0) {
+        image_[pick][0] ^= 0x01;
+    }
+    return pick;
+}
+
 const GroupBytes& GuestWorldMirror::Group(int key) const {
     return key >= 0 && key < int(image_.size()) ? image_[key] : kZeroGroup;
 }
@@ -1632,6 +1654,7 @@ bool WorldImageFromJson(const std::string& text, WorldImage* out, std::string* e
 
 #include "coop_hooks.h"
 #include "game_state.h"
+#include "party_desync.h"
 #include "../net/bbnet_internal.h"
 
 #include <filesystem>
@@ -2041,6 +2064,23 @@ void GuestTick(Global& g, const FlagStore& store, u32 map_id) {
     const std::size_t pending = g.applier.Pending();
     if (!pending) {
         return;
+    }
+    {
+        // Playtest 1 #19: nothing of the host's world goes into a prologue world (this guest's, or
+        // while the host is in its own prologue); the changes wait in the queue until both are ready.
+        static bool held = false;
+        const char* why = nullptr;
+        if (coop::PartyPrologueHold(&why)) {
+            if (!held) {
+                held = true;
+                Log("guest: %zu host flag change(s) held: %s (#19: no sync into a prologue world)", pending, why);
+            }
+            return;
+        }
+        if (held) {
+            held = false;
+            Log("guest: prologue over: applying the %zu held host flag change(s)", pending);
+        }
     }
     const auto before = g.applier.counters();
     const std::size_t held_before = g.applier.Held();
@@ -2512,6 +2552,7 @@ bool OnLinkEvent(const std::string& name, const std::string& body, std::string* 
         if (!ChangesFromJson(body, &epoch, &changes, error)) {
             return false;
         }
+        desync::GuestOnChanges(epoch, changes);  // F5: the model of the host's flags
         ApplyHostFlags(epoch, changes);
         return true;
     }
@@ -2537,7 +2578,52 @@ bool OnLinkEvent(const std::string& name, const std::string& body, std::string* 
         if (!SnapshotFromJson(body, &snap, error)) {
             return false;
         }
+        desync::GuestOnSnapshot(snap);
         ApplyHostSnapshot(snap);
+        return true;
+    }
+    if (name == desync::kDigestEvent) {  // F5: the host's digest; a difference asks for a resync
+        Init();
+        Global& g = G();
+        bool has_world = false;
+        desync::Buckets world{};
+        {
+            std::lock_guard<std::mutex> lk(g.mu);
+            has_world = g.mirror.has_image();
+            if (has_world) {
+                world = desync::WorldDigestOf([&](int key) { return &g.mirror.Group(key); });
+            }
+        }
+        desync::Checker::Result res;
+        bool corrupt = false;
+        if (!desync::GuestOnDigest(body, has_world, world, &res, &corrupt, error)) {
+            return false;
+        }
+        using V = desync::Checker::Verdict;
+        if (res.verdict == V::Asked) {
+            Log("desync: the host's digest differs: %s; resync asked", res.detail.c_str());
+        } else if (res.verdict == V::Resolved) {
+            Log("desync: resolved: %s", res.detail.c_str());
+        } else if (res.verdict == V::Persistent) {
+            Log("desync: still differs after %d resyncs (%s); no more requests for now", desync::kMaxStrikes,
+                res.detail.c_str());
+        } else if (res.verdict == V::Mismatch) {
+            Log("desync: differs (%s); resync pending", res.detail.c_str());
+        } else if (res.verdict == V::Match) {
+            static unsigned matches = 0;  // the first, then every 20th (~5 min): proof the check runs
+            if (matches++ % 20 == 0 || bbnet::party_trace()) {
+                Log("desync: digest %u matches (world %s, flags %s)", matches, has_world ? "checked" : "-",
+                    res.detail.empty() ? "checked" : res.detail.c_str());
+            }
+        }
+        if (corrupt) {
+            int key = -1;
+            {
+                std::lock_guard<std::mutex> lk(g.mu);
+                key = g.mirror.TestCorrupt();
+            }
+            Log("desync test: corrupted mirror group %d and forgot one host flag (BB_PARTY_DESYNC_TEST)", key);
+        }
         return true;
     }
     if (error) {
