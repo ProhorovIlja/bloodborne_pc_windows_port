@@ -25,6 +25,7 @@
 #include "party_async_io.h"
 #include "party_enemy_census.h"
 #include "party_ids.h"
+#include "party_director.h"
 #include "party_link.h"
 #include "party_status.h"
 #include "party_travel.h"
@@ -763,7 +764,10 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         st.last_death = now;
         st.up_since_death = false;
         int kind = -1;
-        if (r.rot && g_stacks.load() < kRotMaxStacks) {
+        // Playtest 1 #19: the prologue is played alone (its first death is scripted): no rot.
+        const bool prologue = coop::LocalPrologueHold();
+        if (prologue && r.rot) Log("death %d in the prologue: no rot (#19)", g_deaths.load());
+        if (r.rot && !prologue && g_stacks.load() < kRotMaxStacks) {
             // One kind picked at random per death (ERSC), among the hooked ones; BB_PARTY_ROT_KIND=N
             // forces kind N (tests).
             int hooked[kRotKinds], nh = 0;
