@@ -8,7 +8,7 @@
 // item_lot_picked key_event cutscene_seen world_state session_runtime never_sync
 // time_of_day (9800-9802: applied only through the cutscene replay path, never silently).
 // Ids no row covers: treat as never_sync.
-// ---- 77 override rows (area gates, endings, cutscene/time-of-day flags)
+// ---- 82 override rows (area gates, endings, cutscene/time-of-day flags)
 {2100u, 2100u, Category::never_sync, "area gate (TBL1 0x47304B0: ON blocks the host bell / summons in the area)"},
 {2200u, 2200u, Category::never_sync, "area gate (TBL1 0x47304B0: ON blocks the host bell / summons in the area)"},
 {2300u, 2300u, Category::never_sync, "area gate (TBL1 0x47304B0: ON blocks the host bell / summons in the area)"},
@@ -86,6 +86,11 @@
 {12100002u, 12100002u, Category::never_sync, "ending event (m21); C4 replay only"},
 {12100180u, 12100180u, Category::never_sync, "A ending event (m21); C4 replay only"},
 {72100130u, 72100131u, Category::never_sync, "Gehrman's offer submit/refuse -> A ending / fight; C4 replay only"},
+{12100112u, 12100118u, Category::never_sync, "per-player: Doll level-up kneel / gesture / SFX / bow / reactions (m21 events 12100112-118)"},
+{72100100u, 72100102u, Category::never_sync, "per-player: Doll talk t210304 level-up handshake (72100100 -> 72100101 + 72100102)"},
+{72100105u, 72100108u, Category::never_sync, "per-player: Doll idle talk / bow / surprise triggers (m21 events 12100111, 12100115, 12100116)"},
+{72100110u, 72100110u, Category::never_sync, "per-player: Doll talk t210304 state (set as the talk opens)"},
+{72100113u, 72100113u, Category::never_sync, "per-player: Doll talk t210304 state after a level-up"},
 // ---- 1727 specific rows
 {2200u, 2200u, Category::boss_defeated, "set by m22_00_00_00 ev 12201800 (boss defeat)"},
 {2300u, 2301u, Category::boss_defeated, "set by m23_00_00_00 ev 12301800 (boss defeat) (+1 more)"},
