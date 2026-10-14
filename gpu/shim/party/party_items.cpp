@@ -74,6 +74,7 @@ struct SourceName {
 constexpr SourceName kSourceNames[] = {
     {ItemSource::Unknown, "unknown"}, {ItemSource::Award, "award"}, {ItemSource::Flag, "flag"},
     {ItemSource::Full, "full"},       {ItemSource::Mark, "mark"},   {ItemSource::Test, "test"},
+    {ItemSource::Own, "own"},
 };
 
 const std::unordered_map<std::int32_t, std::int32_t>& FlagToLot() {
@@ -205,6 +206,10 @@ std::size_t ItemLotFlagCount() {
 
 std::size_t ItemLedgerCount() {
     return std::size(kLedger);
+}
+
+bool MessengerGiftLot(std::int32_t lot) {
+    return lot == 10000 || lot == 10010 || lot == 10050;
 }
 
 bool ItemLotDenied(std::int32_t lot, std::int32_t flag) {
@@ -576,6 +581,70 @@ bool ItemSummonedApplyAllowedNow(const ItemApplyState& s) {
            s.session_role == 6 /* client in the host's world */;
 }
 
+const char* ItemPopupHold(const ItemApplyState& s) {
+    if (!s.alive) {
+        return "dead";
+    }
+    if (s.cutscene) {
+        return "cutscene";
+    }
+    if (!s.boss_quiet) {
+        return "boss defeat banner";
+    }
+    if (!s.calm) {
+        return "in a fight";
+    }
+    return nullptr;
+}
+
+bool ItemGetWatch::Step(double now, int entries, bool armed, bool alive, bool loading, const char** why) {
+    if (entries <= 0) {
+        up_ = crossed_load_ = false;
+        dead_since_ = held_since_ = -1;
+        return false;
+    }
+    if (!up_) {
+        up_ = true;
+        up_since_ = now;
+        crossed_load_ = false;
+        dead_since_ = held_since_ = -1;
+    }
+    if (loading) {
+        crossed_load_ = true; // cleared once the load is over (the game runs the list again)
+        dead_since_ = held_since_ = -1;
+        return false;
+    }
+    const char* r = nullptr;
+    if (crossed_load_) {
+        r = "left over from before a load";
+    }
+    if (!alive) {
+        dead_since_ = dead_since_ < 0 ? now : dead_since_;
+        if (!r && now - dead_since_ >= kDeadFor) {
+            r = "the player is dead";
+        }
+    } else {
+        dead_since_ = -1;
+    }
+    if (!armed) {
+        held_since_ = held_since_ < 0 ? now : held_since_;
+        if (!r && now - held_since_ >= kHeldFor) {
+            r = "its confirm check stays held";
+        }
+    } else {
+        held_since_ = -1;
+    }
+    if (!r) {
+        return false;
+    }
+    if (why) {
+        *why = r;
+    }
+    up_ = crossed_load_ = false;
+    dead_since_ = held_since_ = -1;
+    return true;
+}
+
 ItemApplyMode ItemApplyModeNow(const ItemApplyState& s) {
     if (ItemApplyAllowedNow(s)) {
         return ItemApplyMode::Home;
@@ -833,6 +902,18 @@ LotFit ClassifyLotFit(const std::vector<LotSlotState>& slots, std::string* why) 
     return fit;
 }
 
+bool LedgerSkipSuspicious(const std::vector<LotSlotState>& slots) {
+    if (slots.empty()) {
+        return false;
+    }
+    for (const LotSlotState& s : slots) {
+        if (s.category != 4 || s.max_num != 1 || s.max_storage > 0 || s.owned != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::size_t GuestItems::Offer(const std::vector<ItemGrant>& items) {
     std::size_t taken = 0;
     for (const ItemGrant& g : items) {
@@ -867,6 +948,7 @@ std::size_t GuestItems::Offer(const std::vector<ItemGrant>& items) {
 }
 
 std::optional<ItemGrant> GuestItems::Step(const ItemApplyState& s, double now) {
+    last_hold_ = nullptr;
     const ItemApplyMode mode = ItemApplyModeNow(s);
     if (mode == ItemApplyMode::None) {
         stable_ = 0;
@@ -889,8 +971,16 @@ std::optional<ItemGrant> GuestItems::Step(const ItemApplyState& s, double now) {
         }
     }
     // Marks only set a flag (no popup / notice): no spacing for them.
-    if (it->source != ItemSource::Mark && (now - last_apply_ < kSpacing || !s.calm)) {
-        return std::nullopt; // one popup / notice at a time, and none in a fight
+    if (it->source != ItemSource::Mark) {
+        if (now - last_apply_ < kSpacing) {
+            return std::nullopt; // one popup / notice at a time
+        }
+        // None in a fight, while dead, in a cutscene or under the boss-defeat banner: the native
+        // item-get box pushed then could not be dismissed (playtest 1 #15 / #12).
+        if (const char* hold = ItemPopupHold(s)) {
+            last_hold_ = hold;
+            return std::nullopt;
+        }
     }
     ItemGrant g = *it;
     q_.erase(it);
@@ -1192,6 +1282,21 @@ std::optional<ItemGrant> AwardEntry(u64 lot_arg, u64 host_only_arg) {
             Log("host award lot %d: flagless and not in the ledger table; not replayed", lot);
         }
         return g;
+    } else if (role == PartyRole::Guest && own == 0 && host_only && MessengerGiftLot(lot) && flag > 0) {
+        // A per-player Doll / Messenger gift (Old Hunter Bell ...) the guest's talk asked for in
+        // the host's Dream: the game refuses hostOnly lots on a client and the lot is never
+        // replayed (per player), so the guest gives it to itself (own inventory and own flag).
+        ItemGrant m;
+        m.lot = lot;
+        m.flag = flag;
+        m.source = ItemSource::Own;
+        std::size_t taken = 0;
+        {
+            std::lock_guard<std::mutex> lk(g_guest_mu);
+            taken = g_guest.Offer({m});
+        }
+        Log("guest's own gift lot %d (flag %d) refused by the game in the host's world: %s", lot, flag,
+            taken ? "given to the guest itself (own inventory, own flag)" : "already queued or given");
     } else if (role == PartyRole::Guest && own == 0 && !host_only && flag > 0 && !ItemLotDenied(lot, flag)) {
         // We got it in the host's world; its flag went to the overlay only. Set it at home so the
         // host's replay of the same lot gives nothing twice.
@@ -1510,6 +1615,16 @@ void FillGoodsLimits(LotSlotState* s) {
 // ItemLotParam (ITEMLOT_PARAM_ST, 1.09 paramdef): lotItemId01..08 s32 +0x00, lotItemCategory01..08
 // u32 +0x20, lotItemBasePoint01..08 u16 +0x40, lotItemNum01..08 u8 +0x8A. EquipParamGoods
 // (EQUIP_PARAM_GOODS_ST): maxNum s16 +0x36, maxRepositoryNum s16 +0x49.
+/// A flagless lot whose awarding event is a boss defeat (its ledger row's done flag is a
+/// boss_defeated flag): boss rewards (keys, badges) are never handed to an NPC or used up.
+bool BossLedgerLot(const ItemGrant& g) {
+    if (g.flag >= 0 || g.ledger < 0) {
+        return false;
+    }
+    const std::int32_t f = ItemLedgerDoneFlag(g.ledger);
+    return f > 0 && progress::CategoryOf(static_cast<u32>(f)) == progress::Category::boss_defeated;
+}
+
 std::vector<LotSlotState> LotSlots(std::int32_t lot) {
     std::vector<LotSlotState> out;
     const u64 row = GameParamRow("ItemLotParam", "ITEMLOT_PARAM_ST", static_cast<u32>(lot));
@@ -1598,8 +1713,17 @@ bool Apply(const ItemGrant& g) {
             why.c_str());
     }
     if (IsFlag(man, done)) {
-        Log("skip %s: already given (flag %lld set)", DescribeItem(g).c_str(), static_cast<long long>(done));
-        return false;
+        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && LedgerSkipSuspicious(LotSlots(g.lot))) {
+            // #16: the ledger says given, the player holds none of the lot's unique items.
+            Log("%s: its done flag %lld is set but none of its unique items is held; giving it after all",
+                DescribeItem(g).c_str(), static_cast<long long>(done));
+            if (g.flag >= 0) {
+                SetFlag(man, done, false); // the award's roll skips rows whose flag is set; it sets it again
+            }
+        } else {
+            Log("skip %s: already given (flag %lld set)", DescribeItem(g).c_str(), static_cast<long long>(done));
+            return false;
+        }
     }
     if (!mim) {
         Log("skip %s: no MapItemMan", DescribeItem(g).c_str());
@@ -1674,13 +1798,22 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         }
         return SummonedResult::Skipped;
     }
+    bool regive = false;
     if (OwnSaveFlag(done)) {
-        Log("skip %s: already given (own-save flag %lld set; %s)", DescribeItem(g).c_str(),
-            static_cast<long long>(done), HeldSummary(g.lot).c_str());
-        return SummonedResult::Skipped;
+        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && LedgerSkipSuspicious(LotSlots(g.lot))) {
+            regive = true;
+            Log("%s: its done flag %lld is set but none of its unique items is held (%s); giving it after all",
+                DescribeItem(g).c_str(), static_cast<long long>(done), HeldSummary(g.lot).c_str());
+        } else {
+            Log("skip %s: already given (own-save flag %lld set; %s)", DescribeItem(g).c_str(),
+                static_cast<long long>(done), HeldSummary(g.lot).c_str());
+            return SummonedResult::Skipped;
+        }
     }
     const std::vector<LotRowData> chain = LotChain(g.lot);
-    const LotPlan plan = PlanSummonedLot(chain, g.items, [](std::int32_t f) { return OwnSaveFlag(f); });
+    // A re-give ignores the row flags (the done flag is one of them and is set).
+    const LotPlan plan =
+        PlanSummonedLot(chain, g.items, [regive](std::int32_t f) { return !regive && OwnSaveFlag(f); });
     if (plan.result != LotPlanResult::Give) {
         Log("%s: not while summoned (%s: %s); waits for the own world", DescribeItem(g).c_str(),
             LotPlanResultName(plan.result), plan.why.c_str());
@@ -1988,6 +2121,53 @@ namespace {
 
 /// No HP lost for kCalmAfter s (ChrIns +0x3B0 -> +0x20: +0xF8 HP): not in a fight, so an award
 /// popup does not land on a player under attack. A new player (load) starts calm.
+/// The local player's HP (ChrIns +0x3B0 -> +0x20: +0xF8), -1 unknown.
+std::int32_t PlayerHp(u64 player) {
+    u64 a = 0, b = 0;
+    std::int32_t hp = -1;
+    if (!player || !SafeGet(player + 0x3b0, &a) || !a || !SafeGet(a + 0x20, &b) || !b || !SafeGet(b + 0xf8, &hp)) {
+        return -1;
+    }
+    return hp;
+}
+
+/// No boss health bar now and none for kBossBannerQuiet s (the defeat banner runs after it goes).
+bool BossQuiet(double now) {
+    static bool last = false;
+    static double off_at = -1e9;
+    const bool shown = BossBarShown();
+    if (last && !shown) {
+        off_at = now;
+    }
+    last = shown;
+    return !shown && now - off_at >= kBossBannerQuiet;
+}
+
+/// The item-get dialog's watchdog (ItemGetWatch): every role, party mode.
+void ItemGetWatchTick(const GameSnapshot& gs, double now) {
+    static ItemGetWatch watch;
+    static bool off = [] {
+        const char* v = std::getenv("BB_PARTY_ITEMGET_WATCH");
+        return v && v[0] == '0';
+    }();
+    if (off) {
+        return;
+    }
+    const int n = ItemGetEntries();
+    const std::int32_t hp = PlayerHp(gs.player);
+    const char* why = nullptr;
+    if (!watch.Step(now, n, ItemGetConfirmArmed(), hp != 0, gs.loading || !gs.world_up, &why)) {
+        return;
+    }
+    const double up = now - watch.UpSince();
+    const int cleared = ClearItemGet();
+    Log("item-get dialog cleared (%d entr%s up %.1f s: %s); the items stay in the inventory", cleared,
+        cleared == 1 ? "y" : "ies", up, why);
+    if (cleared > 0) {
+        party::status::SetLastEvent("Item notice closed - the items are in your inventory");
+    }
+}
+
 bool Calm(u64 player, double now) {
     constexpr double kCalmAfter = 15.0;
     static u64 last_player = 0;
@@ -2196,8 +2376,12 @@ void GiftTick(double now) {
             g_gift_test_since = now;
         } else if (now - g_gift_test_since >= 20.0 && Ptr(kMapItemMan)) {
             g_gift_test_done = true;
-            Log("gift test: awarding lot %d through 0x17DDC50 (hostOnly 0) in the host's world", g_gift_test);
-            reinterpret_cast<AwardFn>(Guest(kAwardLot))(Ptr(kMapItemMan), static_cast<u32>(g_gift_test), 0);
+            // BB_PARTY_GIFT_TEST_HOSTONLY=1: hostOnly 1, as the Doll / Messenger talk awards its
+            // per-player gifts (the Old Hunter Bell, lot 10050).
+            const char* ho = std::getenv("BB_PARTY_GIFT_TEST_HOSTONLY");
+            const u32 host_only = ho && ho[0] == '1' ? 1 : 0;
+            Log("gift test: awarding lot %d through 0x17DDC50 (hostOnly %u) in the host's world", g_gift_test, host_only);
+            reinterpret_cast<AwardFn>(Guest(kAwardLot))(Ptr(kMapItemMan), static_cast<u32>(g_gift_test), host_only);
         }
     }
     if (role != PartyRole::Host || own != 1 || now - g_gift_last < 2.0) {
@@ -2288,6 +2472,10 @@ void ItemsTick() {
     s.own_world = OwnWorld();
     s.game_data = gs.player_rec != 0 && Ptr(kMapItemMan) != 0;
     s.calm = Calm(gs.player, Now());
+    s.alive = PlayerHp(gs.player) != 0;
+    s.cutscene = CutscenePlaying();
+    s.boss_quiet = BossQuiet(Now());
+    ItemGetWatchTick(gs, Now());
     static ItemApplyMode gate_logged = ItemApplyMode::None;
     const ItemApplyMode mode_now = ItemApplyModeNow(s);
     if (mode_now != gate_logged) {
@@ -2300,10 +2488,21 @@ void ItemsTick() {
     }
     std::optional<ItemGrant> g;
     ItemApplyMode mode;
+    const char* hold = nullptr;
     {
         std::lock_guard<std::mutex> lk(g_guest_mu);
         g = g_guest.Step(s, Now());
         mode = g_guest.LastMode();
+        hold = g_guest.LastHold();
+    }
+    static const char* hold_logged = nullptr;
+    if (hold != hold_logged) {
+        hold_logged = hold;
+        if (hold) {
+            Log("item popup held (%s): the next grant waits", hold);
+        } else {
+            Log("item popup hold over");
+        }
     }
     if (!g) {
         return;
