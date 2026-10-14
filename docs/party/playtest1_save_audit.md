@@ -51,8 +51,8 @@ later run used its headstone and lamp 2412950 normally. No boss, lamp or ledger 
 | S1 | **Key items lost**: slot 1 holds no key item at all, but its save says it got the Sword Hunter Badge (ledger bit 60009036), the Oedon Tomb Key (60009025) and the Blood Gem Workshop Tool (treasure flag 52411000) | key-item list count 0; G5:40207 `gave ... lot 50000010 ... goods 4114 x1 (held 0 -> 1) ... own-save flag(s) 60009036 set (pool, load mode 1)`; host awards H5:2886 (50000010), H5:8051 (31000), host pickup H5:8752 (52411000); the guest played on for ~50 min with saves after that | a key item given to (or picked up by) a **summoned** guest goes into the summoned inventory, which the save does not keep; the flag / ledger bit is written into the own pool and is saved. verify_c6's "the save written while summoned keeps the gives" came from a base save that already held both keys (`test_saves` slot 0 has 4000 and 4114) | Oedon Tomb Key + badge: re-given only if the join's full item list is applied while the guest stands in its own world (#16 re-give) or deferred to a home trip in the same game run; a title join straight into the host's world and quitting from there never does it. **Workshop Tool: never** (a flagged lot whose flag is set is "already given") | major (the Oedon Tomb Key gates the guest's own Cathedral Ward; no gem workbench) | **fixed (saveaudit, live)** |
 | S2 | `party_summoned_gives.txt` (par_c6's re-give list) is one file per user folder, not per character | design read; this guest has two characters in one folder and played slot 0 the day after | n/a (0.6.0 has no such file) | a key given while summoned to one character would be re-given to whichever character loads next | minor | **fixed (saveaudit)**: entries carry the save slot |
 | S3 | Doll level-up handshake flags left set: slot 1 72100100 / 72100101 / 72100102 = 1 (host 0), slot 0 72100102 = 1 | host H5:9865-9872 cleared them; G5:44580 / 44941 (triage #10) | npc_quest sync of the Doll's handshake (#10): the sets reached the guest's pool, the clears did not | never_sync since pt1npc: no new ones; the old bits stay | minor (the next level-up at his own Doll finds 101 / 102 already set and opens the menu without the kneel / gesture; the talk clears them) | not changed |
-| S4 | Rot crosses characters: the later run's slot 0 character got slot 1's rot | later log: `1 stack(s) kept from the last game`, `rot factor HP 90 %` on the level 10 character, then `lamp rest: rot cleansed` | `party_rot.txt` is per user folder | 87709d03 drops it only for a save in its prologue; a second character past its prologue still inherits it | minor (cleansed at the next lamp; the rot is lost for the other character) | open: key `party_rot.txt` by save slot (party_balance.cpp, `party::flow::CurrentSaveSlot()` now exists) |
-| S5 | `party_prologue.txt` is per user folder too | design read | - | a title join may be held once for a character past its prologue after the other one was in its prologue | minor | open |
+| S4 | Rot crosses characters: the later run's slot 0 character got slot 1's rot | later log: `1 stack(s) kept from the last game`, `rot factor HP 90 %` on the level 10 character, then `lamp rest: rot cleansed` | `party_rot.txt` is per user folder | 87709d03 drops it only for a save in its prologue; a second character past its prologue still inherits it | minor (cleansed at the next lamp; the rot is lost for the other character) | **fixed (slotfiles)**: `party_rot.txt` keyed by save slot; an old unkeyed file is dropped (see below) |
+| S5 | `party_prologue.txt` is per user folder too | design read | - | a title join may be held once for a character past its prologue after the other one was in its prologue | minor | **fixed (slotfiles)**: per save slot; an old unkeyed file reads as the last character's state (see below) |
 | S6 | Old Hunter Bell never given (6670 clear, 4312 not held) | host H5:3368 `award lot 10050` in the host's Dream | per-player Messenger gift; 0.6.0 had no own-gift path | pt1items `ItemSource::Own` gives it to a guest in the host's Dream; vanilla also gives it in the guest's own Dream (12101022 / 12100105 / 12101027 set, 12101026 not done) | none (not lost: still to be collected) | ok |
 | S7 | `userdata0001` / `backup0001` rewritten at 18:24 by the launch that stayed at the title (play time +8 ms between the two) | file times, header | unknown (the title's character list?) | - | none seen (content intact) | note |
 
@@ -87,3 +87,28 @@ Continue in Join mode is enough): the Oedon Tomb Key, the Sword Hunter Badge and
 Tool come back within a few seconds and the game saves. The Old Hunter Bell is still waiting at the
 Messenger in the Hunter's Dream. The Doll's stale handshake bits clear at his next level-up. The rot of
 the other character was already cleansed.
+
+## The fix (S4, S5)
+
+Both files now carry the save slot (`party::flow::CurrentSaveSlot()`, GameDataMan +0x50 -> +2000), as
+`party_summoned_gives.txt` does since S2. Pure parts with unit tests: `party_balance_rules.h`
+(`RotFile`, party-balance-test) and `party_start.h` (`SavedPrologueFile`, party-start-test).
+
+- `party_rot.txt` (S4): one line per character with rot, `slot S kinds H ST SC R D` (stacks per kind:
+  health, stamina, stamina cost, rally, discovery); a cleansed character's line goes, an empty file is
+  deleted. Nothing applies at start; at the first in-world tick the loaded character's slot is read
+  and its own stacks come in (log `rot: save slot N loaded: its own K stack(s)`); loading another
+  character keeps the first one's and switches. **Old unkeyed file (`stacks N` + `kindK N`): dropped**,
+  logged once (`rot: N stack(s) in an old party_rot.txt without a save slot dropped`). Its owner cannot
+  be told apart, giving it to the wrong character was the bug, and dropping a penalty costs nobody
+  anything (the next lamp would cleanse it anyway); the safe choice. The prologue rule
+  (`RotFromAnotherCharacter`, 87709d03) stays for a new game made in a slot whose old character was
+  deleted.
+- `party_prologue.txt` (S5): `last V` (the character seen in its own world last) plus `slot S V` per
+  character. A guest at its title asks for the slot it continues; with that slot unknown or never seen
+  the `last` value counts (the behaviour before). **Old unkeyed file (`1` / `0`): read as `last`**, so the
+  answer is unchanged until each character has been seen once; the safe direction here is to keep it,
+  because a `1` holds a title join (plain Continue, the bell summons later) rather than load a prologue
+  save into the host's world (#19).
+- `instances.py --fresh-saves` already deletes both files. Not checked live (pure logic; the slot read
+  is the one S2 uses).
