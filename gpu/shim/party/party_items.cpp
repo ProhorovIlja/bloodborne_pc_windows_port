@@ -1028,6 +1028,15 @@ bool SummonedGiveAllowed(const std::vector<LotSlotState>& slots) {
     return !LotHasKeyGoods(slots);
 }
 
+bool RepeatSummonedGiveAllowed(const std::vector<LotSlotState>& slots) {
+    for (const LotSlotState& s : slots) {
+        if (KeyGoods(s) && s.goods_type != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool KeyGiveAllowedHeld(const LotSlotState& s, int held) {
     return !KeyGoods(s) || held == 0;
 }
@@ -2214,7 +2223,7 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         FillGoodsLimits(&s);
         slots.push_back(s);
     }
-    if (!SummonedGiveAllowed(slots)) {
+    if (!SummonedGiveAllowed(slots) && !(g.source == ItemSource::Repeat && RepeatSummonedGiveAllowed(slots))) {
         // 0.6.2: never a key item / unique goods while summoned (its held count reads 0 here; the
         // game refuses a second copy with a blocking box). The own world gives it, held checked.
         std::string keys;
