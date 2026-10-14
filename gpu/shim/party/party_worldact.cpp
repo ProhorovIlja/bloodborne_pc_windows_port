@@ -14,11 +14,22 @@ namespace coop::worldact {
 
 using progress::Category;
 
+bool NpcGiftTrigger(std::uint32_t id) {
+    if (id < 9042u || id > 9077u) {
+        return false;
+    }
+    // The common 9040 slots (common.emevd event 0: InitializeEvent(slot, 9040, flag, lot)).
+    return !(id == 9043u || id == 9044u || id == 9053u || id == 9065u || id == 9068u || id == 9070u);
+}
+
 bool WorldActionAllowed(std::uint32_t id, bool clear, std::uint32_t host_map) {
     const int key = progress::PoolKeyOfId(id);
     if (key < 0 || !progress::WorldMirrorKey(key) || progress::NeverWritable(id) ||
         !progress::GetBit(progress::WorldMirrorMask(key).data(), id % progress::kBitsPerBlock)) {
         return false;
+    }
+    if (NpcGiftTrigger(id)) {
+        return !clear;  // set only: the host's own 9040 awards the gift once (P1)
     }
     const Category c = progress::CategoryOf(id);
     // Elevator / two-state object flags (C2's state ids, e.g. 12410350/351 Central Yharnam's lift):
@@ -395,6 +406,25 @@ struct State {
 // the fixture's pickup targets. Main thread.
 std::atomic<std::uint64_t> g_pickups{0};  // map item pickups on this game (PickupEntry)
 std::atomic<double> g_pickup_at{-1e9};     // Now() of the last one
+// P1: NPC gift triggers (NpcGiftTrigger) this game's own talk set (SetEventFlag hook, game thread);
+// the guest tick sends them to the host while it stands in the host's world, else drops them.
+std::mutex g_gift_mu;
+std::vector<std::uint32_t> g_gift_sets;
+void OnLocalGiftSet(std::uint32_t id) {
+    if (!NpcGiftTrigger(id)) {
+        return;
+    }
+    std::lock_guard<std::mutex> lk(g_gift_mu);
+    if (g_gift_sets.size() < 16 && std::find(g_gift_sets.begin(), g_gift_sets.end(), id) == g_gift_sets.end()) {
+        g_gift_sets.push_back(id);
+    }
+}
+std::vector<std::uint32_t> TakeGiftSets() {
+    std::lock_guard<std::mutex> lk(g_gift_mu);
+    std::vector<std::uint32_t> out;
+    out.swap(g_gift_sets);
+    return out;
+}
 std::mutex g_treasure_mu;
 struct Treasure {
     std::array<float, 3> pos{};
@@ -421,6 +451,9 @@ State& S() {
         const char* on = std::getenv("BB_PARTY_WORLD_ACTIONS");
         g_st.enabled = party && party[0] && !(on && on[0] == '0');
         g_st.watch = ParseIds(std::getenv("BB_PARTY_WORLD_WATCH"));
+        if (g_st.enabled) {
+            progress::AddLocalFlagSetObserver(&OnLocalGiftSet);
+        }
         Log("guest world actions %s (levers, doors, shortcuts, elevators, NPC talk -> the host's world)",
             g_st.enabled ? "on" : "off");
         // On by default since 0.5.9 (live 2026-10-12: a guest and the host each took their own copy
@@ -545,6 +578,10 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.baselined = false;
         st.map = s.map_id;
         st.fog_in.clear();
+        // A gift trigger set in the own world (its own 9040 awards it) or during a load: not the host's.
+        if (const std::vector<std::uint32_t> g = TakeGiftSets(); !g.empty()) {
+            Log("guest: NPC gift trigger(s) %s set outside the host's steady world: kept local", IdList(g).c_str());
+        }
         return;
     }
     if (!st.steady) {
@@ -583,6 +620,21 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
     Request r;
     r.map = s.map_id;
     std::vector<std::uint32_t> local, picked;
+    // P1: the guest's talk handed over an NPC gift. Its own 9040 slot ended at load (client), and the
+    // overlay bit already read 1 then (no change to see): the trigger goes to the host, whose 9040
+    // awards the lot; C3 gives it to every member (ledger / lot flag), the guest included.
+    for (std::uint32_t id : TakeGiftSets()) {
+        bool given = false;
+        if (progress::HostWorldFlag(id, &given) && given) {
+            Log("guest: NPC gift trigger %u set by its talk: already given in the host's world; nothing sent", id);
+            continue;
+        }
+        if (WorldActionAllowed(id, false, s.map_id) && r.set.size() < kMaxSet) {
+            r.set.push_back(id);
+            Log("guest: NPC gift trigger %u set by its talk: to the host (its common event 9040 awards the gift, "
+                "C3 hands it to the party)", id);
+        }
+    }
     for (const auto& [id, v] : changes) {
         if (v && st.pickups && MapItemFlag(id) && now - g_pickup_at.load() < 15.0) {
             // D4: the guest picked up the host world's treasure - instanced: its own save only.
