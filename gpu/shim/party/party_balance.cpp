@@ -147,6 +147,7 @@ struct TickState {
     Clock::time_point toast_at{};  // alive in the world since  // rot factor (percent) of the last "max HP now" line
     Clock::time_point factor_since{};
     int last_factor = 100;
+    Clock::time_point prologue_since{};  // in the own prologue since (stale rot)
 };
 TickState& S() {
     static TickState s;
@@ -762,6 +763,24 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
 
     CensusTick(s);
     const bool in_world = s.world_up && !s.loading && s.player;
+    // The rot belongs to the character: a new game (its own prologue) drops the last one's stacks.
+    {
+        const bool own_prologue = in_world && coop::LocalPrologueHold();
+        if (!own_prologue) {
+            st.prologue_since = Clock::time_point{};
+        } else if (st.prologue_since == Clock::time_point{}) {
+            st.prologue_since = now;
+        }
+        const double prologue_s =
+            own_prologue ? std::chrono::duration<double>(now - st.prologue_since).count() : 0.0;
+        if (RotFromAnotherCharacter(g_stacks.load(), own_prologue, prologue_s)) {
+            Log("rot: %d stack(s) from another character dropped (this save is in its prologue: a new game)",
+                g_stacks.load());
+            g_stacks = 0;
+            for (auto& c : g_kind) c = 0;
+            SaveRot();
+        }
+    }
     // C4: the local player's death, the lamp rest, the rate factor.
     const u64 dm = in_world ? Field<u64>(Field<u64>(s.player, 0x3b0), 0x20) : 0;
     const int hp = dm ? Field<int>(dm, 0xf8, -1) : -1;
