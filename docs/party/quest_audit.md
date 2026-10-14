@@ -83,8 +83,13 @@ The ten things most likely to go wrong in the next ~5 hours, and what to do in g
    through the lamp warp hook, so the Hemwick carriage to Cainhurst, the Rom -> Blood Moon warp to
    Yahar'gul, the Lecture Building doors, the Amygdala grab and the DLC grab all open the travel
    question on the player who triggered them (after the cutscene). *In game:* answer **YES**. A NO
-   leaves the others where they were; recover with the bell or a party lamp travel. This path was
-   never run live after split travel landed (campaign soak row 7b passed before it).
+   leaves the others where they were; recover with the bell or a party lamp travel.
+   *Fixed + live (parg, Blood Moon):* these warps set no lamp flag, so since bug 20's "whose lamp"
+   rule the host's Blood Moon warp was dropped as another member's lamp (the host stayed at
+   Moonside Lake). Story warps (`deathrules::StoryWarpEvent`) are now the triggering player's own
+   travel (host-only ones only on the host: a guest's stray copy after its load stays dropped), and
+   the question waits 2 s after the scene (opened in the scene's last frame it never showed). Live:
+   question, YES, host and guest in Yahar'gul with one load each.
 8. **One-off host-only story steps**: the Blood Moon (Rom dead + host near Queen Yharnam,
    13201803), Willem's memory (5), first fights with an intro (Amelia, One Reborn, Wet Nurse,
    Micolash, Logarius), the Yahar'gul altar warp to the Lecture Building after One Reborn
@@ -244,7 +249,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Lunarium Key | 13200400 award lot 3200810 (flag 53200810); ObjAct 3200040 | award | captured -> shared | ok | |
 | Willem | 513000 (ghost bit kept), t320310; 13200121 points at the moon | | ghost on the guest | minor | P3 |
 | Rom | defeat 13201800 (3200 never_sync, 9465), lot 51001900 (ledger 40) | fight (no intro) | guest fog first | ok | |
-| Blood Moon | 13201803 (host only: Rom dead + near Queen Yharnam 3200801), remo 32000000 tod 3, sets 70002802, `2003[49] 2802958` | cutscene -> travel question | live mirror; time-of-day catch-up; follows the party travel | major (question path untested live) | checklist 7/8 |
+| Blood Moon | 13201803 (host only: Rom dead + near Queen Yharnam 3200801), remo 32000000 tod 3, sets 70002802, `2003[49] 2802958` | cutscene -> travel question | live mirror (a mirror cut by the guest's own load is replayed in full); time of day into the own save; the host's question after the scene, the party travels to Yahar'gul (parg, live) | ok | checklist 7/8 |
 | Lecture Building doors | 13200310 (ObjAct 13200124 -> `2003[49] 2602959` Nightmare of Mensis), 13200311 (ObjAct 13200123 -> `2003[49] 3302959` Nightmare Frontier) | question | its own question (both may be asked) | minor | P4 |
 | Lecture Building arrival via Amygdala | 13200950 (clears 12800434) | | | ok | |
 
