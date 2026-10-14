@@ -26,6 +26,7 @@
 #include "party_enemy_census.h"
 #include "party_ids.h"
 #include "party_director.h"
+#include "party_flow.h"
 #include "party_link.h"
 #include "party_status.h"
 #include "party_travel.h"
@@ -43,6 +44,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -165,31 +167,94 @@ std::filesystem::path RotPath() {
     return std::filesystem::path(dir) / "party_rot.txt";
 }
 
-void LoadRot() {
-    std::ifstream f(RotPath());
-    std::string key;
-    int v = 0;
-    if (!(f >> key >> v) || key != "stacks") return;
-    const int left = std::clamp(v, 0, kRotMaxStacks);
-    int sum = 0;
-    for (int k = 0; k < kRotKinds; ++k) {
-        int n = 0;
-        if (!(f >> key >> n)) break;  // an older file: "stacks N" only (health)
-        n = std::clamp(n, 0, left - sum);
-        g_kind[k] = n;
-        sum += n;
-    }
-    if (sum < left) g_kind[kRotHealth] = g_kind[kRotHealth].load() + (left - sum);
-    g_stacks = left;
+// Playtest 1 save audit S4: party_rot.txt holds every character's rot by save slot (RotFile);
+// g_stacks / g_kind are the loaded character's (g_rot_slot), switched when another save is loaded.
+std::mutex g_rot_mu;
+RotFile g_rot_file;  // under g_rot_mu
+int g_rot_slot = -1;  // the save slot g_stacks / g_kind belong to (-1: no character loaded yet)
+
+SlotRot ActiveRot(int slot) {
+    SlotRot r;
+    r.slot = slot;
+    for (int k = 0; k < kRotKinds; ++k) r.kind[k] = g_kind[k].load();
+    return r;
 }
 
-void SaveRot() {
+void UseRot(const SlotRot& r) {
+    int sum = 0;
+    for (int k = 0; k < kRotKinds; ++k) {
+        g_kind[k] = r.kind[k];
+        sum += r.kind[k];
+    }
+    g_stacks = sum;
+}
+
+/// Caller holds g_rot_mu.
+void WriteRotLocked() {
     std::error_code ec;
     const auto p = RotPath();
+    const std::string text = FormatRotFile(g_rot_file);
+    if (text.empty()) {
+        std::filesystem::remove(p, ec);
+        return;
+    }
     std::filesystem::create_directories(p.parent_path(), ec);
     std::ofstream f(p, std::ios::trunc);
-    f << "stacks " << g_stacks.load() << "\n";
-    for (int k = 0; k < kRotKinds; ++k) f << "kind" << k << " " << g_kind[k].load() << "\n";
+    f << text;
+}
+
+void LoadRot() {
+    std::string text;
+    {
+        std::ifstream f(RotPath());
+        std::stringstream ss;
+        ss << f.rdbuf();
+        text = ss.str();
+    }
+    std::lock_guard<std::mutex> lk(g_rot_mu);
+    g_rot_file = ParseRotFile(text);
+    g_rot_slot = -1;
+    UseRot(SlotRot{});  // nothing until the character's save slot is known
+    if (g_rot_file.legacy_stacks > 0) {
+        Log("rot: %d stack(s) in an old party_rot.txt without a save slot dropped (whose character's they were is "
+            "unknown; a lamp would have cleansed them)",
+            g_rot_file.legacy_stacks);
+        g_rot_file.legacy_stacks = 0;
+        WriteRotLocked();
+    }
+}
+
+/// The loaded character's rot to party_rot.txt (kept in memory only while its save slot is unknown).
+void SaveRot() {
+    std::lock_guard<std::mutex> lk(g_rot_mu);
+    if (g_rot_slot < 0) return;
+    g_rot_file.Set(ActiveRot(g_rot_slot));
+    WriteRotLocked();
+}
+
+/// Main thread, in the world: the character in save slot `slot` is loaded; its own rot comes in.
+void RotForSlot(int slot) {
+    std::lock_guard<std::mutex> lk(g_rot_mu);
+    if (!RotSlotChanged(g_rot_slot, slot)) return;
+    const SlotRot before = ActiveRot(g_rot_slot);
+    SlotRot next = g_rot_file.Get(slot);
+    if (g_rot_slot >= 0) {
+        g_rot_file.Set(before);
+    } else if (before.Stacks() > 0) {
+        // Earned before the slot could be read (this character's): added to its own.
+        int left = kRotMaxStacks - next.Stacks();
+        for (int k = 0; k < kRotKinds; ++k) {
+            const int add = std::clamp(before.kind[k], 0, std::max(0, left));
+            next.kind[k] += add;
+            left -= add;
+        }
+        g_rot_file.Set(next);
+    }
+    Log("rot: save slot %d loaded: its own %d stack(s) (slot %d had %d)", slot, next.Stacks(), g_rot_slot,
+        before.Stacks());
+    g_rot_slot = slot;
+    UseRot(next);
+    WriteRotLocked();
 }
 
 void UpdateRotFactor(const Rules& r) {
@@ -701,7 +766,13 @@ void Init() {
     for (int k = 0; k < kRotKinds; ++k)
         kinds += std::string(" ") + kRotKindName[k] + (g_kind_hooked[k] ? "" : "(NOT hooked)") + "=" +
                  std::to_string(g_kind[k].load());
-    Log("on: rot kinds%s; %d stack(s) kept from the last game", kinds.c_str(), g_stacks.load());
+    std::size_t characters = 0;
+    {
+        std::lock_guard<std::mutex> lk(g_rot_mu);
+        characters = g_rot_file.slots.size();
+    }
+    Log("on: rot kinds%s; rot kept for %zu character(s) (by save slot; it comes in when a save is loaded)",
+        kinds.c_str(), characters);
 }
 
 // H3 (party_enemy_census.h KillEchoTracker): every 0.5 s in a party session, an enemy seen alive
@@ -763,7 +834,9 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
 
     CensusTick(s);
     const bool in_world = s.world_up && !s.loading && s.player;
-    // The rot belongs to the character: a new game (its own prologue) drops the last one's stacks.
+    // The rot belongs to the character: each save slot has its own (party_rot.txt), and a new game
+    // (its own prologue) drops stacks a deleted character left in its slot.
+    if (in_world) RotForSlot(party::flow::CurrentSaveSlot());
     {
         const bool own_prologue = in_world && coop::LocalPrologueHold();
         if (!own_prologue) {

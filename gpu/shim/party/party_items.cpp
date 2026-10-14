@@ -21,6 +21,7 @@
 #include "party_npctalk.h"
 #include "game_state.h"
 #include "party_director.h"
+#include "party_flow.h"
 #include "party_progress.h"
 #include "party_status.h"
 #include "seamless_rules.h"
@@ -31,6 +32,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <mutex>
 #include "../net/bbnet_internal.h"
 #ifdef _WIN32
@@ -195,6 +197,44 @@ std::vector<std::uint32_t> LedgerBitsToSeed(const std::function<bool(std::uint32
     return out;
 }
 
+constexpr std::int32_t kSharedKeyTreasureLots[] = {
+    2400450,  // Hunter Chief Emblem (Cathedral Ward; the plaza gate 12400760)
+    2800290,  // Upper Cathedral Key (Yahar'gul; ObjAct 2400100)
+    2600550,  // Iron Door Key (Nightmare of Mensis; ObjAct 2600020/2600021)
+    2600610,  // Iron Door Key (second copy)
+    3200720,  // Lecture Theatre Key (Byrgenwerth; ObjAct 3200030)
+    3500800,  // Underground Cell Key (Research Hall; ObjAct 3500040)
+    2200360,  // Rune Workshop Tool (Hemwick; the Memory Altar)
+    2411000,  // Blood Gem Workshop Tool (Central Yharnam; blood gems at the workbench)
+};
+
+std::vector<std::int32_t> KeyCatchupLots(const std::function<bool(std::uint32_t)>& own_flag,
+                                         const std::function<bool(std::uint32_t)>& boss_flag) {
+    std::vector<std::int32_t> out;
+    for (const LedgerRow& r : kLedger) {
+        const std::uint32_t bit = kItemLedgerBase + static_cast<std::uint32_t>(r.idx);
+        if (r.done_flag <= 0 || ItemLotDenied(r.lot, kItemNone)) {
+            continue;
+        }
+        const std::uint32_t done = static_cast<std::uint32_t>(r.done_flag);
+        if (own_flag(bit) && own_flag(done) && boss_flag(done) &&
+            std::find(out.begin(), out.end(), r.lot) == out.end()) {
+            out.push_back(r.lot);
+        }
+    }
+    // The shared progression keys / workshop tools found as treasure: picked up (or replayed)
+    // while summoned, their flag reached the own save but the key did not (the guest's save had
+    // 52411000, the Blood Gem Workshop Tool's, and no tool); the corpse never offers it again.
+    for (const std::int32_t lot : kSharedKeyTreasureLots) {
+        const std::int32_t flag = ItemLotFlag(lot);
+        if (flag > 0 && own_flag(static_cast<std::uint32_t>(flag)) &&
+            std::find(out.begin(), out.end(), lot) == out.end()) {
+            out.push_back(lot);
+        }
+    }
+    return out;
+}
+
 std::int32_t ItemLedgerLot(std::int32_t idx) {
     for (const LedgerRow& r : kLedger) {
         if (r.idx == idx) {
@@ -296,19 +336,8 @@ std::optional<ItemGrant> ClassifyFlag(std::int32_t flag, const std::map<std::int
 }
 
 bool SharedKeyTreasureLot(std::int32_t lot) {
-    switch (lot) {
-    case 2400450:  // Hunter Chief Emblem (Cathedral Ward; the plaza gate 12400760)
-    case 2800290:  // Upper Cathedral Key (Yahar'gul; ObjAct 2400100)
-    case 2600550:  // Iron Door Key (Nightmare of Mensis; ObjAct 2600020/2600021)
-    case 2600610:  // Iron Door Key (second copy)
-    case 3200720:  // Lecture Theatre Key (Byrgenwerth; ObjAct 3200030)
-    case 3500800:  // Underground Cell Key (Research Hall; ObjAct 3500040)
-    case 2200360:  // Rune Workshop Tool (Hemwick; the Memory Altar)
-    case 2411000:  // Blood Gem Workshop Tool (Central Yharnam; blood gems at the workbench)
-        return true;
-    default:
-        return false;
-    }
+    return std::find(std::begin(kSharedKeyTreasureLots), std::end(kSharedKeyTreasureLots), lot) !=
+           std::end(kSharedKeyTreasureLots);
 }
 
 bool InstancedTreasureFlag(std::int32_t flag, bool instanced, bool captured) {
@@ -954,6 +983,14 @@ bool LotHasKeyItem(const std::vector<LotSlotState>& slots) {
         }
     }
     return false;
+}
+
+bool KeyCatchupNeeded(const std::vector<LotSlotState>& slots) {
+    return LedgerSkipSuspicious(slots) && LotHasKeyItem(slots);
+}
+
+bool SummonedGiveForSlot(int entry_slot, int current_slot) {
+    return entry_slot < 0 || current_slot < 0 || entry_slot == current_slot;
 }
 
 std::size_t GuestItems::Offer(const std::vector<ItemGrant>& items) {
@@ -1833,6 +1870,7 @@ struct SummonedGive {
     u32 id = 0;
     int count = 0;
     int expect = -1;  // held right after the give (or the last re-give)
+    int slot = -1;    // save slot of the character it was given to (-1 unknown: an older file)
 };
 std::mutex g_sgive_mu;
 std::vector<SummonedGive> g_sgives;
@@ -1860,7 +1898,7 @@ void SaveSummonedGives() {
     {
         std::ofstream f(tmp, std::ios::trunc);
         for (const SummonedGive& g : g_sgives) {
-            f << g.bits << ' ' << g.id << ' ' << g.count << ' ' << g.expect << "\n";
+            f << g.bits << ' ' << g.id << ' ' << g.count << ' ' << g.expect << ' ' << g.slot << "\n";
         }
     }
     std::filesystem::rename(tmp, path, ec);
@@ -1873,8 +1911,16 @@ void LoadSummonedGives() {
     }
     g_sgives_loaded = true;
     std::ifstream f(SummonedGivesPath());
-    SummonedGive g;
-    while (f >> g.bits >> g.id >> g.count >> g.expect) {
+    std::string line;
+    while (std::getline(f, line)) {
+        std::istringstream in(line);
+        SummonedGive g;
+        if (!(in >> g.bits >> g.id >> g.count >> g.expect)) {
+            continue;
+        }
+        if (!(in >> g.slot)) {
+            g.slot = -1;  // a file from before the slot field
+        }
         g_sgives.push_back(g);
     }
     if (!g_sgives.empty()) {
@@ -1886,16 +1932,17 @@ void NoteSummonedGive(u32 bits, u32 id, int count, int after) {
     if (after < 0 || count <= 0) {
         return;
     }
+    const int slot = party::flow::CurrentSaveSlot();
     std::lock_guard<std::mutex> lk(g_sgive_mu);
     for (SummonedGive& g : g_sgives) {
-        if (g.bits == bits && g.id == id) {
+        if (g.bits == bits && g.id == id && g.slot == slot) {
             g.count += count;
             g.expect = after;
             SaveSummonedGives();
             return;
         }
     }
-    g_sgives.push_back({bits, id, count, after});
+    g_sgives.push_back({bits, id, count, after, slot});
     SaveSummonedGives();
 }
 
@@ -1937,7 +1984,13 @@ void SummonedGivesTick(const GameSnapshot& gs, int load_mode, double now) {
     }
     std::string text;
     int regave = 0;
+    const int slot_now = party::flow::CurrentSaveSlot();
+    std::size_t other = 0;
     for (SummonedGive& g : g_sgives) {
+        if (!SummonedGiveForSlot(g.slot, slot_now)) {
+            ++other;  // another character's (save slot g.slot): kept for it
+            continue;
+        }
         const int held = ItemCount(g.bits, g.id);
         const int n = SummonedRegiveCount(g.expect, held, g.count);
         if (n <= 0) {
@@ -1957,14 +2010,81 @@ void SummonedGivesTick(const GameSnapshot& gs, int load_mode, double now) {
     if (!text.empty()) {
         Log("goods given while summoned are missing in the own world; given again: %s", text.c_str());
     }
+    if (other) {
+        Log("goods given while summoned: %zu entr%s for another character (not save slot %d) kept for it", other,
+            other == 1 ? "y" : "ies", slot_now);
+    }
     if (OwnWorld() == 1) {
         RequestGameSave("C3 goods given while summoned, kept at home");
-        Log("own world: %zu good(s) given while summoned are in the own save now; list cleared", g_sgives.size());
-        g_sgives.clear();
+        Log("own world: %zu good(s) given while summoned are in the own save now; list cleared",
+            g_sgives.size() - other);
+        g_sgives.erase(std::remove_if(g_sgives.begin(), g_sgives.end(),
+                                      [slot_now](const SummonedGive& g) { return SummonedGiveForSlot(g.slot, slot_now); }),
+                       g_sgives.end());
     }
     SaveSummonedGives();
     (void)regave;
     (void)load_mode;
+}
+
+/// Main thread: 4 s into each steady OWN world (load mode 0) after a load, every boss-reward key
+/// item this save's ledger says was given but the inventory lacks is given once more and a save is
+/// requested (KeyCatchupLots / KeyCatchupNeeded). From the save alone: no host, no party list.
+/// Playtest 1 save audit: the guest's save had the ledger bits of lot 31000 (Oedon Tomb Key) and
+/// 50000010 (Sword Hunter Badge) and both boss flags, but no key item at all (0.6.0 gave them while
+/// summoned; that inventory is not what the save keeps). Runs after SummonedGivesTick (3 s), so a
+/// good it gives back reads as held here.
+void KeyCatchupTick(const GameSnapshot& gs, int load_mode, double now) {
+    static bool armed = true;
+    static double steady_at = -1;
+    if (load_mode != 0 || !gs.world_up || gs.loading || gs.map_id == 0xffffffffu || !gs.player_rec) {
+        armed = true;
+        steady_at = -1;
+        return;
+    }
+    if (!armed) {
+        return;
+    }
+    if (steady_at < 0) {
+        steady_at = now;
+    }
+    if (now - steady_at < 4.0) {
+        return;
+    }
+    armed = false;
+    const u64 man = Ptr(kFlagMan);
+    if (!man || LoadMode(man) != 0 || OwnWorld() != 1) {
+        return;
+    }
+    const std::vector<std::int32_t> lots = KeyCatchupLots(
+        [man](std::uint32_t id) { return IsFlag(man, id); },
+        [](std::uint32_t id) { return progress::CategoryOf(id) == progress::Category::boss_defeated; });
+    int gave = 0;
+    for (const std::int32_t lot : lots) {
+        const std::vector<LotSlotState> slots = LotSlots(lot);
+        if (!KeyCatchupNeeded(slots)) {
+            continue;
+        }
+        const std::int32_t idx = ItemLedgerIndex(lot);
+        char why[128];
+        if (idx >= 0) {
+            std::snprintf(why, sizeof why, "ledger %d = flag %d set with boss flag %d in this save", idx,
+                          int(kItemLedgerBase) + idx, ItemLedgerDoneFlag(idx));
+        } else {
+            std::snprintf(why, sizeof why, "shared key treasure, flag %d set in this save", ItemLotFlag(lot));
+        }
+        for (const LotSlotState& sl : slots) {
+            const int n = std::max(1, sl.num);
+            const bool ok = GiveItem(0x40000000u, static_cast<u32>(sl.id), n);
+            const int after = ItemCount(0x40000000u, static_cast<u32>(sl.id));
+            Log("key item catch-up: %s goods %d x%d (lot %d, %s; held %d -> %d)",
+                ok ? "gave" : "could not give (GiveItemDirect unavailable)", sl.id, n, lot, why, sl.owned, after);
+            gave += ok ? 1 : 0;
+        }
+    }
+    if (gave) {
+        RequestGameSave("C3 key item catch-up");
+    }
 }
 
 enum class SummonedResult { Given, Skipped, Defer };
@@ -2724,6 +2844,7 @@ void ItemsTick() {
     ItemGetWatchTick(gs, Now());
     KeyGoodsWatchTick(gs, s.load_mode, Now());
     SummonedGivesTick(gs, s.load_mode, Now());
+    KeyCatchupTick(gs, s.load_mode, Now());
     static ItemApplyMode gate_logged = ItemApplyMode::None;
     const ItemApplyMode mode_now = ItemApplyModeNow(s);
     if (mode_now != gate_logged) {
