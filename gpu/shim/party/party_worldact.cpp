@@ -226,17 +226,28 @@ const std::vector<GateRule>& GateRules() {
 const std::vector<BossGate>& BossGates() {
     // flag_tool.py emevd --all-ops, every `ゲストがボス部屋入場` event: {event, its last 3[0] flag
     // (= the flag `ボスが動き出す` waits on), the flag it sets, its boss flag}.
+    // intro_flag: the 3[0] ON condition before the host-entered one (the host's first-fight entry
+    // event, an intro cutscene for most); fog_entity: the 3[24] action-button object (the fog).
     static const std::vector<BossGate> gates = {
-        {12204891, 12204800, 12204801, 12201800}, {12304811, 12304800, 12304801, 12301800},
-        {12304731, 12304700, 12304701, 12301700}, {12404841, 12404800, 12404801, 12401800},
-        {12414731, 12414700, 12414701, 12411700}, {12414811, 12414800, 12414801, 12411800},
-        {12424811, 12424800, 12424801, 12421800}, {12424711, 12424700, 12424701, 12421700},
-        {12504811, 12504800, 12504801, 12501800}, {12604846, 12604800, 12604801, 12601800},
-        {12604861, 12604850, 12604851, 12601850}, {12704841, 12704800, 12704801, 12701800},
-        {12804881, 12804800, 12804801, 12801800}, {13304871, 13304800, 13304801, 13301800},
-        {13404801, 13404808, 13404809, 13401800}, {13404851, 13404858, 13404859, 13401850},
-        {13504801, 13504808, 13504809, 13501800}, {13504851, 13504858, 13504859, 13501850},
-        {13604801, 13604808, 13604809, 13601800},
+        {12204891, 12204800, 12204801, 12201800, 12201802, 2201800},
+        {12304811, 12304800, 12304801, 12301800, 12301802, 2301800},
+        {12304731, 12304700, 12304701, 12301700, 12301702, 2301810},
+        {12404841, 12404800, 12404801, 12401800, 12401802, 2401800},
+        {12414731, 12414700, 12414701, 12411700, 12411702, 2411800},
+        {12414811, 12414800, 12414801, 12411800, 12411802, 2411810},
+        {12424811, 12424800, 12424801, 12421800, 12421802, 2421800},
+        {12424711, 12424700, 12424701, 12421700, 0, 2421700},
+        {12504811, 12504800, 12504801, 12501800, 12501802, 2501800},
+        {12604846, 12604800, 12604801, 12601800, 12601802, 2601800},
+        {12604861, 12604850, 12604851, 12601850, 12601852, 2601850},
+        {12704841, 12704800, 12704801, 12701800, 12701802, 2701800},
+        {12804881, 12804800, 12804801, 12801800, 12801802, 2801800},
+        {13304871, 13304800, 13304801, 13301800, 13301802, 3301800},
+        {13404801, 13404808, 13404809, 13401800, 13401801, 3401800},
+        {13404851, 13404858, 13404859, 13401850, 13401851, 3401850},
+        {13504801, 13504808, 13504809, 13501800, 13501801, 3501800},
+        {13504851, 13504858, 13504859, 13501850, 13501851, 3501810},
+        {13604801, 13604808, 13604809, 13601800, 13601801, 3601800},
     };
     return gates;
 }
@@ -267,6 +278,15 @@ bool BossGateSkipCondition(std::int32_t event_id, int bank, int id, std::uint32_
     return g && g->host_flag == flag;
 }
 
+bool BossGateWaitsForHost(const BossGate& g, bool intro_done, bool host_in, bool boss_dead) {
+    return g.intro_flag != 0 && !intro_done && !host_in && !boss_dead;
+}
+
+bool BossGateInBlock(const BossGate& g, std::uint32_t map) {
+    const std::uint32_t area = g.host_flag / 100000 % 100, block = g.host_flag / 10000 % 10;
+    return map != 0xffffffffu && (map >> 24) == area && ((map >> 16) & 0xff) == block;
+}
+
 bool BossGateHostOpens(const BossGate& g, bool guest_in, bool host_in, bool boss_dead, std::uint32_t host_map) {
     const std::uint32_t area = g.host_flag / 100000 % 100, block = g.host_flag / 10000 % 10;
     return guest_in && !host_in && !boss_dead && host_map != 0xffffffffu && (host_map >> 24) == area &&
@@ -283,6 +303,7 @@ bool BossGateHostOpens(const BossGate& g, bool guest_in, bool host_in, bool boss
 #include "party_director.h"
 #include "party_link.h"
 #include "party_guestsvc.h"
+#include "party_status.h"
 
 #include <atomic>
 #include <chrono>
@@ -1776,6 +1797,70 @@ bool OnHostEvent(int slot, const std::string& body, std::string* why) {
     return true;
 }
 
+namespace {
+// Guest (playtest 1 bug 8): standing at a boss fog of the host's world that has no prompt yet
+// because the host has not had its first fight there (the intro condition stays, BossGate): a
+// notice says why, at most once a minute per fog, and a log line.
+void FogWaitTick(const GameSnapshot& s) {
+    static double last_scan = 0;
+    static std::uint32_t last_gate = 0;
+    static double last_notice = -1e9;
+    const double now = Now();
+    if (s.session_role != 6 || !s.world_up || s.loading || now - last_scan < 1.0) {
+        return;
+    }
+    last_scan = now;
+    float me[3] = {};
+    const bool have_me = MyPos(me);
+    static std::string last_state;
+    std::string state;
+    const BossGate* hit = nullptr;
+    float hit_d = 0;
+    for (const BossGate& g : BossGates()) {
+        if (!g.fog_entity || !BossGateInBlock(g, s.map_id)) {
+            continue;
+        }
+        bool intro = false, host_in = false, dead = false;
+        const bool read = progress::ReadFlag(g.intro_flag ? g.intro_flag : g.host_flag, &intro) &&
+                          progress::ReadFlag(g.host_flag, &host_in) && progress::ReadFlag(g.boss_flag, &dead);
+        float fog[3] = {};
+        const bool found = ObjectPoint(g.fog_entity, 0.0f, 0.0f, fog);
+        float d = -1;
+        if (found && have_me) {
+            const float dx = fog[0] - me[0], dy = fog[1] - me[1], dz = fog[2] - me[2];
+            d = std::sqrt(dx * dx + dy * dy + dz * dz);
+        }
+        const bool waits = read && BossGateWaitsForHost(g, intro, host_in, dead);
+        // Diagnostics: the gate's state whenever it changes (distance bucket: near / 20 m / far).
+        char buf[160];
+        std::snprintf(buf, sizeof buf, " [%u: read %d intro %d host %d dead %d fog %s%s]", g.guest_event, read ? 1 : 0,
+                      intro ? 1 : 0, host_in ? 1 : 0, dead ? 1 : 0, !found ? "not loaded" : !have_me ? "?" : "",
+                      !found || !have_me ? "" : d <= kBossFogNoticeRange ? "near" : d <= 20.0f ? "within 20 m" : "far");
+        state += buf;
+        if (waits && found && have_me && d <= kBossFogNoticeRange && !hit) {
+            hit = &g;
+            hit_d = d;
+        }
+    }
+    if (state != last_state) {
+        last_state = state;
+        Log("guest: boss fogs of this block:%s", state.empty() ? " none" : state.c_str());
+    }
+    if (hit) {
+        const BossGate& g = *hit;
+        const double d = hit_d;
+        if (last_gate == g.guest_event && now - last_notice < 60.0) {
+            return;
+        }
+        last_gate = g.guest_event;
+        last_notice = now;
+        party::status::SetLastEvent(kBossFogWaitNotice);
+        Log("guest: at boss fog %d (event %u, %.1f m): first fight here - the host goes in first (host's first-fight "
+            "flag %u off); notice shown", g.fog_entity, g.guest_event, d, g.intro_flag);
+    }
+}
+} // namespace
+
 void Tick(const GameSnapshot& s, party::PartyLink* link) {
     State& st = S();
     WatchTick(s);
@@ -1785,6 +1870,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
     }
     const PartyRole role = PartyDirector::Get().Role();
     if (role == PartyRole::Guest) {
+        FogWaitTick(s);
         GuestTick(s, link);
     } else if (role == PartyRole::Host) {
         // The fixture's clock on the host (kill=N: the host's own kill, each player rolls its drop).
