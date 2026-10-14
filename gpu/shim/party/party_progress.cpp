@@ -6,6 +6,9 @@
 #include "party_progress.h"
 #include "party_async_io.h"
 #include "party_perf.h"
+#ifndef BB_PARTY_PROGRESS_NO_GAME
+#include "party_director.h"  // PartyPrologueHold (#19)
+#endif
 
 #include "../net/json.h"
 
@@ -2023,6 +2026,23 @@ void GuestTick(Global& g, const FlagStore& store, u32 map_id) {
     const std::size_t pending = g.applier.Pending();
     if (!pending) {
         return;
+    }
+    {
+        // Playtest 1 #19: nothing of the host's world goes into a prologue world (this guest's, or
+        // while the host is in its own prologue); the changes wait in the queue until both are ready.
+        static bool held = false;
+        const char* why = nullptr;
+        if (coop::PartyPrologueHold(&why)) {
+            if (!held) {
+                held = true;
+                Log("guest: %zu host flag change(s) held: %s (#19: no sync into a prologue world)", pending, why);
+            }
+            return;
+        }
+        if (held) {
+            held = false;
+            Log("guest: prologue over: applying the %zu held host flag change(s)", pending);
+        }
     }
     const auto before = g.applier.counters();
     const std::size_t held_before = g.applier.Held();

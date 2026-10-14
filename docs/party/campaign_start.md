@@ -213,7 +213,10 @@ Both saves must be in the following state for a summon [C unless marked]:
 3. **Prologue (parallel, solo)**: state `PROLOGUE` while `12410000 OFF || 9401 OFF || 12101020 OFF`.
    Each player wakes in the clinic, dies or uses the lamp, sees the first Dream, takes the starting weapons and
    uses the headstone. The overlay shows each member's step (flags below). The director rings no bells.
-4. **Ready**: `12410000 && 9401 && 12101020 && 12101021`, in the world, not loading, 9180 OFF. Optional grants
+4. **Ready**: `12410000 && 9401 && 12101020 && 12101021`, out of the first Dream visit (seen outside m21_00 after
+   taking the weapons, i.e. after the headstone, or 12100105 Doll awake; playtest 1 #19), in the world, not loading,
+   9180 OFF. Nothing of the party touches a prologue world (summons, gathers, catch-up, flag / item / cutscene syncs,
+   rot), and summons start only once every connected member is ready, whoever finishes first. Optional grants
    (§4.3) run here once, in the player's own world (role 0).
 5. **Gather**: the host director picks the meeting point. Default: the host's current spot. If the host is in the
    Dream, B1 travel to the sickroom lamp **2412950** (or stay in the Dream with the Dream patch).
