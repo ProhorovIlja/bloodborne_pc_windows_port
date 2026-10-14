@@ -2473,6 +2473,52 @@ bool OnHostGiftUp(int slot, const std::string& body, std::string* why) {
     return true;
 }
 
+/// H3 diagnostic (par_c6): the unique key goods of the ledger lots (Oedon Tomb Key, badges, ...):
+/// their held counts are logged once in each world and every change after that, with the state
+/// (map, load mode, session), so a key that vanishes from a save shows where (live: a guest's
+/// Oedon Tomb Key given while summoned was gone after its next restart while its done flag stayed).
+void KeyGoodsWatchTick(const GameSnapshot& gs, int load_mode, double now) {
+    static double next = 0;
+    static std::map<std::int32_t, int> last;
+    static bool baseline = false;
+    if (!gs.world_up || gs.loading || gs.map_id == 0xffffffffu || !gs.player_rec) {
+        baseline = false;  // a load: the next world logs its baseline again
+        next = now + 3.0;
+        return;
+    }
+    if (now < next) {
+        return;
+    }
+    next = now + 5.0;
+    std::map<std::int32_t, int> held;
+    for (const LedgerRow& r : kLedger) {
+        for (const LotSlotState& sl : LotSlots(r.lot)) {
+            if (sl.category == 4 && sl.max_num == 1 && sl.max_storage <= 0 && sl.owned >= 0) {
+                held[static_cast<std::int32_t>(sl.id)] = sl.owned;
+            }
+        }
+    }
+    if (held.empty()) {
+        return;
+    }
+    std::string text;
+    for (const auto& [id, n] : held) {
+        const auto it = last.find(id);
+        if (!baseline) {
+            text += (text.empty() ? "" : ", ") + std::to_string(id) + " x" + std::to_string(n);
+        } else if (it != last.end() && it->second != n) {
+            text += (text.empty() ? "" : ", ") + std::to_string(id) + " " + std::to_string(it->second) + " -> " +
+                    std::to_string(n);
+        }
+    }
+    if (!text.empty()) {
+        Log("key goods %s: %s (%s, load mode %d)", baseline ? "changed" : "held", text.c_str(), Describe(gs).c_str(),
+            load_mode);
+    }
+    last = std::move(held);
+    baseline = true;
+}
+
 void ItemsTick() {
     if (!g_on.load()) {
         return;
@@ -2498,6 +2544,7 @@ void ItemsTick() {
     s.cutscene = CutscenePlaying();
     s.boss_quiet = BossQuiet(Now());
     ItemGetWatchTick(gs, Now());
+    KeyGoodsWatchTick(gs, s.load_mode, Now());
     static ItemApplyMode gate_logged = ItemApplyMode::None;
     const ItemApplyMode mode_now = ItemApplyModeNow(s);
     if (mode_now != gate_logged) {
