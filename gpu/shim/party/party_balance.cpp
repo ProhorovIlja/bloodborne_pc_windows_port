@@ -29,6 +29,7 @@
 #include "party_link.h"
 #include "party_status.h"
 #include "party_travel.h"
+#include "party_worldact.h"
 #include "seamless_rules.h"
 
 #include <algorithm>
@@ -842,12 +843,30 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         const int dialog = in_world ? Field<int>(Slot(kSlotMenuManBal), 0x78, 0) : 0;
         float pos[3] = {}, d[3] = {};
         u32 lamp = 0;
-        if (dialog && !st.dialog_was && hp > 0 && LocalPos(s.player, pos)) lamp = NearestLampSpot(s.map_id, pos, d);
+        float spot_m = -1, obj_m = -1;
+        if (dialog && !st.dialog_was && hp > 0 && LocalPos(s.player, pos)) {
+            lamp = NearestLampSpot(s.map_id, pos, d);
+            spot_m = lamp ? std::sqrt(d[0] * d[0] + d[2] * d[2]) : -1.0f;
+            // The lamp itself stands a few m from its revive spot (Central Yharnam 2412951: 4.6 m,
+            // live 2026-10-14: the box opened 5.7 m from the spot): also measured to the lamp's
+            // object (map entity = the ReturnPoint id - 1000, or - 2000), the nearest one counts.
+            for (const u32 off : {1000u, 2000u}) {
+                float o[3];
+                if (!lamp || !worldact::ObjectPoint(static_cast<std::int32_t>(lamp - off), 0.0f, 0.0f, o)) continue;
+                const float od[3] = {pos[0] - o[0], pos[1] - o[1], pos[2] - o[2]};
+                const float m = std::sqrt(od[0] * od[0] + od[2] * od[2]);
+                if (obj_m < 0 || m < obj_m) obj_m = m;
+                if (m < std::sqrt(d[0] * d[0] + d[2] * d[2])) d[0] = od[0], d[1] = od[1], d[2] = od[2];
+            }
+        }
         if (lamp && LampMenuRest(true, hp > 0, d[0], d[1], d[2])) {
-            char why[96];
-            std::snprintf(why, sizeof why, "lamp menu at lamp %u (%.1f m, dialog %d)", lamp,
-                          std::sqrt(d[0] * d[0] + d[2] * d[2]), dialog);
+            char why[128];
+            std::snprintf(why, sizeof why, "lamp menu at lamp %u (spot %.1f m, lamp %.1f m, dialog %d)", lamp, spot_m,
+                          obj_m, dialog);
             CleanseRot(r, why, now, st);
+        } else if (lamp && spot_m >= 0 && spot_m < 15.0f) {
+            Log("dialog %d opened %.1f m from lamp %u's spot (lamp %.1f m): no lamp menu, not a rest", dialog, spot_m,
+                lamp, obj_m);
         }
         if (in_world) st.dialog_was = dialog != 0;
         // A level up (the Doll) is a rest too.
