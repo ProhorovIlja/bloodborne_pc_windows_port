@@ -693,7 +693,15 @@ Rules FromSettings() {
     r.enemy_hp = v.party_enemy_hp;
     r.enemy_damage = v.party_enemy_damage;
     r.enemy_poise = v.party_enemy_poise;
+    r.friendly_fire = v.party_friendly_fire;
     return Clamped(r);
+}
+
+bool HostRules(Rules* out) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    if (!g_have_host) return false;
+    if (out) *out = g_host;
+    return true;
 }
 
 Rules InForce() {
