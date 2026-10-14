@@ -2709,6 +2709,23 @@ void ItemsTick() {
                                                   : "closed",
             Describe(gs).c_str(), s.load_mode, s.own_world);
     }
+    {
+        // Playtest 1 #19: no item grants into a prologue world (this guest's, or while the host is
+        // in its own prologue); they wait in the queue.
+        static bool held = false;
+        const char* why = nullptr;
+        if (coop::PartyPrologueHold(&why)) {
+            if (!held) {
+                held = true;
+                Log("item grants held: %s (#19: no sync into a prologue world)", why);
+            }
+            return;
+        }
+        if (held) {
+            held = false;
+            Log("item grants: prologue over; the queue goes on");
+        }
+    }
     std::optional<ItemGrant> g;
     ItemApplyMode mode;
     const char* hold = nullptr;
