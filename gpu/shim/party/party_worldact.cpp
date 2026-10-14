@@ -304,6 +304,7 @@ bool BossGateHostOpens(const BossGate& g, bool guest_in, bool host_in, bool boss
 #include "party_link.h"
 #include "party_guestsvc.h"
 #include "party_status.h"
+#include "party_droproll.h"
 
 #include <atomic>
 #include <chrono>
@@ -384,8 +385,6 @@ struct State {
 // MSB treasure spawns seen on this game (0x17DC300(MapItemMan, entity handle, MsbEvent, pos)):
 // the fixture's pickup targets. Main thread.
 std::atomic<std::uint64_t> g_pickups{0};  // map item pickups on this game (PickupEntry)
-std::mutex g_drop_mu;
-std::vector<std::uint32_t> g_drop_chrs;     // chr handles whose drop this game rolled (EnemyDropEntry)
 std::atomic<double> g_pickup_at{-1e9};     // Now() of the last one
 std::mutex g_treasure_mu;
 struct Treasure {
@@ -1623,9 +1622,12 @@ BB_COOP_SYSV void TreasureSpawnEntry(std::uint64_t, std::uint64_t handle, std::u
 
 // Test fixture diagnostics: MapItemMan record inserts by kind (0x17DC300's tail) and removals.
 template <int K>
-BB_COOP_SYSV void RecordInsertEntry(std::uint64_t man, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t,
+BB_COOP_SYSV void RecordInsertEntry(std::uint64_t man, std::uint64_t a1, std::uint64_t, std::uint64_t, std::uint64_t,
                                     std::uint64_t) {
     g_rec_man.store(man);
+    if (K == 2) {
+        droproll::FixtureInsert(a1);  // the drop insert: the shared roll's result log
+    }
     if (g_rec[K].fetch_add(1) < 2) {
         Log("test: MapItemMan record insert kind %d (MapItemMan %p, role %d)", K, reinterpret_cast<void*>(man),
             LocalSessionRole());
@@ -1648,15 +1650,6 @@ BB_COOP_SYSV void RecordRemoveEntry(std::uint64_t, std::uint64_t handle_ptr, std
     }
 }
 
-BB_COOP_SYSV void EnemyDropEntry(std::uint64_t, std::uint64_t chr_handle, std::uint64_t npc, std::uint64_t,
-                                 std::uint64_t, std::uint64_t) {
-    Log("enemy drop roll on this game (role %d): chr handle %#x, npc param %p", LocalSessionRole(),
-        unsigned(chr_handle), reinterpret_cast<void*>(npc));
-    std::lock_guard<std::mutex> lk(g_drop_mu);
-    if (g_drop_chrs.size() < 64) {
-        g_drop_chrs.push_back(std::uint32_t(chr_handle));
-    }
-}
 BB_COOP_SYSV void PickupEntry(std::uint64_t, std::uint64_t handle_ptr, std::uint64_t, std::uint64_t, std::uint64_t,
                               std::uint64_t) {
     std::int32_t h = -1;
@@ -1747,9 +1740,10 @@ void Init() {
     Log("ObjAct kick log %s", a && b ? "on" : "partly off");
     // Enemy drop rolls and map item pickups: logged (the D4 evidence) - only with D4 on or a test.
     const bool d4 = st.pickups || std::getenv("BB_PARTY_WORLDACT_TEST");
+    // The enemy drop roll (0x17DD0B0): one shared roll per kill for the party (party_droproll.h),
+    // logged with D4 on or a test.
+    droproll::Init(d4);
     if (d4) {
-    HookPrologue(0x17DD0B0, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
-                 &EnemyDropEntry, "enemy drop roll (log)");
     HookPrologue(0x17D8570, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                  &PickupEntry, "map item pickup (log)");
     }
@@ -1869,6 +1863,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
         return;
     }
     const PartyRole role = PartyDirector::Get().Role();
+    droproll::Tick(s, link, role == PartyRole::Host);
     if (role == PartyRole::Guest) {
         FogWaitTick(s);
         GuestTick(s, link);
