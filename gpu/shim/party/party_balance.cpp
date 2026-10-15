@@ -849,8 +849,43 @@ void KillEchoTick(const GameSnapshot& s) {
     }
 }
 
+// Test aid (ngfix, BB_PARTY_TEST_ENEMY_HP=1): every 5 s in a steady world, the max HP of the loaded
+// enemies with the lowest map entity ids (the same ids on every game) and the live NG cycle
+// (GameDataMan +0x68), logged when it changes: the same enemy's HP compared across the party.
+void EnemyHpTestTick(const GameSnapshot& s) {
+    static const bool on = [] {
+        const char* v = std::getenv("BB_PARTY_TEST_ENEMY_HP");
+        return v && *v == '1';
+    }();
+    static Clock::time_point next{};
+    static std::string last;
+    if (!on || !s.world_up || s.loading || !s.player) return;
+    const auto now = Clock::now();
+    if (now < next) return;
+    next = now + std::chrono::seconds(5);
+    const u64 wcm = Slot(kSlotWorldChrMan);
+    if (!wcm) return;
+    std::vector<std::pair<u32, u64>> list;
+    for (const auto& e : LoadedEnemyList(wcm))
+        if (e.entity) list.push_back({e.entity, e.chr});
+    std::sort(list.begin(), list.end());
+    std::string line;
+    for (std::size_t i = 0; i < list.size() && i < 6; ++i) {
+        const u64 dm = Field<u64>(Field<u64>(list[i].second, 0x3b0), 0x20);
+        char b[64];
+        std::snprintf(b, sizeof b, " %u max HP %d (base %d);", list[i].first, Field<int>(dm, 0xfc, -1),
+                      Field<int>(dm, 0x100, -1));
+        line += b;
+    }
+    if (line.empty() || line == last) return;
+    last = line;
+    Log("test: enemy HP in %s, live NG cycle %d:%s", MapName(s.map_id).c_str(),
+        int(Field<u32>(s.game_data_man, 0x68, 0xffffffffu)), line.c_str());
+}
+
 void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     KillEchoTick(s);
+    EnemyHpTestTick(s);
     if (!On()) return;
     TickState& st = S();
     const auto now = Clock::now();
