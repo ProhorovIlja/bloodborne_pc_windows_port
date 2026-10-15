@@ -172,3 +172,23 @@ The other device lost seen this cycle (port7's try of Mrsuss60 25f95440's timer 
 merged: `read_tsc` through the process counter at a pinned 1 GHz) came ~7.7 s into boot after a
 GPU library assertion: a guest-side timing change, not a shader or a load; common to both is only
 that neither left a report on disk, which the new `device_lost_*.log` covers.
+
+## 2026-10-15 segment: Cathedral Ward -> Old Yharnam -> Forbidden Woods -> Byrgenwerth (agent pard)
+
+The next main-path segment of the live playtests, 2 loopback instances, the test saves
+(`instances.py run --count 2 --party`; the first run of a chain with `--fresh-saves`, each later run
+a *Continue party game* of the saves the run before left). Test steps: `host_warp` (party travel),
+`host_kill` (Lua ForceDead by id), the guest's fog by `BB_PARTY_WORLDACT_TEST=obj=<fog>` (stands at
+the fog until the prompt is up, Cross). Boss flags read with `BB_PARTY_PROGRESS_TEST_READ`, own
+pools dumped with `BB_PARTY_FLAG_DUMP=1`, `tools/party/save_check.py` on S5b.
+
+| Run | Milestone | Result |
+|---|---|---|
+| S1d | Vicar Amelia's first fight (host's Amelia flags cleared), started by the **guest** at her fog | **pass**: guest through the fog 165.6 s; the host's first-fight event ran (host's chr visit 0.07 s, put back 217 m away at the lamp); intro 24000060 on the host and the guest's live mirror at 166.0 s; the guest in the fight with Amelia's health bar (screenshots) |
+| S5a | Old Yharnam: party travel from the Dream, guest-started Blood-starved Beast fight | **pass / partial**: travel and re-join 20.9 s; the guest's fog started the fight (boss bar host 58.05 s, guest 58.11 s; the base save had BSB's first entry already, so this was the re-fight path); the `host_kill` step found no target (a boss is not in the enemy census) - test aid fixed (`host_kill` of a boss entity uses ForceDead by id again), BSB kill not re-run |
+| S5b | Continue; Forbidden Woods travel, Shadows of Yharnam (3 kills) | **pass**: travel, re-join 33.5 s; boss defeat 12701800: the guest +2 Insight, reward (blood gem) given while summoned, 12701800 / 9463 in the guest's own pool (dumps) and still there after its Leave; save_check consistent |
+| S5c | Continue; Byrgenwerth (Moonside Lake lamp), Rom | **pass**: both read 12701800 = 1/1 after the restart; travel, re-join 13.3 s; Rom's defeat 13201800: guest +2 Insight, reward lot 51001900 (goods 1591) given while summoned, 13201800 / 9465 in its own pool |
+
+Not covered here: the Blood Moon (Rom dead + the host near Queen Yharnam) and its travel to
+Yahar'gul (the "Travel with the party?" path of scripted warps, quest_audit P8), Cathedral Ward's
+plaza gate with the shared Hunter Chief Emblem, the Blood-starved Beast kill.

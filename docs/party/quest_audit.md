@@ -4,7 +4,7 @@ Static audit of every co-op relevant event of Bloodborne 1.09 (EMEVD event scrip
 ObjActParam, NpcParam, talk ESDs, MSBs) against what the party code does today
 (`windows-upstream-0.5` after 0.6.1 packaging). Goal: find before the next Internet session
 (the host and the guest, continuing from Old Yharnam) the key items, doors, warps, fog walls and
-NPC steps that can break co-op. Nothing here was run live (except P1 and P7, marked live); "verified" means checked in the data
+NPC steps that can break co-op. Nothing here was run live (except P1, P2, P3, P5 and P7, marked live); "verified" means checked in the data
 and the code, not on screen.
 
 How it was made (repeatable, game data read-only from an agent game copy):
@@ -67,10 +67,14 @@ The ten things most likely to go wrong in the next ~5 hours, and what to do in g
    everyone); with the fix guest log `NPC gift trigger 9074 set by its talk: to the host`, host
    `award lot 35000`, guest `gave ... lot 35000 ... goods 1400 x4 (held 2 -> 6)`, both saves 1400 x6,
    the host's own talk afterwards gave nothing more. *In game:* either player may talk.
-4. **Vicar Amelia: the first fight starts with the host.** Her intro (12401802, remo 24000060)
-   runs only on the host (chr type 0), so the guest-first fog does not apply. *In game:* the host
-   goes through the fog first; the guest follows. Reward lot 50000001 (goods 4001) is a ledger lot
-   -> shared.
+4. **Vicar Amelia: either player may start the first fight (P5, live).** Her intro (12401802,
+   remo 24000060) runs only on the host (chr type 0). A guest may now go through her fog first:
+   the host's game runs the intro event at once (the host's character visits the event's region
+   for a moment and is put back), the scene plays on every screen, then the fight is on. *In
+   game:* whoever is at the fog goes in; the host walks in through its own fog after the scene.
+   Live 2026-10-15 (pard S1d): guest through the fog 165.6 s, host scene 166.0 s, guest's live
+   mirror 166.0 s, guest in the fight with Amelia's health bar while the host stood 217 m away.
+   Reward lot 50000001 (goods 4001) is a ledger lot -> shared.
 5. **Amelia's skull (evening -> night)**: 12401803 runs only on the host. *In game:* the **host**
    examines the skull at the altar; the guest sees the scene as a live mirror and its time of day
    is caught up. If the guest's world stays evening, it changes at its next summon (time-of-day
@@ -178,10 +182,10 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | 12 ladders | 12301000-12301011 (2009[0]) | kicks down | mirrored; own-save set-only | ok | |
 | Djura (tower) | talk t230323, NpcParam 6300 (solid); NPC state block 1xxx; gift trigger 9071 -> lot 33000 Powder Keg Hunter Badge + Bold Hunter's Mark (flag 50001700) | talk, gift through common 9040 | can talk (6300 has no ghost bit); its 9040 instance ended at load, so its view says "gift given"; its talk's trigger 9071 now goes to the host (P1) | ok (P1 fixed; same path as Eileen, live) | either talks (checklist 3); P1 |
 | "Beast guardian" talk suppression | 12300750 / 12300751 (world_state) | | mirrored | ok | |
-| Blood-starved Beast | defeat 12301800, host entry 12301802 (no remo), guest entry 12304811, late guest 12301803; sets 2300 (area gate, never_sync), 9453 | fight | B2 guest fog first allowed (no intro) | ok | |
+| Blood-starved Beast | defeat 12301800, host entry 12301802 (no remo), guest entry 12304811, late guest 12301803; sets 2300 (area gate, never_sync), 9453 | fight | first fight: the host's entry is a region (no fog for the host, single-player only `3[6]` state 0 = host), the guest's fog waits for it; P5 (2026-10-15): a guest may go through first, the host's game runs 12301802 (region visit) and the boss starts; re-fights: B2 guest fog first | ok | P5 |
 | Blood-starved Beast reward | lot 80000000 Pthumeru Chalice, flag 5000 | gets it | C3 replay (flag 5000), popup after the banner | ok | checklist 2 |
 | 9453 side effects | Snatchers (12400791, 1270501), Hunter's Dream / Messenger changes | | C2 sets 9453 in the own save | ok | checklist 1 |
-| Darkbeast Paarl | defeat 12301700 (2003[12]), host entry 12301702 (no remo); reward lots 50800000 Spark Hunter Badge (ledger 38), 50800005 | fight | guest fog first allowed; ledger replay | ok | |
+| Darkbeast Paarl | defeat 12301700 (2003[12]), host entry 12301702 (no remo); reward lots 50800000 Spark Hunter Badge (ledger 38), 50800005 | fight | first fight: the host comes within 16 m (3[3]) or a guest goes through the fog first (P5); re-fights: B2; ledger replay | ok | P5 |
 | NPC summons (Alfred, Yamamura, Yahar'gul hunter) | 12304400-12304432, need the Old Hunter Bell | signs only in single player | none | minor | none (vanilla) |
 
 ### Central Yharnam / Iosefka's Clinic / Great Bridge (m24_01) - done, kept for reference
@@ -207,13 +211,13 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Hunter Chief Emblem | lot 2400450, flag 52400450 (treasure) | picks up | was per player | major | F2 |
 | Plaza gate (gatekeeper) | 12400760: goods 4011 held by the local player + action 2400030 at 2401220; sets 12400160 (world_state); clears area gates 2400/2401/2405/2406 | opens | opens with its own emblem (now shared); a host-opened gate is mirrored and goes into the own save | ok after F2 | |
 | Church lifts / trick doors | 12400147/148 (state 12400150/151), 12400824/825 (12400827/828), trick doors 12400155/156 (12400157), 12400125/126 (12400177/178), stair door 12400174/175 | rides | mirrored; doors that close again stay open in the own save (set-only) | minor | none |
-| Vicar Amelia | defeat 12401800 (sets 2400-2402 never_sync), host entry 12401802 remo 24000060 (chr type 0), 9455 | intro + fight | intro only as the live mirror; fog: host first | major (wall until the host enters) | checklist 4; P5 |
+| Vicar Amelia | defeat 12401800 (sets 2400-2402 never_sync), host entry 12401802 remo 24000060 (chr type 0), 9455 | intro + fight | either goes in first: a guest's fog starts the host's intro event (P5, live 2026-10-15); intro on every screen (live mirror) | ok | checklist 4; P5 |
 | Amelia reward | lot 50000001 goods 4001 (ledger 35); ObjAct 2400080 needs goods 4001 | gets it | ledger replay | ok | |
 | Amelia's skull -> night | 12401803 (host only), remo 24000030 tod 2 | plays, world -> night | live mirror; time-of-day catch-up into the own save (upward) | minor | checklist 5 |
 | Snatchers | spawn 12400791 / 12400797 (9453 and not 9802); kidnap 12400780 (chr type 0) sets 9420 | kidnapped -> Gaol | dies normally; follows the host's respawn (live, P7) | ok | F1, checklist 1 |
 | Insight checks | 12404000 (host only): Insight >= 15 -> 12404002, >= 40 -> 12404001, >= 50 -> 12404003 (Cathedral Ward variants, DLC Amygdala) | | zone 4 flags: the host's values via the vanilla join snapshot | minor | |
-| Oedon Chapel NPCs | Dweller 113010 (t240312 -> gift 9045 Pebble), lonely old woman 6090 (t240316 -> 9054-9057 sedatives), old man 6080 (t240317/t240338 -> 9059-9064 pellets), Arianna 6110-6113 (Blood of Arianna: common 9100, repeatable, denied), Adella (9100, denied), Alfred 6151/6155 (t240333/t240343 -> 9072/9073), Eileen 6161 (t240325/t240341/t240342 -> 9074/9075 Crow Hunter Badge) | talk, gifts | solid since playtest 1; gifts as Djura; Blood of Arianna / Adella never for a guest | ok (P1 fixed) / minor (9100: P2) | P1, P2 |
-| Beast beggar (suspicious beggar) | NpcParam 504020 (ghost bit kept as an enemy row), t240217 | talk | ghost on the guest: cannot talk | minor | P3 |
+| Oedon Chapel NPCs | Dweller 113010 (t240312 -> gift 9045 Pebble), lonely old woman 6090 (t240316 -> 9054-9057 sedatives), old man 6080 (t240317/t240338 -> 9059-9064 pellets), Arianna 6110-6113 (Blood of Arianna: common 9100, repeatable, denied), Adella (9100, denied), Alfred 6151/6155 (t240333/t240343 -> 9072/9073), Eileen 6161 (t240325/t240341/t240342 -> 9074/9075 Crow Hunter Badge) | talk, gifts | solid since playtest 1; gifts as Djura; Blood of Arianna / Adella: the guest who talks gets its own (P2, 2026-10-15) | ok | P1, P2 |
+| Beast beggar (suspicious beggar) | NpcParam 504020 (only this talk NPC uses the row, every MSB checked), t240217 | talk | solid for the guest since P3 (2026-10-15): can talk; turned hostile he is a normal enemy on its screen | ok | P3 |
 | NPC "scared" flag | 9432 (key_event; cleared at every m24_00 load by ev 50) | | harmless | ok | |
 | Upper Cathedral Ward gate | ObjAct 2400100 needs Upper Cathedral Key (Yahar'gul treasure 2800290) | | key now shared (F2) | ok after F2 | |
 | DLC grab | 12400765 shows Amygdala 2400899 at Blood Moon or 12404001; 12405263 needs goods 4311 on the local player; host: 12401000 + `2003[49] 3402959` | grab -> travel question | grab cutscene only (chr type != 0 ends) and needs its own Eye (F3) | minor | checklist 7 |
@@ -225,7 +229,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Lamps | 2202950, 2202951 | | via host | ok | |
 | Lift | 12200122/123 (state 12200125/126) | | mirrored | minor | |
 | Rune Workshop Tool | lot 2200360 (treasure) | picks up | was per player -> no Memory Altar for the guest | major | F2 |
-| Witch of Hemwick (Eye Collector) | defeat 12201800 (2200 never_sync, 9452), host entry 12201802 (no remo), insight checks 12204844 / 12204010 host only; lot 21002950 (ledger 31) | fight | guest fog first; ledger replay | ok | |
+| Witch of Hemwick (Eye Collector) | defeat 12201800 (2200 never_sync, 9452), host entry 12201802 (no remo), insight checks 12204844 / 12204010 host only; lot 21002950 (ledger 31) | fight | first fight: host region or a guest's fog (P5); re-fights: B2; ledger replay | ok | P5 |
 | Cainhurst carriage | 12200130 (appears: local player holds goods 4003 + 12201800 + in region 2202410), 12200131 (action, remo 22000040, `2003[49] 2502959`) | travel question | with its own summons (shared) it can call the carriage too -> its question -> party request | minor | checklist 7 |
 | Hostile crowd woman back throw | 12205080 | | | ok | |
 
@@ -236,8 +240,8 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Lamps | 2702950, 2702951 | | via host | ok | |
 | Lifts / gate | lift 12700130-132 (12700134/135), lift 12700140-142 (12700144/145), gate 12700170-172 + 12705490 (12700173/174) | | mirrored, State | minor | |
 | Snatchers | 1270501 (spawn), 12700500 (kidnap, chr type 0) | | | major | F1 |
-| Shadows of Yharnam | defeat 12701800 (2700/2701 never_sync, 9463), host entry 12701802 (no remo); lots 2700990 (flag 52700950), 2700995 | fight | guest fog first; captured award (map flag) -> shared | ok | |
-| Valtr / League (t270503, 6500), beggar 504030 (t270217, ghost), old man 6100 (t270317 -> 9058 Pungent Blood Cocktail) | | | gifts as Djura; beggar ghost | minor | P1, P3 |
+| Shadows of Yharnam | defeat 12701800 (2700/2701 never_sync, 9463), host entry 12701802 (no remo); lots 2700990 (flag 52700950), 2700995 | fight | first fight: host region or a guest's fog (P5); re-fights: B2; captured award (map flag) -> shared | ok | P5 |
+| Valtr / League (t270503, 6500), beggar 504030 (t270217, ghost), old man 6100 (t270317 -> 9058 Pungent Blood Cocktail) | | | gifts as Djura; beggar solid since P3 | ok | P1, P3 |
 | NPC summons (Henryk, executioner) | 12704400-12704431 | | | minor | none |
 
 ### Byrgenwerth, Lecture Building, Moonside Lake (m32_00)
@@ -247,7 +251,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Lamps | 3202950-3202953 (+ script points 3202956-3202959) | | via host | ok | |
 | Lecture Theatre Key | lot 3200720 (treasure); ObjAct 3200030 | picks up | was per player | major | F2 |
 | Lunarium Key | 13200400 award lot 3200810 (flag 53200810); ObjAct 3200040 | award | captured -> shared | ok | |
-| Willem | 513000 (ghost bit kept), t320310; 13200121 points at the moon | | ghost on the guest | minor | P3 |
+| Willem | 513000 (talk NPC + two cutscene dummies, every MSB checked), t320310; 13200121 points at the moon | | solid since P3 (2026-10-15): the guest can talk | ok | P3 |
 | Rom | defeat 13201800 (3200 never_sync, 9465), lot 51001900 (ledger 40) | fight (no intro) | guest fog first | ok | |
 | Blood Moon | 13201803 (host only: Rom dead + near Queen Yharnam 3200801), remo 32000000 tod 3, sets 70002802, `2003[49] 2802958` | cutscene -> travel question | live mirror (a mirror cut by the guest's own load is replayed in full); time of day into the own save; the host's question after the scene, the party travels to Yahar'gul (parg, live) | ok | checklist 7/8 |
 | Lecture Building doors | 13200310 (ObjAct 13200124 -> `2003[49] 2602959` Nightmare of Mensis), 13200311 (ObjAct 13200123 -> `2003[49] 3302959` Nightmare Frontier) | question | its own question (both may be asked) | minor | P4 |
@@ -261,7 +265,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | First-sacrifice multiplayer block | 12800160: SpEffects 9120/9121 while 9802 is off | | cutscenes_endings.md 5.2: unknown effect on summons in m28 | major (untested) | P6 |
 | Time of day | 12800400 (sets 2800 never_sync, 70002802), gates 12800402/12800403 by 9802 | | mirrored | ok | |
 | Upper Cathedral Key | lot 2800290 (treasure) | picks up | was per player | major | F2 |
-| One Reborn | defeat 12801800 (2800, 9464), host entry 12801802 remo 28000000; lot 50700000 (ledger 37) | intro + fight | host first | major | checklist 8, P5 |
+| One Reborn | defeat 12801800 (2800, 9464), host entry 12801802 remo 28000000; lot 50700000 (ledger 37) | intro + fight | either goes in first (P5: a guest's fog runs the host's intro event 12801802, region visit) | ok | checklist 8, P5 |
 | Altar warp to the Lecture Building | 12800430 (`End if Client`, action 2800020 at 2801500, `2003[49] 3202959`) | question | cannot use it | minor | checklist 8 |
 | Amygdala grab (Tonsil Stone) | 12800401 (visible at Insight >= 40 or Blood Moon, local), 12800431 (event message 10 of 2800745 + goods 4310 on the local player, remo 28000040/28001040, `2003[49] 3202958`; **no client guard**) | question | a guest holding the Tonsil Stone runs its own copy too (its own question) | minor | P4 |
 | Tonsil Stone | lot 39000 (common 9040 slot 36, ledger 28, done 9076); its trigger 9076 is in no talk ESD (set by another path; Patches' state 9782 checks the stone) | award | ledger replay | ok (who triggers it: unverified) | |
@@ -287,7 +291,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 |---|---|---|---|---|---|
 | Arrival | carriage `2003[49] 2502959` (from Hemwick) | party travel | follows | minor | checklist 7 |
 | Lift | 12500074 (12500076/077) | | | minor | |
-| Martyr Logarius | defeat 12501800 (2500, 9460), host entry 12501802 remo 25000020 | intro + fight | host first | major | P5 |
+| Martyr Logarius | defeat 12501800 (2500, 9460), host entry 12501802 remo 25000020 | intro + fight | either goes in first (P5, region visit) | ok | P5 |
 | Unopened Summons | 12500600 lot 2500910 flag 52500910 (award) | | shared | ok | |
 | Queenly Flesh | 12500020, lot 2500920 | | | ok | |
 | Annalise / Yurie / Alfred | 6040 (t250307 -> 9042 lot 17000 Cainhurst Badge), 6150 (t250324) | | solid; gifts as Djura | ok (P1 fixed, live with Eileen) | P1 |
@@ -309,8 +313,8 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Arrival | Lecture Building door 13200310 (`2003[49] 2602959`) | question | | minor | |
 | Iron Door Key | lots 2600550 / 2600610 (treasure); ObjAct 2600020/2600021 | | was per player | major | F2 |
 | Lifts | 12601320/330/340/352 (12601250-12601256) | | | minor | |
-| Micolash | defeat 12601850 (2600, 9461; clears 1080-1099), host entry 12601852 remo 26000060; post scene 12601854 host only; lot 21000 Mensis Cage (ledger 3) | intro + fight | host first | major | P5 |
-| Mergo's Wet Nurse | defeat 12601800 (2601, 9462 final night), entry 12601802 remo 26000010, spawn needs the host in region 2602805; lot 55100000 One Third of Umbilical Cord flag 50000305 (global -> shared) | | host first | major | P5 |
+| Micolash | defeat 12601850 (2600, 9461; clears 1080-1099), host entry 12601852 remo 26000060; post scene 12601854 host only; lot 21000 Mensis Cage (ledger 3) | intro + fight | either goes in first (P5: the host's chr visits 2 m from Micolash's MSB spot for the 3[3] 32 m check) | ok | P5 |
+| Mergo's Wet Nurse | defeat 12601800 (2601, 9462 final night), entry 12601802 remo 26000010, spawn needs the host in region 2602805; lot 55100000 One Third of Umbilical Cord flag 50000305 (global -> shared) | | either goes in first (P5, region visit into 2602805) | ok | P5 |
 | 9462 "final night" | Hunter's Dream burns, Gehrman's offer | | C2 | ok | |
 
 ### Hunter's Dream (m21_00, m21_01)
@@ -333,7 +337,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Ludwig / Laurence | 13401800 / 13401850 (personal flags 6673/6674, exceptions in ItemLotDenied); Laurence needs goods 4014 Laurence's Skull (13404861 / 13401851) | | | minor | |
 | Research Hall keys | Underground Cell Key 3500800 (treasure, F2), Inner Chamber Key 43220 (Simon, flag 50002350 global), Balcony Key 43010 / 43030 (flag 50002250 global), Astral Clocktower Key 3501850 (award), Celestial Dial 3501800 (award), Eye Pendant 3401810 (flag 9470) | | shared | ok after F2 | |
 | Clocktower altar | 13501105 (goods 4017, phantom-aware), 13501140 | | | minor | |
-| Research Hall talk NPCs | NpcParam 402080, 402090, 402280, 402281, 402290, 402300 (talks 3505xx), Fishing Hamlet 405100 (t360507), 409000 (t340540), Ludwig's head 451100 (t340508) keep the ghost bit | | ghosts: no talk (Adeline, patients, Ludwig's head) | major (DLC) | P3 |
+| Research Hall talk NPCs | NpcParam 402080, 402090, 402280, 402281, 402290, 402300 (talks 3505xx), Fishing Hamlet 405100 (t360507), 409000 (t340540), Ludwig's head 451100 (t340508) keep the ghost bit | | solid since P3 (2026-10-15; only these talk NPCs use the rows): the guest can talk | ok | P3 |
 
 ### Chalice dungeons
 
@@ -356,21 +360,51 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
   (`WorldActionAllowed`), unless the host's image already has it; the host's 9040 awards the lot,
   C3 hands it to every member (ledger / lot flag), the guest's own save gets the trigger. Live:
   see checklist 3.
-* **P2 Repeatable NPC gifts for guests** (9100 slots): `MessengerGiftLot`-style own grant.
-* **P3 Remaining ghost NPCs**: the beast beggar 504020/504030, Willem 513000 and the DLC talk
-  NPCs (402080-402300, 405100, 409000, 451100) still have the ghost bit. They are enemy-family
-  rows, so clearing the bit also changes how their hostile uses look on clients: check each row's
-  users in the MSBs and verify in the DLC before adding them to `party_npcghost.h`.
+* **P2 Repeatable NPC gifts for guests. DONE (pard, 2026-10-15).** Common event 9100
+  (`NPCアイテム入手_何度でも`, slots 0-4: 72410359 -> 24060 Blue Elixir x3, 72410310 -> 23000
+  Iosefka's Blood Vial, 72400398 -> 32020 Blood of Adella, 72400489 -> 28000 Blood of Arianna, 9043
+  -> 17010 Queenly Flesh) awards the lot when the talk sets the trigger and clears it again. It
+  ends at once on a client, and the trigger used to go to the host as an npc_quest world action,
+  so the HOST's 9100 gave the guest's Blood of Arianna to the host. Now the trigger is never a world
+  action (`RepeatGiftLot`, `WorldActionAllowed`); the guest's own talk set (SetEventFlag observer)
+  queues its own grant (`ItemSource::Repeat`, a key per grant: every talk gives again), given while
+  summoned like any grant, and clears the trigger as 9100 would; a trigger the host's world has set
+  (the host's own talk) gives the guest nothing. Unit: party-worldact-test, party-items-test. Live (pard S2b,
+  `guest_flag` test steps): Blood of Arianna given while summoned with the item box (0 -> 1; consumable
+  uniques are given there, key items such as Queenly Flesh wait for home), Blue Elixir twice (0 -> 3 -> 6),
+  the host's own Blood of Adella trigger awarded the host only.
+* **P3 Remaining ghost NPCs. DONE (pard, 2026-10-15).** Every MSB part (all maps, chalice
+  layouts too) that uses NpcParam 504020 / 504030 (the suspicious beggar, m24_00 / m27), 513000
+  (Willem and two m32 cutscene dummies), 402080 / 402090 / 402280 / 402281 / 402290 / 402300 (the
+  Research Hall's talking patients, heads and Adeline), 405100 (the Fishing Hamlet priest), 409000
+  (the corpse in Ludwig's arena) and 451100 (Ludwig's head) is that talk NPC: no hostile enemy shares
+  the rows, so all twelve lose the ghost bit on clients (`party_npcghost.h`). The beggar turned
+  hostile is then a solid enemy on the guest's screen like any other. Live (pard S3): the guest
+  talked to Willem at Byrgenwerth (prompt at the first spot, his line, solid on the screenshot).
 * **P4 Double travel questions** for scripted warps that run on both games (Lecture Building
   doors via the replicated ObjAct, the Tonsil Stone grab on a guest holding the stone): the host
   should drop a guest's lamp request for the same id while its own question or travel for that id
   is pending (party_split / party_guestsvc).
-* **P5 First fights with an intro** (Amelia, One Reborn, Logarius, Micolash, Wet Nurse; DLC
-  bosses): let a guest's fog report make the host play the intro and open the fight, or at least
-  show "Waiting for the host: this fight starts with a scene" (playtest1_triage.md bug 8).
+* **P5 First fights. DONE (pard, 2026-10-15, live with Amelia).** Every boss's FIRST fight
+  starts with the host's first-fight event (`ホストがボス部屋入場_初戦/初回`: the host enters a region
+  or comes within a distance, many with an intro scene), and each guest-entry event waits for it
+  (3[0] on that event's flag), so a guest stood at a fog with no prompt. For the 12 gates whose
+  first-fight event waits only on the host's position (Witch, Blood-starved Beast, Darkbeast
+  Paarl, Amelia, Cleric Beast, Gascoigne, Logarius, Wet Nurse, Micolash, Shadows, One Reborn,
+  Amygdala; `BossGateGuestStarts`) the guest's fog now has its prompt; its `fog` report makes the
+  host's game run the first-fight event: EMEVD conditions are registered once (a late skip does
+  not pass one already waiting: the first try armed a skip and nothing happened), so the host's
+  character visits the event's region for a moment (`FirstFightSpotFor`, MSB data) and is put back
+  as soon as the event went on (0.07 s live). Its scene plays for the whole party (live mirror),
+  the boss starts. Ebrietas (a hit starts her), Rom (a hit; no guest gate) and the DLC bosses stay
+  host-first with the notice. `BB_PARTY_GUEST_FIRST_FIGHT=0` off. Live S1d: see checklist 4.
 * **P6 Yahar'gul before the Blood Moon** (12800160 SpEffects 9120/9121, the Gaol): verify a
   summon / B2 travel into m28 with 9802 off before the players get kidnapped (only reachable by a
-  kidnap before Rom).
+  kidnap before Rom). Covered in part: the P7 live run was with the test save, whose 9802 is off
+  (save_decode: 9800/9801 on, 9802 off, Rom alive), so the guest followed the host into the Gaol
+  before the Blood Moon and stood beside it; the same SpEffect pair is always on in the Hunter's
+  Dream (m21 constructor), where summons work. Not run: a fresh summon (bell) inside m28 with 9802
+  off.
 * **P7 Kidnap respawn trace. DONE (kidnap agent, 2026-10-14, live).** The EMEVD dispatcher
   0x17C0420 switches on the 2003 instruction id (jump table 0x17C2C38); id 23 (`復活ポイント設定`,
   set respawn point) is the case at 0x17C10A5: row lookup 0x1F26B40, then `GSM +0x1528 =
