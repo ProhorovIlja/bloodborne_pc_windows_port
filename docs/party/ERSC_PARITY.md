@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-15 (agent/parfin: C4 C5 C7 F1 F2 G2 H5; agent/parceh2: C1 C3 C4 C5 C7 E4 H1 H2 H3 H5; agent/parab: A1, A4, A5, A11, B1, B5, B6; agent/outage062: F5).
+Last update: 2026-10-15 (agent/parab2: A4, A11, B1, B5, B6; earlier the same day agent/parab: A1, A4, A5, A11, B1, B5, B6; agent/outage062: F5).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -52,14 +52,14 @@ only 100% when it meets it.
 | Area | Parity |
 |---|---|
 | A. Session & joining | 94% |
-| B. World & travel | 92% |
+| B. World & travel | 95% |
 | C. Death & respawn | 95% |
 | D. Progress (anyone can progress) | 89% |
 | E. Services & UI | 97% |
 | F. Network & robustness | 91% |
 | G. BB-specific (chalice, insight, bath) | 88% |
 | H. Bloodborne rule (feels like SP in a party) | 94% |
-| **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~92%** |
+| **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~93%** |
 
 ## A. Session & joining
 
@@ -165,6 +165,7 @@ only 100% when it meets it.
 
 ## Change log
 
+- 2026-10-15 (parab2, 0.6.2): A11 95 -> 100 (the admitted-just-before-a-cutscene race re-run live with a deterministic test aid: the joiner waits at the lamp until the scene ends, then stands beside the host), B1 85 -> 97 (route walker along navmesh waypoints; host and guest walked by the stick into different blocks and fought, used items and died there for minutes, no pull, no desync), B5 93 -> 95 (fixed live: a title-joined guest went home when the host travelled alone; enemy reconciliation stays off, decided with a live run), B6 95 -> 97 (Cainhurst carriage and Lecture Building door through their real events, live), A4 stays 95 (a 0.5 s bell sign timer makes direct-summon joins 1.5 s faster but stalls 1 in 3-5 joins, live: the race is on the guest's side; the 2 s timer stays). A 94%, B 92 -> 95%, overall ~92 -> ~93%.
 - 2026-10-15 (parfin, 0.6.2): C5 93 -> 100 (Cross switches between two living members, live, 3 players, twice), C7 97 -> 100 (a living 3rd player taken out of the boss room by a guest's rest, live), C4 97 -> 98 (rally rot live and on by default, 6 s window after damage), G2 85 -> 88 (Madman's Knowledge through the guest's inventory, live); F1 / F2 unchanged: the real-PC part is now a checklist (playtest2_checklist.md); H5 unchanged (oath runes are not item lots: a covenant needs the NPC talk); test aid `lot=N` guest-only (live). C 94 -> 95%, G 87 -> 88%, overall ~92%.
 - 2026-10-15 (parab, 0.6.2): A1 85 -> 100 (wrong password refused with the way out, fixed password + Rejoin joins, live), A4 85 -> 95 (cross-map join 12.3-12.8 s with one load, title join 5.6-8.2 s), A5 85 -> 100 (one-load cross-map join: direct summon from the own map + B2 arrival re-join, default on; K6 holds the game's own summon load; summoned GameData after the arrival), A11 90 -> 95 (after pard: cutscene case with a cross-map guest, one-load join after the wait; a wait refusal no longer gathers; the beside-the-host warp also checks the host's reported position and map), B5 85 -> 93 (guest death apart: no load; host death apart: the guest plays on, the host's re-sync does not wait for it), B6 85 -> 95 (Lecture Building, Cainhurst, Mensis, Hamlet, Hunter's Nightmare story warps live; P4 one question per warp; unseen question reopened), B1 85 unchanged (stick routes across a block boundary blocked by geometry). A 89 -> 94%, B 89 -> 92%, overall ~90 -> ~91%.
 - 2026-10-15 (pard, 0.6.2): A11 85 -> 90 (cutscene case live: title join and direct summon refused during the host's scene, joined 2.5 s after it; a join granted just before a scene no longer lands inside a wall), B2 90 -> 93 (a guest may start a boss's first fight, live with Amelia), D5 83 -> 88 (repeatable NPC gifts for the asking guest, last ghost NPCs solid, both live), D6 82 -> 84 (soak of Amelia, Old Yharnam, Forbidden Woods, Byrgenwerth with Continues), D10 80 -> 87 (guest-started intro plays for everyone, live); B 88 -> 89, D 87 -> 89; overall ~90% with parceh's rows (mean of the 48 rows with a number, 89.96).
