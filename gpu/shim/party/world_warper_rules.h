@@ -364,10 +364,38 @@ inline float Seconds(const std::vector<PadStep>& steps) {
 }
 
 /// Bosses (`bosses`): an idle boss stands in its closed arena, and a spot taken from the player's
-/// side of it (as for other enemies) lands in the arena's wall. Candidate spots instead: 4 m in
-/// front of the boss (an idle boss faces into its arena), then to its right, left and back; each
-/// is checked (BossSpotOk) before the fight, the next one tried otherwise.
-inline constexpr int kBossSpots = 4;
+/// side of it (as for other enemies) lands in the arena's wall. Candidate spots instead: first the
+/// arena's own entry floor (kBossArenas: the MSB point the fog wall's stuck check warps a player to,
+/// just inside the fog, or the boss's entry region where a map has no fog wall), from where the
+/// fight starts as in the game; then 4 m in front of the boss (an idle boss faces into its arena),
+/// to its right, left and back. Each is checked (ArenaSpotOk / BossSpotOk) before the fight, the
+/// next one tried otherwise.
+struct BossArena {
+    std::uint32_t boss;  ///< the boss's map entity id
+    float x, y, z;       ///< the arena's entry floor (MSB, 1.09)
+};
+inline constexpr BossArena kBossArenas[] = {
+    {2200800, -329.75f, 1.6f, 699.3f},     {2200801, -329.75f, 1.6f, 699.3f},    // Witch of Hemwick
+    {2300800, -88.3f, -126.5f, 14.0f},                                           // Blood-starved Beast
+    {2300810, 134.6f, -120.1f, -85.4f},                                          // Darkbeast Paarl
+    {2400800, 51.9f, 35.7f, 312.3f},                                             // Vicar Amelia
+    {2410800, -153.5f, -27.0f, 35.8f},                                           // Cleric Beast
+    {2410810, -49.6f, -40.8f, 71.6f},      {2410811, -49.6f, -40.8f, 71.6f},     // Father Gascoigne
+    {2420800, 94.4f, 4.17f, 387.7f},                                             // Ebrietas
+    {2420810, -4.8f, 55.3f, 293.0f},                                             // Celestial Emissary
+    {2500800, 34.4f, 112.1f, -331.2f},     {2500801, 34.4f, 112.1f, -331.2f},    // Martyr Logarius
+    {2600800, 142.0f, 1125.1f, -37.7f},    {2600801, 142.0f, 1125.1f, -37.7f},   // Mergo's Wet Nurse
+    {2700800, -323.5f, -185.9f, 493.8f},   {2700801, -323.5f, -185.9f, 493.8f},  // Shadows of Yharnam
+    {2700802, -323.5f, -185.9f, 493.8f},
+    {2800800, 381.6f, -122.5f, -216.2f},                                         // The One Reborn
+    {3200800, -513.9f, -271.25f, 352.9f},                                        // Rom
+    {3300800, -48.2f, 1461.0f, -68.6f},                                          // Amygdala
+    {3400800, -407.9f, 1503.8f, -744.6f},                                        // Ludwig
+    {3400850, -436.5f, 1535.7f, -266.0f},                                        // Laurence
+    {3500800, -477.2f, 1595.5f, -824.4f},                                        // Lady Maria
+    {3600800, -700.2f, 1578.5f, -929.2f},                                        // Orphan of Kos
+};
+inline constexpr int kBossSpots = 5;  ///< the arena's entry floor, then four round the boss
 inline constexpr float kBossSpotDistance = 4.0f;
 
 /// The yaw that faces from `from` to `to` (the game's convention: forward = (-sin, -cos)).
@@ -375,10 +403,21 @@ inline float FaceYaw(const float from[3], const float to[3]) {
     return std::atan2(-(to[0] - from[0]), -(to[2] - from[2]));
 }
 
-/// Candidate spot `i` (0..kBossSpots-1) round a boss at `boss` facing `yaw`.
+/// The arena's entry floor of boss `entity` (kBossArenas); false: none known.
+inline bool BossArenaSpot(std::uint32_t entity, float out[3]) {
+    for (const BossArena& a : kBossArenas) {
+        if (a.boss == entity) {
+            out[0] = a.x, out[1] = a.y, out[2] = a.z;
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Candidate spot `i` round a boss at `boss` facing `yaw` (0: in front, 1 right, 2 left, 3 back).
 inline void BossSpot(const float boss[3], float yaw, int i, float out[3]) {
-    static constexpr float kTurn[kBossSpots] = {0.0f, -1.5707963f, 1.5707963f, 3.14159265f};
-    const float a = yaw + kTurn[((i % kBossSpots) + kBossSpots) % kBossSpots];
+    static constexpr float kTurn[4] = {0.0f, -1.5707963f, 1.5707963f, 3.14159265f};
+    const float a = yaw + kTurn[((i % 4) + 4) % 4];
     out[0] = boss[0] - std::sin(a) * kBossSpotDistance;
     out[1] = boss[1] + 0.3f;
     out[2] = boss[2] - std::cos(a) * kBossSpotDistance;
@@ -396,6 +435,15 @@ inline bool BossSpotOk(const float boss[3], const float settled[3], const float 
     const float d0 = flat(settled), d1 = flat(walked);
     return std::fabs(settled[1] - boss[1]) < 2.5f && std::fabs(walked[1] - boss[1]) < 2.5f && d0 < 8.0f &&
            d0 - d1 >= 0.4f;
+}
+
+/// The arena's entry floor checked against the spot itself (`spot`: where the player was put): on
+/// its floor (within 2.5 m of its height: not fallen through) and the walk toward the boss moved
+/// the player 0.4 m or more (not stuck in geometry).
+inline bool ArenaSpotOk(const float spot[3], const float settled[3], const float walked[3]) {
+    const float dx = walked[0] - settled[0], dz = walked[2] - settled[2];
+    return std::fabs(settled[1] - spot[1]) < 2.5f && std::fabs(walked[1] - spot[1]) < 2.5f &&
+           std::sqrt(dx * dx + dz * dz) >= 0.4f;
 }
 
 /// An enemy's kind for the coverage (one kill per kind): its model cAAAA, the NpcParam row id's
