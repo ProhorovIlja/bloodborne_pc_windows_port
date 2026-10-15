@@ -2104,6 +2104,89 @@ void SummonedGivesTick(const GameSnapshot& gs, int load_mode, double now) {
     (void)load_mode;
 }
 
+// Key-item lots a summoned guest was handed but could not take (SummonedResult::Defer): kept on
+// disk per save slot so they come at the next own world even when the guest quits from the host's
+// world or keeps joining from its title (title join never loads the own world; live pard2 c4: the
+// Pthumeru Chalice of the Blood-starved Beast waited, the session ended before the guest went home).
+struct OwedLot {
+    std::int32_t lot = 0;
+    int slot = -1;
+};
+std::mutex g_owed_mu;
+std::vector<OwedLot> g_owed;
+bool g_owed_loaded = false;
+
+std::filesystem::path OwedLotsPath() {
+    return SummonedGivesPath().parent_path() / "party_owed_lots.txt";
+}
+
+/// Caller holds g_owed_mu.
+void LoadOwedLotsLocked() {
+    if (g_owed_loaded) {
+        return;
+    }
+    g_owed_loaded = true;
+    std::ifstream f(OwedLotsPath());
+    OwedLot o;
+    while (f >> o.lot >> o.slot) {
+        g_owed.push_back(o);
+    }
+}
+
+/// Caller holds g_owed_mu.
+void SaveOwedLotsLocked() {
+    std::error_code ec;
+    const std::filesystem::path path = OwedLotsPath();
+    if (g_owed.empty()) {
+        std::filesystem::remove(path, ec);
+        return;
+    }
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream f(tmp, std::ios::trunc);
+        for (const OwedLot& o : g_owed) {
+            f << o.lot << ' ' << o.slot << '\n';
+        }
+    }
+    std::filesystem::rename(tmp, path, ec);
+}
+
+void NoteOwedLot(std::int32_t lot) {
+    const int slot = party::flow::CurrentSaveSlot();
+    std::lock_guard<std::mutex> lk(g_owed_mu);
+    LoadOwedLotsLocked();
+    for (const OwedLot& o : g_owed) {
+        if (o.lot == lot && o.slot == slot) {
+            return;
+        }
+    }
+    if (g_owed.size() < 64) {
+        g_owed.push_back({lot, slot});
+        SaveOwedLotsLocked();
+        Log("owed key item: lot %d kept for this character's next own world (save slot %d)", lot, slot);
+    }
+}
+
+/// Own world (KeyCatchupTick): the lots owed to this save slot whose items are still missing.
+std::vector<std::int32_t> TakeOwedLots() {
+    const int slot = party::flow::CurrentSaveSlot();
+    std::lock_guard<std::mutex> lk(g_owed_mu);
+    LoadOwedLotsLocked();
+    std::vector<std::int32_t> lots;
+    auto it = std::remove_if(g_owed.begin(), g_owed.end(), [&](const OwedLot& o) {
+        if (!SummonedGiveForSlot(o.slot, slot)) {
+            return false;
+        }
+        lots.push_back(o.lot);
+        return true;
+    });
+    if (it != g_owed.end()) {
+        g_owed.erase(it, g_owed.end());
+        SaveOwedLotsLocked();
+    }
+    return lots;
+}
+
 /// Main thread: 4 s into each steady OWN world (load mode 0) after a load, every boss-reward key
 /// item this save's ledger says was given but the inventory lacks is given once more and a save is
 /// requested (KeyCatchupLots / KeyCatchupNeeded). From the save alone: no host, no party list.
@@ -2133,18 +2216,27 @@ void KeyCatchupTick(const GameSnapshot& gs, int load_mode, double now) {
     if (!man || LoadMode(man) != 0 || OwnWorld() != 1) {
         return;
     }
-    const std::vector<std::int32_t> lots = KeyCatchupLots(
+    std::vector<std::int32_t> lots = KeyCatchupLots(
         [man](std::uint32_t id) { return IsFlag(man, id); },
         [](std::uint32_t id) { return progress::CategoryOf(id) == progress::Category::boss_defeated; });
+    const std::vector<std::int32_t> owed = TakeOwedLots();
+    for (const std::int32_t lot : owed) {
+        if (std::find(lots.begin(), lots.end(), lot) == lots.end()) {
+            lots.push_back(lot);
+        }
+    }
     int gave = 0;
     for (const std::int32_t lot : lots) {
+        const bool is_owed = std::find(owed.begin(), owed.end(), lot) != owed.end();
         const std::vector<LotSlotState> slots = LotSlots(lot);
         if (!KeyCatchupNeeded(slots)) {
             continue;
         }
         const std::int32_t idx = ItemLedgerIndex(lot);
         char why[128];
-        if (idx >= 0) {
+        if (is_owed) {
+            std::snprintf(why, sizeof why, "owed: handed while summoned, not taken there");
+        } else if (idx >= 0) {
             std::snprintf(why, sizeof why, "ledger %d = flag %d set with boss flag %d in this save", idx,
                           int(kItemLedgerBase) + idx, ItemLedgerDoneFlag(idx));
         } else {
@@ -2234,6 +2326,7 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         }
         Log("%s: key item / unique goods %s: not given while summoned; waits for the own world",
             DescribeItem(g).c_str(), keys.c_str());
+        NoteOwedLot(g.lot);
         return SummonedResult::Defer;
     }
     std::string why;

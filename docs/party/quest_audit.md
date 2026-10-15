@@ -372,7 +372,10 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
   (the host's own talk) gives the guest nothing. Unit: party-worldact-test, party-items-test. Live (pard S2b,
   `guest_flag` test steps): Blood of Arianna given while summoned with the item box (0 -> 1; consumable
   uniques are given there, key items such as Queenly Flesh wait for home), Blue Elixir twice (0 -> 3 -> 6),
-  the host's own Blood of Adella trigger awarded the host only.
+  the host's own Blood of Adella trigger awarded the host only. Queenly Flesh (a key item) live
+  (pard2 qf2): the guest's trigger 9043 in the host's world queued lot 17010 ("waits for the own
+  world"), the guest left the party 25 s later and its own world gave goods 4305 7 s after the
+  Leave (`inventory add 1/1: item 4305`), before the bell summoned it again; the host got nothing.
 * **P3 Remaining ghost NPCs. DONE (pard, 2026-10-15).** Every MSB part (all maps, chalice
   layouts too) that uses NpcParam 504020 / 504030 (the suspicious beggar, m24_00 / m27), 513000
   (Willem and two m32 cutscene dummies), 402080 / 402090 / 402280 / 402281 / 402290 / 402300 (the
@@ -381,10 +384,14 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
   the rows, so all twelve lose the ghost bit on clients (`party_npcghost.h`). The beggar turned
   hostile is then a solid enemy on the guest's screen like any other. Live (pard S3): the guest
   talked to Willem at Byrgenwerth (prompt at the first spot, his line, solid on the screenshot).
-* **P4 Double travel questions** for scripted warps that run on both games (Lecture Building
-  doors via the replicated ObjAct, the Tonsil Stone grab on a guest holding the stone): the host
-  should drop a guest's lamp request for the same id while its own question or travel for that id
-  is pending (party_split / party_guestsvc).
+* **P4 Double travel questions. DONE (parab, 2026-10-15, live b6a).** A scripted warp that runs on
+  two games (Lecture Building doors via the replicated ObjAct, the Tonsil Stone grab of every
+  player holding the stone) asks once: each game tells the others when it opens the question
+  (`split_choosing`) and the lower party slot keeps it (the host first,
+  `deathrules::DropSameWarpQuestion`); the host also takes no second question for a warp whose
+  party travel a member's request already started. Live (parab b6a, Lecture Building 3202959 by
+  the test aid): both asked at once, the guest's question closed, one party travel. pard2 c7 ran
+  the real Lecture Building door (guest's Cross on its ObjAct): see campaign_soak.md.
 * **P5 First fights. DONE (pard, 2026-10-15, live with Amelia).** Every boss's FIRST fight
   starts with the host's first-fight event (`ホストがボス部屋入場_初戦/初回`: the host enters a region
   or comes within a distance, many with an intro scene), and each guest-entry event waits for it
@@ -414,12 +421,21 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
   one loading screen for both, guest 0.5 m beside the host in the cell, no stuck or half state.
   A guest cannot be kidnapped in the host's world (12400780 / 12700500 end unless the local chr
   type is 0; a summoned guest is type 1 within 0.3 s of arriving).
-* **P8 Scripted warp question**: consider skipping the travel question for scripted `2003[49]`
-  warps that are story transitions (Blood Moon 2802958, DLC 3402959, carriage 2502959, Lecture
-  Building 3202958 / 3202959 / 2602959 / 3302959) and always travel with the party, as the
-  vanilla game moves only the host and expects phantoms to go home.
-* **P9 One-way doors that close again** (12400157, 12400177, 12700173): C2 set-only leaves them
-  open in the guest's own save; sync their state like the lifts if it matters.
+* **P8 Scripted warp question. DECIDED (pard2, 2026-10-15): they keep asking.** Every story warp
+  (`deathrules::StoryWarpEvent`) asks the player who triggered it "Travel with the party?" after
+  its scene, like a lamp: YES (the cursor's default) moves the party with one loading screen, NO
+  lets that player go alone (the vanilla game moves only the host and sends phantoms home; ERSC
+  keeps the session and moves nobody else). Asking costs one press and keeps a way to split the
+  party on purpose; P4 makes sure it is one question. `BB_PARTY_TRAVEL_CHOICE=party` never asks.
+  Live: Blood Moon 2802958 (parg, pard2 c1: question 2.0 s after the scene, YES, guest beside the
+  host in Yahar'gul), Cainhurst 2502959, Mensis 2602959, the Hamlet 3302959, the Nightmare
+  3402959, the Lecture Building 3202959 (parab b6a-c).
+* **P9 One-way doors that close again. DONE (pard2, 2026-10-15, live).** 12400157, 12400177 and
+  12700173 were already in the C2 state list (`kStateIds`, party_progress.cpp, since 2026-10-10):
+  they follow the host both ways, open and shut, in the guest's own save as the lifts do
+  (party-progress-test now asserts it). Live (pard2 qf2, `BB_PARTY_WORLD_WATCH=12400157` on the
+  guest): the host's world shut 12400157 at 69.5 s; the guest's own save read 0 at 69.9 s and its
+  view 0 at 70.9 s.
 
 ## Regenerating
 
