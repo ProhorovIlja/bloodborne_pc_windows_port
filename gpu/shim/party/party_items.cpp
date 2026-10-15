@@ -2689,6 +2689,42 @@ bool BossQuiet(double now) {
 }
 
 /// The item-get dialog's watchdog (ItemGetWatch): every role, party mode.
+/// BB_PARTY_ITEMGET_PROBE: the gates of the action-button registration 0x1CD91F0 the item notice's
+/// confirm (0x16D86E0: button 0x1130, category 0xB) goes through, while an entry waits.
+void ItemConfirmGateProbe(double now) {
+    static double next = 0;
+    if (now < next) {
+        return;
+    }
+    next = now + 1.0;
+    auto rd = [](u64 a, u64 off) -> u64 {
+        u64 v = 0;
+        return a && SafeGet(a + off, &v) ? v : 0;
+    };
+    auto rb = [](u64 a, u64 off) -> int {
+        u8 v = 0;
+        return a && SafeGet(a + off, &v) ? v : -1;
+    };
+    auto ri = [](u64 a, u64 off) -> int {
+        std::int32_t v = 0;
+        return a && SafeGet(a + off, &v) ? v : -1;
+    };
+    const u64 wcm = rd(Guest(0x553e878), 0), chr = rd(wcm, 0x60), man = rd(Guest(0x5540048), 0),
+              menu = rd(Guest(0x5562878), 0);
+    u32 f1e1 = 0;
+    if (chr) {
+        SafeGet(chr + 0x1e1, &f1e1);
+    }
+    const u64 cnt_ptr = rd(rd(chr, 0x58), 0x248);
+    const u64 l15 = rd(rd(rd(rd(rd(chr, 0x3b0), 0x58), 8), 0x58), 0x38);
+    const u64 l11 = rd(rd(rd(l15, 8), 8), 0x3b0);
+    const u64 l3 = rd(l11, 0x30);
+    Log("item confirm gates: man +0x50 %d +0x51 %d +0x52 %d +0x55 %d; menu +0xC0 %d +0x118 %d +0x130 %d; chr +0x1E1 "
+        "%#x (0x400 %d); +0x58->+0x248 count %d; L3+900 %d; L11+8->+0x10 %d; L15+0x5D %d",
+        rb(man, 0x50), rb(man, 0x51), rb(man, 0x52), rb(man, 0x55), ri(menu, 0xc0), ri(menu, 0x118), ri(menu, 0x130),
+        f1e1, (f1e1 & 0x400) ? 1 : 0, cnt_ptr ? ri(cnt_ptr, 0) : -9, rb(l3, 900), rb(rd(l11, 8), 0x10), rb(l15, 0x5d));
+}
+
 void ItemGetWatchTick(const GameSnapshot& gs, double now) {
     static ItemGetWatch watch;
     static bool off = [] {
@@ -2699,6 +2735,10 @@ void ItemGetWatchTick(const GameSnapshot& gs, double now) {
         return;
     }
     const int n = ItemGetEntries();
+    static const bool probe = std::getenv("BB_PARTY_ITEMGET_PROBE") != nullptr;
+    if (probe && n > 0) {
+        ItemConfirmGateProbe(now);
+    }
     const std::int32_t hp = PlayerHp(gs.player);
     const char* why = nullptr;
     if (!watch.Step(now, n, ItemGetConfirmArmed(), hp != 0, gs.loading || !gs.world_up, &why)) {
