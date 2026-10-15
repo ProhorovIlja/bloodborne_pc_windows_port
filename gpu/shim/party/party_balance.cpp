@@ -43,6 +43,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -294,14 +295,6 @@ bool Mine(u64 list) {
 BB_COOP_SYSV float StaminaRateHook(u64 list) {  // 0x17e4a20 max stamina rate (maxStaminaRate +0x18)
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotStamina])(list);
     return Mine(list) ? Note(kRotStamina, r * g_kind_value[kRotStamina].load(std::memory_order_relaxed)) : r;
-}
-BB_COOP_SYSV float StaminaCostHook(u64 list, u64 ctx) {  // 0x17e4c50 consumeStaminaRate +0x1b8
-    const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64, u64)>(g_kind_orig[kRotStaminaCost])(list, ctx);
-    return Mine(list) ? Note(kRotStaminaCost, r * g_kind_value[kRotStaminaCost].load(std::memory_order_relaxed)) : r;
-}
-BB_COOP_SYSV float RallyHook(u64 list, u64 ctx) {  // 0x17e5590 regainRate +0x1f4
-    const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64, u64)>(g_kind_orig[kRotRally])(list, ctx);
-    return Mine(list) ? Note(kRotRally, r * g_kind_value[kRotRally].load(std::memory_order_relaxed)) : r;
 }
 BB_COOP_SYSV float DiscoveryHook(u64 list) {  // 0x17e8010 the sum of itemDropRate +0x1fc (points)
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotDiscovery])(list);
@@ -754,17 +747,19 @@ void Init() {
     g_kind_hooked[kRotStamina] = ReplacePrologue(kMaxStaminaRate, {0x55, 0x48, 0x89, 0xe5, 0x48, 0x83, 0xec, 0x10},
                                                  reinterpret_cast<const void*>(&StaminaRateHook),
                                                  &g_kind_orig[kRotStamina], "balance: max stamina rate (rot)");
-    // Kinds 3-5 (stamina cost, rally, item discovery) are not verified live yet: off unless
-    // BB_PARTY_ROT_ALL_KINDS=1 (0.5.2: health and stamina only). Without the hooks a death picks
-    // among the hooked kinds only.
+    // Stamina cost (0.6.2): charged by the tick (RotExtraStaminaDrain), not by a game hook: the
+    // SpEffect consumeStaminaRate getter 0x17e4c50 is never asked for a roll or a swing (live
+    // 2026-10-15: 0 calls). BB_PARTY_ROT_STAMINA_COST=0 leaves the kind out.
+    g_kind_hooked[kRotStaminaCost] = !EnvIsZero("BB_PARTY_ROT_STAMINA_COST");
+    // Rally (0.6.2): taken back by the tick too (RotRallyTakeBack): the SpEffect regainRate getter
+    // 0x17e5590 was never asked while a guest fought and killed (live 2026-10-15, 0 calls).
+    // BB_PARTY_ROT_RALLY=0 leaves the kind out.
+    g_kind_hooked[kRotRally] = !EnvIsZero("BB_PARTY_ROT_RALLY");
+    // Item discovery: the itemDropRate sum 0x17e8010 was never asked either (0 calls over guest
+    // kills with drops), and no other path is known: not offered unless BB_PARTY_ROT_ALL_KINDS=1
+    // (the hook, for RE).
     const char* all = std::getenv("BB_PARTY_ROT_ALL_KINDS");
     if (all && all[0] == '1') {
-        g_kind_hooked[kRotStaminaCost] = ReplacePrologue(0x17e4c50, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53},
-                                                         reinterpret_cast<const void*>(&StaminaCostHook),
-                                                         &g_kind_orig[kRotStaminaCost], "balance: stamina cost rate (rot)");
-        g_kind_hooked[kRotRally] = ReplacePrologue(0x17e5590, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x56, 0x53},
-                                                   reinterpret_cast<const void*>(&RallyHook), &g_kind_orig[kRotRally],
-                                                   "balance: rally rate (rot)");
         g_kind_hooked[kRotDiscovery] = ReplacePrologue(0x17e8010, {0x48, 0x8b, 0x47, 0x08, 0xc5, 0xf8, 0x57, 0xc0},
                                                        reinterpret_cast<const void*>(&DiscoveryHook),
                                                        &g_kind_orig[kRotDiscovery], "balance: item discovery sum (rot)");
@@ -810,6 +805,38 @@ void KillEchoTick(const GameSnapshot& s) {
         o.alive = e.alive;
         SafeRead(e.chr + 0x1e1, &o.flags, 5);
         obs.push_back(o);
+    }
+    // H3 diagnostics (0.6.2): every kill seen here (alive -> HP 0), its payer gates and the own
+    // Echoes at the death and 3.5 s later, whoever paid (a real weapon kill by another player).
+    {
+        static std::map<u64, bool> was_alive;
+        struct Later {
+            Clock::time_point at;
+            u64 chr;
+            int echoes;  // at the death (for the log)
+        };
+        static std::vector<Later> later;
+        std::map<u64, bool> now_alive;
+        for (const auto& o : obs) {
+            now_alive[o.chr] = o.alive;
+            const auto w = was_alive.find(o.chr);
+            if (!o.alive && w != was_alive.end() && w->second) {
+                Log("kill seen: entity %u died here: %s; own Echoes %d", Field<u32>(o.chr, 0x1f0, 0),
+                    DescribeKillEchoGates(o.chr).c_str(), ReadGameState(false).echoes);
+                later.push_back({now + std::chrono::milliseconds(3500), o.chr, ReadGameState(false).echoes});
+            }
+        }
+        was_alive.swap(now_alive);
+        for (auto it = later.begin(); it != later.end();) {
+            if (now >= it->at) {
+                const int e_now = ReadGameState(false).echoes;
+                Log("kill seen: entity %u 3.5 s later: %s; own Echoes %d (%+d since)", Field<u32>(it->chr, 0x1f0, 0),
+                    DescribeKillEchoGates(it->chr).c_str(), e_now, e_now - it->echoes);
+                it = later.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
     for (const u64 chr : tracker.Update(obs, std::chrono::duration<double>(now - t0).count())) {
         const int before = ReadGameState(false).echoes;
@@ -1001,7 +1028,10 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
                 "stamina cost x%.2f, rally x%.2f, discovery sum %+.0f (with rot)",
                 max_hp, hp, Field<int>(dm, 0x138, -1), f % 1000, f / 1000 % 1000, g_stacks.load(),
                 double(g_kind_value[kRotStaminaCost].load()), double(g_kind_value[kRotRally].load()),
-                double(g_kind_hooked[kRotDiscovery] ? DiscoveryHook(list) : 0.0f));
+                double(g_kind_hooked[kRotDiscovery] && g_kind_orig[kRotDiscovery]
+                           ? reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotDiscovery])(list) +
+                                 g_kind_value[kRotDiscovery].load()
+                           : 0.0f));
         }
     }
     g_rot_list.store(in_world ? Field<u64>(s.player, 0x1c8) : 0, std::memory_order_relaxed);
@@ -1011,8 +1041,74 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     {
         static int last_st = -1;
         static std::chrono::steady_clock::time_point next_st{};
-        const int stn = in_world && hp > 0 ? Field<int>(dm, 0x134, -1) : -1;
+        int stn = in_world && hp > 0 ? Field<int>(dm, 0x134, -1) : -1;
         const int stmax = Field<int>(dm, 0x138, -1);
+        // The "stamina cost" rot: what this tick's actions spent, times (factor - 1), taken too.
+        {
+            static int prev_st = -1, prev_max = -1;
+            static float carry = 0;
+            static std::uint64_t charged = 0, charged_n = 0;
+            static std::chrono::steady_clock::time_point next_charge_log{};
+            const float f = g_kind_hooked[kRotStaminaCost] ? g_kind_value[kRotStaminaCost].load() : 1.0f;
+            const int extra = RotExtraStaminaDrain(prev_st, stn, prev_max, stmax, f, &carry);
+            const int after = stn - extra;
+            if (extra > 0 && SafeWrite(dm + 0x134, &after, sizeof after)) {
+                stn = after;
+                charged += std::uint64_t(extra);
+                ++charged_n;
+                Note(kRotStaminaCost, f);
+                if (now >= next_charge_log) {
+                    next_charge_log = now + std::chrono::seconds(5);
+                    Log("rot stamina cost: %d -> %d (+%d for x%.2f; %llu extra over %llu drops)", prev_st, stn, extra,
+                        double(f), (unsigned long long)charged, (unsigned long long)charged_n);
+                }
+            }
+            if (f <= 1.0f) carry = 0;
+            prev_st = stn;
+            prev_max = stmax;
+        }
+        // The "rally" rot: part of each HP gain that is not a Blood Vial's is taken back.
+        {
+            static int prev_hp = -1, prev_mhp = -1, vials = -1;
+            static float carry = 0;
+            static std::uint64_t taken = 0, gains = 0, regained = 0;
+            static std::chrono::steady_clock::time_point vial_at{}, next_vials{}, next_rally_log{};
+            const float f = g_kind_hooked[kRotRally] ? g_kind_value[kRotRally].load() : 1.0f;
+            const int hp_now = in_world ? hp : -1;
+            const bool gain = f < 1.0f && prev_hp > 0 && hp_now > prev_hp;
+            // A Blood Vial (goods 1000) used in the last 3 s: its heal, not a rally. The count is
+            // read twice a second while the rot is in force, and at every gain.
+            if (f < 1.0f && in_world && (gain || now >= next_vials)) {
+                next_vials = now + std::chrono::milliseconds(500);
+                const int v = GoodsCount(1000);
+                if (vials >= 0 && v >= 0 && v < vials) vial_at = now;
+                vials = v;
+            }
+            int kept_hp = hp_now;
+            if (gain) {
+                const bool vial = now - vial_at < std::chrono::seconds(3);
+                const int back = RotRallyTakeBack(prev_hp, hp_now, prev_mhp, max_hp, f, vial, &carry);
+                if (!vial && prev_mhp == max_hp) {
+                    regained += std::uint64_t(hp_now - prev_hp);
+                    ++gains;
+                }
+                const int after = hp_now - back;
+                if (back > 0 && SafeWrite(dm + 0xf8, &after, sizeof after)) {
+                    kept_hp = after;
+                    taken += std::uint64_t(back);
+                    Note(kRotRally, f);
+                }
+                if (now >= next_rally_log) {
+                    next_rally_log = now + std::chrono::seconds(5);
+                    Log("rot rally: HP %d -> %d%s, %d kept (x%.2f; so far %llu HP regained in %llu gains, %llu taken back)",
+                        prev_hp, hp_now, vial ? " after a Blood Vial" : " regained", kept_hp - prev_hp, double(f),
+                        (unsigned long long)regained, (unsigned long long)gains, (unsigned long long)taken);
+                }
+            }
+            if (f >= 1.0f) carry = 0;
+            prev_hp = kept_hp;
+            prev_mhp = max_hp;
+        }
         if (stn >= 0 && last_st >= 0 && last_st == stmax && last_st - stn >= 8 && now >= next_st) {
             next_st = now + std::chrono::seconds(5);
             Log("stamina used from a full bar: %d (%d -> %d); stamina cost x%.2f (%d rot stack(s))", last_st - stn,

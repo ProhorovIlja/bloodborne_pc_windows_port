@@ -92,6 +92,7 @@
 {72100105u, 72100108u, Category::never_sync, "per-player: Doll idle talk / bow / surprise triggers (m21 events 12100111, 12100115, 12100116)"},
 {72100110u, 72100110u, Category::never_sync, "per-player: Doll talk t210304 state (set as the talk opens)"},
 {72100113u, 72100113u, Category::never_sync, "per-player: Doll talk t210304 state after a level-up"},
+{72100202u, 72100202u, Category::never_sync, "per-player: the Dream mirror t210696 one-time note ('Wear clothing to change appearance.')"},
 // ---- 1727 specific rows
 {2200u, 2200u, Category::boss_defeated, "set by m22_00_00_00 ev 12201800 (boss defeat)"},
 {2300u, 2301u, Category::boss_defeated, "set by m23_00_00_00 ev 12301800 (boss defeat) (+1 more)"},
