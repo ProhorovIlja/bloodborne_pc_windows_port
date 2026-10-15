@@ -1446,6 +1446,14 @@ void HostTick(const GameSnapshot& s) {
             apply(id, false);
         }
         for (std::int32_t k : r.kick) {
+            // D6: a key-item gate's far-side kick only while the gate is still shut in the host's
+            // world (the host's own copy usually opened it already from the guest's press).
+            const KeyItemGate* kg = KeyItemGateFor(12400760);
+            bool open_now = false;
+            if (kg && k == kg->far_kick && progress::ReadFlag(kg->open_flag, &open_now) && open_now) {
+                Log("host: slot %d's gate kick %d: the gate is open here already; nothing to replay", slot, k);
+                continue;
+            }
             ReplayKick(slot, k, Now());
         }
         for (std::uint32_t e : r.story) {
