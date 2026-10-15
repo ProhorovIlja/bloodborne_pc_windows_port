@@ -751,10 +751,14 @@ void Init() {
     // SpEffect consumeStaminaRate getter 0x17e4c50 is never asked for a roll or a swing (live
     // 2026-10-15: 0 calls). BB_PARTY_ROT_STAMINA_COST=0 leaves the kind out.
     g_kind_hooked[kRotStaminaCost] = !EnvIsZero("BB_PARTY_ROT_STAMINA_COST");
-    // Rally (0.6.2): taken back by the tick too (RotRallyTakeBack): the SpEffect regainRate getter
-    // 0x17e5590 was never asked while a guest fought and killed (live 2026-10-15, 0 calls).
-    // BB_PARTY_ROT_RALLY=0 leaves the kind out.
-    g_kind_hooked[kRotRally] = !EnvIsZero("BB_PARTY_ROT_RALLY");
+    // Rally (0.6.2): the SpEffect regainRate getter 0x17e5590 was never asked while a guest fought
+    // and killed (live 2026-10-15, 0 calls), so the tick takes back part of each HP gain instead
+    // (RotRallyTakeBack). Not offered yet (BB_PARTY_ROT_RALLY=1 offers it): the live fights gave
+    // only a few 1-HP gains, too little to see the take-back work.
+    {
+        const char* r = std::getenv("BB_PARTY_ROT_RALLY");
+        g_kind_hooked[kRotRally] = r && r[0] == '1';
+    }
     // Item discovery: the itemDropRate sum 0x17e8010 was never asked either (0 calls over guest
     // kills with drops), and no other path is known: not offered unless BB_PARTY_ROT_ALL_KINDS=1
     // (the hook, for RE).
