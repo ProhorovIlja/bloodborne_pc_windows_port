@@ -1195,6 +1195,7 @@ double Now() {
 std::atomic<bool> g_on{false};
 std::atomic<bool> g_in_apply{false}; // our own 0x17DDC50 call: the hook stands aside
 std::atomic<u32> g_added{0};         // items 0x17D89F0 added during our own award
+std::atomic<bool> g_award_no_share{false}; // AwardLotGuestOnly (test aid): no gift_up to the host
 
 std::mutex g_host_mu;
 HostItems g_host;            // under g_host_mu
@@ -1445,7 +1446,9 @@ std::optional<ItemGrant> AwardEntry(u64 lot_arg, u64 host_only_arg) {
             g_guest.Offer({m});
         }
         Log("guest received lot %d while summoned: flag %d goes into the own save (pool)", lot, flag);
-        if (GuestGiftShareable(lot, flag)) {
+        if (g_award_no_share.load()) {
+            Log("gift: lot %d is a guest-only test award: not reported to the host", lot);
+        } else if (GuestGiftShareable(lot, flag)) {
             // D5: an NPC's gift in the host's world (shared quest choices): the host takes it too.
             std::lock_guard<std::mutex> lk(g_gift_mu);
             if (g_gift_up.size() < 64) {
@@ -2987,6 +2990,13 @@ bool OfferRepeatGift(std::int32_t lot) {
     Log("guest's own repeatable gift lot %d (#%llu this session): %s", lot, static_cast<unsigned long long>(n),
         taken ? "queued (given while summoned, or at home)" : "queue full");
     return taken != 0;
+}
+
+bool AwardLotGuestOnly(std::uint32_t lot) {
+    g_award_no_share = true;
+    const bool ok = AwardItemLot(lot);
+    g_award_no_share = false;
+    return ok;
 }
 
 bool PopGuestGift(std::string* body) {
