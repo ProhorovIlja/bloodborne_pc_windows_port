@@ -59,6 +59,8 @@ struct Options {
     bool bosses = false;   ///< bosses: loaded bosses are fought too (opt-in: an idle boss outside its fight
                            ///< stands in its closed arena; going there put the player in the walls)
     bool items = true;     ///< noitems: no item-effect pass (SpEffects of every goods)
+    bool gestures = true;  ///< nogestures: no gesture pass
+    bool tools = true;     ///< notools: no hunter-tool / throwable pass
     bool dump = false;     ///< dump: log the player record (equipment research)
     int enemies_per_row = 6;  ///< enemies=N: at most N new enemy kinds per row
     bool remo_only = false;   ///< remoonly: only the cutscene pass (no tour, no time of day)
@@ -82,6 +84,8 @@ inline bool ApplyFlag(Options& o, const std::string& item) {
     else if (item == "noitems") o.items = false;
     else if (item == "dump") o.dump = true;
     else if (item == "remoonly") o.remo_only = o.remo = true;
+    else if (item == "nogestures") o.gestures = false;
+    else if (item == "notools") o.tools = false;
     else return false;
     return true;
 }
@@ -193,6 +197,8 @@ struct Progress {
     int tod_orig = -1;                  ///< "todorig <value>": the save's own time of day
     bool effects_done = false;          ///< "effects": the item-effect pass ran
     std::set<std::uint32_t> fx;         ///< "fx <id>": item effects applied (or crashed in)
+    std::set<std::uint32_t> gestures;   ///< "gesture <n>": gestures played (1-based param id)
+    std::set<std::uint32_t> tools;      ///< "tool <goods>": hunter tools / throwables used
 };
 
 inline Progress ParseProgress(const std::string& text) {
@@ -231,6 +237,8 @@ inline Progress ParseProgress(const std::string& text) {
         else if (word == "fx") p.fx.insert(rp);
         else if (word == "remo") p.remos.insert(rp), ++p.remo_tries[rp];
         else if (word == "remook") p.remos_ok.insert(rp);
+        else if (word == "gesture") p.gestures.insert(rp);
+        else if (word == "tool") p.tools.insert(rp);
         else if (word == "start") ++p.starts[rp];
         else if (word == "done") p.done.insert(rp);
         else if (word == "skip") p.skipped.insert(rp);
@@ -532,6 +540,51 @@ constexpr bool ItemEffectAllowed(std::uint32_t goods, std::uint32_t speffect) {
     default:
         return false;
     }
+}
+
+/// The gestures (the gesture menu's 23 entries; table 0x55526D0, entry p = 1..23: gesture index
+/// p - 1, animation 104000 + 10 * (motion - 1), all in c0000's behaviour as Gesture<index>). The
+/// game plays one when MenuMan (*0x5562878) +0x2BC holds its param id p (the player's pad update
+/// 0x1526750 reads and clears it; no "learned" check), as the gesture menu asks for it.
+inline constexpr int kGestureCount = 23;
+inline constexpr float kGestureSeconds = 4.5f;  ///< played, then a dodge ends a looping one
+
+/// The hunter tools and throwables (goods in the quick-item slots; EquipParamGoods refCategory 1:
+/// a Bullet row) used once each per run, from quick slot 0 with Square: the throwables (Molotov
+/// 1200, Delayed Molotov 1201, Poison Knife 1210, Oil Urn 1220, Pebble 1230, Throwing Knife 1240,
+/// Rope Molotov 1250, Delayed Rope Molotov 1251, Pungent Blood Cocktail 1260, Numbing Mist 1270)
+/// and the quicksilver tools (Tiny Music Box 700, Augur of Ebrietas 2000, A Call Beyond 2010,
+/// Beast Roar 2020, Lead Elixir 2030, Choir Bell 2050, Tiny Tonitrus 2070, Executioner's Gloves
+/// 2080, Shaman Bone Blade 2090, Messenger's Gift 2110, Blacksky Eye 2120).
+inline constexpr std::uint32_t kWarperTools[] = {1200, 1201, 1210, 1220, 1230, 1240, 1250, 1251, 1260, 1270,
+                                                 700,  2000, 2010, 2020, 2030, 2050, 2070, 2080, 2090, 2110, 2120};
+inline constexpr std::uint32_t kQuicksilverBullets = 900;  ///< goods: the tools' ammunition
+inline constexpr float kToolSeconds = 4.0f;
+
+/// A gesture's English name (param id 1..23, the gesture menu's order).
+inline const char* GestureName(std::uint32_t id) {
+    static constexpr const char* kNames[kGestureCount] = {
+        "Point Forward", "Hunter's Salutation", "Conviction", "Joy", "Shake off Cape", "Church Bow (male)",
+        "Curtsy", "Church Bow (female)", "Wave", "Pray", "Wait", "Shh!", "Hunter's Rally", "Triumph", "Approval",
+        "Roar", "Beg for Life", "Brush off Dust", "Respect", "Deep Respect", "Make Contact", "Sit Down",
+        "League Oath"};
+    return id >= 1 && id <= static_cast<std::uint32_t>(kGestureCount) ? kNames[id - 1] : "?";
+}
+
+/// The gestures / tools still to do in a run (resume: the ones in the progress file are done).
+inline std::vector<std::uint32_t> GesturesLeft(const Progress& p) {
+    std::vector<std::uint32_t> v;
+    for (std::uint32_t g = 1; g <= static_cast<std::uint32_t>(kGestureCount); ++g) {
+        if (!p.gestures.count(g)) v.push_back(g);
+    }
+    return v;
+}
+inline std::vector<std::uint32_t> ToolsLeft(const Progress& p) {
+    std::vector<std::uint32_t> v;
+    for (std::uint32_t t : kWarperTools) {
+        if (!p.tools.count(t)) v.push_back(t);
+    }
+    return v;
 }
 
 /// Weapon actions after a gear change: the right-hand weapon in both forms (R1, R2, charged R2,
