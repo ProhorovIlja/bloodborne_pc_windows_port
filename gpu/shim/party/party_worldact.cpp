@@ -2611,14 +2611,21 @@ void FogPutBackTick(const GameSnapshot& s) {
     if (s.loading || !s.world_up) {
         return;
     }
+    static double last_action = -1e9;
     for (const FogPutBack& p : due) {
+        if (Now() - last_action < 30.0) {
+            Log("guest: in boss room %d (event %u) again %.0f s after the last put-back / load: left as is (no loop)",
+                p.fog_entity, p.guest_event, Now() - last_action);
+            continue;
+        }
+        last_action = Now();
         if (BossBarShown()) {
             // The fight was on (the host left during it): its boss bar and the boss stay on this
-            // game; correct over seamless - a loading screen to the own last lamp resets both.
+            // game; correct over seamless - a loading screen to the host's lamp (where the party is).
             party::status::SetLastEvent(kBossFogApartNotice);
-            const bool ok = b2::ReloadAtOwnLamp("boss fight without the host's area (the host left)");
+            const bool ok = b2::ReloadAtHostLamp("boss fight without the host's area (the host left)");
             Log("guest: in boss room %d (event %u) with the boss bar up while the host is in another area: %s; notice "
-                "shown", p.fog_entity, p.guest_event, ok ? "a loading screen to the own last lamp" : "NO alone load");
+                "shown", p.fog_entity, p.guest_event, ok ? "a loading screen to the host's lamp" : "NO alone load");
             if (ok) {
                 continue;
             }
