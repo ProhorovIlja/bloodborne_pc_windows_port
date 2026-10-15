@@ -173,6 +173,7 @@ struct Progress {
     std::set<std::uint64_t> tod_done;   ///< "tod <value> <rp> ...": time-of-day rows (value << 32 | rp)
     int tod_orig = -1;                  ///< "todorig <value>": the save's own time of day
     bool effects_done = false;          ///< "effects": the item-effect pass ran
+    std::set<std::uint32_t> fx;         ///< "fx <id>": item effects applied (or crashed in)
 };
 
 inline Progress ParseProgress(const std::string& text) {
@@ -208,6 +209,7 @@ inline Progress ParseProgress(const std::string& text) {
         }
         if (!rp) continue;
         if (word == "kind") p.kinds.insert(rp);
+        else if (word == "fx") p.fx.insert(rp);
         else if (word == "remo") p.remos.insert(rp);
         else if (word == "start") ++p.starts[rp];
         else if (word == "done") p.done.insert(rp);
@@ -300,13 +302,13 @@ inline std::vector<PadStep> ActionSteps() {
 /// Once per tour (the first area): the other weapons and items. Left / Right on the d-pad switch
 /// the left-hand (firearm / torch / shield) and right-hand weapons, each followed by its attacks;
 /// Up / Down cycle the quick items (and tools), Square uses one, Triangle a blood vial.
-inline std::vector<PadStep> LoadoutSteps() {
+inline std::vector<PadStep> LoadoutSteps(bool switch_weapons = true) {
     auto tap = [](std::uint32_t b, const char* w, float hold = 0.15f, float after = 0.9f) {
         return std::vector<PadStep>{{hold, b, -1, -1, -1, -1, w}, {after, 0, -1, -1, -1, -1, w}};
     };
     std::vector<PadStep> v;
     auto add = [&](std::vector<PadStep> s) { v.insert(v.end(), s.begin(), s.end()); };
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; switch_weapons && i < 2; ++i) {
         add(tap(kRight, "weapon switch", 0.15f, 1.8f));
         add(tap(kR1, "r1 (other weapon)", 0.15f, 1.2f));
         add(tap(kL1, "transform (other weapon)", 0.15f, 1.6f));
@@ -379,20 +381,19 @@ inline std::vector<int> TodPasses(int orig) {
     return v;
 }
 
-/// The gear of the tour's n-th row: three right-hand and three left-hand weapons and one armor
-/// set, rotating through world_warper_content.inc so every model is worn / held at least once
-/// in a full tour (34 sets, 26 + 15 weapons; 3 of each hand a row).
+/// The gear of the tour's n-th row: a right-hand and a left-hand weapon (the first slot of each
+/// hand: the ones held) and an armor set, rotating through world_warper_content.inc so every
+/// model is worn / held at least once in a full tour (34 sets, 26 + 15 weapons). The other weapon
+/// slots are left as they are and never switched to: a d-pad switch to a slot the record was
+/// changed in ended the game a few seconds later (live 2026-10-15, three times).
 struct Gear {
-    std::uint32_t right[3] = {}, left[3] = {};
+    std::uint32_t right = 0, left = 0;
     std::uint32_t armor = 0;  ///< head row; + 1000 chest, + 2000 arms, + 3000 legs
 };
 inline Gear GearFor(std::size_t n) {
     Gear g;
-    constexpr std::size_t nr = std::size(kWarperRightWeapons), nl = std::size(kWarperLeftWeapons);
-    for (std::size_t k = 0; k < 3; ++k) {
-        g.right[k] = kWarperRightWeapons[(3 * n + k) % nr];
-        g.left[k] = kWarperLeftWeapons[(3 * n + k) % nl];
-    }
+    g.right = kWarperRightWeapons[n % std::size(kWarperRightWeapons)];
+    g.left = kWarperLeftWeapons[n % std::size(kWarperLeftWeapons)];
     g.armor = kWarperArmorSets[n % std::size(kWarperArmorSets)];
     return g;
 }
@@ -411,29 +412,31 @@ constexpr bool ItemEffectAllowed(std::uint32_t goods, std::uint32_t speffect) {
         return false;
     default: break;
     }
+    // Below 1000: the plain consumables' effects (cures, Blood Vial heal steps); applied out of an
+    // item use, two of them (150, 230) ended the game (live 2026-10-15). 3401..3484: the Coldblood
+    // rows, one Echoes gain each with the same effect as 3400.
+    if (speffect < 1000 || (speffect > 3400 && speffect <= 3484)) return false;
     return speffect != 2100 && speffect != 2101 && speffect / 1000 != 9;
 }
 
-/// Weapon actions after a gear change: each right-hand weapon (R1, R2, transform, R1, back) and
-/// each left-hand one (L2), switching with Right / Left.
+/// Weapon actions after a gear change: the right-hand weapon in both forms (R1, R2, charged R2,
+/// transform, R1, R2, back) and the left-hand one (L2); no weapon switch (see Gear).
 inline std::vector<PadStep> GearSteps() {
     auto tap = [](std::uint32_t b, const char* w, float hold = 0.15f, float after = 0.9f) {
         return std::vector<PadStep>{{hold, b, -1, -1, -1, -1, w}, {after, 0, -1, -1, -1, -1, w}};
     };
     std::vector<PadStep> v;
     auto add = [&](std::vector<PadStep> s) { v.insert(v.end(), s.begin(), s.end()); };
-    for (int i = 0; i < 3; ++i) {
-        add(tap(kR1, "gear: r1", 0.15f, 1.1f));
-        add(tap(kR2, "gear: r2", 0.15f, 1.5f));
-        add(tap(kL1, "gear: transform", 0.15f, 1.5f));
-        add(tap(kR1, "gear: r1 transformed", 0.15f, 1.1f));
-        add(tap(kL1, "gear: transform", 0.15f, 1.5f));
-        add(tap(kRight, "gear: switch", 0.15f, 1.6f));
-    }
-    for (int i = 0; i < 3; ++i) {
-        add(tap(kL2, "gear: left hand", 0.15f, 1.3f));
-        add(tap(kLeft, "gear: switch", 0.15f, 1.6f));
-    }
+    add(tap(kR1, "gear: r1", 0.15f, 1.1f));
+    add(tap(kR1, "gear: r1", 0.15f, 1.1f));
+    add(tap(kR2, "gear: r2", 0.15f, 1.5f));
+    add(tap(kR2, "gear: r2 charged", 1.6f, 1.5f));
+    add(tap(kL1, "gear: transform", 0.15f, 1.6f));
+    add(tap(kR1, "gear: r1 transformed", 0.15f, 1.1f));
+    add(tap(kR2, "gear: r2 transformed", 0.15f, 1.6f));
+    add(tap(kL1, "gear: transform back", 0.15f, 1.6f));
+    add(tap(kL2, "gear: left hand", 0.15f, 1.4f));
+    add(tap(kL2, "gear: left hand", 0.15f, 1.4f));
     return v;
 }
 
