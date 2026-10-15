@@ -30,6 +30,7 @@ from pathlib import Path
 FOLDERS = ("savedata", "savedata_party")
 SESSIONS = Path("save_backups") / "party_sessions"
 INFO = "SESSION.txt"
+KEEP = 8  # snapshots kept by the launcher's own copies (the game keeps BB_SAVE_SESSION_KEEP = 5 of its own)
 CHECKED = "CHECKED.txt"
 SLOT_SIZE = 0x140000
 SYSTEM_SIZE = 0x40000
@@ -217,7 +218,14 @@ def snapshot_now(user, kind="before-undo", role="") -> Path:
         lines.append(f"{folder}_files={len(_files(src))}")
     (partial / INFO).write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
     partial.rename(final)
+    _prune(base)
     return final
+
+
+def _prune(base, keep=KEEP):
+    """The newest `keep` snapshots stay (the game rotates its own the same way, BB_SAVE_SESSION_KEEP)."""
+    for s in sessions(base.parent.parent)[keep:]:
+        shutil.rmtree(s.path, ignore_errors=True)
 
 
 def _describe_slot(data):
@@ -229,7 +237,8 @@ def _describe_slot(data):
     who = c.get("name") or "a character"
     lvl = f" level {c['level']}" if c.get("level") else ""
     ng = f", NG+{s.ng_cycle}" if s.ng_cycle else ""
-    return f"{who}{lvl}{ng}, {s.play_ms / 3.6e6:.1f} h played"
+    minutes = s.play_ms // 60000
+    return f"{who}{lvl}{ng}, {minutes // 60} h {minutes % 60:02d} min played"
 
 
 def describe(user, session=None) -> list:
