@@ -412,11 +412,31 @@ constexpr bool ItemEffectAllowed(std::uint32_t goods, std::uint32_t speffect) {
         return false;
     default: break;
     }
-    // Below 1000: the plain consumables' effects (cures, Blood Vial heal steps); applied out of an
-    // item use, two of them (150, 230) ended the game (live 2026-10-15). 3401..3484: the Coldblood
-    // rows, one Echoes gain each with the same effect as 3400.
-    if (speffect < 1000 || (speffect > 3400 && speffect <= 3484)) return false;
-    return speffect != 2100 && speffect != 2101 && speffect / 1000 != 9;
+    // Only the effects with a look of their own (the item names from msg/engus item.msgbnd):
+    // applied out of an item use, others ended the game (live 2026-10-15: 150 and 230, the cures'
+    // steps below 1000; one of the Coldblood Echoes gains / gem gifts / Umbilical Cord rows).
+    switch (speffect) {
+    case 1120:  // Old Hunter Bone
+    case 2010:  // Hand Lantern
+    case 2014:  // Blue Elixir
+    case 2016:  // Blue Elixir (DLC row)
+    case 2017:  // Vermin
+    case 2160:  // Madman's Knowledge / Blood Dreg
+    case 2161:  // Great One's Wisdom
+    case 2200:  // Fire Paper
+    case 2210:  // Empty Phantasm Shell
+    case 2220:  // Bolt Paper
+    case 2230:  // Bone Marrow Ash
+    case 3010:  // Blood Vial
+    case 3020:  // Iosefka's Blood Vial
+    case 3030:  // Blood of Arianna / Queenly Blood
+    case 3040:  // Blood of Adeline
+    case 3060:  // Blood of Adella
+    case 3240:  // Beast Blood Pellet
+        return true;
+    default:
+        return false;
+    }
 }
 
 /// Weapon actions after a gear change: the right-hand weapon in both forms (R1, R2, charged R2,
