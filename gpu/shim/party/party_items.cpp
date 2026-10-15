@@ -80,7 +80,7 @@ struct SourceName {
 constexpr SourceName kSourceNames[] = {
     {ItemSource::Unknown, "unknown"}, {ItemSource::Award, "award"}, {ItemSource::Flag, "flag"},
     {ItemSource::Full, "full"},       {ItemSource::Mark, "mark"},   {ItemSource::Test, "test"},
-    {ItemSource::Own, "own"},         {ItemSource::Repeat, "repeat"},
+    {ItemSource::Own, "own"},         {ItemSource::Repeat, "repeat"}, {ItemSource::Chalice, "chalice"},
 };
 
 const std::unordered_map<std::int32_t, std::int32_t>& FlagToLot() {
@@ -273,6 +273,28 @@ std::optional<ItemGrant> MakeRepeatGrant(std::int32_t lot, std::uint64_t n) {
     return g;
 }
 
+bool ChaliceAwardLot(std::int32_t lot) {
+    return lot >= 100000000 || (lot > 0 && lot / 100000 == 29);
+}
+
+std::optional<ItemGrant> MakeChaliceGrant(std::int32_t lot, const std::vector<GrantItem>& items, std::uint64_t n) {
+    if (!ChaliceAwardLot(lot) || items.empty() || items.size() > kMaxGrantItems) {
+        return std::nullopt;
+    }
+    ItemGrant g;
+    g.lot = lot;
+    g.flag = kItemNone;
+    g.ledger = kItemNone;
+    g.source = ItemSource::Chalice;
+    g.items = items;
+    g.repeat_key = kChaliceKeyBase + static_cast<std::int64_t>(n);
+    return g;
+}
+
+bool ChaliceGrantAccepted(bool summoned, std::uint32_t map_id) {
+    return summoned && map_id != 0xffffffffu && (map_id >> 24) == 29;
+}
+
 bool ItemLotDenied(std::int32_t lot, std::int32_t flag) {
     if (lot <= 0 || lot >= 100000000) {
         return true; // unresolved; Chalice Dungeon lots (1100xxxxx, 2001xxxxx)
@@ -438,7 +460,12 @@ bool ItemsFromJson(const json::Value& v, std::vector<ItemGrant>* out, std::strin
                 throw std::runtime_error("items: source is not a string");
             }
             g.source = ItemSourceFromName(row.array[4].string);
-            if (g.DoneFlag() < 0) {
+            if (g.source == ItemSource::Chalice) {
+                // G1: a Chalice award has no flag; the host's items are required (checked below).
+                if (g.flag != kItemNone || g.ledger != kItemNone || !ChaliceAwardLot(g.lot) || row.array.size() != 6) {
+                    throw std::runtime_error("items: a chalice row needs a dungeon lot, no flag and its items");
+                }
+            } else if (g.DoneFlag() < 0) {
                 throw std::runtime_error("items: a row needs a flag or a ledger index");
             }
             if (row.array.size() == 6) {
@@ -498,6 +525,14 @@ bool ItemGrantFromPeerAllowed(const ItemGrant& g, std::string* why) {
         }
         return false;
     };
+    if (g.source == ItemSource::Chalice) {
+        // G1: a dungeon lot with exactly the host's items, no flag; given only in the dungeon.
+        if (!ChaliceAwardLot(g.lot) || g.flag != kItemNone || g.ledger != kItemNone || g.items.empty() ||
+            g.items.size() > kMaxGrantItems) {
+            return no("a chalice award needs a dungeon lot, no flag and the host's items");
+        }
+        return true;
+    }
     if (g.source != ItemSource::Award && g.source != ItemSource::Flag && g.source != ItemSource::Full) {
         return no("not a host source (mark / test rows are guest-local)");
     }
@@ -1381,6 +1416,8 @@ std::deque<RecentGive> g_recent_gem_gives;
 // ---- The award hook (main thread: EMEVD, Lua) ----
 
 AwardFn g_award_original = nullptr; // the trampoline (ReplacePrologue)
+// G1: the host's Chalice Dungeon awards go to the guests in the dungeon (BB_PARTY_CHALICE_AWARDS=0: off).
+const bool g_chalice_awards = !EnvOff("BB_PARTY_CHALICE_AWARDS");
 bool g_capturing = false;           // main thread: the host's own award runs, GiveListEntry records
 std::vector<GrantItem> g_captured;  // its items (category, id, count)
 bool g_captured_bad = false;        // an item that could not be read (the guest resolves the lot itself)
@@ -1406,6 +1443,14 @@ std::optional<ItemGrant> AwardEntry(u64 lot_arg, u64 host_only_arg) {
             SetFlag(Ptr(kFlagMan), std::int64_t(kItemLedgerBase) + idx);
             Log("own award of ledger lot %d: ledger flag %d set", lot, int(kItemLedgerBase) + idx);
         }
+    }
+    if (role == PartyRole::Host && own == 1 && host_only && ChaliceAwardLot(lot) && g_chalice_awards) {
+        // G1: a Chalice Dungeon award (a layer boss's ritual materials, ...): what the host's roll
+        // gives goes to the guests in the dungeon now (AwardReplace fills the items).
+        ItemGrant c;
+        c.lot = lot;
+        c.source = ItemSource::Chalice;
+        return c;
     }
     if (role == PartyRole::Host && own == 1) {
         const std::optional<ItemGrant> g = ClassifyAward(lot, host_only);
@@ -1473,6 +1518,17 @@ BB_COOP_SYSV void AwardReplace(u64 mim, u64 lot_arg, u64 host_only_arg) {
     g_capturing = false;
     if (!g) {
         return;
+    }
+    if (g->source == ItemSource::Chalice) {
+        static std::uint64_t n = 0;
+        const std::optional<ItemGrant> c =
+            g_captured_bad ? std::nullopt : MakeChaliceGrant(g->lot, g_captured, ++n);
+        if (!c) {
+            Log("host chalice award lot %d: %s; not sent", g->lot,
+                g_captured_bad ? "an item could not be read" : g_captured.empty() ? "it gave nothing" : "too many items");
+            return;
+        }
+        g = c;
     }
     // What the host's roll really gave: guests replay exactly that while summoned.
     if (!g_captured_bad && g_captured.size() <= kMaxGrantItems) {
@@ -2335,7 +2391,28 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
     }
     const std::vector<LotRowData> chain = LotChain(g.lot);
     // A re-give ignores the row flags (the done flag is one of them and is set).
-    const LotPlan plan = PlanSummonedLot(chain, g.items, [](std::int32_t f) { return OwnSaveFlag(f); });
+    LotPlan plan = PlanSummonedLot(chain, g.items, [](std::int32_t f) { return OwnSaveFlag(f); });
+    if (g.source == ItemSource::Chalice) {
+        // G1: exactly the host's items, never a flag (dungeon flags are the slot's own), and no
+        // key goods (a chalice reaches every member through the chalice share).
+        plan.result = LotPlanResult::Give;
+        plan.why = "the host's chalice award";
+        plan.row_flags.clear();
+        plan.items.clear();
+        for (const GrantItem& it : g.items) {
+            LotSlotState s;
+            s.category = it.category;
+            s.id = it.id;
+            s.num = it.count;
+            FillGoodsLimits(&s);
+            if (KeyGoods(s)) {
+                Log("%s: goods %d is a key item (the chalice share gives chalices); left out", DescribeItem(g).c_str(),
+                    it.id);
+                continue;
+            }
+            plan.items.push_back(it);
+        }
+    }
     if (plan.result != LotPlanResult::Give) {
         Log("%s: not while summoned (%s: %s); waits for the own world", DescribeItem(g).c_str(),
             LotPlanResultName(plan.result), plan.why.c_str());
@@ -2646,9 +2723,33 @@ bool TakeHostFullItems(int* slot, std::vector<ItemGrant>* out) {
     return true;
 }
 
-void RequestGuestItems(const std::vector<ItemGrant>& items) {
+void RequestGuestItems(const std::vector<ItemGrant>& in) {
     if (!g_on.load()) {
         return;
+    }
+    std::vector<ItemGrant> items;
+    items.reserve(in.size());
+    for (const ItemGrant& g : in) {
+        if (g.source != ItemSource::Chalice) {
+            items.push_back(g);
+            continue;
+        }
+        // G1: only a guest in the dungeon now (summoned) takes the host's Chalice award; its own
+        // key (once; no flag is ever written for it).
+        static std::uint64_t n = 0;
+        const GameSnapshot q = ReadGameState(false);
+        const bool summoned = q.session_role == RoleClient && progress::FlagLoadMode() == 1;
+        if (!ChaliceGrantAccepted(summoned, q.map_id)) {
+            Log("chalice award lot %d from the host: not taken (this player is not in the host's dungeon: map %08x, "
+                "role %d)",
+                g.lot, q.map_id, q.session_role);
+            continue;
+        }
+        ItemGrant c = g;
+        c.repeat_key = kChaliceKeyBase + static_cast<std::int64_t>(++n);
+        Log("chalice award lot %d from the host (%zu item(s)): queued for this guest (in the dungeon at the kill)",
+            g.lot, g.items.size());
+        items.push_back(c);
     }
     std::size_t taken, pending;
     {
@@ -3229,7 +3330,10 @@ void ItemsTick() {
     if (mode == ItemApplyMode::Summoned) {
         const SummonedResult r = ApplySummoned(*g);
         std::lock_guard<std::mutex> lk(g_guest_mu);
-        if (r == SummonedResult::Defer) {
+        if (r == SummonedResult::Defer && g->source == ItemSource::Chalice) {
+            // A dungeon award is for the dungeon: never carried home.
+            Log("%s: could not be given in the dungeon; dropped (not carried home)", DescribeItem(*g).c_str());
+        } else if (r == SummonedResult::Defer) {
             g_guest.Defer(*g);
             return;
         }
