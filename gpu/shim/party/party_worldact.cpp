@@ -397,6 +397,34 @@ const FirstFightSpot* FirstFightSpotFor(std::uint32_t intro_event) {
     return nullptr;
 }
 
+const KeyItemGate* KeyItemGateFor(std::int32_t event_id) {
+    // flag_tool emevd + an instruction dump of m24_00 12400760: 3[4] group 1 goods 4011 state 0,
+    // group 2 state 1, both with 3[24] action button 2400030 at 2401220; group 3 = 5[2] ObjAct
+    // 12400170 (the far-side lever: the gate opens, no player animation); sets 12400160.
+    static const KeyItemGate gates[] = {
+        {12400760, 4011, 52400450u, 2, 12400160u, 12400170},
+    };
+    for (const KeyItemGate& g : gates) {
+        if (g.event == event_id) {
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
+const KeyItemGate* KeyItemGateByOpenFlag(std::uint32_t open_flag) {
+    const KeyItemGate* g = KeyItemGateFor(12400760);
+    return g && g->open_flag == open_flag ? g : nullptr;
+}
+
+std::uint8_t KeyItemGateHeldState(const KeyItemGate& g, int group, bool invert) {
+    return static_cast<std::uint8_t>((group == g.held_group) != invert ? 1 : 0);
+}
+
+bool KeyItemGateInvert(bool summoned_guest, bool own_flag, bool host_world_flag) {
+    return summoned_guest && (own_flag || host_world_flag);
+}
+
 bool FirstFightVisitDone(bool host_flag_on, bool flag9180_on, bool cutscene, double visit_s, bool chained,
                          bool scene) {
     return host_flag_on || (flag9180_on && !chained && !scene) || cutscene || visit_s >= kFirstFightVisitSeconds;
@@ -1179,7 +1207,18 @@ void HostTick(const GameSnapshot& s) {
                     "[" + progress::CategoryName(progress::CategoryOf(id)) + "]";
         };
         for (std::uint32_t id : r.set) {
+            bool was = false;
+            const KeyItemGate* kg = KeyItemGateByOpenFlag(id);
+            const bool kg_read = kg && progress::ReadFlag(id, &was);
             apply(id, true);
+            bool now_on = false;
+            if (kg_read && !was && progress::ReadFlag(id, &now_on) && now_on) {
+                // D6: a guest opened a key-item gate with its own key: the host's copy of the
+                // event still waits at the gate; the far-side ObjAct opens it there (animation).
+                Log("host: slot %d opened key-item gate %d (flag %u): its far-side ObjAct %d is kicked here", slot,
+                    kg->event, id, kg->far_kick);
+                ReplayKick(slot, kg->far_kick, Now());
+            }
         }
         for (std::uint32_t id : r.clr) {
             apply(id, false);
@@ -2165,11 +2204,56 @@ bool StandAtChr(std::int32_t entity, float dist, float angle_deg, std::string* w
     return PutLocal(p, -std::sin(r[1]), -std::cos(r[1]), dist, angle_deg, what);
 }
 
+namespace {
+// D6 (pard3): KeyItemGate. The dispatch thread, before the game reads the instruction's arguments:
+// each 3[4] of the gate's event gets the held state this game's copy should check (the argument
+// bytes are the loaded script's, shared by every run of the event, so every dispatch writes the
+// value for the current role: back to the data's own at home).
+std::atomic<int> g_keygate_last{-1};
+void KeyGateRewriter(int event_id, int bank, int id, std::uint64_t event, std::uint64_t instr) {
+    if (bank != 3 || id != 4) {
+        return;
+    }
+    const KeyItemGate* g = KeyItemGateFor(event_id);
+    if (!g) {
+        return;
+    }
+    std::uint32_t size = 0;
+    const std::uint64_t args = EmevdInstructionArgs(event, instr, &size);
+    std::int8_t group = 0;
+    std::int32_t goods = 0;
+    std::uint8_t state = 0;
+    if (!args || size < 9 || !SafeGet(args, &group) || !SafeGet(args + 4, &goods) || !SafeGet(args + 8, &state) ||
+        goods != g->goods) {
+        return;
+    }
+    const bool summoned = LocalSessionRole() == 6 && progress::FlagLoadMode() == 1;
+    bool own = false, host = false;
+    if (summoned) {
+        progress::ReadFlagOwnSave(g->own_flag, &own);
+        progress::HostWorldFlag(g->own_flag, &host);
+    }
+    const bool invert = KeyItemGateInvert(summoned, own, host);
+    const std::uint8_t want = KeyItemGateHeldState(*g, group, invert);
+    if (want != state) {
+        SafeWrite(args + 8, &want, 1);
+    }
+    const int key = (invert ? 1 : 0) | (own ? 2 : 0) | (host ? 4 : 0);
+    if (g_keygate_last.exchange(key) != key) {
+        Log("key item gate: event %d checks goods %d %s (summoned %d, own pickup flag %u %d, host world's %d)",
+            event_id, goods, invert ? "as held: the guest's own key opens it in the host's world" : "as in the data",
+            summoned ? 1 : 0, g->own_flag, own ? 1 : 0, host ? 1 : 0);
+    }
+}
+} // namespace
+
 void Init() {
     State& st = S();
     if (!st.enabled) {
         return;
     }
+    SetEmevdRewriter3(&KeyGateRewriter);
+    EnsureEmevdFilter();
     // push rbp; mov rbp, rsp; push r15; push r14; push r13; push r12; push rbx (13 bytes, both).
     const bool a = HookPrologue(0x13AE370, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                                 &LocalKickEntry, "ObjAct local kick (log)");
