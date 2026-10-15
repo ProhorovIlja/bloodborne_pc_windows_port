@@ -19,7 +19,7 @@
 //            replay=A+B (the replay's route), max=N (the first N rows of the route), noact (no
 //            weapon / item actions), noenemy (no enemies), nokill, enemies=N (new enemy kinds per
 //            row, 6), chalice (the Chalice Dungeon rows too: the save's current dungeon), notod (no
-//            time-of-day pass), nogear (no armor / weapon sets), remo (cutscenes: opt-in), nobosses,
+//            time-of-day pass), nogear (no armor / weapon sets), remo (cutscenes: opt-in), bosses (opt-in),
 //            noitems (no item-effect pass), dump (log the player record).
 #pragma once
 
@@ -53,7 +53,8 @@ struct Options {
     bool tod = true;       ///< notod: no time-of-day pass (day / evening / night / Blood Moon)
     bool gear = true;      ///< nogear: no armor / weapon changes between rows
     bool remo = false;     ///< remo: the map's cutscenes too (off: a played one ended the game, live 2026-10-15)
-    bool bosses = true;    ///< nobosses: loaded bosses are not fought
+    bool bosses = false;   ///< bosses: loaded bosses are fought too (opt-in: an idle boss outside its fight
+                           ///< stands in its closed arena; going there put the player in the walls)
     bool items = true;     ///< noitems: no item-effect pass (SpEffects of every goods)
     bool dump = false;     ///< dump: log the player record (equipment research)
     int enemies_per_row = 6;  ///< enemies=N: at most N new enemy kinds per row
@@ -70,6 +71,7 @@ inline bool ApplyFlag(Options& o, const std::string& item) {
     else if (item == "noremo") o.remo = false;
     else if (item == "remo") o.remo = true;
     else if (item == "nobosses") o.bosses = false;
+    else if (item == "bosses") o.bosses = true;
     else if (item == "noitems") o.items = false;
     else if (item == "dump") o.dump = true;
     else return false;
@@ -81,6 +83,10 @@ inline bool ApplyFlag(Options& o, const std::string& item) {
 inline constexpr std::uint32_t kDefaultReplay[] = {2102950, 2412950, 2402950, 2202950};
 
 inline constexpr int kMaxAttempts = 2;
+
+/// How far from the row's spot an enemy may be to be fought (m): farther ones stand in parts of
+/// the map that are not walkable from here (a 73 m pick ended the game, live 2026-10-15).
+inline constexpr float kEnemyRange = 45.0f;
 
 inline std::vector<std::uint32_t> ParseIds(const std::string& s) {
     std::vector<std::uint32_t> out;
