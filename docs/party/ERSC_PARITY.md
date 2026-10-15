@@ -15,7 +15,7 @@ description (scaling semantics), an ExitLag guide (secondary; it says 4 players 
 2026-10-11). The Nexus page (nexusmods.com/eldenring/mods/510) blocks automated fetches. ERSC
 behaviour marked *(verify)* is from memory or weak sources and is not confirmed by the docs.
 
-Last update: 2026-10-15 (agent/guestvals: C1, D2, G2, H3; agent/robust1: C6, F5; agent/parab3: A2, A3, A4, A6, A7, B1, B2, B3, B5, B6; earlier the same day agent/parab2: A4, A11, B1, B5, B6; agent/parab: A1, A4, A5, A11, B1, B5, B6; agent/outage062: F5).
+Last update: 2026-10-15 (agent/parx: A9, B4, C1, C3, C4, E1, E4, F5, H3, H4, H5; agent/guestvals: C1, D2, G2, H3; agent/robust1: C6, F5; agent/parab3: A2, A3, A4, A6, A7, B1, B2, B3, B5, B6; earlier the same day agent/parab2: A4, A11, B1, B5, B6; agent/parab: A1, A4, A5, A11, B1, B5, B6; agent/outage062: F5).
 
 ## Bloodborne rule (user, 2026-10-11) - overrides ERSC where they differ
 
@@ -51,15 +51,15 @@ only 100% when it meets it.
 
 | Area | Parity |
 |---|---|
-| A. Session & joining | 99% |
+| A. Session & joining | 100% |
 | B. World & travel | 99% |
-| C. Death & respawn | 96% |
+| C. Death & respawn | 97% |
 | D. Progress (anyone can progress) | 92% |
-| E. Services & UI | 97% |
+| E. Services & UI | 100% |
 | F. Network & robustness | 91% |
 | G. BB-specific (chalice, insight, bath) | 90% |
-| H. Bloodborne rule (feels like SP in a party) | 94% |
-| **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~95%** |
+| H. Bloodborne rule (feels like SP in a party) | 96% |
+| **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~96%** |
 
 ## A. Session & joining
 
@@ -165,6 +165,7 @@ only 100% when it meets it.
 
 ## Change log
 
+- 2026-10-15 (parx, 0.6.2): A9 95 -> 100 (two different builds live: refused at the title with both builds and the differing patch named, the guest plays alone), B4 95 -> 100 (the host's same-map lamp with YES: three players moved in-world, no load; a real map change one load; host death the vanilla respawn load), C1 98 -> 100 (the host sees the re-created guest's body at its lamp; the join banner a revive replayed fixed), C3 96 -> 100 (a guest dead while the host is down waits for the host's death load: one load each, fixed live), C4 98 -> 100 (item discovery rot on every enemy drop roll, live: discovery 0.80 with two stacks; all five kinds in force), E1 95 -> 100 (three Doll level-ups in a row as a guest), E4 95 -> 100 (rejoins by direct summon in 2-4 s, a 26 s sign hold after a guest's own Leave fixed), F5 95 -> 98 (30 s and 50 s outages with 3 players: session kept, no load; send queue limit 1001 -> 30000 after deadinside's BBSC notes; a real network still open), H4 95 -> 100 (census 0 respawned over deaths, kills, travel and host death loads with 2-3 players), H5 97 -> 100 (a covenant joined as a guest: the Hunter oath rune memorized; oath runes are item lots after all); H3 unchanged 97 (D6 soak). Step 0 (post-merge smoke of parab4 / guestvals): 3-player leave / rejoin x3 and host Leave without a crash; found and fixed the guest's drop to the title after the host's Leave or its own ("Failed to connect to Bloodborne server": it now plays alone) and the third rejoin's bell path; guest stain / lamps / NG guard fine. Harness: every instance's exe re-linked after a build. A 99 -> 100%, C 96 -> 97%, E 97 -> 100%, H 94 -> 96%, overall ~96%.
 - 2026-10-15 (ngfix, 0.6.2): D7 95 -> 97 (mixed NG cycles: a guest in the host's world now runs the host's cycle on every game - same enemy max HP on both games, same kill echoes, live; the guest's own save keeps its own cycle, on disk, and its own world is back at its cycle at home; the open point from guestvals is closed). Also a renderer robustness fix: the host's GPU assertion `vk_scheduler ReserveRecordData` (seen once 11 s after a party arrived in Vicar Amelia's hall) came from command data larger than a 128 KiB recording chunk; such data now lives beside the chunk for exactly as long as its commands (live: 7 min in the same hall on both games with the `BB_RECORD_LARGE_TEST=1` aid, 700+ oversized commands checked per game, 0 damaged, no assertion; the original trigger did not recur in 15 min there; no device-lost logs found). Summary unchanged: D 92%, overall ~95%.
 - 2026-10-15 (parab4, 0.6.2): A6 95 -> 100 (the host's Leave with 1, 2 and 3 guests live: every guest out in 0.4-0.5 s, home), A7 90 -> 100 (the rejoin crash's cause: a guest kept a departed guest's PlayerIns, so at the rejoin two chrs read one peer's packet queue from two threads; guests now remove it the host's way, plus a queue lock and a newer-reader guard; live with 3 players (three cycles) and 4 players (three cycles, a headless leaver too): no crash, the right cooperator counts), A8 90 -> 100 (every Party page in the game's own System menu, live; each ersc_settings.ini entry mapped), A4 100 (the served-room +10 s seen live), B6 97 -> 100 (the Amygdala grab's trigger is region 2402018 under the chapel steps (event 12405260); a grabbed guest and a grabbed host both took the party into the Hunter's Nightmare, live; the arrival's double Insight for guests fixed). A 97 -> 99%, B 98 -> 99%, overall ~95% (95.3 with guestvals / robust1).
 - 2026-10-15 (guestvals, 0.6.2, the statsaudit findings 1, 3, 4, 5, 9): C1 96 -> 98 (the guest's bloodstain recoverable in the host's world, marked, live), D2 92 -> 96 (lamps shared by the whole party both ways, a boss-gated lamp waits, live, on disk), G2 88 -> 93 (first-encounter Insight in a guest-started fight for each player once; boss echoes / Insight made up when a guest's own defeat does not run), H3 95 -> 97 (a guest's own NG cycle kept for its own save, on disk). Found on the way (open, not changed): with mixed NG cycles the guest's game runs the host's world at the guest's OWN cycle after the B2 arrival load (+0x68 back to own; only the first summoned load used the host's), so enemy scaling differs per game (vanilla / ERSC: the host's cycle for everyone). Finding 11 (a guest in another map block gets no echoes for the host's kills there): documented only; ERSC's rule for far kills is not stated in its docs *(verify)*. C 96%, D 92%, G 90%, H 94%; overall ~95%.
