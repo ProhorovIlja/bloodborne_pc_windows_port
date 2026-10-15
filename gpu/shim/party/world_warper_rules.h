@@ -342,6 +342,13 @@ constexpr std::uint32_t EnemyKind(std::uint32_t npc_param_id) {
     return npc_param_id >= 100000000u ? npc_param_id / 100000u : npc_param_id;
 }
 
+/// A chr the warper fights: a real enemy's NpcParam row (model * 100000 + variant). The team-23
+/// chrs with short rows (the Hunter's Dream's 902010.. set pieces with 999 HP, NPC hunters) are
+/// left alone: killing the Dream's ended the game at the next warp (live 2026-10-15).
+constexpr bool EnemyRowFightable(std::uint32_t npc_param_id) {
+    return npc_param_id >= 100000000u;
+}
+
 /// The packed map (AA << 24 | BB << 16) a cutscene belongs to: remo AABBnnnn.
 constexpr std::uint32_t RemoMap(std::uint32_t remo) {
     return (remo / 1000000u) << 24 | (remo / 10000u % 100u) << 16;
