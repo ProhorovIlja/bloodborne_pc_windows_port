@@ -72,17 +72,17 @@ only 100% when it meets it.
 
 ## Summary
 
-| Area | Parity |
-|---|---|
-| A. Session & joining | 100% |
-| B. World & travel | 100% |
-| C. Death & respawn | 100% |
-| D. Progress (anyone can progress) | 99% |
-| E. Services & UI | 100% |
-| F. Network & robustness | 93% |
-| G. BB-specific (chalice, insight, bath) | 100% |
-| H. Bloodborne rule (feels like SP in a party) | 100% |
-| **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~99%** |
+| Area | Plan done | ERSC parity (evidence-weighted) |
+|---|---|---|
+| A. Session & joining | 100% | 95% |
+| B. World & travel | 100% | 95% |
+| C. Death & respawn | 100% | 95% |
+| D. Progress (anyone can progress) | 99% | 95% |
+| E. Services & UI | 100% | 95% |
+| F. Network & robustness | 93% | 92% |
+| G. BB-specific (chalice, insight, bath) | 100% | 95% |
+| H. Bloodborne rule (feels like SP in a party) | 100% | 95% |
+| **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~99%** | **~95%** |
 
 ## Evidence and ERSC parity (evidence-weighted)
 
