@@ -153,6 +153,29 @@ boss rewards, key items from bosses and NPC event awards arrive by themselves.
 | Scripted warps `2003[49]` / `2003[14]` | split question (Ask), YES = party travel | a guest's warp becomes a lamp request | party_split, party_travel |
 | Host death | party respawn load at the host's last lamp record | guests replay as a lamp warp | party_b2, party_travel |
 
+### Rule audit: "party quest progress is shared by everyone" (user decision 2026-10-15; pard3)
+
+Every kind of progress any member makes must end up in every member's own save, both ways, and stay
+there (owed when a summoned save cannot take it yet). Checked kind by kind against the code and the
+live runs; lamps are agent guestvals' (not repeated here).
+
+| Kind | Host's progress -> each guest's save | A guest's progress -> host's world and save | Status |
+|---|---|---|---|
+| Boss kills in the host's world (anyone's hit) | the host's game has the kill; C2 writes the boss flag into each guest's own pool (live O2, 3 players: the headless guest's own save `12801800=1` after it went home) | it is the host's world: the host's own kill | shared |
+| Boss kills by a guest alone in another map (split travel) | - | **was lost** (the boss was alive again in the host's world). NEW: the boss flag of the area the lone guest stands in goes up as a world action (`BossKillActionAllowed`, set only, only while apart); the host's save keeps it, no rewards for the host | fixed, unit-tested (party-worldact-test); live run open |
+| First fights started by a guest (intro, boss start) | host's event, scene mirrored (P5) | the guest's fog report | shared (live: Ludwig, the One Reborn, Amygdala, Wet Nurse, Amelia) |
+| Doors, levers, shortcuts, one-way doors | C2 + mirror | world action + ObjAct kick replay | shared (live: Lecture Building door, lever 2411310, P9 doors) |
+| Key-item gates (the plaza gate's Hunter Chief Emblem) | C2 (12400160) | **a guest could not open it** (its key items read 0 summoned). NEW: `KeyItemGate`, the guest's own emblem opens it; the host's copy opens by its far-side ObjAct | fixed, live run P1b |
+| NPC quest steps, talk choices | Follow (set and clear) | world action npc_quest (live: Chapel Dweller 72400310, Eileen 72400520); the host saves at once | shared |
+| NPC gifts | C3 | P1 / P2 (gift_up, the guest's own grant for repeatable gifts) | shared |
+| Story scenes and their flags | live mirror + C4 replay into the own save | story_up; NEW: host-only trigger spots the guest reaches (the Blood Moon, `StoryTrigger`) run on the host's chr | shared; Amelia's skull (an action button only the host's chr has) still needs the host |
+| Story notices (2007[1] dialogs only the host's event shows) | NEW: relayed (`story_notice`, Yahar'gul's "Ritual secret broken") | - | shared (display only, no flag) |
+| Key items, workshop tools, boss key rewards | C3, owed lots for title joiners | shared key treasure (`SharedKeyTreasureLot`) | shared |
+| Time of day / Insight-world state | C4 (upward), zone flags of the host's world through C2 | the host's own clock / Insight decide | host-led by design (one world) |
+| Treasure pickups (non-key) | per player (instanced) | own save only | per player by decision ("World item pickups"), not progress |
+| Endings / NG+ | NEW: each guest is asked (YES: the ending in its own save; NOT NOW: home, save unchanged) | the host's own | per player by decision (2026-10-15) |
+| Progress a member makes playing solo in its own world (no party) | - | - | not shared: outside a party session each save is its own (as in vanilla and ERSC) |
+
 ---------------------------------------------------------------------------------------------
 
 ## Fixes in this change (data / tables, unit-tested)

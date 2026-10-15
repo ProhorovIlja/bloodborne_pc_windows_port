@@ -2735,6 +2735,35 @@ void ItemGetWatchTick(const GameSnapshot& gs, double now) {
         return;
     }
     const int n = ItemGetEntries();
+    // A summoned guest's game holds every action button off (SprjActionButtonMan +0x52 = 1: a
+    // phantom never picks anything up in vanilla), and the item notice's confirm is an action
+    // button (0x16D86E0 -> 0x1CD91F0 button 0x1130): the box had no OK row and Cross did nothing
+    // (live pard3 R3: +0x52 1 in the field, 0 in the Dream where it worked). While an item notice
+    // is up the gate is lifted, and put back once it is closed.
+    {
+        static bool lifted = false;
+        static const bool keep = std::getenv("BB_PARTY_ITEMGET_CONFIRM") && std::getenv("BB_PARTY_ITEMGET_CONFIRM")[0] == '0';
+        u64 man = 0;
+        if (!keep && SafeGet(Guest(0x5540048), &man) && man) {
+            u8 gate = 0;
+            SafeGet(man + 0x52, &gate);
+            if (n > 0 && gs.session_role == 6 && gate == 1) {
+                const u8 zero = 0;
+                SafeWrite(man + 0x52, &zero, 1);
+                if (!lifted) {
+                    lifted = true;
+                    Log("item notice up on a summoned guest: the action-button hold (+0x52) lifted so its OK confirms it");
+                }
+            } else if (n <= 0 && lifted) {
+                lifted = false;
+                if (gs.session_role == 6 && gate == 0) {
+                    const u8 one = 1;
+                    SafeWrite(man + 0x52, &one, 1);
+                }
+                Log("item notice closed: the action-button hold put back");
+            }
+        }
+    }
     static const bool probe = std::getenv("BB_PARTY_ITEMGET_PROBE") != nullptr;
     if (probe && n > 0) {
         ItemConfirmGateProbe(now);
