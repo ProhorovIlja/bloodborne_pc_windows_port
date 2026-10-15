@@ -192,3 +192,25 @@ pools dumped with `BB_PARTY_FLAG_DUMP=1`, `tools/party/save_check.py` on S5b.
 Not covered here: the Blood Moon (Rom dead + the host near Queen Yharnam) and its travel to
 Yahar'gul (the "Travel with the party?" path of scripted warps, quest_audit P8), Cathedral Ward's
 plaza gate with the shared Hunter Chief Emblem, the Blood-starved Beast kill.
+
+## 2026-10-15 segment 2: Blood Moon -> Yahar'gul -> ... -> the ending (agent pard2)
+
+The rest of the main path, continuing pard's segment the same way (2 loopback instances, test
+saves, `instances.py run --count 2 --party`, the first run with `--fresh-saves`, each later run a
+*Continue party game* of the saves the run before left, kept between runs under the agent's
+`campaign_state/`; guest Continue = title join unless noted). Each run 230 s (the shared queue's
+lease); `BB_PARTY_FLAG_DUMP=1`, `tools/party/save_check.py` after each; screenshots every 15 s.
+
+| Run | Milestone | Result |
+|---|---|---|
+| c1 | Byrgenwerth: Rom killed (`host_kill=3200800`), host to Moonside Lake 3202952: the Blood Moon | **pass**: 13201800 boss kill, guest +2 Insight (6 -> 8); Blood Moon scene 32000000 on the host 59.4 s and the guest's live mirror 59.4 s (36 s); the guest's own time of day 6 -> 7 (pool); story warp 2802958 `this player's own travel`, the question 2.0 s after the scene, YES, party travel; guest replayed it and stood beside the host in Yahar'gul (screenshot: the two in the chapel); save_check consistent |
+| c2 | Continue in Yahar'gul (Blood Moon): the guest's title join, the One Reborn's first fight started by the **guest** | **pass**: guest through fog 2801800 at 55.5 s, host visit 0.14 s, intro 28000000 on both (live mirror, 79-80 s), the host kept at the arena entrance through the scene and put back 1 s after it, alive; the `host_kill` step (75 s) hit during the scene and killed nothing lasting (the boss entity is 2800803, see c13) |
+| c3 | Cathedral Ward: the plaza gate (12400160 cleared on the host, reload) | **partial**: the guest's prompt at the gatekeeper was the "need the emblem" talk (10010310: a summoned guest's key items read 0 in the host's world, so its copy of 12400760 takes the no-emblem branch); the host's `host_obj` + Cross found no prompt at its spot: the gate stayed shut. As in vanilla only the host can open it; not re-run |
+| c4 | Old Yharnam 2302950, the Blood-starved Beast killed (`host_kill=2300800`, the fixed boss path) | **pass / found**: boss kill 12301800, guest +2 Insight; the Pthumeru Chalice (lot 80000000, key item) waited for the guest's own world, which a title-joining guest never loads, and the run ended first (save_check LOST) -> **fixed**: owed key items on disk, given at the next own world (c12) |
+| c5 | Nightmare Frontier 3302950: the Amygdala's first fight started by the **guest**, then killed | **pass**: guest through fog 3301800, host visit 0.07 s (no scene: boss started at once), first-fight Insight +3 to the guest, boss kill 13301800, Insight +3; reward lot 80000200 waited (as c4) |
+| c6 | Yahar'gul 2802950: the One Reborn | **partial**: `host_kill=2800800` ForceDead without a defeat (the boss bar entity is 2800803); owed lots 80000000 / 80000200 recorded on the guest (`owed key item: lot ... kept`) |
+| c7 | Lecture Building 3202959 | **pass**: party travel, re-join 4.4 s; the door fixture named the doors' SFX entity 3202000 (`not loaded`): the real door not run |
+| c8 | Nightmare of Mensis 2602950: Micolash's flag set, Mergo's Wet Nurse's first fight started by the **guest**, killed | **pass**: guest through fog 2601800 71.5 s, host visit, intro 26000010 on both (29 s), host kept through it and put back; `host_kill` 2600802 -> boss kill 12601800 at 173 s, guest +3 Insight; reward lot 55100000 (One Third of Umbilical Cord) owed for the guest's own world |
+| c9 | Upper Cathedral Ward 2422950: Ebrietas killed | **pass**: boss kill 12421800, guest Insight 21 -> 24; reward lot 80000300 (a chalice) owed for the guest's own world |
+| c10 | Hunter's Dream: Gehrman's refusal (72100131), the fight, the ending | **pass**: refusal scene 21000040 on both (live mirror, 55 s with the skip), Gehrman killed (12101800, +3 Insight to the guest), ending 2 (event 12100000) sent to the party at 131.5 s: the host's remo and the guest's own (in its own Dream, by design) both 72-73 s, NG cycle 0 -> 1 on both, staff roll on both windows (screenshots) |
+

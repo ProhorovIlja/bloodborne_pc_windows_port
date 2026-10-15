@@ -390,8 +390,9 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
   (`split_choosing`) and the lower party slot keeps it (the host first,
   `deathrules::DropSameWarpQuestion`); the host also takes no second question for a warp whose
   party travel a member's request already started. Live (parab b6a, Lecture Building 3202959 by
-  the test aid): both asked at once, the guest's question closed, one party travel. pard2 c7 ran
-  the real Lecture Building door (guest's Cross on its ObjAct): see campaign_soak.md.
+  the test aid): both asked at once, the guest's question closed, one party travel. The real
+  door's ObjAct by a guest is still not run live (pard2 c7 travelled to the Lecture Building
+  3202959 with the party, but its fixture named the doors' SFX entity 3202000, not the door object).
 * **P5 First fights. DONE (pard, 2026-10-15, live with Amelia).** Every boss's FIRST fight
   starts with the host's first-fight event (`ホストがボス部屋入場_初戦/初回`: the host enters a region
   or comes within a distance, many with an intro scene), and each guest-entry event waits for it
@@ -403,15 +404,49 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
   not pass one already waiting: the first try armed a skip and nothing happened), so the host's
   character visits the event's region for a moment (`FirstFightSpotFor`, MSB data) and is put back
   as soon as the event went on (0.07 s live). Its scene plays for the whole party (live mirror),
-  the boss starts. Ebrietas (a hit starts her), Rom (a hit; no guest gate) and the DLC bosses stay
-  host-first with the notice. `BB_PARTY_GUEST_FIRST_FIGHT=0` off. Live S1d: see checklist 4.
-* **P6 Yahar'gul before the Blood Moon** (12800160 SpEffects 9120/9121, the Gaol): verify a
-  summon / B2 travel into m28 with 9802 off before the players get kidnapped (only reachable by a
-  kidnap before Rom). Covered in part: the P7 live run was with the test save, whose 9802 is off
-  (save_decode: 9800/9801 on, 9802 off, Rom alive), so the guest followed the host into the Gaol
-  before the Blood Moon and stood beside it; the same SpEffect pair is always on in the Hunter's
-  Dream (m21 constructor), where summons work. Not run: a fresh summon (bell) inside m28 with 9802
-  off.
+  the boss starts. `BB_PARTY_GUEST_FIRST_FIGHT=0` off. Live S1d: see checklist 4.
+  *pard2 (2026-10-15), the host's side, live with frame captures of the host's window (66 per s):*
+  - Without a hold the visit showed: 2-4 frames of the arena's view between the host's own view
+    and the intro (p5a2). Now the host's screen keeps its last picture while the chr is away
+    (`bbport_present_hold.h`, the presenter shows the held frame again; not with frame
+    generation; `BB_PARTY_FF_HOLD=0` off): p5d, 240 frames, the 3D view identical up to the
+    intro's first frame (only the party panel's distance number changed for ~0.2 s).
+  - A host put back before its intro scene ended was killed the moment the scene ended (p5a /
+    p5b / p5d / p5e: `hit: HP 719 -> 0` at the scene's end, then the party's respawn load; the
+    scene's player pose ends at the arena entrance). Gates with an intro scene (`FirstFightSpot::scene`:
+    Amelia, Gascoigne, Logarius, Wet Nurse, Micolash, One Reborn, Ludwig, Laurence, the Orphan)
+    now keep the host at the spot until the scene has started (9180 does not end the visit) and
+    through it, and put it back 1 s after it (p5f: put back at 202.1 s, alive at its lamp to the
+    end of the run with Amelia's bar up, the guest fighting her, screenshots; c2: the One Reborn
+    the same, host alive).
+  - Host dead when the guest's start arrives (p5c, `host_die` 2 s before): the start is dropped
+    ("the host died: the party respawns at its lamp"), the party's death load takes the guest out
+    of the arena; no visit. Another boss bar up or a scene playing: the visit waits.
+  - Host in the game menu (p5b, Options pressed 3 s before): visited all the same, the menu stays
+    open, the scene plays. Host mid-attack (p5a2 / p5d, R1 every 0.7 s): visited and put back.
+  - No other event ran from the host's moment there: with `BB_PARTY_EMEVD_TRACE=1` the only new
+    instructions in the visit window were the first-fight event 12401802's own and common 9280
+    (slot 2, `出現寡婦_消滅`), which waits on that event's flags, not on a position.
+  - DLC (`BossGateGuestStarts` now 16 gates): Ludwig (13404811 + 13401801, both 3[2] 3402805),
+    Laurence (13404861 + 13401851, 3[2] 3402855; the host must hold goods 4014 as in vanilla),
+    the Orphan of Kos (13604811 + 13601801, 3[2] 3602805) are two-part first fights (the first part
+    sets 9180 and its flag, the scene part needs that flag AND the host still in the region:
+    `FirstFightSpot::chained`), the Living Failures one part (13501851, 3[2] 3502815). Spots from
+    the MSB regions (origin + 0.5 m). Unit-tested; not run live (no DLC area in the test saves).
+  - Host-first by design: Ebrietas (12421802: 3[23] damage to her by entity 10000, the HOST's own
+    hit), Lady Maria (13501801 waits on 13500947, set by 13500948 when the host examines her in her
+    chair, 3[1] 1650/1651), the Celestial Emissary (no first-fight event). Rom has no fog gate and
+    her first fight starts on anyone's hit (13201802: 3[23] attacker -1), so a guest starts it
+    already.
+* **P6 Yahar'gul before and after the Blood Moon. DONE (pard2, 2026-10-15, live).** 12800160 puts
+  SpEffects 9120/9121 on the local player in m28 while 9802 is off (the Hunter's Dream constructor
+  does the same, and summons work there). Before (p6, test saves, 9802 = 0 on both, own save and
+  view): the host in Yahar'gul at lamp 2802950, the guest rang from its own Dream: refused once
+  (another map), gathered to 2802950 with a loading screen, rang again, direct summon joined 3.0 s
+  after the request, arrived 0.5 m from the host and stayed 170 s to the end of the run
+  (screenshot: both in the night, unreddened Yahar'gul). After (c2, the Blood Moon world of c1): the
+  guest's title join loaded straight into Yahar'gul beside the host, and it started the One
+  Reborn's first fight there.
 * **P7 Kidnap respawn trace. DONE (kidnap agent, 2026-10-14, live).** The EMEVD dispatcher
   0x17C0420 switches on the 2003 instruction id (jump table 0x17C2C38); id 23 (`復活ポイント設定`,
   set respawn point) is the case at 0x17C10A5: row lookup 0x1F26B40, then `GSM +0x1528 =

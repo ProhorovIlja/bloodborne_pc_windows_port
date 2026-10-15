@@ -1643,6 +1643,7 @@ void ParseHostTest() {
 }
 
 /// The host fixture (main thread): the game's award with hostOnly 1, through our hook.
+void ForgetOwedLot(std::int32_t lot);
 std::vector<LotSlotState> LotSlots(std::int32_t lot);
 
 void HostTestTick(double now) {
@@ -1894,6 +1895,7 @@ bool Apply(const ItemGrant& g) {
         SetFlag(man, done);
         Log("skip %s: %s (%s); flag %lld set instead", DescribeItem(g).c_str(), LotFitName(fit), why.c_str(),
             static_cast<long long>(done));
+        ForgetOwedLot(g.lot);  // held already: not owed
         return false;
     }
     // The ledger bit goes in first: the give can start a save (run A of the C3 check lost a
@@ -1913,6 +1915,9 @@ bool Apply(const ItemGrant& g) {
     const bool now_set = IsFlag(man, done);
     Log("gave %s: 0x17DDC50(lot %d, 0) added %u item entr%s; flag %lld is %s", DescribeItem(g).c_str(), g.lot, added,
         added == 1 ? "y" : "ies", static_cast<long long>(done), now_set ? "set" : "CLEAR (nothing given)");
+    if (added > 0) {
+        ForgetOwedLot(g.lot);  // given at home in this session: not owed any more
+    }
     return true;
 }
 
@@ -2167,6 +2172,19 @@ void NoteOwedLot(std::int32_t lot) {
     }
 }
 
+void ForgetOwedLot(std::int32_t lot) {
+    const int slot = party::flow::CurrentSaveSlot();
+    std::lock_guard<std::mutex> lk(g_owed_mu);
+    LoadOwedLotsLocked();
+    const auto it = std::remove_if(g_owed.begin(), g_owed.end(), [&](const OwedLot& o) {
+        return o.lot == lot && SummonedGiveForSlot(o.slot, slot);
+    });
+    if (it != g_owed.end()) {
+        g_owed.erase(it, g_owed.end());
+        SaveOwedLotsLocked();
+    }
+}
+
 /// Own world (KeyCatchupTick): the lots owed to this save slot whose items are still missing.
 std::vector<std::int32_t> TakeOwedLots() {
     const int slot = party::flow::CurrentSaveSlot();
@@ -2216,27 +2234,42 @@ void KeyCatchupTick(const GameSnapshot& gs, int load_mode, double now) {
     if (!man || LoadMode(man) != 0 || OwnWorld() != 1) {
         return;
     }
-    std::vector<std::int32_t> lots = KeyCatchupLots(
+    const std::vector<std::int32_t> lots = KeyCatchupLots(
         [man](std::uint32_t id) { return IsFlag(man, id); },
         [](std::uint32_t id) { return progress::CategoryOf(id) == progress::Category::boss_defeated; });
     const std::vector<std::int32_t> owed = TakeOwedLots();
+    int gave = 0;
+    // Owed lots (deferred whole while summoned): every goods slot, a unique one only when missing.
     for (const std::int32_t lot : owed) {
-        if (std::find(lots.begin(), lots.end(), lot) == lots.end()) {
-            lots.push_back(lot);
+        for (const LotSlotState& sl : LotSlots(lot)) {
+            if (sl.id <= 0) {
+                continue;
+            }
+            if (sl.category != 4) {
+                Log("owed lot %d: %s %d is not goods; not given here", lot, CategoryWord(std::uint32_t(sl.category)),
+                    sl.id);
+                continue;
+            }
+            const int n = std::max(1, sl.num);
+            const int held_now = ItemCount(0x40000000u, static_cast<u32>(sl.id));
+            if (!KeyGiveAllowedHeld(sl, held_now)) {
+                Log("owed lot %d: goods %d held %d already: not given again", lot, sl.id, held_now);
+                continue;
+            }
+            const bool ok = GiveItem(0x40000000u, static_cast<u32>(sl.id), n);
+            Log("owed lot %d: %s goods %d x%d (held %d -> %d)", lot, ok ? "gave" : "could not give", sl.id, n, held_now,
+                ItemCount(0x40000000u, static_cast<u32>(sl.id)));
+            gave += ok ? 1 : 0;
         }
     }
-    int gave = 0;
     for (const std::int32_t lot : lots) {
-        const bool is_owed = std::find(owed.begin(), owed.end(), lot) != owed.end();
         const std::vector<LotSlotState> slots = LotSlots(lot);
         if (!KeyCatchupNeeded(slots)) {
             continue;
         }
         const std::int32_t idx = ItemLedgerIndex(lot);
         char why[128];
-        if (is_owed) {
-            std::snprintf(why, sizeof why, "owed: handed while summoned, not taken there");
-        } else if (idx >= 0) {
+        if (idx >= 0) {
             std::snprintf(why, sizeof why, "ledger %d = flag %d set with boss flag %d in this save", idx,
                           int(kItemLedgerBase) + idx, ItemLedgerDoneFlag(idx));
         } else {
