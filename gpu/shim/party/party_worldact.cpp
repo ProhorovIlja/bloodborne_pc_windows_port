@@ -582,6 +582,7 @@ std::atomic<std::uint32_t> g_fog_host_map{0};
 struct FogPutBack {
     std::int32_t fog_entity = 0;
     std::uint32_t guest_event = 0;
+    std::uint32_t guest_flag = 0;
     double at = 0;
 };
 std::mutex g_putback_mu;
@@ -626,6 +627,7 @@ struct State {
     bool steady = false, baselined = false;
     std::set<std::uint64_t> known;  // id * 2 + value: local changes already sent or held back
     std::set<std::uint32_t> fog_in;  // guest: boss fogs it went through (B2), reported once
+    std::set<std::uint32_t> fog_apart;  // guest: put back out of that boss room this stay (D3)
     std::set<std::uint32_t> story_sent;  // guest: story triggers it reported (D10), once per map
     bool pickups = false;           // D4 patches in: the guest sees and takes the host world's treasure
     Stats stats;
@@ -839,6 +841,7 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.baselined = false;
         st.map = s.map_id;
         st.fog_in.clear();
+        st.fog_apart.clear();
         st.story_sent.clear();
         // A gift trigger set in the own world (its own 9040 awards it) or during a load: not the host's.
         if (const std::vector<std::uint32_t> g = TakeGiftSets(); !g.empty()) {
@@ -987,19 +990,28 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         bool in = false;
         progress::ReadFlag(g.guest_flag, &in);
         const bool was = st.fog_in.count(g.guest_flag) != 0;
-        if (in && !was && !GuestFogOpenWhileHostAt(g, b2::MemberMap(0))) {
-            // D3 (pard4): through the fog while the host is in another area (the fog had opened
-            // while the host was still here): nothing could start this fight. Put back outside.
+        const std::uint32_t host_map = b2::MemberMap(0);
+        const bool apart = !GuestFogOpenWhileHostAt(g, host_map);
+        if (!apart || !in) {
+            st.fog_apart.erase(g.guest_flag);
+        }
+        if (in && apart && !st.fog_apart.count(g.guest_flag)) {
+            // D3 (pard4): in the boss room while the host is in another area - through the fog
+            // after the host left (its prompt had opened while the host was here), or the host
+            // travelled alone during the fight: nothing can start or end this fight here (the
+            // boss's events are the host's). Put back outside the fog, once per stay.
+            st.fog_apart.insert(g.guest_flag);
             st.fog_in.insert(g.guest_flag);
             bool dead = false;
             progress::ReadFlag(g.boss_flag, &dead);
             if (!dead && g.fog_entity) {
                 std::lock_guard<std::mutex> lk(g_putback_mu);
-                g_putback.push_back({g.fog_entity, g.guest_event, Now() + kFogApartPutBackAfter});
+                g_putback.push_back({g.fog_entity, g.guest_event, g.guest_flag, Now() + kFogApartPutBackAfter});
             }
-            Log("guest: went through boss fog (event %u, flag %u) while the host is in %s: not sent (no fight without "
-                "the host's area)%s", g.guest_event, g.guest_flag, MapName(b2::MemberMap(0)).c_str(),
-                dead ? "; the boss is dead here" : "; putting back outside");
+            Log("guest: in boss room (event %u, flag %u) while the host is in %s (%s): no fight without the host's "
+                "area%s", g.guest_event, g.guest_flag, MapName(host_map).c_str(),
+                was ? "the host left during the fight" : "went through the fog", dead ? "; the boss is dead here" :
+                "; putting back outside");
         } else if (in && !was && r.fog.size() < kMaxFog) {
             st.fog_in.insert(g.guest_flag);
             r.fog.push_back(g.guest_flag);
@@ -2602,6 +2614,10 @@ void FogPutBackTick(const GameSnapshot& s) {
     for (const FogPutBack& p : due) {
         std::string what;
         const bool ok = StandAtObject(p.fog_entity, 1.5f, 0.0f, &what);
+        // Out of the room: its "guest in" flag off in this copy, so another walk in is seen again.
+        if (ok && p.guest_flag) {
+            WriteEventFlag(p.guest_flag, false);
+        }
         party::status::SetLastEvent(kBossFogApartNotice);
         Log("guest: went through boss fog %d (event %u) while the host is in another area: no fight can start here "
             "(the boss's events are the host's); put back outside the fog %s%s%s; notice shown",
