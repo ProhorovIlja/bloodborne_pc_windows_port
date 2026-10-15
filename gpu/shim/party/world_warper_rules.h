@@ -20,10 +20,13 @@
 //            weapon / item actions), noenemy (no enemies), nokill, enemies=N (new enemy kinds per
 //            row, 6), chalice (the Chalice Dungeon rows too: the save's current dungeon), notod (no
 //            time-of-day pass), nogear (no armor / weapon rotation), noremo (no cutscenes), bosses (idle bosses too),
-//            noitems (no item-effect pass), dump (log the player record).
+//            noitems (no item-effect pass), dump (log the player record), remoonly (only the
+//            cutscene pass), remos=A+B (the cutscene pass's cutscenes), remoskip=S (a cutscene is
+//            skipped S s after it started; 150).
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -58,6 +61,9 @@ struct Options {
     bool items = true;     ///< noitems: no item-effect pass (SpEffects of every goods)
     bool dump = false;     ///< dump: log the player record (equipment research)
     int enemies_per_row = 6;  ///< enemies=N: at most N new enemy kinds per row
+    bool remo_only = false;   ///< remoonly: only the cutscene pass (no tour, no time of day)
+    std::vector<std::uint32_t> remos;  ///< remos=: the cutscene pass's list (empty: every known one)
+    int remo_skip = 150;      ///< remoskip=S: skip a playing cutscene after S s
 };
 
 /// A word option ("noact", "chalice", ...): true when `item` is one (applied to `o`).
@@ -75,6 +81,7 @@ inline bool ApplyFlag(Options& o, const std::string& item) {
     else if (item == "bosses") o.bosses = true;
     else if (item == "noitems") o.items = false;
     else if (item == "dump") o.dump = true;
+    else if (item == "remoonly") o.remo_only = o.remo = true;
     else return false;
     return true;
 }
@@ -132,6 +139,8 @@ inline Options ParseOptions(const char* env) {
         else if (item.rfind("replay=", 0) == 0) o.replay = ParseIds(item.substr(7));
         else if (item.rfind("max=", 0) == 0) o.max = std::max(0, std::atoi(item.c_str() + 4));
         else if (item.rfind("enemies=", 0) == 0) o.enemies_per_row = std::max(0, std::atoi(item.c_str() + 8));
+        else if (item.rfind("remos=", 0) == 0) o.remos = ParseIds(item.substr(6));
+        else if (item.rfind("remoskip=", 0) == 0) o.remo_skip = std::max(5, std::atoi(item.c_str() + 9));
         else ApplyFlag(o, item);
     }
     return o;
@@ -178,6 +187,8 @@ struct Progress {
     // Content seen in earlier sessions of the run (resume: not fought / played again).
     std::set<std::uint32_t> kinds;      ///< "kind <model>": enemy models killed (or bosses fought)
     std::set<std::uint32_t> remos;      ///< "remo <id>": cutscenes played (or tried)
+    std::map<std::uint32_t, int> remo_tries;  ///< "remo <id>" lines per cutscene
+    std::set<std::uint32_t> remos_ok;   ///< "remook <id>": cutscenes that started and played
     std::set<std::uint64_t> tod_done;   ///< "tod <value> <rp> ...": time-of-day rows (value << 32 | rp)
     int tod_orig = -1;                  ///< "todorig <value>": the save's own time of day
     bool effects_done = false;          ///< "effects": the item-effect pass ran
@@ -218,7 +229,8 @@ inline Progress ParseProgress(const std::string& text) {
         if (!rp) continue;
         if (word == "kind") p.kinds.insert(rp);
         else if (word == "fx") p.fx.insert(rp);
-        else if (word == "remo") p.remos.insert(rp);
+        else if (word == "remo") p.remos.insert(rp), ++p.remo_tries[rp];
+        else if (word == "remook") p.remos_ok.insert(rp);
         else if (word == "start") ++p.starts[rp];
         else if (word == "done") p.done.insert(rp);
         else if (word == "skip") p.skipped.insert(rp);
@@ -343,6 +355,41 @@ inline float Seconds(const std::vector<PadStep>& steps) {
     return s;
 }
 
+/// Bosses (`bosses`): an idle boss stands in its closed arena, and a spot taken from the player's
+/// side of it (as for other enemies) lands in the arena's wall. Candidate spots instead: 4 m in
+/// front of the boss (an idle boss faces into its arena), then to its right, left and back; each
+/// is checked (BossSpotOk) before the fight, the next one tried otherwise.
+inline constexpr int kBossSpots = 4;
+inline constexpr float kBossSpotDistance = 4.0f;
+
+/// The yaw that faces from `from` to `to` (the game's convention: forward = (-sin, -cos)).
+inline float FaceYaw(const float from[3], const float to[3]) {
+    return std::atan2(-(to[0] - from[0]), -(to[2] - from[2]));
+}
+
+/// Candidate spot `i` (0..kBossSpots-1) round a boss at `boss` facing `yaw`.
+inline void BossSpot(const float boss[3], float yaw, int i, float out[3]) {
+    static constexpr float kTurn[kBossSpots] = {0.0f, -1.5707963f, 1.5707963f, 3.14159265f};
+    const float a = yaw + kTurn[((i % kBossSpots) + kBossSpots) % kBossSpots];
+    out[0] = boss[0] - std::sin(a) * kBossSpotDistance;
+    out[1] = boss[1] + 0.3f;
+    out[2] = boss[2] - std::cos(a) * kBossSpotDistance;
+}
+
+/// A boss spot is usable when, after settling (`settled`) and a short walk toward the boss
+/// (`walked`), the player stands on the boss's floor (within 2.5 m of its height: not fallen
+/// through, not stuck on a wall's top), near it (under 8 m) and could walk (came 0.4 m or more
+/// closer: not stuck inside a wall).
+inline bool BossSpotOk(const float boss[3], const float settled[3], const float walked[3]) {
+    auto flat = [&](const float p[3]) {
+        const float dx = p[0] - boss[0], dz = p[2] - boss[2];
+        return std::sqrt(dx * dx + dz * dz);
+    };
+    const float d0 = flat(settled), d1 = flat(walked);
+    return std::fabs(settled[1] - boss[1]) < 2.5f && std::fabs(walked[1] - boss[1]) < 2.5f && d0 < 8.0f &&
+           d0 - d1 >= 0.4f;
+}
+
 /// An enemy's kind for the coverage (one kill per kind): its model cAAAA, the NpcParam row id's
 /// first four digits (100010, 10100080, 100007000: c1000, c1010, c1000).
 constexpr std::uint32_t EnemyKind(std::uint32_t npc_param_id) {
@@ -361,6 +408,36 @@ constexpr bool EnemyRowFightable(std::uint32_t npc_param_id) {
 /// The packed map (AA << 24 | BB << 16) a cutscene belongs to: remo AABBnnnn.
 constexpr std::uint32_t RemoMap(std::uint32_t remo) {
     return (remo / 1000000u) << 24 | (remo / 10000u % 100u) << 16;
+}
+
+/// A cutscene is asked for at most this many times in a run (the tour's try and the cutscene
+/// pass's): one that did not start twice is left out.
+inline constexpr int kMaxRemoTries = 2;
+
+/// The cutscene pass (after the tour): every cutscene of `remos` that has not played yet (tried
+/// fewer than kMaxRemoTries times), each with a row of its map from `tour` to warp to (a fresh
+/// warp before every cutscene: two asked for in one visit ended the game). The rows of a map
+/// take turns, so a retry starts from another row. Cutscenes of maps without a row are left out.
+inline std::vector<std::pair<std::uint32_t, std::uint32_t>> CutsceneRoute(const std::vector<std::uint32_t>& tour,
+                                                                         const std::vector<std::uint32_t>& remos,
+                                                                         const Progress& p) {
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> out;
+    std::map<std::uint32_t, std::size_t> turn;  // map -> how many cutscenes of it so far
+    for (std::uint32_t id : remos) {
+        if (p.remos_ok.count(id)) continue;
+        const auto t = p.remo_tries.find(id);
+        if (t != p.remo_tries.end() && t->second >= kMaxRemoTries) continue;
+        std::vector<std::uint32_t> rows;
+        for (std::uint32_t rp : tour) {
+            if (!ChaliceRow(rp) && MapOfRow(rp) == RemoMap(id)) rows.push_back(rp);
+        }
+        if (rows.empty()) continue;
+        std::size_t& n = turn[RemoMap(id)];
+        const std::size_t tried = t == p.remo_tries.end() ? 0 : static_cast<std::size_t>(t->second);
+        out.emplace_back(rows[(n + tried) % rows.size()], id);
+        ++n;
+    }
+    return out;
 }
 
 /// The time-of-day values (event flags 9800..9802 as one 3-bit value, party_story kTodTable):
