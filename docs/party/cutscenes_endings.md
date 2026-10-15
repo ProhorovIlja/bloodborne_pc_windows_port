@@ -246,6 +246,12 @@ The choice (talk ESD `t210305.esd` = Gehrman, the only file that writes both) [d
   frames, remo **24000000** (mode 2 if MultiplayerState 2); **if local chr type ≠ 0 → end**
   (phantom: remo only); host: flag **12401000**, `2003[49] 3402959` (Hunter's Nightmare
   respawn row, a load ⇒ session ends).
+* **The grab's trigger is 12405260** (m24_00, rest=1): while the local player (chr type 0 or 1)
+  stands in region **2402018** ("Event 邪神アニメ強制再生エリア", an 8 x 8 x 4 m box at
+  (-20.5, -17.35, 95.1), the steps below the Oedon Chapel; floor about -15.5) it forces animation
+  3000 (the grab) on 2400899, every 250 frames. The hand's hit sends message 710. Live 2026-10-15
+  (parab4 b6b / b6c): a grabbed guest runs the HOST's 12405263 (the host holds the Eye): scene on
+  both, then the host's question; a grabbed host the same.
 * The grabbing Amygdala exists only under Blood Moon: **12400765** shows 2400899 when 9802 or
   12404001 (else sets 12405263 OFF).
 * Arrival m34 **13401000**: if 12401000 → clear it, SpEffects 110–116, respawn point 3402958,
