@@ -950,6 +950,8 @@ struct FirstFightWait {
     int tries = 0;
     double visit_at = 0;
     double held_logged = 0;
+    double scene_over_at = 0;
+    bool back_after_scene = false;
     alignas(16) float back_pos[4] = {};
     alignas(16) float back_rot[4] = {};
 };
@@ -1044,13 +1046,18 @@ void FirstFightTick(const GameSnapshot& s) {
             w.phase = 3;
             Log("host: first fight (guest event %u): its scene started %.2f s into the visit: the host stays at the "
                 "arena's entrance until it is over", w.guest_event, now - w.visit_at);
-        } else if (w.phase == 3 && !cutscene) {
+        } else if (w.phase == 3 && cutscene) {
+            w.scene_over_at = 0;
+        } else if (w.phase == 3 && !cutscene && w.scene_over_at == 0) {
+            w.scene_over_at = now;  // the put-back waits a moment after the scene (live pard2 p5e)
+        } else if (w.phase == 3 && now - w.scene_over_at >= kFirstFightAfterScene) {
             FirstFightHold(kFirstFightHoldAfter);
             const bool ok = WarpLocalChr(w.back_pos, w.back_rot);
             Log("host: first fight (guest event %u): scene over: the host is put back at (%.2f, %.2f, %.2f)%s",
                 w.guest_event, w.back_pos[0], w.back_pos[1], w.back_pos[2], ok ? "" : " (warp NOT possible)");
             w.phase = 2;
             w.visit_at = now;
+            w.back_after_scene = true;  // the chr warp lands next frame: no second put-back below
         }
         if (w.phase == 1 && FirstFightVisitDone(host_in, f9180, cutscene, now - w.visit_at, chained, scene)) {
             const bool ok = WarpLocalChr(w.back_pos, w.back_rot);
@@ -1062,6 +1069,13 @@ void FirstFightTick(const GameSnapshot& s) {
             w.phase = (host_in || (f9180 && !chained && !scene) || cutscene) ? 2 : 0;  // a visit that started nothing: try again
             w.visit_at = now;
         }
+        if (w.phase == 3 && !dead && now - w.since <= kFirstFightWaitSeconds) {
+            // In the scene: its event may end (intro flag on) before the scene does (live pard2
+            // p5e: the host put back 6 s before the end of Amelia's scene was killed as it
+            // ended, HP 719 -> 0). The host stays at the spot until the scene is over.
+            ++it;
+            continue;
+        }
         if (!g || !spot || intro || dead || host_died || now - w.since > kFirstFightWaitSeconds ||
             w.tries > kFirstFightVisitTries) {
             if (g && intro) {
@@ -1071,7 +1085,7 @@ void FirstFightTick(const GameSnapshot& s) {
                 // 217 m away at its lamp, stood in Amelia's arena after her scene and was killed
                 // there). The host goes back to where it stood; it walks in through its own fog.
                 alignas(16) float here[4] = {}, rot[4] = {};
-                if (w.tries > 0 && spot && LocalChrPose(here, rot) &&
+                if (w.tries > 0 && spot && !w.back_after_scene && LocalChrPose(here, rot) &&
                     FirstFightPutBackAfterScene(here, w.back_pos, spot->pos)) {
                     FirstFightHold(kFirstFightHoldAfter);
                     const bool ok = WarpLocalChr(w.back_pos, w.back_rot);
