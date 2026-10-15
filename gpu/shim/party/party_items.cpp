@@ -80,7 +80,7 @@ struct SourceName {
 constexpr SourceName kSourceNames[] = {
     {ItemSource::Unknown, "unknown"}, {ItemSource::Award, "award"}, {ItemSource::Flag, "flag"},
     {ItemSource::Full, "full"},       {ItemSource::Mark, "mark"},   {ItemSource::Test, "test"},
-    {ItemSource::Own, "own"},
+    {ItemSource::Own, "own"},         {ItemSource::Repeat, "repeat"},
 };
 
 const std::unordered_map<std::int32_t, std::int32_t>& FlagToLot() {
@@ -254,6 +254,23 @@ std::size_t ItemLedgerCount() {
 
 bool MessengerGiftLot(std::int32_t lot) {
     return lot == 10000 || lot == 10010 || lot == 10050;
+}
+
+bool RepeatGiftLotId(std::int32_t lot) {
+    return lot == 17010 || lot == 23000 || lot == 24060 || lot == 28000 || lot == 32020;
+}
+
+std::optional<ItemGrant> MakeRepeatGrant(std::int32_t lot, std::uint64_t n) {
+    if (!RepeatGiftLotId(lot)) {
+        return std::nullopt;
+    }
+    ItemGrant g;
+    g.lot = lot;
+    g.flag = kItemNone;
+    g.ledger = kItemNone;
+    g.source = ItemSource::Repeat;
+    g.repeat_key = kRepeatKeyBase + static_cast<std::int64_t>(n);
+    return g;
 }
 
 bool ItemLotDenied(std::int32_t lot, std::int32_t flag) {
@@ -1009,6 +1026,15 @@ bool LotHasKeyGoods(const std::vector<LotSlotState>& slots) {
 
 bool SummonedGiveAllowed(const std::vector<LotSlotState>& slots) {
     return !LotHasKeyGoods(slots);
+}
+
+bool RepeatSummonedGiveAllowed(const std::vector<LotSlotState>& slots) {
+    for (const LotSlotState& s : slots) {
+        if (KeyGoods(s) && s.goods_type != 0) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool KeyGiveAllowedHeld(const LotSlotState& s, int held) {
@@ -2197,7 +2223,7 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         FillGoodsLimits(&s);
         slots.push_back(s);
     }
-    if (!SummonedGiveAllowed(slots)) {
+    if (!SummonedGiveAllowed(slots) && !(g.source == ItemSource::Repeat && RepeatSummonedGiveAllowed(slots))) {
         // 0.6.2: never a key item / unique goods while summoned (its held count reads 0 here; the
         // game refuses a second copy with a blocking box). The own world gives it, held checked.
         std::string keys;
@@ -2214,9 +2240,12 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
     const LotFit fit = ClassifyLotFit(slots, &why);
     // Flags first (the save that holds the items holds the flags; a save between the two loses an
     // item rather than giving it twice).
-    std::vector<std::int64_t> flags = {done};
+    std::vector<std::int64_t> flags;
+    if (done >= 0) {  // a repeatable gift has none
+        flags.push_back(done);
+    }
     for (const std::int32_t f : plan.row_flags) {
-        if (f != done) {
+        if (f != done && f > 0) {
             flags.push_back(f);
         }
     }
@@ -2814,6 +2843,25 @@ void GiftTick(double now) {
 }
 
 } // namespace
+
+bool OfferRepeatGift(std::int32_t lot) {
+    if (!g_on.load() || EnvOff("BB_PARTY_ITEMS")) {
+        return false;
+    }
+    static std::uint64_t n = 0;
+    const std::optional<ItemGrant> g = MakeRepeatGrant(lot, ++n);
+    if (!g) {
+        return false;
+    }
+    std::size_t taken = 0;
+    {
+        std::lock_guard<std::mutex> lk(g_guest_mu);
+        taken = g_guest.Offer({*g});
+    }
+    Log("guest's own repeatable gift lot %d (#%llu this session): %s", lot, static_cast<unsigned long long>(n),
+        taken ? "queued (given while summoned, or at home)" : "queue full");
+    return taken != 0;
+}
 
 bool PopGuestGift(std::string* body) {
     std::lock_guard<std::mutex> lk(g_gift_mu);
