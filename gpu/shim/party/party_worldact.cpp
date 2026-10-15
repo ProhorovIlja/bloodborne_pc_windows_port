@@ -84,6 +84,14 @@ bool WorldActionAllowed(std::uint32_t id, bool clear, std::uint32_t host_map) {
     return area == (host_map >> 24);  // the guest acts in the host's world: the host's area
 }
 
+bool BossKillActionAllowed(std::uint32_t id, bool clear, std::uint32_t member_map, bool apart) {
+    if (!apart || clear || member_map == 0xffffffffu || id < 10000000u ||
+        progress::CategoryOf(id) != Category::boss_defeated || progress::NeverWritable(id)) {
+        return false;
+    }
+    return id / 100000u % 100u == (member_map >> 24);
+}
+
 std::string RequestToJson(const Request& r) {
     json::Value v = json::Value::make_object();
     v.set("v", 1u);
@@ -110,6 +118,13 @@ std::string RequestToJson(const Request& r) {
             f.push(static_cast<unsigned>(id));
         }
         v.set("fog", std::move(f));
+    }
+    if (!r.story.empty()) {
+        json::Value f = json::Value::make_array();
+        for (std::uint32_t id : r.story) {
+            f.push(static_cast<unsigned>(id));
+        }
+        v.set("story", std::move(f));
     }
     return json::dump(v, 0);
 }
@@ -166,8 +181,23 @@ bool RequestFromJson(const std::string& text, Request* out, std::string* error) 
                 r.fog.push_back(std::uint32_t(id));
             }
         }
+        if (const json::Value* story = v.find("story")) {
+            if (story->type != json::Value::Type::Array || story->array.size() > kMaxStory) {
+                throw std::runtime_error("bad story list");
+            }
+            for (const json::Value& x : story->array) {
+                const std::uint64_t id = json::as_u64(x, "story");
+                if (id > 0xffffffffull || !StoryTriggerByEvent(std::uint32_t(id))) {
+                    throw std::runtime_error("not a story trigger");
+                }
+                if (std::find(r.story.begin(), r.story.end(), std::uint32_t(id)) != r.story.end()) {
+                    throw std::runtime_error("duplicate story");
+                }
+                r.story.push_back(std::uint32_t(id));
+            }
+        }
         if (set.size() > kMaxSet || clr.size() > kMaxClear ||
-            (set.empty() && clr.empty() && r.kick.empty() && r.fog.empty())) {
+            (set.empty() && clr.empty() && r.kick.empty() && r.fog.empty() && r.story.empty())) {
             throw std::runtime_error("bad world_action size");
         }
         auto take = [](const std::vector<json::Value>& a, bool clear, std::vector<std::uint32_t>* to) {
@@ -178,7 +208,7 @@ bool RequestFromJson(const std::string& text, Request* out, std::string* error) 
                 }
                 const std::uint32_t id32 = std::uint32_t(id);
                 const std::uint32_t area = id32 >= 10000000u ? id32 / 100000u % 100u : 21u;
-                if (!WorldActionAllowed(id32, clear, area << 24)) {
+                if (!WorldActionAllowed(id32, clear, area << 24) && !BossKillActionAllowed(id32, clear, area << 24, true)) {
                     throw std::runtime_error("flag not allowed: " + std::to_string(id32));
                 }
                 if (std::find(to->begin(), to->end(), id32) != to->end()) {
@@ -397,6 +427,67 @@ const FirstFightSpot* FirstFightSpotFor(std::uint32_t intro_event) {
     return nullptr;
 }
 
+const std::vector<StoryTrigger>& StoryTriggers() {
+    // m32_00 13201803 after Rom (13201800 -> label 1): 4[3] chr type 0 + 3[3] 12 m to 3200801
+    // (MSB part `ダンジョン人花嫁の幻影`, (-510.86, -271.25, 370.35)); the Moonside Lake lamp 3202952
+    // stands 2 m from her (its ReturnPointParam spot, raised 0.5 m).
+    static const std::vector<StoryTrigger> t = {
+        {13201803u, 13201800u, 70002802u, {-510.86f, -271.25f, 370.35f}, 12.0f, {-508.98f, -270.74f, 371.03f}},
+    };
+    return t;
+}
+
+const StoryTrigger* StoryTriggerByEvent(std::uint32_t event) {
+    for (const StoryTrigger& t : StoryTriggers()) {
+        if (t.event == event) {
+            return &t;
+        }
+    }
+    return nullptr;
+}
+
+bool StoryTriggerInBlock(const StoryTrigger& t, std::uint32_t map) {
+    const std::uint32_t area = t.event / 100000u % 100u, block = t.event / 10000u % 10u;
+    return map != 0xffffffffu && (map >> 24) == area && ((map >> 16) & 0xffu) == block;
+}
+
+bool StoryTriggerDue(const StoryTrigger& t, std::uint32_t map, bool needs_on, bool done_on, bool event_done,
+                     const float* me) {
+    if (!me || !StoryTriggerInBlock(t, map) || !needs_on || done_on || event_done) {
+        return false;
+    }
+    const float dx = me[0] - t.centre[0], dy = me[1] - t.centre[1], dz = me[2] - t.centre[2];
+    return dx * dx + dy * dy + dz * dz <= t.radius * t.radius;
+}
+
+const KeyItemGate* KeyItemGateFor(std::int32_t event_id) {
+    // flag_tool emevd + an instruction dump of m24_00 12400760: 3[4] group 1 goods 4011 state 0,
+    // group 2 state 1, both with 3[24] action button 2400030 at 2401220; group 3 = 5[2] ObjAct
+    // 12400170 (the far-side lever: the gate opens, no player animation); sets 12400160.
+    static const KeyItemGate gates[] = {
+        {12400760, 4011, 52400450u, 2, 12400160u, 12400170},
+    };
+    for (const KeyItemGate& g : gates) {
+        if (g.event == event_id) {
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
+const KeyItemGate* KeyItemGateByOpenFlag(std::uint32_t open_flag) {
+    const KeyItemGate* g = KeyItemGateFor(12400760);
+    return g && g->open_flag == open_flag ? g : nullptr;
+}
+
+std::uint8_t KeyItemGateHeldState(const KeyItemGate& g, int group, bool invert) {
+    return static_cast<std::uint8_t>((group == g.held_group) != invert ? 1 : 0);
+}
+
+bool KeyItemGateInvert(bool summoned_guest, bool own_flag, bool host_world_flag) {
+    return summoned_guest && (own_flag || host_world_flag);
+}
+
 bool FirstFightVisitDone(bool host_flag_on, bool flag9180_on, bool cutscene, double visit_s, bool chained,
                          bool scene) {
     return host_flag_on || (flag9180_on && !chained && !scene) || cutscene || visit_s >= kFirstFightVisitSeconds;
@@ -516,6 +607,7 @@ struct State {
     bool steady = false, baselined = false;
     std::set<std::uint64_t> known;  // id * 2 + value: local changes already sent or held back
     std::set<std::uint32_t> fog_in;  // guest: boss fogs it went through (B2), reported once
+    std::set<std::uint32_t> story_sent;  // guest: story triggers it reported (D10), once per map
     bool pickups = false;           // D4 patches in: the guest sees and takes the host world's treasure
     Stats stats;
 } g_st;
@@ -531,7 +623,23 @@ std::atomic<double> g_pickup_at{-1e9};     // Now() of the last one
 std::mutex g_gift_mu;
 std::vector<std::uint32_t> g_gift_sets;
 std::vector<std::uint32_t> g_repeat_sets;  // P2: repeatable gift triggers (RepeatGiftLot) this game set
+std::mutex g_kick_mu;
+std::vector<std::int32_t> g_kicks_out;
+std::atomic<std::uint32_t> g_keygate_own{0};  // guest: a key-item gate it opened (own save, GuestTick)
 void OnLocalGiftSet(std::uint32_t id) {
+    if (const KeyItemGate* kg = KeyItemGateByOpenFlag(id); kg && LocalSessionRole() == 6) {
+        // D6 (pard3, live P1b): the guest's copy of the gate's event opened it with its own key
+        // (KeyItemGate). The flag is a T1 zone-0 one the world mirror does not carry, so it never
+        // went up: the host gets the gate's far-side ObjAct kick (its copy opens with the
+        // animation and sets the flag; the mirror and C2 bring it back), the guest's own save
+        // the flag now.
+        std::lock_guard<std::mutex> lk(g_kick_mu);
+        if (g_kicks_out.size() < 16) {
+            g_kicks_out.push_back(kg->far_kick);
+        }
+        g_keygate_own.store(id);
+        return;
+    }
     if (RepeatGiftLot(id) > 0) {
         std::lock_guard<std::mutex> lk(g_gift_mu);
         if (g_repeat_sets.size() < 16) {
@@ -568,8 +676,6 @@ std::vector<Treasure> g_treasure;
 std::atomic<int> g_tgate[8];  // TreasureGate results (test fixture)
 std::atomic<int> g_rec[4];     // record inserts by kind, [0] removes (test fixture)
 std::atomic<std::uint64_t> g_rec_man{0};  // the MapItemMan the last insert went to
-std::mutex g_kick_mu;
-std::vector<std::int32_t> g_kicks_out;
 std::vector<std::pair<std::int32_t, double>> g_kicks_seen;
 
 /// A map treasure's pickup flag (5AABZnnn, a map's item lot): what a guest's pickup in the host's
@@ -703,6 +809,8 @@ void GateCatchup() {
     }
 }
 
+bool MyPos(float out[3]);
+
 void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
     State& st = S();
     const double now = Now();
@@ -712,6 +820,7 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.baselined = false;
         st.map = s.map_id;
         st.fog_in.clear();
+        st.story_sent.clear();
         // A gift trigger set in the own world (its own 9040 awards it) or during a load: not the host's.
         if (const std::vector<std::uint32_t> g = TakeGiftSets(); !g.empty()) {
             Log("guest: NPC gift trigger(s) %s set outside the host's steady world: kept local", IdList(g).c_str());
@@ -777,6 +886,11 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
             "(common 9100 does that on the host only)", id, lot,
             queued ? "given to this guest (own grant)" : "NOT queued (items off)", cleared ? "cleared" : "NOT cleared");
     }
+    if (const std::uint32_t kgf = g_keygate_own.exchange(0)) {
+        const bool ok = progress::WriteFlagOwnSave(kgf, true);
+        Log("guest: opened key-item gate (flag %u) with its own key: the host's far-side ObjAct kick goes up; own "
+            "save %s", kgf, ok ? "set" : "NOT written");
+    }
     for (std::uint32_t id : TakeGiftSets()) {
         bool given = false;
         if (progress::HostWorldFlag(id, &given) && given) {
@@ -811,7 +925,7 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
             local.push_back(id);
             continue;
         }
-        if (!WorldActionAllowed(id, !v, s.map_id)) {
+        if (!WorldActionAllowed(id, !v, s.map_id) && !BossKillActionAllowed(id, !v, s.map_id, b2::MemberApart(0))) {
             local.push_back(id);
             continue;
         }
@@ -860,7 +974,26 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
             st.fog_in.erase(g.guest_flag);
         }
     }
-    if (r.set.empty() && r.clr.empty() && r.kick.empty() && r.fog.empty()) {
+    for (const StoryTrigger& t : StoryTriggers()) {
+        // D10: the guest stands where a host-only story event would start (Blood Moon): the host's
+        // chr runs it. Once per map stay; again after a load if it still did not run.
+        if (!StoryTriggerInBlock(t, s.map_id) || st.story_sent.count(t.event) || r.story.size() >= kMaxStory) {
+            continue;
+        }
+        bool needs = false, done = false, ran = false;
+        float me[3] = {};
+        const bool have_me = MyPos(me);
+        progress::ReadFlag(t.needs_flag, &needs);
+        progress::ReadFlag(t.done_flag, &done);
+        progress::ReadFlag(t.event, &ran);
+        if (StoryTriggerDue(t, s.map_id, needs, done, ran, have_me ? me : nullptr)) {
+            st.story_sent.insert(t.event);
+            r.story.push_back(t.event);
+            Log("guest: at story event %u's spot (%.1f, %.1f, %.1f), %.0f m radius: the host's chr runs it (its scene "
+                "plays for the party)", t.event, me[0], me[1], me[2], t.radius);
+        }
+    }
+    if (r.set.empty() && r.clr.empty() && r.kick.empty() && r.fog.empty() && r.story.empty()) {
         return;
     }
     // The guest's own save keeps what it did (its own world after the session).
@@ -1138,6 +1271,122 @@ void FirstFightTick(const GameSnapshot& s) {
         ++it;
     }
 }
+
+// D10 (pard3): a guest at a host-only story event's spot (StoryTrigger): the host's chr visits the
+// spot (the same hold / put-back as a guest-started first fight), the event plays its scene for
+// the whole party (live mirror); 1 s after the scene the host goes back, unless the event's own
+// story warp is loading it (then the travel question asks the host, P8).
+struct StoryVisit {
+    std::uint32_t event = 0;
+    int slot = 0;
+    int phase = 0;  // 0 waits, 1 visiting, 3 in the scene
+    int tries = 0;
+    double since = 0, visit_at = -1e9, scene_over_at = 0, held_logged = -1e9;
+    alignas(16) float back_pos[4] = {}, back_rot[4] = {};
+};
+std::mutex g_story_mu;
+std::vector<StoryVisit> g_story_wait;
+
+void StoryRequest(std::uint32_t event, int slot) {
+    std::lock_guard<std::mutex> lk(g_story_mu);
+    for (StoryVisit& w : g_story_wait) {
+        if (w.event == event) {
+            w.slot = slot;
+            return;
+        }
+    }
+    StoryVisit w;
+    w.event = event;
+    w.slot = slot;
+    w.since = Now();
+    g_story_wait.push_back(w);
+    Log("host: slot %d stands at story event %u's spot: the host's chr runs it (its scene plays for the party)", slot,
+        event);
+}
+
+void StoryTick(const GameSnapshot& s) {
+    std::lock_guard<std::mutex> lk(g_story_mu);
+    const double now = Now();
+    for (auto it = g_story_wait.begin(); it != g_story_wait.end();) {
+        StoryVisit& w = *it;
+        const StoryTrigger* t = StoryTriggerByEvent(w.event);
+        bool needs = false, done = false, ran = false;
+        if (t) {
+            progress::ReadFlag(t->needs_flag, &needs);
+            progress::ReadFlag(t->done_flag, &done);
+            progress::ReadFlag(t->event, &ran);
+        }
+        const bool cutscene = CutscenePlaying();
+        if (w.phase == 1 && cutscene) {
+            FirstFightHold(0);
+            w.phase = 3;
+            Log("host: story event %u: its scene started %.2f s into the visit: the host stays for it", w.event,
+                now - w.visit_at);
+        } else if (w.phase == 3 && cutscene) {
+            w.scene_over_at = 0;
+        } else if (w.phase == 3 && !cutscene && w.scene_over_at == 0) {
+            w.scene_over_at = now;
+        } else if (w.phase == 3 && now - w.scene_over_at >= kFirstFightAfterScene) {
+            // The event's story warp may be loading the host already (a load moves it anyway).
+            const bool moving = !s.world_up || s.loading;
+            const bool ok = !moving && WarpLocalChr(w.back_pos, w.back_rot);
+            if (!moving) {
+                FirstFightHold(kFirstFightHoldAfter);
+            }
+            Log("host: story event %u: scene over (ran %d, done flag %u = %d): %s", w.event, ran ? 1 : 0,
+                t ? t->done_flag : 0u, done ? 1 : 0,
+                moving ? "a load runs (its story warp): not put back" : ok ? "the host is put back" : "put back NOT possible");
+            it = g_story_wait.erase(it);
+            continue;
+        }
+        if (w.phase == 1 && now - w.visit_at >= kFirstFightVisitSeconds + 1.0) {
+            const bool ok = WarpLocalChr(w.back_pos, w.back_rot);
+            FirstFightHold(kFirstFightHoldAfter);
+            Log("host: story event %u: no scene %.1f s into visit %d: put back%s", w.event, now - w.visit_at, w.tries,
+                ok ? "" : " (warp NOT possible)");
+            w.phase = 0;
+            w.visit_at = now;
+        }
+        if (w.phase == 3) {
+            ++it;
+            continue;
+        }
+        const int hp = b2::LocalHp();
+        if (!t || !needs || done || ran || w.tries >= kFirstFightVisitTries || now - w.since > kFirstFightWaitSeconds) {
+            if (w.phase == 1) {
+                WarpLocalChr(w.back_pos, w.back_rot);
+                FirstFightHold(kFirstFightHoldAfter);
+            }
+            Log("host: story event %u (slot %d) %s", w.event, w.slot,
+                !t ? "unknown" : (done || ran) ? "has run" : !needs ? "is not due in the host's world (its gate flag is off)"
+                : w.tries >= kFirstFightVisitTries ? "did not start after the visits: dropped" : "waited too long: dropped");
+            it = g_story_wait.erase(it);
+            continue;
+        }
+        const bool bar = BossBarShown();
+        const bool ready = s.world_up && !s.loading && StoryTriggerInBlock(*t, s.map_id) &&
+                           FirstFightHostReady(hp, bar, cutscene) && progress::FlagLoadMode() == 0 &&
+                           now - w.visit_at > 1.0;
+        if (w.phase == 0 && !ready && now - w.held_logged > 10.0) {
+            w.held_logged = now;
+            Log("host: story event %u: the visit waits (host in %s, HP %d, boss bar %d, cutscene %d)", w.event,
+                MapName(s.map_id).c_str(), hp, bar ? 1 : 0, cutscene ? 1 : 0);
+        }
+        if (w.phase == 0 && ready && LocalChrPose(w.back_pos, w.back_rot)) {
+            alignas(16) const float to[4] = {t->spot[0], t->spot[1], t->spot[2], 1.0f};
+            FirstFightHold(kFirstFightVisitSeconds + 1.0 + kFirstFightHoldAfter);
+            if (WarpLocalChr(to, w.back_rot)) {
+                ++w.tries;
+                w.phase = 1;
+                w.visit_at = now;
+                Log("host: story event %u (try %d): the host's chr visits its spot (%.2f, %.2f, %.2f) from (%.2f, "
+                    "%.2f, %.2f)", w.event, w.tries, to[0], to[1], to[2], w.back_pos[0], w.back_pos[1], w.back_pos[2]);
+                party::status::SetLastEvent("A party member started a story scene");
+            }
+        }
+        ++it;
+    }
+}
 } // namespace
 
 void HostTick(const GameSnapshot& s) {
@@ -1165,7 +1414,8 @@ void HostTick(const GameSnapshot& s) {
             Log("host: world action from slot %d, alone in %s: checked against its map", slot, MapName(check_map).c_str());
         }
         auto apply = [&](std::uint32_t id, bool v) {
-            if (!WorldActionAllowed(id, !v, check_map)) {
+            if (!WorldActionAllowed(id, !v, check_map) &&
+                !BossKillActionAllowed(id, !v, check_map, check_map != s.map_id)) {
                 ++st.stats.refused;
                 list += " " + std::to_string(id) + "(refused)";
                 return;
@@ -1179,13 +1429,35 @@ void HostTick(const GameSnapshot& s) {
                     "[" + progress::CategoryName(progress::CategoryOf(id)) + "]";
         };
         for (std::uint32_t id : r.set) {
+            bool was = false;
+            const KeyItemGate* kg = KeyItemGateByOpenFlag(id);
+            const bool kg_read = kg && progress::ReadFlag(id, &was);
             apply(id, true);
+            bool now_on = false;
+            if (kg_read && !was && progress::ReadFlag(id, &now_on) && now_on) {
+                // D6: a guest opened a key-item gate with its own key: the host's copy of the
+                // event still waits at the gate; the far-side ObjAct opens it there (animation).
+                Log("host: slot %d opened key-item gate %d (flag %u): its far-side ObjAct %d is kicked here", slot,
+                    kg->event, id, kg->far_kick);
+                ReplayKick(slot, kg->far_kick, Now());
+            }
         }
         for (std::uint32_t id : r.clr) {
             apply(id, false);
         }
         for (std::int32_t k : r.kick) {
+            // D6: a key-item gate's far-side kick only while the gate is still shut in the host's
+            // world (the host's own copy usually opened it already from the guest's press).
+            const KeyItemGate* kg = KeyItemGateFor(12400760);
+            bool open_now = false;
+            if (kg && k == kg->far_kick && progress::ReadFlag(kg->open_flag, &open_now) && open_now) {
+                Log("host: slot %d's gate kick %d: the gate is open here already; nothing to replay", slot, k);
+                continue;
+            }
             ReplayKick(slot, k, Now());
+        }
+        for (std::uint32_t e : r.story) {
+            StoryRequest(e, slot);
         }
         for (std::uint32_t f : r.fog) {
             // B2: the guest went through a boss fog before the host: the host's game sets its
@@ -2165,11 +2437,56 @@ bool StandAtChr(std::int32_t entity, float dist, float angle_deg, std::string* w
     return PutLocal(p, -std::sin(r[1]), -std::cos(r[1]), dist, angle_deg, what);
 }
 
+namespace {
+// D6 (pard3): KeyItemGate. The dispatch thread, before the game reads the instruction's arguments:
+// each 3[4] of the gate's event gets the held state this game's copy should check (the argument
+// bytes are the loaded script's, shared by every run of the event, so every dispatch writes the
+// value for the current role: back to the data's own at home).
+std::atomic<int> g_keygate_last{-1};
+void KeyGateRewriter(int event_id, int bank, int id, std::uint64_t event, std::uint64_t instr) {
+    if (bank != 3 || id != 4) {
+        return;
+    }
+    const KeyItemGate* g = KeyItemGateFor(event_id);
+    if (!g) {
+        return;
+    }
+    std::uint32_t size = 0;
+    const std::uint64_t args = EmevdInstructionArgs(event, instr, &size);
+    std::int8_t group = 0;
+    std::int32_t goods = 0;
+    std::uint8_t state = 0;
+    if (!args || size < 9 || !SafeGet(args, &group) || !SafeGet(args + 4, &goods) || !SafeGet(args + 8, &state) ||
+        goods != g->goods) {
+        return;
+    }
+    const bool summoned = LocalSessionRole() == 6 && progress::FlagLoadMode() == 1;
+    bool own = false, host = false;
+    if (summoned) {
+        progress::ReadFlagOwnSave(g->own_flag, &own);
+        progress::HostWorldFlag(g->own_flag, &host);
+    }
+    const bool invert = KeyItemGateInvert(summoned, own, host);
+    const std::uint8_t want = KeyItemGateHeldState(*g, group, invert);
+    if (want != state) {
+        SafeWrite(args + 8, &want, 1);
+    }
+    const int key = (invert ? 1 : 0) | (own ? 2 : 0) | (host ? 4 : 0);
+    if (g_keygate_last.exchange(key) != key) {
+        Log("key item gate: event %d checks goods %d %s (summoned %d, own pickup flag %u %d, host world's %d)",
+            event_id, goods, invert ? "as held: the guest's own key opens it in the host's world" : "as in the data",
+            summoned ? 1 : 0, g->own_flag, own ? 1 : 0, host ? 1 : 0);
+    }
+}
+} // namespace
+
 void Init() {
     State& st = S();
     if (!st.enabled) {
         return;
     }
+    SetEmevdRewriter3(&KeyGateRewriter);
+    EnsureEmevdFilter();
     // push rbp; mov rbp, rsp; push r15; push r14; push r13; push r12; push rbx (13 bytes, both).
     const bool a = HookPrologue(0x13AE370, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},
                                 &LocalKickEntry, "ObjAct local kick (log)");
@@ -2317,6 +2634,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
             st.steady_since = Now();
         }
         FirstFightTick(s);
+        StoryTick(s);
         HostTick(s);
     }
 }
