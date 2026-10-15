@@ -2,9 +2,32 @@
 
 Master tracking table. The model is Elden Ring Seamless Co-op (LukeYui): friends-only password sessions,
 no tether, the session survives deaths and bosses, and everyone in the party progresses as if
-playing solo. Update a row whenever its status changes (date + evidence). Percentages are
-judgement calls: 100 = matches ERSC (or a sane BB equivalent) and is verified live; code that is
-written but not verified live counts at most 60.
+playing solo. Update a row whenever its status changes (date + evidence).
+
+**Two numbers per row (since 2026-10-15, confid, after the independent score audit
+`agents/scoreaudit_report.md`):**
+
+* **Plan done** (the `%` column of the tables below): how much of the row's plan is built and seen
+  working. 100 = the plan's target (ERSC's behaviour, a sane BB equivalent, or a recorded user
+  decision) is implemented and verified live at least once; code written but not verified live counts
+  at most 60. Judgement calls by the agent that did the work.
+* **ERSC parity (evidence-weighted)** (the table "Evidence and ERSC parity" after the Summary): the
+  plan score capped by what the evidence can carry and by what ERSC actually does:
+  * a row whose evidence is only single-PC loopback (127.0.0.1, with or without test aids) is capped at
+    **95**; only a real two-PC session over the Internet can take it above 95;
+  * a row that is 100 **by decision** (a user decision or a redefinition that differs from ERSC: the
+    party respawning with the host, extra loads, max 4 players, one shared drop roll) is capped at **95**
+    with the difference written next to it;
+  * unit-only evidence keeps the 60 cap.
+  The area and overall parity numbers are unweighted means of these capped row scores.
+
+Every row also carries an **evidence tag**: `loopback-live` (live runs on one PC driven by real game
+flows / pad input, no aids that force the outcome), `loopback-scripted+aids` (live on one PC, driven by
+test aids: director warps, ForceDead, forced flags, invincibility, process kills), `unit` (tests only),
+`two-PC-real` (a real session on two PCs over the Internet; none on the current build), `by-decision`
+(see above); and the **ERSC claim's source**: `FAQ-confirmed` (ersc-docs.github.io FAQ / settings
+page), `secondary` (the Nexus description as pasted, guides, videos; not re-checked), `assumed`
+(marked *(verify)*, inferred, or a self-defined target where ERSC has no equivalent).
 
 The player-facing summary is the **Party co-op** section of the [README](../../README.md) (How it plays /
 Deaths / Coming next). Whenever a row changes what a player experiences, update that section in the
@@ -60,6 +83,70 @@ only 100% when it meets it.
 | G. BB-specific (chalice, insight, bath) | 100% |
 | H. Bloodborne rule (feels like SP in a party) | 100% |
 | **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~99%** |
+
+## Evidence and ERSC parity (evidence-weighted)
+
+Per row: the plan score (the `%` column below), the evidence behind it, where the ERSC behaviour it is
+compared with comes from, and the ERSC parity score (capped as described at the top of this file).
+No row has `two-PC-real` evidence on the current build: the only real Internet session was playtest 1
+(0.6.0, 2026-10-13, 22 bugs). So every row is capped at 95 here until playtest 2
+(`playtest2_checklist.md`, section 4b: the audit's ten riskiest claims) checks it on a real line. An
+independent audit of these scores (agents/scoreaudit_report.md, 2026-10-15) put the parity a real
+two-PC session would show at ~85% (78-90%); the cap here is the rule, that estimate is the bet.
+
+Repetition and post-merge smoke since the audit (confid, 2026-10-15): see the change log entry of
+that date for the success counts (`tools/mp/repeat_party.py`, `tools/mp/smoke_party.py`, the soak).
+
+| Row | Plan % | Evidence | ERSC claim | Parity % | Difference / why capped |
+|---|---|---|---|---|---|
+| A1 | 100 | loopback-scripted+aids (`BB_PARTY_TEST_REJOIN_PASSWORD`) | FAQ-confirmed | 95 | loopback only |
+| A2 | 100 | loopback-live (md5 of every save file) | secondary | 95 | loopback only |
+| A3 | 100 | loopback-scripted+aids (Party page presses by script) | secondary | 95 | loopback only; the title restart is a decision (ERSC's launcher) |
+| A4 | 100 | loopback-scripted+aids; repeat cycles (confid) | assumed | 95 | loopback only; real-network join times unknown |
+| A5 | 100 | loopback-scripted+aids (`BB_PARTY_TEST_START_LAMP`); repeat cycles (confid) | secondary | 95 | loopback only; home of playtest 1's blocker |
+| A6 | 100 | loopback-scripted+aids; repeat cycles (confid) | FAQ-confirmed (Separation Mist) | 95 | loopback only |
+| A7 | 100 | loopback-scripted+aids (4 players, 2 headless-lite); by-decision | FAQ-confirmed (6 players) | 95 | by decision: max 4 players, ERSC 6; 4 rendered games never run |
+| A8 | 100 | loopback-live (menu walk, screenshots) | secondary | 95 | loopback only |
+| A9 | 100 | loopback-live (two real builds) | secondary | 95 | loopback only |
+| A11 | 100 | loopback-scripted+aids (`BB_PARTY_STORY_TEST`) | secondary | 95 | loopback only |
+| B1 | 100 | loopback-live (stick route walker); by-decision | secondary | 95 | by decision: the host's death pulls everyone (scored in C2) |
+| B2 | 100 | loopback-scripted+aids (fixtures, `guest_move`) | secondary | 95 | loopback only |
+| B3 | 100 | loopback-scripted+aids | assumed (per-player warp inferred) | 95 | loopback only |
+| B4 | 100 | loopback-live (3 players, screenshots) | secondary | 95 | loopback only |
+| B5 | 95 | loopback-scripted+aids | secondary | 95 | a boss killed while the party is apart: see the row |
+| B6 | 100 | loopback-scripted+aids (`guest_move`) | secondary | 95 | loopback only |
+| C1 | 100 | loopback-scripted+aids (ForceDead, `guest_lastlamp`) | secondary | 95 | loopback only |
+| C2 | 100 | loopback-scripted+aids; by-decision | secondary | 95 | by decision: the whole party respawns with the host (one load); ERSC: the others play on |
+| C3 | 100 | loopback-scripted+aids (ForceDead, invincibility); repeat cycles (confid) | secondary | 95 | loopback only |
+| C4 | 100 | loopback-scripted+aids (kinds forced) | secondary (3 effects; the 5 kinds are not in a primary source) | 95 | loopback only |
+| C5 | 100 | loopback-scripted+aids | secondary | 95 | loopback only |
+| C6 | 100 | loopback-scripted+aids (`--crash-plan` kills); by-decision (parlast: the FROM sign-in before Continue is not shortened, by judgement); repeat cycles (confid) | secondary | 95 | by judgement: ~15 s of the rejoin is the game's own sign-in; loopback only, a real reboot + sign-in over the Internet unmeasured |
+| C7 | 100 | loopback-scripted+aids (fixture boss, invincibility) | assumed (Nexus text; not in the FAQ) | 95 | loopback only |
+| D1 | 100 | loopback-scripted+aids (`host_kill`) | secondary | 95 | loopback only |
+| D2 | 96 | loopback-live (control runs, on disk) | FAQ-confirmed | 95 | loopback only |
+| D3 | 85 | loopback-scripted+aids (2026-10-11 runs) | assumed *(verify)* | 85 | oldest evidence; boss kills apart (from B5) not live |
+| D4 | 97 | loopback-scripted+aids (`host_kill=0` sweeps); by-decision | FAQ-confirmed (drops differ per player) | 95 | by decision: one shared roll; ERSC rolls random drops per player |
+| D5 | 97 | loopback-scripted+aids | FAQ-confirmed ("erratic") | 95 | loopback only |
+| D6 | 98 | loopback-scripted+aids (chained short runs, test travel and kills) | secondary | 95 | loopback only; nobody has played the campaign as a party |
+| D7 | 97 | loopback-live (1 cooperator) | secondary | 95 | loopback only; 2 cooperators not run |
+| D8 | 85 | loopback-scripted+aids + unit | secondary | 85 | partly unit |
+| D9 | 90 | loopback-live (census) | secondary | 90 | |
+| D10 | 97 | loopback-scripted+aids (aid-triggered scenes) | secondary | 95 | loopback only |
+| E1 | 100 | loopback-scripted+aids (`BB_PARTY_GUESTSVC_TEST`) | secondary | 95 | loopback only |
+| E2 | 100 | loopback-live (screenshots, netsim ping) | secondary | 95 | loopback only |
+| E4 | 100 | loopback-live (join timings) | n/a (self-defined target) | 95 | loopback only |
+| F1 | 92 | loopback-scripted+aids (netsim) | secondary | 92 | no real network since 0.6.0 |
+| F2 | 85 | loopback-scripted+aids (simulated NAT, fake DHT) + unit | secondary | 85 | no real router |
+| F3 | 94 | unit + fuzz, loopback lockout | secondary | 94 | |
+| F5 | 99 | loopback-scripted+aids (netsim outages on loopback only: 30-120 s) | secondary | 95 | loopback netsim only; no real cable / Wi-Fi cut; the send-queue limit 30000 is a game-internal change |
+| G1 | 100 | loopback-scripted+aids (`host_kill`, `BB_PARTY_ALTAR_AUTO`) | n/a (self-defined target) | 95 | loopback only |
+| G2 | 100 | loopback-live (one walked-in trigger) + probes | n/a (self-defined target) | 95 | loopback only |
+| G3 | 100 | loopback-scripted+aids (fixtures) | n/a (self-defined target) | 95 | loopback only |
+| H1 | 100 | loopback-live (load inventory); by-decision | assumed (a death loads only the dead player) | 95 | by decision: loads (5)-(7) of the inventory are ones ERSC would not show |
+| H2 | 100 | loopback-scripted+aids (sweeps) | secondary | 95 | loopback only; playtest 1's main pain over the Internet |
+| H3 | 97 | loopback-scripted+aids (`host_kill`, save_check) | FAQ-confirmed (wanderer progression) | 95 | loopback only |
+| H4 | 100 | loopback-live (census, every game) | secondary | 95 | loopback only |
+| H5 | 100 | loopback-scripted+aids (fixture lot awards) | secondary | 95 | loopback only |
 
 ## A. Session & joining
 
