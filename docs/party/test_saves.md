@@ -11,7 +11,8 @@ Each fixture folder holds a `savedata` tree that `tools/mp/instances.py` copies 
 | `savedata` (the default) | Character "visy", level 37, in the Hunter's Dream; Cleric Beast, Gascoigne, Vicar Amelia dead; night (9800 + 9801); lamps of Central Yharnam / Cathedral Ward; Oedon Tomb Key, Old Hunter Bell; no chalice | copy of the user's 2026-10-12 backup |
 | `chalice_pthumeru_ritual\savedata` | The default save after the **Pthumeru Chalice ritual at the First Ritual Altar** (Dream gravestone, slot 1: shared fixed dungeon 1110692594440089, glyph `wmqbhonw`, depth 1); Pthumeru Chalice held, Ritual Blood (1) used, 4000 Echoes; standing at the altar | run altar7 below (2026-10-15) |
 | `cathedral_day\savedata` | The default save put back **before day -> evening**: 9800 / 9801 off, the Cathedral Ward door event 12400750 off (the door 2401210 is closed and its prompt works again), at the Cathedral Ward lamp 2402950 | run fixture_cw below (2026-10-15) |
-| `rom_dead_moonside\savedata` | The default save with **Rom dead** (13201800), at Moonside Lake (lamp 3202952): the Blood Moon scene 13201803 is one step away (stand near Queen Yharnam 3200801) | run fixture_rom below (2026-10-15) |
+| `rom_dead_dream\savedata` | The default save with **Rom dead** (13201800), in the Hunter's Dream: a lamp travel to Moonside Lake (`host_lamp=3202952` / `BB_PARTY_TEST_START_LAMP=3202952`) plays the Blood Moon scene 13201803 right at the arrival (the lamp is inside its trigger) | run fixture_rom2 below (2026-10-15) |
+| `blood_moon_yahargul\savedata` | After the **Blood Moon**: 9800..9802 on, Rom dead, 70002802 on, in Yahar'gul (m28_00, the scene's warp 2802958) | run fixture_bm below (2026-10-15) |
 
 Use one for a single instance or the host with `--saves`, e.g.
 
@@ -44,7 +45,11 @@ saved (its file times; check with `python -I tools/party/save_decode.py <userdat
   rests upon the altar." on screen.
 * **fixture_cw** (`cathedral_day`): `BB_PARTY_PROGRESS_TEST_CLEAR=9800,9801,12400750`,
   `BB_PARTY_TEST_START_LAMP=2402950`.
-* **fixture_rom** (`rom_dead_moonside`): `BB_PARTY_PROGRESS_TEST_SET=13201800`,
+* **fixture_rom2** (`rom_dead_dream`): `BB_PARTY_PROGRESS_TEST_SET=13201800`,
+  `BB_PARTY_TEST_START_LAMP=2102950` (a load in the Dream, so the game saves).
+* **fixture_bm** (`blood_moon_yahargul`): `BB_PARTY_PROGRESS_TEST_SET=13201800`,
+  `BB_PARTY_TEST_START_LAMP=3202952`, 140 s (the scene 32000000 plays on arrival, then its warp to
+  Yahar'gul; the game saves there).
   `BB_PARTY_TEST_START_LAMP=3202952`.
 
 `stand=obj:ENTITY[:DIST[:ANGLE[:BUTTON]]]` (new) stands at a map object as `host_obj` does, then the
