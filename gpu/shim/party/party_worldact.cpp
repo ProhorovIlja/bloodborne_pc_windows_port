@@ -2612,6 +2612,17 @@ void FogPutBackTick(const GameSnapshot& s) {
         return;
     }
     for (const FogPutBack& p : due) {
+        if (BossBarShown()) {
+            // The fight was on (the host left during it): its boss bar and the boss stay on this
+            // game; correct over seamless - a loading screen to the own last lamp resets both.
+            party::status::SetLastEvent(kBossFogApartNotice);
+            const bool ok = b2::ReloadAtOwnLamp("boss fight without the host's area (the host left)");
+            Log("guest: in boss room %d (event %u) with the boss bar up while the host is in another area: %s; notice "
+                "shown", p.fog_entity, p.guest_event, ok ? "a loading screen to the own last lamp" : "NO alone load");
+            if (ok) {
+                continue;
+            }
+        }
         std::string what;
         const bool ok = StandAtObject(p.fog_entity, 1.5f, 0.0f, &what);
         // Out of the room: its "guest in" flag off in this copy, so another walk in is seen again.
@@ -2619,7 +2630,7 @@ void FogPutBackTick(const GameSnapshot& s) {
             WriteEventFlag(p.guest_flag, false);
         }
         party::status::SetLastEvent(kBossFogApartNotice);
-        Log("guest: went through boss fog %d (event %u) while the host is in another area: no fight can start here "
+        Log("guest: in boss room %d (event %u) while the host is in another area: no fight can start here "
             "(the boss's events are the host's); put back outside the fog %s%s%s; notice shown",
             p.fog_entity, p.guest_event, ok ? "" : "FAILED (fog not loaded)", what.empty() ? "" : ": ",
             what.c_str());
