@@ -84,6 +84,14 @@ bool WorldActionAllowed(std::uint32_t id, bool clear, std::uint32_t host_map) {
     return area == (host_map >> 24);  // the guest acts in the host's world: the host's area
 }
 
+bool BossKillActionAllowed(std::uint32_t id, bool clear, std::uint32_t member_map, bool apart) {
+    if (!apart || clear || member_map == 0xffffffffu || id < 10000000u ||
+        progress::CategoryOf(id) != Category::boss_defeated || progress::NeverWritable(id)) {
+        return false;
+    }
+    return id / 100000u % 100u == (member_map >> 24);
+}
+
 std::string RequestToJson(const Request& r) {
     json::Value v = json::Value::make_object();
     v.set("v", 1u);
@@ -200,7 +208,7 @@ bool RequestFromJson(const std::string& text, Request* out, std::string* error) 
                 }
                 const std::uint32_t id32 = std::uint32_t(id);
                 const std::uint32_t area = id32 >= 10000000u ? id32 / 100000u % 100u : 21u;
-                if (!WorldActionAllowed(id32, clear, area << 24)) {
+                if (!WorldActionAllowed(id32, clear, area << 24) && !BossKillActionAllowed(id32, clear, area << 24, true)) {
                     throw std::runtime_error("flag not allowed: " + std::to_string(id32));
                 }
                 if (std::find(to->begin(), to->end(), id32) != to->end()) {
@@ -898,7 +906,7 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
             local.push_back(id);
             continue;
         }
-        if (!WorldActionAllowed(id, !v, s.map_id)) {
+        if (!WorldActionAllowed(id, !v, s.map_id) && !BossKillActionAllowed(id, !v, s.map_id, b2::MemberApart(0))) {
             local.push_back(id);
             continue;
         }
@@ -1387,7 +1395,8 @@ void HostTick(const GameSnapshot& s) {
             Log("host: world action from slot %d, alone in %s: checked against its map", slot, MapName(check_map).c_str());
         }
         auto apply = [&](std::uint32_t id, bool v) {
-            if (!WorldActionAllowed(id, !v, check_map)) {
+            if (!WorldActionAllowed(id, !v, check_map) &&
+                !BossKillActionAllowed(id, !v, check_map, check_map != s.map_id)) {
                 ++st.stats.refused;
                 list += " " + std::to_string(id) + "(refused)";
                 return;
