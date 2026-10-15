@@ -296,9 +296,9 @@ BB_COOP_SYSV float StaminaRateHook(u64 list) {  // 0x17e4a20 max stamina rate (m
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotStamina])(list);
     return Mine(list) ? Note(kRotStamina, r * g_kind_value[kRotStamina].load(std::memory_order_relaxed)) : r;
 }
-BB_COOP_SYSV float DiscoveryHook(u64 list) {  // 0x17e8010 the sum of itemDropRate +0x1fc (points)
+BB_COOP_SYSV float DiscoveryHook(u64 list) {  // 0x17e8010 the sum of itemDropRate +0x1fc (points), RE only
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotDiscovery])(list);
-    return Mine(list) ? Note(kRotDiscovery, r + g_kind_value[kRotDiscovery].load(std::memory_order_relaxed)) : r;
+    return Mine(list) ? Note(kRotDiscovery, r) : r;
 }
 
 void OnLampUse(u32 id) {
@@ -728,6 +728,14 @@ int LocalRotStacks() {
     return InForce().rot ? g_stacks.load() : 0;
 }
 
+float RotDropDiscovery(float own) {
+    const int n = g_kind[kRotDiscovery].load(std::memory_order_relaxed);
+    if (n <= 0 || !g_kind_hooked[kRotDiscovery] || !InForce().rot) {
+        return own;
+    }
+    return Note(kRotDiscovery, RotItemDiscovery(own, n));
+}
+
 void NoteLampMenuOpened() {
     g_lamp_menu_opened = true;
 }
@@ -758,11 +766,14 @@ void Init() {
     // (RotRallyGainInWindow). Live 2026-10-15 (parfin c4, 2 stacks): 44 HP regained in 4 gains,
     // 13 taken back (30 %). On by default; BB_PARTY_ROT_RALLY=0 leaves the kind out.
     g_kind_hooked[kRotRally] = !EnvIsZero("BB_PARTY_ROT_RALLY");
-    // Item discovery: the itemDropRate sum 0x17e8010 was never asked either (0 calls over guest
-    // kills with drops), and no other path is known: not offered unless BB_PARTY_ROT_ALL_KINDS=1
-    // (the hook, for RE).
+    // Item discovery (0.6.2): the itemDropRate sum 0x17e8010 is never asked (0 calls over guest
+    // kills with drops), but every enemy drop roll's request carries the player's discovery
+    // (party_droproll, request +4): RotDropDiscovery takes the stacks off there. On by default;
+    // BB_PARTY_ROT_DISCOVERY=0 leaves the kind out. BB_PARTY_ROT_ALL_KINDS=1 still hooks the sum
+    // (RE only: it adds nothing the roll uses).
+    g_kind_hooked[kRotDiscovery] = !EnvIsZero("BB_PARTY_ROT_DISCOVERY");
     const char* all = std::getenv("BB_PARTY_ROT_ALL_KINDS");
-    if (all && all[0] == '1') {
+    if (all && all[0] == '1' && g_kind_hooked[kRotDiscovery]) {
         g_kind_hooked[kRotDiscovery] = ReplacePrologue(0x17e8010, {0x48, 0x8b, 0x47, 0x08, 0xc5, 0xf8, 0x57, 0xc0},
                                                        reinterpret_cast<const void*>(&DiscoveryHook),
                                                        &g_kind_orig[kRotDiscovery], "balance: item discovery sum (rot)");
