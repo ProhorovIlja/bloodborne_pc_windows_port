@@ -753,12 +753,10 @@ void Init() {
     g_kind_hooked[kRotStaminaCost] = !EnvIsZero("BB_PARTY_ROT_STAMINA_COST");
     // Rally (0.6.2): the SpEffect regainRate getter 0x17e5590 was never asked while a guest fought
     // and killed (live 2026-10-15, 0 calls), so the tick takes back part of each HP gain instead
-    // (RotRallyTakeBack). Not offered yet (BB_PARTY_ROT_RALLY=1 offers it): the live fights gave
-    // only a few 1-HP gains, too little to see the take-back work.
-    {
-        const char* r = std::getenv("BB_PARTY_ROT_RALLY");
-        g_kind_hooked[kRotRally] = r && r[0] == '1';
-    }
+    // (RotRallyTakeBack), only for gains inside the rally window after damage
+    // (RotRallyGainInWindow). Live 2026-10-15 (parfin c4, 2 stacks): 44 HP regained in 4 gains,
+    // 13 taken back (30 %). On by default; BB_PARTY_ROT_RALLY=0 leaves the kind out.
+    g_kind_hooked[kRotRally] = !EnvIsZero("BB_PARTY_ROT_RALLY");
     // Item discovery: the itemDropRate sum 0x17e8010 was never asked either (0 calls over guest
     // kills with drops), and no other path is known: not offered unless BB_PARTY_ROT_ALL_KINDS=1
     // (the hook, for RE).
@@ -1076,10 +1074,19 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
             static int prev_hp = -1, prev_mhp = -1, vials = -1;
             static float carry = 0;
             static std::uint64_t taken = 0, gains = 0, regained = 0;
-            static std::chrono::steady_clock::time_point vial_at{}, next_vials{}, next_rally_log{};
+            static std::chrono::steady_clock::time_point vial_at{}, next_vials{}, next_rally_log{}, damage_at{};
+            static bool damaged = false;
             const float f = g_kind_hooked[kRotRally] ? g_kind_value[kRotRally].load() : 1.0f;
             const int hp_now = in_world ? hp : -1;
-            const bool gain = f < 1.0f && prev_hp > 0 && hp_now > prev_hp;
+            // Damage (HP down, the max unchanged, still alive) opens the rally window; only a gain
+            // inside it is a rally (a regeneration effect's slow ticks later are kept whole).
+            if (prev_hp > 0 && hp_now > 0 && hp_now < prev_hp && prev_mhp == max_hp) {
+                damage_at = now;
+                damaged = true;
+            }
+            const double since_damage =
+                damaged ? std::chrono::duration<double>(now - damage_at).count() : -1.0;
+            const bool gain = f < 1.0f && prev_hp > 0 && hp_now > prev_hp && RotRallyGainInWindow(since_damage);
             // A Blood Vial (goods 1000) used in the last 3 s: its heal, not a rally. The count is
             // read twice a second while the rot is in force, and at every gain.
             if (f < 1.0f && in_world && (gain || now >= next_vials)) {
