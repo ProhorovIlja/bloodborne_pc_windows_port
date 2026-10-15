@@ -623,7 +623,23 @@ std::atomic<double> g_pickup_at{-1e9};     // Now() of the last one
 std::mutex g_gift_mu;
 std::vector<std::uint32_t> g_gift_sets;
 std::vector<std::uint32_t> g_repeat_sets;  // P2: repeatable gift triggers (RepeatGiftLot) this game set
+std::mutex g_kick_mu;
+std::vector<std::int32_t> g_kicks_out;
+std::atomic<std::uint32_t> g_keygate_own{0};  // guest: a key-item gate it opened (own save, GuestTick)
 void OnLocalGiftSet(std::uint32_t id) {
+    if (const KeyItemGate* kg = KeyItemGateByOpenFlag(id); kg && LocalSessionRole() == 6) {
+        // D6 (pard3, live P1b): the guest's copy of the gate's event opened it with its own key
+        // (KeyItemGate). The flag is a T1 zone-0 one the world mirror does not carry, so it never
+        // went up: the host gets the gate's far-side ObjAct kick (its copy opens with the
+        // animation and sets the flag; the mirror and C2 bring it back), the guest's own save
+        // the flag now.
+        std::lock_guard<std::mutex> lk(g_kick_mu);
+        if (g_kicks_out.size() < 16) {
+            g_kicks_out.push_back(kg->far_kick);
+        }
+        g_keygate_own.store(id);
+        return;
+    }
     if (RepeatGiftLot(id) > 0) {
         std::lock_guard<std::mutex> lk(g_gift_mu);
         if (g_repeat_sets.size() < 16) {
@@ -660,8 +676,6 @@ std::vector<Treasure> g_treasure;
 std::atomic<int> g_tgate[8];  // TreasureGate results (test fixture)
 std::atomic<int> g_rec[4];     // record inserts by kind, [0] removes (test fixture)
 std::atomic<std::uint64_t> g_rec_man{0};  // the MapItemMan the last insert went to
-std::mutex g_kick_mu;
-std::vector<std::int32_t> g_kicks_out;
 std::vector<std::pair<std::int32_t, double>> g_kicks_seen;
 
 /// A map treasure's pickup flag (5AABZnnn, a map's item lot): what a guest's pickup in the host's
@@ -871,6 +885,11 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         Log("guest: repeatable NPC gift trigger %u set by its talk in the host's world: lot %d %s; trigger %s "
             "(common 9100 does that on the host only)", id, lot,
             queued ? "given to this guest (own grant)" : "NOT queued (items off)", cleared ? "cleared" : "NOT cleared");
+    }
+    if (const std::uint32_t kgf = g_keygate_own.exchange(0)) {
+        const bool ok = progress::WriteFlagOwnSave(kgf, true);
+        Log("guest: opened key-item gate (flag %u) with its own key: the host's far-side ObjAct kick goes up; own "
+            "save %s", kgf, ok ? "set" : "NOT written");
     }
     for (std::uint32_t id : TakeGiftSets()) {
         bool given = false;
