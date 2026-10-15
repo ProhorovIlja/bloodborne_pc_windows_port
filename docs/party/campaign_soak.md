@@ -226,3 +226,21 @@ the host's emblem opens it; the host's spot press found no prompt), the One Rebo
 the wrong entity; c13 fell into NG+), the Lecture Building door by the guest (wrong entity),
 Cainhurst / Hemwick / the Chalice Dungeons in this chain, 3 players.
 
+
+## 2026-10-15 segment 3: the soak's open items (agent pard3)
+
+2 loopback instances (3 for O2: two windows + one headless guest, the A7 way), test saves (the
+character owns the DLC and the Eye), each run its own session unless noted; screenshots every 3-15 s
+under `agents/pard3/runs/<run>` (kept in `agents/pard3_shots_keep`).
+
+| Run | Milestone | Result |
+|---|---|---|
+| L2 | Lecture Building: the 1F door (3201124, ObjAct 13200124) used by the **guest** | **pass**: the guest's kick reached the host's game natively (`ObjAct kick (another player)`), both games ran 13200310's story warp, one question (P4: the host's), YES, the party in the Nightmare of Mensis, re-join 12.9 s (screenshots: both side by side in Mensis) |
+| O1 / R1 / R3 / R4 | Rom killed, the **guest** walks up to Yharnam at Moonside Lake: the Blood Moon | **pass**: `slot 1 stands at story event 13201803's spot`, the host's chr visited the lamp spot 0.1 s, scene 32000000 on both, the host put back, the story warp's question, YES, both in Yahar'gul; there the host's "Ritual secret broken" notice showed on the guest too (R3 / R4) |
+| O2 | Yahar'gul, **3 players**: the One Reborn started by guest 1, killed by its boss entity 2800803 | **pass**: intro 28000000 on all three, kill 12801800, +3 Insight on both guests, the headless guest's own save `12801800=1` after it went home |
+| P1b / P1d | Cathedral Ward: the main gate (12400160 cleared on the host) opened by the **guest** with its own Hunter Chief Emblem | **pass**: the guest's copy took the emblem branch (`key item gate ... as held`), "A special emblem opened the main gate" on both screens, 12400160 on the host (its own copy ran from the guest's press) and in the guest's own save; P1c (Continue): the host's world keeps the gate open |
+| L1c, L4, L5b, L3c | DLC first fights started by the **guest** (Ludwig, the Living Failures, the Orphan of Kos, Laurence) | see quest_audit.md P5 (pard3) |
+| E1 / E2 / E3 | The host's ending (test aid) asks the guest | **pass**: NOT NOW = home, NG 0, no ending flags on disk; YES = staff roll, NG 0 -> 1, 6601/6603/6604 on disk; YES with three cords = Childhood's Beginning (6602) |
+
+Not done here: Cainhurst / Hemwick in this chain; a lone guest's boss fight (LB2: no defeat ran on
+the guest's own game).

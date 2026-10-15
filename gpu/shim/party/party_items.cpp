@@ -80,7 +80,7 @@ struct SourceName {
 constexpr SourceName kSourceNames[] = {
     {ItemSource::Unknown, "unknown"}, {ItemSource::Award, "award"}, {ItemSource::Flag, "flag"},
     {ItemSource::Full, "full"},       {ItemSource::Mark, "mark"},   {ItemSource::Test, "test"},
-    {ItemSource::Own, "own"},         {ItemSource::Repeat, "repeat"},
+    {ItemSource::Own, "own"},         {ItemSource::Repeat, "repeat"}, {ItemSource::Chalice, "chalice"},
 };
 
 const std::unordered_map<std::int32_t, std::int32_t>& FlagToLot() {
@@ -273,6 +273,28 @@ std::optional<ItemGrant> MakeRepeatGrant(std::int32_t lot, std::uint64_t n) {
     return g;
 }
 
+bool ChaliceAwardLot(std::int32_t lot) {
+    return lot >= 100000000 || (lot > 0 && lot / 100000 == 29);
+}
+
+std::optional<ItemGrant> MakeChaliceGrant(std::int32_t lot, const std::vector<GrantItem>& items, std::uint64_t n) {
+    if (!ChaliceAwardLot(lot) || items.empty() || items.size() > kMaxGrantItems) {
+        return std::nullopt;
+    }
+    ItemGrant g;
+    g.lot = lot;
+    g.flag = kItemNone;
+    g.ledger = kItemNone;
+    g.source = ItemSource::Chalice;
+    g.items = items;
+    g.repeat_key = kChaliceKeyBase + static_cast<std::int64_t>(n);
+    return g;
+}
+
+bool ChaliceGrantAccepted(bool summoned, std::uint32_t map_id) {
+    return summoned && map_id != 0xffffffffu && (map_id >> 24) == 29;
+}
+
 bool ItemLotDenied(std::int32_t lot, std::int32_t flag) {
     if (lot <= 0 || lot >= 100000000) {
         return true; // unresolved; Chalice Dungeon lots (1100xxxxx, 2001xxxxx)
@@ -438,7 +460,12 @@ bool ItemsFromJson(const json::Value& v, std::vector<ItemGrant>* out, std::strin
                 throw std::runtime_error("items: source is not a string");
             }
             g.source = ItemSourceFromName(row.array[4].string);
-            if (g.DoneFlag() < 0) {
+            if (g.source == ItemSource::Chalice) {
+                // G1: a Chalice award has no flag; the host's items are required (checked below).
+                if (g.flag != kItemNone || g.ledger != kItemNone || !ChaliceAwardLot(g.lot) || row.array.size() != 6) {
+                    throw std::runtime_error("items: a chalice row needs a dungeon lot, no flag and its items");
+                }
+            } else if (g.DoneFlag() < 0) {
                 throw std::runtime_error("items: a row needs a flag or a ledger index");
             }
             if (row.array.size() == 6) {
@@ -498,6 +525,14 @@ bool ItemGrantFromPeerAllowed(const ItemGrant& g, std::string* why) {
         }
         return false;
     };
+    if (g.source == ItemSource::Chalice) {
+        // G1: a dungeon lot with exactly the host's items, no flag; given only in the dungeon.
+        if (!ChaliceAwardLot(g.lot) || g.flag != kItemNone || g.ledger != kItemNone || g.items.empty() ||
+            g.items.size() > kMaxGrantItems) {
+            return no("a chalice award needs a dungeon lot, no flag and the host's items");
+        }
+        return true;
+    }
     if (g.source != ItemSource::Award && g.source != ItemSource::Flag && g.source != ItemSource::Full) {
         return no("not a host source (mark / test rows are guest-local)");
     }
@@ -1381,6 +1416,8 @@ std::deque<RecentGive> g_recent_gem_gives;
 // ---- The award hook (main thread: EMEVD, Lua) ----
 
 AwardFn g_award_original = nullptr; // the trampoline (ReplacePrologue)
+// G1: the host's Chalice Dungeon awards go to the guests in the dungeon (BB_PARTY_CHALICE_AWARDS=0: off).
+const bool g_chalice_awards = !EnvOff("BB_PARTY_CHALICE_AWARDS");
 bool g_capturing = false;           // main thread: the host's own award runs, GiveListEntry records
 std::vector<GrantItem> g_captured;  // its items (category, id, count)
 bool g_captured_bad = false;        // an item that could not be read (the guest resolves the lot itself)
@@ -1406,6 +1443,14 @@ std::optional<ItemGrant> AwardEntry(u64 lot_arg, u64 host_only_arg) {
             SetFlag(Ptr(kFlagMan), std::int64_t(kItemLedgerBase) + idx);
             Log("own award of ledger lot %d: ledger flag %d set", lot, int(kItemLedgerBase) + idx);
         }
+    }
+    if (role == PartyRole::Host && own == 1 && host_only && ChaliceAwardLot(lot) && g_chalice_awards) {
+        // G1: a Chalice Dungeon award (a layer boss's ritual materials, ...): what the host's roll
+        // gives goes to the guests in the dungeon now (AwardReplace fills the items).
+        ItemGrant c;
+        c.lot = lot;
+        c.source = ItemSource::Chalice;
+        return c;
     }
     if (role == PartyRole::Host && own == 1) {
         const std::optional<ItemGrant> g = ClassifyAward(lot, host_only);
@@ -1473,6 +1518,17 @@ BB_COOP_SYSV void AwardReplace(u64 mim, u64 lot_arg, u64 host_only_arg) {
     g_capturing = false;
     if (!g) {
         return;
+    }
+    if (g->source == ItemSource::Chalice) {
+        static std::uint64_t n = 0;
+        const std::optional<ItemGrant> c =
+            g_captured_bad ? std::nullopt : MakeChaliceGrant(g->lot, g_captured, ++n);
+        if (!c) {
+            Log("host chalice award lot %d: %s; not sent", g->lot,
+                g_captured_bad ? "an item could not be read" : g_captured.empty() ? "it gave nothing" : "too many items");
+            return;
+        }
+        g = c;
     }
     // What the host's roll really gave: guests replay exactly that while summoned.
     if (!g_captured_bad && g_captured.size() <= kMaxGrantItems) {
@@ -2335,7 +2391,28 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
     }
     const std::vector<LotRowData> chain = LotChain(g.lot);
     // A re-give ignores the row flags (the done flag is one of them and is set).
-    const LotPlan plan = PlanSummonedLot(chain, g.items, [](std::int32_t f) { return OwnSaveFlag(f); });
+    LotPlan plan = PlanSummonedLot(chain, g.items, [](std::int32_t f) { return OwnSaveFlag(f); });
+    if (g.source == ItemSource::Chalice) {
+        // G1: exactly the host's items, never a flag (dungeon flags are the slot's own), and no
+        // key goods (a chalice reaches every member through the chalice share).
+        plan.result = LotPlanResult::Give;
+        plan.why = "the host's chalice award";
+        plan.row_flags.clear();
+        plan.items.clear();
+        for (const GrantItem& it : g.items) {
+            LotSlotState s;
+            s.category = it.category;
+            s.id = it.id;
+            s.num = it.count;
+            FillGoodsLimits(&s);
+            if (KeyGoods(s)) {
+                Log("%s: goods %d is a key item (the chalice share gives chalices); left out", DescribeItem(g).c_str(),
+                    it.id);
+                continue;
+            }
+            plan.items.push_back(it);
+        }
+    }
     if (plan.result != LotPlanResult::Give) {
         Log("%s: not while summoned (%s: %s); waits for the own world", DescribeItem(g).c_str(),
             LotPlanResultName(plan.result), plan.why.c_str());
@@ -2646,9 +2723,33 @@ bool TakeHostFullItems(int* slot, std::vector<ItemGrant>* out) {
     return true;
 }
 
-void RequestGuestItems(const std::vector<ItemGrant>& items) {
+void RequestGuestItems(const std::vector<ItemGrant>& in) {
     if (!g_on.load()) {
         return;
+    }
+    std::vector<ItemGrant> items;
+    items.reserve(in.size());
+    for (const ItemGrant& g : in) {
+        if (g.source != ItemSource::Chalice) {
+            items.push_back(g);
+            continue;
+        }
+        // G1: only a guest in the dungeon now (summoned) takes the host's Chalice award; its own
+        // key (once; no flag is ever written for it).
+        static std::uint64_t n = 0;
+        const GameSnapshot q = ReadGameState(false);
+        const bool summoned = q.session_role == RoleClient && progress::FlagLoadMode() == 1;
+        if (!ChaliceGrantAccepted(summoned, q.map_id)) {
+            Log("chalice award lot %d from the host: not taken (this player is not in the host's dungeon: map %08x, "
+                "role %d)",
+                g.lot, q.map_id, q.session_role);
+            continue;
+        }
+        ItemGrant c = g;
+        c.repeat_key = kChaliceKeyBase + static_cast<std::int64_t>(++n);
+        Log("chalice award lot %d from the host (%zu item(s)): queued for this guest (in the dungeon at the kill)",
+            g.lot, g.items.size());
+        items.push_back(c);
     }
     std::size_t taken, pending;
     {
@@ -2682,10 +2783,49 @@ bool BossQuiet(double now) {
         off_at = now;
     }
     last = shown;
-    return !shown && now - off_at >= kBossBannerQuiet;
+    // A boss killed without its bar on this game (a guest away from the fight, a scripted kill)
+    // still shows its defeat banner: an item notice opened under it had no OK row and could not be
+    // closed (live pard3 O1, Rom's Kin Coldblood on the guest).
+    return !shown && now - off_at >= kBossBannerQuiet && BannerAgeSeconds() >= kBossBannerQuiet;
 }
 
 /// The item-get dialog's watchdog (ItemGetWatch): every role, party mode.
+/// BB_PARTY_ITEMGET_PROBE: the gates of the action-button registration 0x1CD91F0 the item notice's
+/// confirm (0x16D86E0: button 0x1130, category 0xB) goes through, while an entry waits.
+void ItemConfirmGateProbe(double now) {
+    static double next = 0;
+    if (now < next) {
+        return;
+    }
+    next = now + 1.0;
+    auto rd = [](u64 a, u64 off) -> u64 {
+        u64 v = 0;
+        return a && SafeGet(a + off, &v) ? v : 0;
+    };
+    auto rb = [](u64 a, u64 off) -> int {
+        u8 v = 0;
+        return a && SafeGet(a + off, &v) ? v : -1;
+    };
+    auto ri = [](u64 a, u64 off) -> int {
+        std::int32_t v = 0;
+        return a && SafeGet(a + off, &v) ? v : -1;
+    };
+    const u64 wcm = rd(Guest(0x553e878), 0), chr = rd(wcm, 0x60), man = rd(Guest(0x5540048), 0),
+              menu = rd(Guest(0x5562878), 0);
+    u32 f1e1 = 0;
+    if (chr) {
+        SafeGet(chr + 0x1e1, &f1e1);
+    }
+    const u64 cnt_ptr = rd(rd(chr, 0x58), 0x248);
+    const u64 l15 = rd(rd(rd(rd(rd(chr, 0x3b0), 0x58), 8), 0x58), 0x38);
+    const u64 l11 = rd(rd(rd(l15, 8), 8), 0x3b0);
+    const u64 l3 = rd(l11, 0x30);
+    Log("item confirm gates: man +0x50 %d +0x51 %d +0x52 %d +0x55 %d; menu +0xC0 %d +0x118 %d +0x130 %d; chr +0x1E1 "
+        "%#x (0x400 %d); +0x58->+0x248 count %d; L3+900 %d; L11+8->+0x10 %d; L15+0x5D %d",
+        rb(man, 0x50), rb(man, 0x51), rb(man, 0x52), rb(man, 0x55), ri(menu, 0xc0), ri(menu, 0x118), ri(menu, 0x130),
+        f1e1, (f1e1 & 0x400) ? 1 : 0, cnt_ptr ? ri(cnt_ptr, 0) : -9, rb(l3, 900), rb(rd(l11, 8), 0x10), rb(l15, 0x5d));
+}
+
 void ItemGetWatchTick(const GameSnapshot& gs, double now) {
     static ItemGetWatch watch;
     static bool off = [] {
@@ -2696,6 +2836,39 @@ void ItemGetWatchTick(const GameSnapshot& gs, double now) {
         return;
     }
     const int n = ItemGetEntries();
+    // A summoned guest's game holds every action button off (SprjActionButtonMan +0x52 = 1: a
+    // phantom never picks anything up in vanilla), and the item notice's confirm is an action
+    // button (0x16D86E0 -> 0x1CD91F0 button 0x1130): the box had no OK row and Cross did nothing
+    // (live pard3 R3: +0x52 1 in the field, 0 in the Dream where it worked). While an item notice
+    // is up the gate is lifted, and put back once it is closed.
+    {
+        static bool lifted = false;
+        static const bool keep = std::getenv("BB_PARTY_ITEMGET_CONFIRM") && std::getenv("BB_PARTY_ITEMGET_CONFIRM")[0] == '0';
+        u64 man = 0;
+        if (!keep && SafeGet(Guest(0x5540048), &man) && man) {
+            u8 gate = 0;
+            SafeGet(man + 0x52, &gate);
+            if (n > 0 && gs.session_role == 6 && gate == 1) {
+                const u8 zero = 0;
+                SafeWrite(man + 0x52, &zero, 1);
+                if (!lifted) {
+                    lifted = true;
+                    Log("item notice up on a summoned guest: the action-button hold (+0x52) lifted so its OK confirms it");
+                }
+            } else if (n <= 0 && lifted) {
+                lifted = false;
+                if (gs.session_role == 6 && gate == 0) {
+                    const u8 one = 1;
+                    SafeWrite(man + 0x52, &one, 1);
+                }
+                Log("item notice closed: the action-button hold put back");
+            }
+        }
+    }
+    static const bool probe = std::getenv("BB_PARTY_ITEMGET_PROBE") != nullptr;
+    if (probe && n > 0) {
+        ItemConfirmGateProbe(now);
+    }
     const std::int32_t hp = PlayerHp(gs.player);
     const char* why = nullptr;
     if (!watch.Step(now, n, ItemGetConfirmArmed(), hp != 0, gs.loading || !gs.world_up, &why)) {
@@ -3157,7 +3330,10 @@ void ItemsTick() {
     if (mode == ItemApplyMode::Summoned) {
         const SummonedResult r = ApplySummoned(*g);
         std::lock_guard<std::mutex> lk(g_guest_mu);
-        if (r == SummonedResult::Defer) {
+        if (r == SummonedResult::Defer && g->source == ItemSource::Chalice) {
+            // A dungeon award is for the dungeon: never carried home.
+            Log("%s: could not be given in the dungeon; dropped (not carried home)", DescribeItem(*g).c_str());
+        } else if (r == SummonedResult::Defer) {
             g_guest.Defer(*g);
             return;
         }

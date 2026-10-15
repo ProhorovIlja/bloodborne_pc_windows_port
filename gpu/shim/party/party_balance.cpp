@@ -296,9 +296,9 @@ BB_COOP_SYSV float StaminaRateHook(u64 list) {  // 0x17e4a20 max stamina rate (m
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotStamina])(list);
     return Mine(list) ? Note(kRotStamina, r * g_kind_value[kRotStamina].load(std::memory_order_relaxed)) : r;
 }
-BB_COOP_SYSV float DiscoveryHook(u64 list) {  // 0x17e8010 the sum of itemDropRate +0x1fc (points)
+BB_COOP_SYSV float DiscoveryHook(u64 list) {  // 0x17e8010 the sum of itemDropRate +0x1fc (points), RE only
     const float r = reinterpret_cast<float(BB_COOP_SYSV*)(u64)>(g_kind_orig[kRotDiscovery])(list);
-    return Mine(list) ? Note(kRotDiscovery, r + g_kind_value[kRotDiscovery].load(std::memory_order_relaxed)) : r;
+    return Mine(list) ? Note(kRotDiscovery, r) : r;
 }
 
 void OnLampUse(u32 id) {
@@ -687,6 +687,7 @@ Rules FromSettings() {
     r.enemy_damage = v.party_enemy_damage;
     r.enemy_poise = v.party_enemy_poise;
     r.friendly_fire = v.party_friendly_fire;
+    r.share_lamps = v.party_share_lamps;
     return Clamped(r);
 }
 
@@ -727,6 +728,14 @@ int LocalRotStacks() {
     return InForce().rot ? g_stacks.load() : 0;
 }
 
+float RotDropDiscovery(float own) {
+    const int n = g_kind[kRotDiscovery].load(std::memory_order_relaxed);
+    if (n <= 0 || !g_kind_hooked[kRotDiscovery] || !InForce().rot) {
+        return own;
+    }
+    return Note(kRotDiscovery, RotItemDiscovery(own, n));
+}
+
 void NoteLampMenuOpened() {
     g_lamp_menu_opened = true;
 }
@@ -757,11 +766,14 @@ void Init() {
     // (RotRallyGainInWindow). Live 2026-10-15 (parfin c4, 2 stacks): 44 HP regained in 4 gains,
     // 13 taken back (30 %). On by default; BB_PARTY_ROT_RALLY=0 leaves the kind out.
     g_kind_hooked[kRotRally] = !EnvIsZero("BB_PARTY_ROT_RALLY");
-    // Item discovery: the itemDropRate sum 0x17e8010 was never asked either (0 calls over guest
-    // kills with drops), and no other path is known: not offered unless BB_PARTY_ROT_ALL_KINDS=1
-    // (the hook, for RE).
+    // Item discovery (0.6.2): the itemDropRate sum 0x17e8010 is never asked (0 calls over guest
+    // kills with drops), but every enemy drop roll's request carries the player's discovery
+    // (party_droproll, request +4): RotDropDiscovery takes the stacks off there. On by default;
+    // BB_PARTY_ROT_DISCOVERY=0 leaves the kind out. BB_PARTY_ROT_ALL_KINDS=1 still hooks the sum
+    // (RE only: it adds nothing the roll uses).
+    g_kind_hooked[kRotDiscovery] = !EnvIsZero("BB_PARTY_ROT_DISCOVERY");
     const char* all = std::getenv("BB_PARTY_ROT_ALL_KINDS");
-    if (all && all[0] == '1') {
+    if (all && all[0] == '1' && g_kind_hooked[kRotDiscovery]) {
         g_kind_hooked[kRotDiscovery] = ReplacePrologue(0x17e8010, {0x48, 0x8b, 0x47, 0x08, 0xc5, 0xf8, 0x57, 0xc0},
                                                        reinterpret_cast<const void*>(&DiscoveryHook),
                                                        &g_kind_orig[kRotDiscovery], "balance: item discovery sum (rot)");
@@ -848,12 +860,48 @@ void KillEchoTick(const GameSnapshot& s) {
     }
 }
 
+// Test aid (ngfix, BB_PARTY_TEST_ENEMY_HP=1): every 5 s in a steady world, the max HP of the loaded
+// enemies with the lowest map entity ids (the same ids on every game) and the live NG cycle
+// (GameDataMan +0x68), logged when it changes: the same enemy's HP compared across the party.
+void EnemyHpTestTick(const GameSnapshot& s) {
+    static const bool on = [] {
+        const char* v = std::getenv("BB_PARTY_TEST_ENEMY_HP");
+        return v && *v == '1';
+    }();
+    static Clock::time_point next{};
+    static std::string last;
+    if (!on || !s.world_up || s.loading || !s.player) return;
+    const auto now = Clock::now();
+    if (now < next) return;
+    next = now + std::chrono::seconds(5);
+    const u64 wcm = Slot(kSlotWorldChrMan);
+    if (!wcm) return;
+    std::vector<std::pair<u32, u64>> list;
+    for (const auto& e : LoadedEnemyList(wcm))
+        if (e.entity) list.push_back({e.entity, e.chr});
+    std::sort(list.begin(), list.end());
+    std::string line;
+    for (std::size_t i = 0; i < list.size() && i < 6; ++i) {
+        const u64 dm = Field<u64>(Field<u64>(list[i].second, 0x3b0), 0x20);
+        char b[64];
+        std::snprintf(b, sizeof b, " %u max HP %d (base %d);", list[i].first, Field<int>(dm, 0xfc, -1),
+                      Field<int>(dm, 0x100, -1));
+        line += b;
+    }
+    if (line.empty() || line == last) return;
+    last = line;
+    Log("test: enemy HP in %s, live NG cycle %d:%s", MapName(s.map_id).c_str(),
+        int(Field<u32>(s.game_data_man, 0x68, 0xffffffffu)), line.c_str());
+}
+
 void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     KillEchoTick(s);
+    EnemyHpTestTick(s);
     if (!On()) return;
     TickState& st = S();
     const auto now = Clock::now();
     const Rules r = host ? FromSettings() : InForce();
+    party::status::SetShareLamps(r.share_lamps);
     if (host) {
         std::lock_guard<std::mutex> lk(g_mu);
         g_have_host = false;  // a host's own settings count
