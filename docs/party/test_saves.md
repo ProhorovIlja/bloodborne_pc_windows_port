@@ -13,6 +13,7 @@ Each fixture folder holds a `savedata` tree that `tools/mp/instances.py` copies 
 | `cathedral_day\savedata` | The default save put back **before day -> evening**: 9800 / 9801 off, the Cathedral Ward door event 12400750 off (the door 2401210 is closed and its prompt works again), at the Cathedral Ward lamp 2402950 | run fixture_cw below (2026-10-15) |
 | `rom_dead_dream\savedata` | The default save with **Rom dead** (13201800), in the Hunter's Dream: a lamp travel to Moonside Lake (`host_lamp=3202952` / `BB_PARTY_TEST_START_LAMP=3202952`) plays the Blood Moon scene 13201803 right at the arrival (the lamp is inside its trigger) | run fixture_rom2 below (2026-10-15) |
 | `blood_moon_yahargul\savedata` | After the **Blood Moon**: 9800..9802 on, Rom dead, 70002802 on, in Yahar'gul (m28_00, the scene's warp 2802958) | run fixture_bm below (2026-10-15) |
+| `chalice_pthumeru_inside\savedata` | A **host inside the Pthumeru dungeon** of glyph `ksxx7rqb` (entered by "Enter the party's dungeon"), layer 1 boss 2900100 dead, standing in its boss room: Continue loads the dungeon, a guest title-joins straight into it (used with the guest `chalice_pthumeru_ritual`); the lift car at the top | run g1b3 below (2026-10-15) |
 
 Use one for a single instance or the host with `--saves`, e.g.
 
@@ -54,3 +55,5 @@ saved (its file times; check with `python -I tools/party/save_decode.py <userdat
 
 `stand=obj:ENTITY[:DIST[:ANGLE[:BUTTON]]]` (new) stands at a map object as `host_obj` does, then the
 button and `seq=`; for objects on the walkable floor (levers, doors).
+
+* **g1b3** (`chalice_pthumeru_inside`, parfin3): the g1m entry (host default save, guest `chalice_pthumeru_ritual`, `BB_PARTY_ALTAR_AUTO=1`, `approach=-17.0:-16.9:0.35,face=-18.27:-16.88,prompt=First Ritual Altar,seq=cross/?cross@Use the Ritual Altar/wait/down/down/cross`), then `host_move=-45:30.7:-93@30%m29,host_kill=2900100@8%m29`; the host's `savedata_party` copied after the boss-clear (K10). Later runs without `--fresh-saves` Continue in the dungeon.
