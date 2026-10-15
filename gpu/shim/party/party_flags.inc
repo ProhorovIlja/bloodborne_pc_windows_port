@@ -1846,7 +1846,7 @@
 {9180u, 9180u, Category::never_sync, "a cutscene is playing (set around every story remo; cutscenes_endings.md)"},
 {9181u, 9199u, Category::never_sync, "insight return 9181/9182 (per player)"},
 {9200u, 9299u, Category::session_runtime, "insight hallucinations / bell maiden events (restart)"},
-{9300u, 9359u, Category::cutscene_seen, "boss intro seen (host enters boss room, first fight)"},
+{9300u, 9359u, Category::never_sync, "a boss's first-encounter Insight given (per player: read and set by the first-fight events around their 9350)"},
 {9360u, 9399u, Category::npc_quest, "kin rune + NPC kill events"},
 {9400u, 9419u, Category::key_event, "9400/9401 constructor progress gates, 9402 first death, 9403 ladder top, 9404"},
 {9420u, 9439u, Category::key_event, "kidnapper warp to Yahar'gul / first sacrifice"},

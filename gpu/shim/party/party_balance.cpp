@@ -687,6 +687,7 @@ Rules FromSettings() {
     r.enemy_damage = v.party_enemy_damage;
     r.enemy_poise = v.party_enemy_poise;
     r.friendly_fire = v.party_friendly_fire;
+    r.share_lamps = v.party_share_lamps;
     return Clamped(r);
 }
 
@@ -854,6 +855,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     TickState& st = S();
     const auto now = Clock::now();
     const Rules r = host ? FromSettings() : InForce();
+    party::status::SetShareLamps(r.share_lamps);
     if (host) {
         std::lock_guard<std::mutex> lk(g_mu);
         g_have_host = false;  // a host's own settings count
