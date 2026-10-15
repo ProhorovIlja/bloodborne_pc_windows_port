@@ -19,7 +19,7 @@
 //            replay=A+B (the replay's route), max=N (the first N rows of the route), noact (no
 //            weapon / item actions), noenemy (no enemies), nokill, enemies=N (new enemy kinds per
 //            row, 6), chalice (the Chalice Dungeon rows too: the save's current dungeon), notod (no
-//            time-of-day pass), nogear (no armor / weapon sets), remo (cutscenes: opt-in), bosses (opt-in),
+//            time-of-day pass), gear (armor / weapon rotation: opt-in), remo (cutscenes: opt-in), bosses (opt-in),
 //            noitems (no item-effect pass), dump (log the player record).
 #pragma once
 
@@ -51,7 +51,8 @@ struct Options {
     bool act = true, enemies = true, kill = true;
     bool chalice = false;  ///< chalice: the Chalice Dungeon rows too (the save's current dungeon)
     bool tod = true;       ///< notod: no time-of-day pass (day / evening / night / Blood Moon)
-    bool gear = true;      ///< nogear: no armor / weapon changes between rows
+    bool gear = false;     ///< gear: an armor set and weapons a row (opt-in: changing them ended the game
+                           ///< every few rows, live 2026-10-15)
     bool remo = false;     ///< remo: the map's cutscenes too (off: a played one ended the game, live 2026-10-15)
     bool bosses = false;   ///< bosses: loaded bosses are fought too (opt-in: an idle boss outside its fight
                            ///< stands in its closed arena; going there put the player in the walls)
@@ -68,6 +69,7 @@ inline bool ApplyFlag(Options& o, const std::string& item) {
     else if (item == "chalice") o.chalice = true;
     else if (item == "notod") o.tod = false;
     else if (item == "nogear") o.gear = false;
+    else if (item == "gear") o.gear = true;
     else if (item == "noremo") o.remo = false;
     else if (item == "remo") o.remo = true;
     else if (item == "nobosses") o.bosses = false;
