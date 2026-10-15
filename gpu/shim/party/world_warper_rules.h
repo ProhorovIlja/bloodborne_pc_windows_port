@@ -336,17 +336,19 @@ inline float Seconds(const std::vector<PadStep>& steps) {
     return s;
 }
 
-/// An enemy's kind for the coverage (one kill per kind): its model, from the NpcParam row id
-/// (c2100's rows are 210000000.. : id / 100000; the short ids of NPC hunters stay themselves).
+/// An enemy's kind for the coverage (one kill per kind): its model cAAAA, the NpcParam row id's
+/// first four digits (100010, 10100080, 100007000: c1000, c1010, c1000).
 constexpr std::uint32_t EnemyKind(std::uint32_t npc_param_id) {
-    return npc_param_id >= 100000000u ? npc_param_id / 100000u : npc_param_id;
+    std::uint32_t k = npc_param_id;
+    while (k >= 10000u) k /= 10u;
+    return k;
 }
 
-/// A chr the warper fights: a real enemy's NpcParam row (model * 100000 + variant). The team-23
-/// chrs with short rows (the Hunter's Dream's 902010.. set pieces with 999 HP, NPC hunters) are
-/// left alone: killing the Dream's ended the game at the next warp (live 2026-10-15).
+/// A chr the warper fights: a real enemy's NpcParam row. The c9xxx team-23 chrs (the Hunter's
+/// Dream's 902010.. set pieces with 999 HP) and the short player-type rows are left alone:
+/// killing the Dream's ended the game at the next warp (live 2026-10-15).
 constexpr bool EnemyRowFightable(std::uint32_t npc_param_id) {
-    return npc_param_id >= 100000000u;
+    return npc_param_id >= 10000u && EnemyKind(npc_param_id) / 1000u != 9u;
 }
 
 /// The packed map (AA << 24 | BB << 16) a cutscene belongs to: remo AABBnnnn.
@@ -389,7 +391,8 @@ inline std::vector<int> TodPasses(int orig) {
     return v;
 }
 
-/// The gear of the tour's n-th row: a right-hand and a left-hand weapon (the first slot of each
+/// The gear of the tour's n-th row (put on when the row's world is up, as the equipment menu
+/// does): a right-hand and a left-hand weapon (the first slot of each
 /// hand: the ones held) and an armor set, rotating through world_warper_content.inc so every
 /// model is worn / held at least once in a full tour (34 sets, 26 + 15 weapons). The other weapon
 /// slots are left as they are and never switched to: a d-pad switch to a slot the record was
