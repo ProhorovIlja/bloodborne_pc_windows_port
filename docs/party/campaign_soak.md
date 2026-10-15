@@ -244,3 +244,21 @@ under `agents/pard3/runs/<run>` (kept in `agents/pard3_shots_keep`).
 
 Not done here: Cainhurst / Hemwick in this chain; a lone guest's boss fight (LB2: no defeat ran on
 the guest's own game).
+
+
+## 2026-10-15 segment 4: Amelia's skull, Hemwick, Cainhurst (agent pard4)
+
+Loopback instances, test saves (the default save), **3 players** for B2 / B3 (two windows + one
+headless guest), screenshots every 3-5 s under `agents/pard4/runs/<run>` (kept in
+`agents/pard4_shots_keep`). B2 is one continuous session (Cathedral Ward -> Hemwick -> Cainhurst).
+
+| Run | Milestone | Result |
+|---|---|---|
+| B2 | Grand Cathedral, evening (fixture: the host's 9801 / 12401803 cleared): Amelia's skull examined by the **guest** | **pass**: the guest's copy of 12401803 ran (its client / chr-type checks skipped), the game passed the press to the host's own event: scene 24000030 on the host and both guests (screenshots: the same frame "Master Willem, I've come to bid you farewell." on both windows), the host's time of day 2 (night) sent to the party |
+| B2 | Party travel to Hemwick; the Witch of Hemwick's first fight started by the **guest** (P5) | **pass**: the host's first-fight event 12201802 ran 0.3 s after the guest's fog, both witches killed (host_kill), 12201800 / 9452 on the host, Insight to all |
+| B2 | The carriage: the host in its region (12200130: Cainhurst Summons held, the Witch dead) | **pass**: scene 22000030 on host and guests; the carriage's own press was not reproduced (the test stand put the host into a wall), so its warp ran as the story warp (`host_lamp=2502959:story`): the travel question, YES, the party in Cainhurst |
+| B2 | Cainhurst: Vicar Logarius's first fight started by the **guest**, killed | **pass**: intro 25000020 mirrored on the guests (the guest's own copy skipped as already played), the boss doped with 7501 (two cooperators) on every game, HP 9081 on all three, poise +60 counted; 12501800 / 9460 on the host; found: each guest got +6 Insight against the host's +3 (fixed: the relay now tops up only to the host's grant, live B3 / B4: guest 6 -> 9 like the host) |
+| B3 | Hemwick again, 3 players, `BB_PARTY_FLAG_DUMP=1` | **pass**: `save_check`: both guests' own pools hold every host flag of the synced categories (0 missing), items consistent; every save on disk has 12201800 |
+| B4 / B5 | The Rune Workshop Tool (shared key treasure 2200360) picked up by the **guest** | see ERSC_PARITY D4 |
+
+Not done here: the carriage's press (above), Queen Annalise, the Chalice Dungeons in this chain.

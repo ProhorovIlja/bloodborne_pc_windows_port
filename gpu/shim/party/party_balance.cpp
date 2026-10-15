@@ -455,7 +455,9 @@ u64 ChrByEntity(int entity) {
     return reinterpret_cast<Fn>(Guest(kGetChrByEntityId))(entity, u64(unsigned(entity)), 0);
 }
 
-std::string g_boss_line;  // the last boss line logged (only changes are logged)
+// The last boss line logged per boss chr handle (only changes are logged; one string for all of
+// them logged every line again when a fight had several boss chrs, live pard4 B2: 450 lines).
+std::map<std::uint32_t, std::string> g_boss_line;
 u64 g_sample = 0;
 u32 g_sample_handle = ~0u;
 int g_sample_logs = 0;
@@ -615,8 +617,12 @@ void EnemyPass(const GameSnapshot& s, bool scale) {
                                   Field<int>(dm, 0xfc, -1), Field<int>(dm, 0x100, -1),
                                   double(list && g_rate_orig ? reinterpret_cast<RateFn>(g_rate_orig)(list, 0) : -1.0f),
                                   poise);
-                    if (g_boss_line != b) {
-                        g_boss_line = b;
+                    if (g_boss_line.size() > 64) {
+                        g_boss_line.clear();
+                    }
+                    std::string& last = g_boss_line[Field<u32>(chr, 8, ~0u)];
+                    if (last != b) {
+                        last = b;
                         Log("%s", b);
                     }
                 }
