@@ -17,13 +17,17 @@
 //   Options  BB_WORLD_WARPER = tour | replay | measure (replay, tour, replay again: the stutter
 //            check in one session), then ",key=value" items: lamps=A+B (the tour's route),
 //            replay=A+B (the replay's route), max=N (the first N rows of the route), noact (no
-//            weapon / item actions), noenemy (no enemies), nokill.
+//            weapon / item actions), noenemy (no enemies), nokill, enemies=N (new enemy kinds per
+//            row, 6), chalice (the Chalice Dungeon rows too: the save's current dungeon), notod (no
+//            time-of-day pass), nogear (no armor / weapon rotation), noremo (no cutscenes), bosses (idle bosses too),
+//            noitems (no item-effect pass), dump (log the player record).
 #pragma once
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iterator>
 #include <map>
 #include <set>
 #include <string>
@@ -33,6 +37,10 @@
 
 namespace coop::warper {
 
+#define WARPER_ARRAY(name, count) inline constexpr std::uint32_t name[count]
+#include "world_warper_content.inc"
+#undef WARPER_ARRAY
+
 enum class Mode : std::uint8_t { Off, Tour, Replay, Measure };
 
 struct Options {
@@ -41,13 +49,45 @@ struct Options {
     std::vector<std::uint32_t> replay;  ///< replay=: the replay route (empty: kDefaultReplay)
     int max = 0;                        ///< max=N: the first N rows only (0: all)
     bool act = true, enemies = true, kill = true;
+    bool chalice = false;  ///< chalice: the Chalice Dungeon rows too (the save's current dungeon)
+    bool tod = true;       ///< notod: no time-of-day pass (day / evening / night / Blood Moon)
+    bool gear = true;      ///< nogear: no armor set / weapons a row
+    bool remo = true;      ///< noremo: no cutscenes
+    bool bosses = false;   ///< bosses: loaded bosses are fought too (opt-in: an idle boss outside its fight
+                           ///< stands in its closed arena; going there put the player in the walls)
+    bool items = true;     ///< noitems: no item-effect pass (SpEffects of every goods)
+    bool dump = false;     ///< dump: log the player record (equipment research)
+    int enemies_per_row = 6;  ///< enemies=N: at most N new enemy kinds per row
 };
+
+/// A word option ("noact", "chalice", ...): true when `item` is one (applied to `o`).
+inline bool ApplyFlag(Options& o, const std::string& item) {
+    if (item == "noact") o.act = false;
+    else if (item == "noenemy") o.enemies = false;
+    else if (item == "nokill") o.kill = false;
+    else if (item == "chalice") o.chalice = true;
+    else if (item == "notod") o.tod = false;
+    else if (item == "nogear") o.gear = false;
+    else if (item == "gear") o.gear = true;
+    else if (item == "noremo") o.remo = false;
+    else if (item == "remo") o.remo = true;
+    else if (item == "nobosses") o.bosses = false;
+    else if (item == "bosses") o.bosses = true;
+    else if (item == "noitems") o.items = false;
+    else if (item == "dump") o.dump = true;
+    else return false;
+    return true;
+}
 
 /// The replay route (the stutter check): four lamps in four areas that a save past the first boss
 /// usually has, each a different kind of scene (the Dream, streets, a cathedral, a forest).
 inline constexpr std::uint32_t kDefaultReplay[] = {2102950, 2412950, 2402950, 2202950};
 
 inline constexpr int kMaxAttempts = 2;
+
+/// How far from the row's spot an enemy may be to be fought (m): farther ones stand in parts of
+/// the map that are not walkable from here.
+inline constexpr float kEnemyRange = 45.0f;
 
 inline std::vector<std::uint32_t> ParseIds(const std::string& s) {
     std::vector<std::uint32_t> out;
@@ -85,14 +125,14 @@ inline Options ParseOptions(const char* env) {
             if (item == "replay") o.mode = Mode::Replay;
             else if (item == "measure") o.mode = Mode::Measure;
             else o.mode = Mode::Tour;  // "1", "on", "tour" (or an option first: a tour)
-            if (item.find('=') == std::string::npos && item != "noact" && item != "noenemy" && item != "nokill") continue;
+            Options probe;
+            if (item.find('=') == std::string::npos && !ApplyFlag(probe, item)) continue;
         }
         if (item.rfind("lamps=", 0) == 0) o.lamps = ParseIds(item.substr(6));
         else if (item.rfind("replay=", 0) == 0) o.replay = ParseIds(item.substr(7));
         else if (item.rfind("max=", 0) == 0) o.max = std::max(0, std::atoi(item.c_str() + 4));
-        else if (item == "noact") o.act = false;
-        else if (item == "noenemy") o.enemies = false;
-        else if (item == "nokill") o.kill = false;
+        else if (item.rfind("enemies=", 0) == 0) o.enemies_per_row = std::max(0, std::atoi(item.c_str() + 8));
+        else ApplyFlag(o, item);
     }
     return o;
 }
@@ -110,7 +150,7 @@ std::vector<std::uint32_t> BuildRoute(const std::vector<std::uint32_t>& known, S
     std::vector<std::uint32_t> out;
     std::set<std::uint32_t> have(known.begin(), known.end()), used;
     auto add = [&](std::uint32_t rp) {
-        if (!have.count(rp) || used.count(rp) || ChaliceRow(rp) || !has_spot(rp)) return;
+        if (!have.count(rp) || used.count(rp) || (ChaliceRow(rp) && !o.chalice) || !has_spot(rp)) return;
         used.insert(rp);
         out.push_back(rp);
     };
@@ -135,6 +175,13 @@ struct Progress {
     std::map<std::uint32_t, int> starts;
     std::set<std::uint32_t> done, skipped;
     bool finished = false;
+    // Content seen in earlier sessions of the run (resume: not fought / played again).
+    std::set<std::uint32_t> kinds;      ///< "kind <model>": enemy models killed (or bosses fought)
+    std::set<std::uint32_t> remos;      ///< "remo <id>": cutscenes played (or tried)
+    std::set<std::uint64_t> tod_done;   ///< "tod <value> <rp> ...": time-of-day rows (value << 32 | rp)
+    int tod_orig = -1;                  ///< "todorig <value>": the save's own time of day
+    bool effects_done = false;          ///< "effects": the item-effect pass ran
+    std::set<std::uint32_t> fx;         ///< "fx <id>": item effects applied (or crashed in)
 };
 
 inline Progress ParseProgress(const std::string& text) {
@@ -150,12 +197,29 @@ inline Progress ParseProgress(const std::string& text) {
             p.finished = true;
             continue;
         }
+        if (line == "effects") {
+            p.effects_done = true;
+            continue;
+        }
         const std::size_t sp = line.find(' ');
         if (sp == std::string::npos) continue;
         const std::string word = line.substr(0, sp);
-        const std::uint32_t rp = static_cast<std::uint32_t>(std::strtoul(line.c_str() + sp + 1, nullptr, 10));
+        char* after = nullptr;
+        const std::uint32_t rp = static_cast<std::uint32_t>(std::strtoul(line.c_str() + sp + 1, &after, 10));
+        if (word == "todorig") {
+            p.tod_orig = static_cast<int>(rp);
+            continue;
+        }
+        if (word == "tod") {  // tod <value> <rp> ...
+            const std::uint32_t row = static_cast<std::uint32_t>(std::strtoul(after, nullptr, 10));
+            if (row) p.tod_done.insert(std::uint64_t(rp) << 32 | row);
+            continue;
+        }
         if (!rp) continue;
-        if (word == "start") ++p.starts[rp];
+        if (word == "kind") p.kinds.insert(rp);
+        else if (word == "fx") p.fx.insert(rp);
+        else if (word == "remo") p.remos.insert(rp);
+        else if (word == "start") ++p.starts[rp];
         else if (word == "done") p.done.insert(rp);
         else if (word == "skip") p.skipped.insert(rp);
     }
@@ -246,13 +310,13 @@ inline std::vector<PadStep> ActionSteps() {
 /// Once per tour (the first area): the other weapons and items. Left / Right on the d-pad switch
 /// the left-hand (firearm / torch / shield) and right-hand weapons, each followed by its attacks;
 /// Up / Down cycle the quick items (and tools), Square uses one, Triangle a blood vial.
-inline std::vector<PadStep> LoadoutSteps() {
+inline std::vector<PadStep> LoadoutSteps(bool switch_weapons = true) {
     auto tap = [](std::uint32_t b, const char* w, float hold = 0.15f, float after = 0.9f) {
         return std::vector<PadStep>{{hold, b, -1, -1, -1, -1, w}, {after, 0, -1, -1, -1, -1, w}};
     };
     std::vector<PadStep> v;
     auto add = [&](std::vector<PadStep> s) { v.insert(v.end(), s.begin(), s.end()); };
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; switch_weapons && i < 2; ++i) {
         add(tap(kRight, "weapon switch", 0.15f, 1.8f));
         add(tap(kR1, "r1 (other weapon)", 0.15f, 1.2f));
         add(tap(kL1, "transform (other weapon)", 0.15f, 1.6f));
@@ -277,6 +341,141 @@ inline float Seconds(const std::vector<PadStep>& steps) {
     float s = 0;
     for (const PadStep& p : steps) s += p.seconds;
     return s;
+}
+
+/// An enemy's kind for the coverage (one kill per kind): its model cAAAA, the NpcParam row id's
+/// first four digits (100010, 10100080, 100007000: c1000, c1010, c1000).
+constexpr std::uint32_t EnemyKind(std::uint32_t npc_param_id) {
+    std::uint32_t k = npc_param_id;
+    while (k >= 10000u) k /= 10u;
+    return k;
+}
+
+/// A chr the warper fights: a real enemy's NpcParam row. The c9xxx team-23 chrs (the Hunter's
+/// Dream's 902010.. set pieces with 999 HP) and the short player-type rows are left alone:
+/// they are the Dream's own, not enemies to see die.
+constexpr bool EnemyRowFightable(std::uint32_t npc_param_id) {
+    return npc_param_id >= 10000u && EnemyKind(npc_param_id) / 1000u != 9u;
+}
+
+/// The packed map (AA << 24 | BB << 16) a cutscene belongs to: remo AABBnnnn.
+constexpr std::uint32_t RemoMap(std::uint32_t remo) {
+    return (remo / 1000000u) << 24 | (remo / 10000u % 100u) << 16;
+}
+
+/// The time-of-day values (event flags 9800..9802 as one 3-bit value, party_story kTodTable):
+/// day, evening, night, Blood Moon.
+inline constexpr int kTodValues[4] = {0, 4, 6, 7};
+inline const char* TodName(int v) {
+    return v == 0 ? "day" : v == 4 ? "evening" : v == 6 ? "night" : v == 7 ? "Blood Moon" : "?";
+}
+
+/// Areas whose look follows the time of day (Yharnam, the Dream, the woods, Byrgenwerth;
+/// the Nightmares, the DLC and the Chalice Dungeons have their own fixed sky).
+constexpr bool TodArea(std::uint32_t rp) {
+    const std::uint32_t area = rp / 100000u;
+    return area == 21 || area == 22 || area == 23 || area == 24 || area == 25 || area == 27 || area == 28 ||
+           area == 32;
+}
+
+/// The time-of-day route: the first row of each map (AA_BB) of `tour` in a TodArea.
+inline std::vector<std::uint32_t> TodRoute(const std::vector<std::uint32_t>& tour) {
+    std::vector<std::uint32_t> out;
+    std::set<std::uint32_t> maps;
+    for (std::uint32_t rp : tour) {
+        if (!TodArea(rp) || ChaliceRow(rp)) continue;
+        if (maps.insert(rp / 10000u).second) out.push_back(rp);
+    }
+    return out;
+}
+
+/// The time-of-day passes: every value but the save's own, then back to it (`orig` < 0: all).
+inline std::vector<int> TodPasses(int orig) {
+    std::vector<int> v;
+    for (int t : kTodValues) {
+        if (t != orig) v.push_back(t);
+    }
+    return v;
+}
+
+/// The gear of the tour's n-th row (put on when the row's world is up, as the equipment menu
+/// does): a right-hand and a left-hand weapon (the first slot of each
+/// hand: the ones held) and an armor set, rotating through world_warper_content.inc so every
+/// model is worn / held at least once in a full tour (34 sets, 26 + 15 weapons). The other weapon
+/// slots are left as they are.
+struct Gear {
+    std::uint32_t right = 0, left = 0;
+    std::uint32_t armor = 0;  ///< head row; + 1000 chest, + 2000 arms, + 3000 legs
+};
+inline Gear GearFor(std::size_t n) {
+    Gear g;
+    g.right = kWarperRightWeapons[n % std::size(kWarperRightWeapons)];
+    g.left = kWarperLeftWeapons[n % std::size(kWarperLeftWeapons)];
+    g.armor = kWarperArmorSets[n % std::size(kWarperArmorSets)];
+    return g;
+}
+
+/// The player record's equipment slots (PlayerGameData, live 1.09 dump 2026-10-15): the inventory
+/// index (+0x1F4), gaitem handle (+0x264) and item id (+0x2A4) of each slot, in this order.
+enum EquipSlot : int { kSlotLeft1 = 0, kSlotRight1, kSlotLeft2, kSlotRight2, kSlotLeft3, kSlotRight3,
+                       kSlotHead = 8, kSlotChest, kSlotArms, kSlotLegs };
+inline constexpr std::uint64_t kRecEquipIndex = 0x1f4, kRecEquipHandle = 0x264, kRecEquipId = 0x2a4;
+
+/// Goods whose effect is not shown by the item-effect pass: the warps (Hunter's Mark, Bold
+/// Hunter's Mark), the bells (summons, resonance) and the test rows.
+constexpr bool ItemEffectAllowed(std::uint32_t goods, std::uint32_t speffect) {
+    switch (goods) {
+    case 1: case 2: case 100: case 200: case 201: case 205: case 206: case 225: case 226: case 999: case 1400:
+        return false;
+    default: break;
+    }
+    // Only the effects with a look of their own (the item names from msg/engus item.msgbnd); the
+    // others are cure / heal steps, Echoes gains (Coldblood), item gifts (the brooch, pendant and
+    // stone hand out gems with an item box) or story items (Umbilical Cord: Insight and the
+    // ending's condition).
+    switch (speffect) {
+    case 1120:  // Old Hunter Bone
+    case 2010:  // Hand Lantern
+    case 2014:  // Blue Elixir
+    case 2016:  // Blue Elixir (DLC row)
+    case 2017:  // Vermin
+    case 2160:  // Madman's Knowledge / Blood Dreg
+    case 2161:  // Great One's Wisdom
+    case 2200:  // Fire Paper
+    case 2210:  // Empty Phantasm Shell
+    case 2220:  // Bolt Paper
+    case 2230:  // Bone Marrow Ash
+    case 3010:  // Blood Vial
+    case 3020:  // Iosefka's Blood Vial
+    case 3030:  // Blood of Arianna / Queenly Blood
+    case 3040:  // Blood of Adeline
+    case 3060:  // Blood of Adella
+    case 3240:  // Beast Blood Pellet
+        return true;
+    default:
+        return false;
+    }
+}
+
+/// Weapon actions after a gear change: the right-hand weapon in both forms (R1, R2, charged R2,
+/// transform, R1, R2, back) and the left-hand one (L2); no weapon switch (see Gear).
+inline std::vector<PadStep> GearSteps() {
+    auto tap = [](std::uint32_t b, const char* w, float hold = 0.15f, float after = 0.9f) {
+        return std::vector<PadStep>{{hold, b, -1, -1, -1, -1, w}, {after, 0, -1, -1, -1, -1, w}};
+    };
+    std::vector<PadStep> v;
+    auto add = [&](std::vector<PadStep> s) { v.insert(v.end(), s.begin(), s.end()); };
+    add(tap(kR1, "gear: r1", 0.15f, 1.1f));
+    add(tap(kR1, "gear: r1", 0.15f, 1.1f));
+    add(tap(kR2, "gear: r2", 0.15f, 1.5f));
+    add(tap(kR2, "gear: r2 charged", 1.6f, 1.5f));
+    add(tap(kL1, "gear: transform", 0.15f, 1.6f));
+    add(tap(kR1, "gear: r1 transformed", 0.15f, 1.1f));
+    add(tap(kR2, "gear: r2 transformed", 0.15f, 1.6f));
+    add(tap(kL1, "gear: transform back", 0.15f, 1.6f));
+    add(tap(kL2, "gear: left hand", 0.15f, 1.4f));
+    add(tap(kL2, "gear: left hand", 0.15f, 1.4f));
+    return v;
 }
 
 /// The area's name for the progress display (English, the map's usual name; "" unknown).
