@@ -340,6 +340,11 @@ bool BossGateGuestStarts(const BossGate& g) {
     switch (g.guest_event) {
     case 12204891: case 12304811: case 12304731: case 12404841: case 12414731: case 12414811:
     case 12504811: case 12604846: case 12604861: case 12704841: case 12804881: case 13304871:
+    // DLC (pard2): Ludwig 13404801 (13404811 + 13401801 both 3[2] 3402805, scene 34000020),
+    // Laurence 13404851 (13404861 + 13401851 3[2] 3402855 and goods 4014 held by the host, scene
+    // 34000010 with a player warp), Living Failures 13504851 (13501851 3[2] 3502815, no scene),
+    // the Orphan of Kos 13604801 (13604811 + 13601801 3[2] 3602805, scene 36000000).
+    case 13404801: case 13404851: case 13504851: case 13604801:
         return g.intro_flag != 0;
     default:
         return false;
@@ -370,15 +375,19 @@ const FirstFightSpot* FirstFightSpotFor(std::uint32_t intro_event) {
         {12201802, {-336.14f, 2.10f, 726.64f}},    // Witch of Hemwick, region 2202805
         {12301802, {-136.33f, -126.33f, 53.89f}},  // Blood-starved Beast, region 2302805
         {12301702, {113.50f, -120.31f, -63.68f}},  // Darkbeast Paarl, 2300810
-        {12401802, {57.70f, 35.21f, 322.60f}},     // Vicar Amelia, region 2402805
+        {12401802, {57.70f, 35.21f, 322.60f}, false, true},     // Vicar Amelia, region 2402805
         {12411702, {-136.52f, -26.92f, 52.77f}},   // Cleric Beast, region 2412805
-        {12411802, {-48.76f, -40.42f, 72.44f}},    // Father Gascoigne, region 2412815
-        {12501802, {62.81f, 109.37f, -371.63f}},   // Martyr Logarius, region 2502805
-        {12601802, {146.46f, 1124.75f, -37.90f}},  // Mergo's Wet Nurse, region 2602805
-        {12601852, {176.82f, 1038.48f, -35.82f}},  // Micolash, 2600850
+        {12411802, {-48.76f, -40.42f, 72.44f}, false, true},    // Father Gascoigne, region 2412815
+        {12501802, {62.81f, 109.37f, -371.63f}, false, true},   // Martyr Logarius, region 2502805
+        {12601802, {146.46f, 1124.75f, -37.90f}, false, true},  // Mergo's Wet Nurse, region 2602805
+        {12601852, {176.82f, 1038.48f, -35.82f}, false, true},  // Micolash, 2600850
         {12701802, {-335.60f, -187.48f, 485.44f}}, // Shadows of Yharnam, region 2702805
-        {12801802, {402.90f, -125.00f, -237.50f}}, // the One Reborn, region 2802805
+        {12801802, {402.90f, -125.00f, -237.50f}, false, true}, // the One Reborn, region 2802805
         {13301802, {-98.85f, 1461.50f, -46.33f}},  // Amygdala, region 3302805
+        {13401801, {-407.93f, 1503.50f, -721.36f}, true, true},  // Ludwig, region 3402805 (two parts)
+        {13401851, {-433.10f, 1536.11f, -261.59f}, true, true},  // Laurence, region 3402855 (two parts)
+        {13501851, {-380.91f, 1593.30f, -824.55f}},        // Living Failures, region 3502815
+        {13601801, {-700.20f, 1575.90f, -956.20f}, true, true},  // the Orphan of Kos, region 3602805 (two parts)
     };
     for (const FirstFightSpot& f : spots) {
         if (f.intro_event == intro_event) {
@@ -388,8 +397,21 @@ const FirstFightSpot* FirstFightSpotFor(std::uint32_t intro_event) {
     return nullptr;
 }
 
-bool FirstFightVisitDone(bool host_flag_on, bool flag9180_on, bool cutscene, double visit_s) {
-    return host_flag_on || flag9180_on || cutscene || visit_s >= kFirstFightVisitSeconds;
+bool FirstFightVisitDone(bool host_flag_on, bool flag9180_on, bool cutscene, double visit_s, bool chained,
+                         bool scene) {
+    return host_flag_on || (flag9180_on && !chained && !scene) || cutscene || visit_s >= kFirstFightVisitSeconds;
+}
+
+bool FirstFightPutBackAfterScene(const float here[3], const float back[3], const float spot[3]) {
+    const auto dist = [](const float* a, const float* b) {
+        const float dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2];
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
+    };
+    return dist(here, back) > kFirstFightBackSlack && dist(here, spot) < kFirstFightSceneRadius;
+}
+
+bool FirstFightHostReady(int host_hp, bool boss_bar_up, bool cutscene) {
+    return host_hp > 0 && !boss_bar_up && !cutscene;
 }
 
 FogAction HostFogAction(const BossGate& g, bool guest_starts_on, bool intro_done, bool host_in, bool boss_dead,
@@ -421,6 +443,8 @@ FogAction HostFogAction(const BossGate& g, bool guest_starts_on, bool intro_done
 #include "party_status.h"
 #include "party_droproll.h"
 #include "party_items.h"
+#include "seamless_rules.h"
+#include "bbport_present_hold.h"
 
 #include <atomic>
 #include <chrono>
@@ -922,9 +946,10 @@ struct FirstFightWait {
     std::uint32_t guest_event = 0;
     int slot = -1;
     double since = 0;
-    int phase = 0;  // 0 waits for the host in the block, 1 visiting, 2 back (waits for the event's end)
+    int phase = 0;  // 0 waits for the host in the block, 1 visiting, 3 in the intro scene, 2 back (waits for the event's end)
     int tries = 0;
     double visit_at = 0;
+    double held_logged = 0;
     alignas(16) float back_pos[4] = {};
     alignas(16) float back_rot[4] = {};
 };
@@ -936,6 +961,15 @@ bool LocalChrPose(float pos[4], float rot[4]) {
     return SafeGet(Guest(0x553e878), &man) && man && SafeGet(man + 0x60, &player) && player &&
            SafeGet(player + 0x58, &a) && a && SafeGet(a + 8, &b) && b && SafeGet(b + 0x3b0, &c) && c &&
            SafeGet(c + 0x68, &d) && d && SafeRead(d + 0x1e0, pos, 16) && SafeRead(d + 0x1d0, rot, 16);
+}
+
+// The host's screen keeps its last picture while its chr is away (live pard2: without it 2-4
+// frames of the arena spot's view showed before the put-back). BB_PARTY_FF_HOLD=0: off.
+void FirstFightHold(double seconds) {
+    static const bool on = !(std::getenv("BB_PARTY_FF_HOLD") && std::getenv("BB_PARTY_FF_HOLD")[0] == '0');
+    if (on) {
+        BbPresentHold::For(seconds);
+    }
 }
 
 bool WarpLocalChr(const float pos[4], const float rot[4]) {
@@ -996,36 +1030,85 @@ void FirstFightTick(const GameSnapshot& s) {
         }
         progress::ReadFlag(9180, &f9180);
         const bool cutscene = CutscenePlaying();
-        if (w.phase == 1 && FirstFightVisitDone(host_in, f9180, cutscene, now - w.visit_at)) {
+        const bool chained = spot && spot->chained;
+        // The host's death is the party's respawn load at its lamp (the guest leaves the boss
+        // room with it, the room resets): a start that has not run yet is void.
+        const int hp_now = b2::LocalHp();
+        const bool host_died = w.phase == 0 && hp_now == 0 && s.world_up;
+        const bool scene = spot && spot->scene;
+        if (w.phase == 1 && scene && cutscene) {
+            // The intro scene runs with the host at the arena's entrance, as when it walks in
+            // (live pard2: a host put back before the scene was killed the moment the scene
+            // ended, HP 719 -> 0). It stays there for the scene; the scene is on screen.
+            FirstFightHold(0);
+            w.phase = 3;
+            Log("host: first fight (guest event %u): its scene started %.2f s into the visit: the host stays at the "
+                "arena's entrance until it is over", w.guest_event, now - w.visit_at);
+        } else if (w.phase == 3 && !cutscene) {
+            FirstFightHold(kFirstFightHoldAfter);
             const bool ok = WarpLocalChr(w.back_pos, w.back_rot);
+            Log("host: first fight (guest event %u): scene over: the host is put back at (%.2f, %.2f, %.2f)%s",
+                w.guest_event, w.back_pos[0], w.back_pos[1], w.back_pos[2], ok ? "" : " (warp NOT possible)");
+            w.phase = 2;
+            w.visit_at = now;
+        }
+        if (w.phase == 1 && FirstFightVisitDone(host_in, f9180, cutscene, now - w.visit_at, chained, scene)) {
+            const bool ok = WarpLocalChr(w.back_pos, w.back_rot);
+            FirstFightHold(kFirstFightHoldAfter);  // until the camera is back behind the host
             Log("host: first fight (guest event %u): visit over after %.2f s (boss started %d, 9180 %d, cutscene %d): "
                 "the host is put back at (%.2f, %.2f, %.2f)%s", w.guest_event, now - w.visit_at, host_in ? 1 : 0,
                 f9180 ? 1 : 0, cutscene ? 1 : 0, w.back_pos[0], w.back_pos[1], w.back_pos[2],
                 ok ? "" : " (warp NOT possible)");
-            w.phase = (host_in || f9180 || cutscene) ? 2 : 0;  // a visit that started nothing: try again
+            w.phase = (host_in || (f9180 && !chained && !scene) || cutscene) ? 2 : 0;  // a visit that started nothing: try again
             w.visit_at = now;
         }
-        if (!g || !spot || intro || dead || now - w.since > kFirstFightWaitSeconds || w.tries > kFirstFightVisitTries) {
+        if (!g || !spot || intro || dead || host_died || now - w.since > kFirstFightWaitSeconds ||
+            w.tries > kFirstFightVisitTries) {
             if (g && intro) {
                 Log("host: first fight of guest event %u started (first-fight event %u done, %.1f s after the "
                     "guest's start)", w.guest_event, g->intro_flag, now - w.since);
+                // The intro scene leaves the player at the arena's entrance (live pard2: the host,
+                // 217 m away at its lamp, stood in Amelia's arena after her scene and was killed
+                // there). The host goes back to where it stood; it walks in through its own fog.
+                alignas(16) float here[4] = {}, rot[4] = {};
+                if (w.tries > 0 && spot && LocalChrPose(here, rot) &&
+                    FirstFightPutBackAfterScene(here, w.back_pos, spot->pos)) {
+                    FirstFightHold(kFirstFightHoldAfter);
+                    const bool ok = WarpLocalChr(w.back_pos, w.back_rot);
+                    Log("host: first fight (guest event %u): the scene left the host at (%.2f, %.2f, %.2f) by the "
+                        "arena: put back at (%.2f, %.2f, %.2f)%s", w.guest_event, here[0], here[1], here[2],
+                        w.back_pos[0], w.back_pos[1], w.back_pos[2], ok ? "" : " (warp NOT possible)");
+                }
             } else if (g) {
                 Log("host: first-fight start for guest event %u dropped (%s)", w.guest_event,
                     dead ? "boss dead"
+                    : host_died ? "the host died: the party respawns at its lamp, the boss room resets"
                     : !spot ? "no spot"
                     : w.tries > kFirstFightVisitTries ? "the event did not start"
                                                       : "the host did not come within the wait");
             }
-            if (w.phase == 1) {
+            if (w.phase == 1 || w.phase == 3) {
                 WarpLocalChr(w.back_pos, w.back_rot);
+                FirstFightHold(kFirstFightHoldAfter);
             }
             it = g_ff_wait.erase(it);
             continue;
         }
-        const bool ready = s.world_up && !s.loading && BossGateInBlock(*g, s.map_id) && !cutscene &&
-                           progress::FlagLoadMode() == 0 && now - w.visit_at > 1.0;
+        // A dead host (its respawn load comes), another boss fight of this block or a scene: later.
+        const int hp = hp_now;
+        const bool bar = BossBarShown();
+        const bool ready = s.world_up && !s.loading && BossGateInBlock(*g, s.map_id) &&
+                           FirstFightHostReady(hp, bar, cutscene) && progress::FlagLoadMode() == 0 &&
+                           now - w.visit_at > 1.0;
+        if (w.phase == 0 && !ready && s.world_up && !s.loading && BossGateInBlock(*g, s.map_id) &&
+            now - w.held_logged > 10.0 && !FirstFightHostReady(hp, bar, cutscene)) {
+            w.held_logged = now;
+            Log("host: first fight (guest event %u): the visit waits (host HP %d, boss bar %d, cutscene %d)",
+                w.guest_event, hp, bar ? 1 : 0, cutscene ? 1 : 0);
+        }
         if (w.phase == 0 && ready && w.tries < kFirstFightVisitTries && LocalChrPose(w.back_pos, w.back_rot)) {
             alignas(16) const float to[4] = {spot->pos[0], spot->pos[1], spot->pos[2], 1.0f};
+            FirstFightHold(kFirstFightVisitSeconds + kFirstFightHoldAfter);  // ended sooner at the put-back
             if (WarpLocalChr(to, w.back_rot)) {
                 ++w.tries;
                 w.phase = 1;
