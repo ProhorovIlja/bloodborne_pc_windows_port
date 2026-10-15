@@ -4,7 +4,7 @@ Static audit of every co-op relevant event of Bloodborne 1.09 (EMEVD event scrip
 ObjActParam, NpcParam, talk ESDs, MSBs) against what the party code does today
 (`windows-upstream-0.5` after 0.6.1 packaging). Goal: find before the next Internet session
 (the host and the guest, continuing from Old Yharnam) the key items, doors, warps, fog walls and
-NPC steps that can break co-op. Nothing here was run live (except P1 and P7, marked live); "verified" means checked in the data
+NPC steps that can break co-op. Nothing here was run live (except P1, P2, P3, P5 and P7, marked live); "verified" means checked in the data
 and the code, not on screen.
 
 How it was made (repeatable, game data read-only from an agent game copy):
@@ -369,14 +369,18 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
   action (`RepeatGiftLot`, `WorldActionAllowed`); the guest's own talk set (SetEventFlag observer)
   queues its own grant (`ItemSource::Repeat`, a key per grant: every talk gives again), given while
   summoned like any grant, and clears the trigger as 9100 would; a trigger the host's world has set
-  (the host's own talk) gives the guest nothing. Unit: party-worldact-test, party-items-test.
+  (the host's own talk) gives the guest nothing. Unit: party-worldact-test, party-items-test. Live (pard S2b,
+  `guest_flag` test steps): Blood of Arianna given while summoned with the item box (0 -> 1; consumable
+  uniques are given there, key items such as Queenly Flesh wait for home), Blue Elixir twice (0 -> 3 -> 6),
+  the host's own Blood of Adella trigger awarded the host only.
 * **P3 Remaining ghost NPCs. DONE (pard, 2026-10-15).** Every MSB part (all maps, chalice
   layouts too) that uses NpcParam 504020 / 504030 (the suspicious beggar, m24_00 / m27), 513000
   (Willem and two m32 cutscene dummies), 402080 / 402090 / 402280 / 402281 / 402290 / 402300 (the
   Research Hall's talking patients, heads and Adeline), 405100 (the Fishing Hamlet priest), 409000
   (the corpse in Ludwig's arena) and 451100 (Ludwig's head) is that talk NPC: no hostile enemy shares
   the rows, so all twelve lose the ghost bit on clients (`party_npcghost.h`). The beggar turned
-  hostile is then a solid enemy on the guest's screen like any other.
+  hostile is then a solid enemy on the guest's screen like any other. Live (pard S3): the guest
+  talked to Willem at Byrgenwerth (prompt at the first spot, his line, solid on the screenshot).
 * **P4 Double travel questions** for scripted warps that run on both games (Lecture Building
   doors via the replicated ObjAct, the Tonsil Stone grab on a guest holding the stone): the host
   should drop a guest's lamp request for the same id while its own question or travel for that id
