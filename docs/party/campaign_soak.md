@@ -213,4 +213,16 @@ lease); `BB_PARTY_FLAG_DUMP=1`, `tools/party/save_check.py` after each; screensh
 | c8 | Nightmare of Mensis 2602950: Micolash's flag set, Mergo's Wet Nurse's first fight started by the **guest**, killed | **pass**: guest through fog 2601800 71.5 s, host visit, intro 26000010 on both (29 s), host kept through it and put back; `host_kill` 2600802 -> boss kill 12601800 at 173 s, guest +3 Insight; reward lot 55100000 (One Third of Umbilical Cord) owed for the guest's own world |
 | c9 | Upper Cathedral Ward 2422950: Ebrietas killed | **pass**: boss kill 12421800, guest Insight 21 -> 24; reward lot 80000300 (a chalice) owed for the guest's own world |
 | c10 | Hunter's Dream: Gehrman's refusal (72100131), the fight, the ending | **pass**: refusal scene 21000040 on both (live mirror, 55 s with the skip), Gehrman killed (12101800, +3 Insight to the guest), ending 2 (event 12100000) sent to the party at 131.5 s: the host's remo and the guest's own (in its own Dream, by design) both 72-73 s, NG cycle 0 -> 1 on both, staff roll on both windows (screenshots) |
+| c11-c13 | Continue after the ending | **pass (as designed)**: both load NG+ (NG cycle 1) at the clinic; the prologue rule holds summons ("members in their prologue", #19), so the c11 walk, c13's One Reborn kill (`host_kill=2800803`) and c12's join did not run |
+| c14 | Continue, the guest without title join (its own world first), owed key items from c4-c9 restored | **pass**: 4 s into its own world `owed lot 55100000: gave goods 4323 x1 (held 0 -> 1)` (One Third of Umbilical Cord, the Wet Nurse's), the three chalices already held (the chalice share gave them at c10's own-world ending: "not given again"), a save requested, the owed file empty after |
+
+Results: the main path from the Blood Moon to the ending ran with 2 players, a Continue between every
+run, the host and the guest in the same world after every travel (re-join 4.4-9.0 s on the host,
+one loading screen each), boss flags and Insight on the guest each time, the ending and staff roll
+on both. Found and fixed here: the host killed at the end of a guest-started first fight's intro
+scene (pard2 P5 work, quest_audit.md P5), and boss key items never reaching a guest who keeps
+joining from its title (owed lots, c4 / c14). Not done: the plaza gate by the guest (vanilla: only
+the host's emblem opens it; the host's spot press found no prompt), the One Reborn's kill (c6 named
+the wrong entity; c13 fell into NG+), the Lecture Building door by the guest (wrong entity),
+Cainhurst / Hemwick / the Chalice Dungeons in this chain, 3 players.
 

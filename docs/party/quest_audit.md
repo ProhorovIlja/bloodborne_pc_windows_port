@@ -4,7 +4,7 @@ Static audit of every co-op relevant event of Bloodborne 1.09 (EMEVD event scrip
 ObjActParam, NpcParam, talk ESDs, MSBs) against what the party code does today
 (`windows-upstream-0.5` after 0.6.1 packaging). Goal: find before the next Internet session
 (the host and the guest, continuing from Old Yharnam) the key items, doors, warps, fog walls and
-NPC steps that can break co-op. Nothing here was run live (except P1, P2, P3, P5 and P7, marked live); "verified" means checked in the data
+NPC steps that can break co-op. Nothing here was run live (except P1-P7 and P9, marked live); "verified" means checked in the data
 and the code, not on screen.
 
 How it was made (repeatable, game data read-only from an agent game copy):
