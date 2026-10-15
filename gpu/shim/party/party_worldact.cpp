@@ -338,6 +338,13 @@ bool BossGateWaitsForHost(const BossGate& g, bool intro_done, bool host_in, bool
     return g.intro_flag != 0 && !intro_done && !host_in && !boss_dead;
 }
 
+bool GuestFogOpenWhileHostAt(const BossGate& g, std::uint32_t host_map) {
+    if (host_map == 0 || host_map == 0xffffffffu) {
+        return true;
+    }
+    return (host_map >> 24) == g.host_flag / 100000u % 100u;
+}
+
 bool BossFogNoticeDue(const BossGate& g, bool read, bool intro_done, bool host_in, bool boss_dead, float dist_m) {
     return read && BossGateWaitsForHost(g, intro_done, host_in, boss_dead) && dist_m >= 0.0f &&
            dist_m <= kBossFogNoticeRange;
@@ -567,6 +574,18 @@ void Log(const char* fmt, ...) {
 double Now() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
+
+// D3 (pard4): the host's map as this guest last knew it (party link vitals, b2::MemberMap(0)),
+// for the EMEVD dispatch's fog decision (GuestFogSkipAllowed); 0 = unknown.
+std::atomic<std::uint32_t> g_fog_host_map{0};
+// A guest that went through a fog while the host was in another area: put back outside then.
+struct FogPutBack {
+    std::int32_t fog_entity = 0;
+    std::uint32_t guest_event = 0;
+    double at = 0;
+};
+std::mutex g_putback_mu;
+std::vector<FogPutBack> g_putback;
 
 /// A tag that differs from step to step without digits: the harness reaper blanks numbers when it
 /// counts distinct "Party:" lines, so a fixture's repeated steps need words to stay "active".
@@ -910,6 +929,8 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
                 ++st.stats.own_save;
                 picked.push_back(id);
             }
+            // D4 (pard4): a progression key / workshop tool goes to the whole party (gift_up).
+            ReportGuestKeyTreasure(static_cast<std::int32_t>(id));
             continue;
         }
         const std::uint64_t k = std::uint64_t(id) * 2 + (v ? 1 : 0);
@@ -966,7 +987,20 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         bool in = false;
         progress::ReadFlag(g.guest_flag, &in);
         const bool was = st.fog_in.count(g.guest_flag) != 0;
-        if (in && !was && r.fog.size() < kMaxFog) {
+        if (in && !was && !GuestFogOpenWhileHostAt(g, b2::MemberMap(0))) {
+            // D3 (pard4): through the fog while the host is in another area (the fog had opened
+            // while the host was still here): nothing could start this fight. Put back outside.
+            st.fog_in.insert(g.guest_flag);
+            bool dead = false;
+            progress::ReadFlag(g.boss_flag, &dead);
+            if (!dead && g.fog_entity) {
+                std::lock_guard<std::mutex> lk(g_putback_mu);
+                g_putback.push_back({g.fog_entity, g.guest_event, Now() + kFogApartPutBackAfter});
+            }
+            Log("guest: went through boss fog (event %u, flag %u) while the host is in %s: not sent (no fight without "
+                "the host's area)%s", g.guest_event, g.guest_flag, MapName(b2::MemberMap(0)).c_str(),
+                dead ? "; the boss is dead here" : "; putting back outside");
+        } else if (in && !was && r.fog.size() < kMaxFog) {
             st.fog_in.insert(g.guest_flag);
             r.fog.push_back(g.guest_flag);
             Log("guest: went through boss fog (event %u, flag %u): the host opens the fight", g.guest_event, g.guest_flag);
@@ -2547,6 +2581,55 @@ bool OnHostEvent(int slot, const std::string& body, std::string* why) {
 }
 
 namespace {
+
+void FogPutBackTick(const GameSnapshot& s) {
+    std::vector<FogPutBack> due;
+    {
+        std::lock_guard<std::mutex> lk(g_putback_mu);
+        const double now = Now();
+        for (auto it = g_putback.begin(); it != g_putback.end();) {
+            if (now >= it->at) {
+                due.push_back(*it);
+                it = g_putback.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    if (s.loading || !s.world_up) {
+        return;
+    }
+    for (const FogPutBack& p : due) {
+        std::string what;
+        const bool ok = StandAtObject(p.fog_entity, 1.5f, 0.0f, &what);
+        party::status::SetLastEvent(kBossFogApartNotice);
+        Log("guest: went through boss fog %d (event %u) while the host is in another area: no fight can start here "
+            "(the boss's events are the host's); put back outside the fog %s%s%s; notice shown",
+            p.fog_entity, p.guest_event, ok ? "" : "FAILED (fog not loaded)", what.empty() ? "" : ": ",
+            what.c_str());
+    }
+}
+} // namespace
+
+bool GuestFogSkipAllowed(std::int32_t guest_event) {
+    const BossGate* g = BossGateByEvent(guest_event);
+    if (!g) {
+        return true;
+    }
+    const std::uint32_t host_map = g_fog_host_map.load(std::memory_order_relaxed);
+    const bool ok = GuestFogOpenWhileHostAt(*g, host_map);
+    if (!ok) {
+        static std::atomic<std::int32_t> logged{0};
+        if (logged.exchange(guest_event) != guest_event) {
+            Log("guest: boss fog (guest-entry event %d) keeps the vanilla phantom rule: the host is in %s, another "
+                "area (a lone guest's boss fight would have no start or defeat; LB2)", guest_event,
+                MapName(host_map).c_str());
+        }
+    }
+    return ok;
+}
+
+namespace {
 // Guest (playtest 1 bug 8): standing at a boss fog of the host's world that has no prompt yet
 // because the host has not had its first fight there (the intro condition stays, BossGate): a
 // notice says why, at most once a minute per fog, and a log line.
@@ -2565,6 +2648,8 @@ void FogWaitTick(const GameSnapshot& s) {
     std::string state;
     const BossGate* hit = nullptr;
     float hit_d = 0;
+    bool hit_apart = false;
+    const std::uint32_t host_map = g_fog_host_map.load(std::memory_order_relaxed);
     for (const BossGate& g : BossGates()) {
         if (!g.fog_entity || !BossGateInBlock(g, s.map_id)) {
             continue;
@@ -2585,6 +2670,14 @@ void FogWaitTick(const GameSnapshot& s) {
                       intro ? 1 : 0, host_in ? 1 : 0, dead ? 1 : 0, !found ? "not loaded" : !have_me ? "?" : "",
                       !found || !have_me ? "" : d <= kBossFogNoticeRange ? "near" : d <= 20.0f ? "within 20 m" : "far");
         state += buf;
+        // D3 (pard4): the host is in another area: the fog keeps the phantom rule (GuestFogSkipAllowed).
+        if (!hit && read && !dead && !host_in && found && have_me && d <= kBossFogNoticeRange &&
+            !GuestFogOpenWhileHostAt(g, host_map)) {
+            hit = &g;
+            hit_d = d;
+            hit_apart = true;
+            continue;
+        }
         // P5: a guest-startable first fight has its fog prompt (FogFirstSkip): no "host first" notice.
         const bool guest_starts = GuestFirstFightEnabled() && BossGateGuestStarts(g);
         if (!guest_starts && BossFogNoticeDue(g, read, intro, host_in, dead, found && have_me ? d : -1.0f) && !hit) {
@@ -2604,6 +2697,13 @@ void FogWaitTick(const GameSnapshot& s) {
         }
         last_gate = g.guest_event;
         last_notice = now;
+        if (hit_apart) {
+            party::status::SetLastEvent(kBossFogApartNotice);
+            Log("guest: at boss fog %d (event %u, %.1f m): the host is in %s, another area - no boss fight without "
+                "the host's area (the fog keeps the phantom rule); notice shown", g.fog_entity, g.guest_event, d,
+                MapName(host_map).c_str());
+            return;
+        }
         party::status::SetLastEvent(kBossFogWaitNotice);
         Log("guest: at boss fog %d (event %u, %.1f m): first fight here - the host goes in first (host's first-fight "
             "flag %u off); notice shown", g.fog_entity, g.guest_event, d, g.intro_flag);
@@ -2621,6 +2721,8 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
     const PartyRole role = PartyDirector::Get().Role();
     droproll::Tick(s, link, role == PartyRole::Host);
     if (role == PartyRole::Guest) {
+        g_fog_host_map.store(b2::MemberMap(0), std::memory_order_relaxed);
+        FogPutBackTick(s);
         FogWaitTick(s);
         GuestTick(s, link);
     } else if (role == PartyRole::Host) {

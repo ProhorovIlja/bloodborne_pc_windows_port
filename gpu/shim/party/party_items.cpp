@@ -3172,6 +3172,21 @@ bool AwardLotGuestOnly(std::uint32_t lot) {
     return ok;
 }
 
+bool ReportGuestKeyTreasure(std::int32_t flag) {
+    const std::int32_t lot = ItemLotForFlag(flag);
+    if (!g_on.load() || lot <= 0 || !SharedKeyTreasureLot(lot) || !GuestGiftShareable(lot, flag)) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lk(g_gift_mu);
+    if (g_gift_up.size() >= 64) {
+        return false;
+    }
+    g_gift_up.push_back(GiftUpToJsonText(lot, flag));
+    Log("gift: shared key treasure lot %d (flag %d) picked up by this guest: reported to the host (its world "
+        "awards it, C3 hands it to every member)", lot, flag);
+    return true;
+}
+
 bool PopGuestGift(std::string* body) {
     std::lock_guard<std::mutex> lk(g_gift_mu);
     if (g_gift_up.empty()) {
