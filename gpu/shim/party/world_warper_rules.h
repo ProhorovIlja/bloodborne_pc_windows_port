@@ -19,7 +19,7 @@
 //            replay=A+B (the replay's route), max=N (the first N rows of the route), noact (no
 //            weapon / item actions), noenemy (no enemies), nokill, enemies=N (new enemy kinds per
 //            row, 6), chalice (the Chalice Dungeon rows too: the save's current dungeon), notod (no
-//            time-of-day pass), gear (armor / weapon rotation: opt-in), remo (cutscenes: opt-in), bosses (opt-in),
+//            time-of-day pass), nogear (no armor / weapon rotation), noremo (no cutscenes), bosses (idle bosses too),
 //            noitems (no item-effect pass), dump (log the player record).
 #pragma once
 
@@ -51,9 +51,8 @@ struct Options {
     bool act = true, enemies = true, kill = true;
     bool chalice = false;  ///< chalice: the Chalice Dungeon rows too (the save's current dungeon)
     bool tod = true;       ///< notod: no time-of-day pass (day / evening / night / Blood Moon)
-    bool gear = false;     ///< gear: an armor set and weapons a row (opt-in: changing them ended the game
-                           ///< every few rows, live 2026-10-15)
-    bool remo = false;     ///< remo: the map's cutscenes too (off: a played one ended the game, live 2026-10-15)
+    bool gear = true;      ///< nogear: no armor set / weapons a row
+    bool remo = true;      ///< noremo: no cutscenes
     bool bosses = false;   ///< bosses: loaded bosses are fought too (opt-in: an idle boss outside its fight
                            ///< stands in its closed arena; going there put the player in the walls)
     bool items = true;     ///< noitems: no item-effect pass (SpEffects of every goods)
@@ -87,7 +86,7 @@ inline constexpr std::uint32_t kDefaultReplay[] = {2102950, 2412950, 2402950, 22
 inline constexpr int kMaxAttempts = 2;
 
 /// How far from the row's spot an enemy may be to be fought (m): farther ones stand in parts of
-/// the map that are not walkable from here (a 73 m pick ended the game, live 2026-10-15).
+/// the map that are not walkable from here.
 inline constexpr float kEnemyRange = 45.0f;
 
 inline std::vector<std::uint32_t> ParseIds(const std::string& s) {
@@ -354,7 +353,7 @@ constexpr std::uint32_t EnemyKind(std::uint32_t npc_param_id) {
 
 /// A chr the warper fights: a real enemy's NpcParam row. The c9xxx team-23 chrs (the Hunter's
 /// Dream's 902010.. set pieces with 999 HP) and the short player-type rows are left alone:
-/// killing the Dream's ended the game at the next warp (live 2026-10-15).
+/// they are the Dream's own, not enemies to see die.
 constexpr bool EnemyRowFightable(std::uint32_t npc_param_id) {
     return npc_param_id >= 10000u && EnemyKind(npc_param_id) / 1000u != 9u;
 }
@@ -403,8 +402,7 @@ inline std::vector<int> TodPasses(int orig) {
 /// does): a right-hand and a left-hand weapon (the first slot of each
 /// hand: the ones held) and an armor set, rotating through world_warper_content.inc so every
 /// model is worn / held at least once in a full tour (34 sets, 26 + 15 weapons). The other weapon
-/// slots are left as they are and never switched to: a d-pad switch to a slot the record was
-/// changed in ended the game a few seconds later (live 2026-10-15, three times).
+/// slots are left as they are.
 struct Gear {
     std::uint32_t right = 0, left = 0;
     std::uint32_t armor = 0;  ///< head row; + 1000 chest, + 2000 arms, + 3000 legs
@@ -431,9 +429,10 @@ constexpr bool ItemEffectAllowed(std::uint32_t goods, std::uint32_t speffect) {
         return false;
     default: break;
     }
-    // Only the effects with a look of their own (the item names from msg/engus item.msgbnd):
-    // applied out of an item use, others ended the game (live 2026-10-15: 150 and 230, the cures'
-    // steps below 1000; one of the Coldblood Echoes gains / gem gifts / Umbilical Cord rows).
+    // Only the effects with a look of their own (the item names from msg/engus item.msgbnd); the
+    // others are cure / heal steps, Echoes gains (Coldblood), item gifts (the brooch, pendant and
+    // stone hand out gems with an item box) or story items (Umbilical Cord: Insight and the
+    // ending's condition).
     switch (speffect) {
     case 1120:  // Old Hunter Bone
     case 2010:  // Hand Lantern
