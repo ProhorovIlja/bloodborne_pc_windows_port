@@ -2682,7 +2682,10 @@ bool BossQuiet(double now) {
         off_at = now;
     }
     last = shown;
-    return !shown && now - off_at >= kBossBannerQuiet;
+    // A boss killed without its bar on this game (a guest away from the fight, a scripted kill)
+    // still shows its defeat banner: an item notice opened under it had no OK row and could not be
+    // closed (live pard3 O1, Rom's Kin Coldblood on the guest).
+    return !shown && now - off_at >= kBossBannerQuiet && BannerAgeSeconds() >= kBossBannerQuiet;
 }
 
 /// The item-get dialog's watchdog (ItemGetWatch): every role, party mode.
