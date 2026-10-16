@@ -59,8 +59,12 @@ struct Options {
     bool bosses = false;   ///< bosses: loaded bosses are fought too (opt-in: an idle boss outside its fight
                            ///< stands in its closed arena; going there put the player in the walls)
     bool items = true;     ///< noitems: no item-effect pass (SpEffects of every goods)
-    bool gestures = true;  ///< nogestures: no gesture pass
-    bool tools = true;     ///< notools: no hunter-tool / throwable pass
+    // Work in progress, opt-in (not verified live: the gesture request did not play a gesture on
+    // 2026-10-16; the tools' use is not checked yet): `gestures`, `tools`, `remopass`.
+    bool gestures = false; ///< gestures: the gesture pass
+    bool tools = false;    ///< tools: the hunter-tool / throwable pass
+    bool remo_pass = false; ///< remopass: the cutscene pass after the tour
+    int gestures_max = 0, tools_max = 0;  ///< gestures=N / tools=N: at most N of them (0: all)
     bool dump = false;     ///< dump: log the player record (equipment research)
     int enemies_per_row = 6;  ///< enemies=N: at most N new enemy kinds per row
     bool remo_only = false;   ///< remoonly: only the cutscene pass (no tour, no time of day)
@@ -85,7 +89,10 @@ inline bool ApplyFlag(Options& o, const std::string& item) {
     else if (item == "dump") o.dump = true;
     else if (item == "remoonly") o.remo_only = o.remo = true;
     else if (item == "nogestures") o.gestures = false;
+    else if (item == "gestures") o.gestures = true;
     else if (item == "notools") o.tools = false;
+    else if (item == "tools") o.tools = true;
+    else if (item == "remopass") o.remo_pass = true;
     else return false;
     return true;
 }
@@ -144,6 +151,8 @@ inline Options ParseOptions(const char* env) {
         else if (item.rfind("max=", 0) == 0) o.max = std::max(0, std::atoi(item.c_str() + 4));
         else if (item.rfind("enemies=", 0) == 0) o.enemies_per_row = std::max(0, std::atoi(item.c_str() + 8));
         else if (item.rfind("remos=", 0) == 0) o.remos = ParseIds(item.substr(6));
+        else if (item.rfind("gestures=", 0) == 0) o.gestures = true, o.gestures_max = std::max(0, std::atoi(item.c_str() + 9));
+        else if (item.rfind("tools=", 0) == 0) o.tools = true, o.tools_max = std::max(0, std::atoi(item.c_str() + 6));
         else if (item.rfind("remoskip=", 0) == 0) o.remo_skip = std::max(5, std::atoi(item.c_str() + 9));
         else ApplyFlag(o, item);
     }
@@ -198,7 +207,9 @@ struct Progress {
     bool effects_done = false;          ///< "effects": the item-effect pass ran
     std::set<std::uint32_t> fx;         ///< "fx <id>": item effects applied (or crashed in)
     std::set<std::uint32_t> gestures;   ///< "gesture <n>": gestures played (1-based param id)
-    std::set<std::uint32_t> tools;      ///< "tool <goods>": hunter tools / throwables used
+    std::set<std::uint32_t> tools;      ///< "tool <goods>": hunter tools / throwables tried
+    std::set<std::uint32_t> tools_ok;   ///< "toolok <goods>": ... whose use was seen (its cost)
+    std::set<std::uint32_t> gestures_ok; ///< "gestureok <n>": gestures seen playing
 };
 
 inline Progress ParseProgress(const std::string& text) {
@@ -239,6 +250,8 @@ inline Progress ParseProgress(const std::string& text) {
         else if (word == "remook") p.remos_ok.insert(rp);
         else if (word == "gesture") p.gestures.insert(rp);
         else if (word == "tool") p.tools.insert(rp);
+        else if (word == "toolok") p.tools_ok.insert(rp);
+        else if (word == "gestureok") p.gestures_ok.insert(rp);
         else if (word == "start") ++p.starts[rp];
         else if (word == "done") p.done.insert(rp);
         else if (word == "skip") p.skipped.insert(rp);
@@ -642,6 +655,13 @@ inline const char* GestureName(std::uint32_t id) {
         "Roar", "Beg for Life", "Brush off Dust", "Respect", "Deep Respect", "Make Contact", "Sit Down",
         "League Oath"};
     return id >= 1 && id <= static_cast<std::uint32_t>(kGestureCount) ? kNames[id - 1] : "?";
+}
+
+/// A hunter tool / throwable was used when its use cost something: one of the item (throwables,
+/// counts before / after, -1 unknown) or quicksilver bullets (the tools).
+inline bool ToolUseSeen(int held_before, int held_after, int bullets_before, int bullets_after) {
+    return (held_before > 0 && held_after >= 0 && held_after < held_before) ||
+           (bullets_before > 0 && bullets_after >= 0 && bullets_after < bullets_before);
 }
 
 /// The gestures / tools still to do in a run (resume: the ones in the progress file are done).
