@@ -473,8 +473,13 @@ inline TitleScreen ClassifyTitle(std::int64_t brightness_ms, std::int64_t contro
     const std::int64_t menu = std::max(continue_ms, new_game_ms);
     if (controls_ms > 0 && controls_ms >= brightness_ms && controls_ms >= menu) return TitleScreen::Controls;
     if (brightness_ms > 0 && brightness_ms >= menu) return TitleScreen::Brightness;
-    if (new_game_ms > 0 && continue_ms == 0 && now_ms - new_game_ms >= 3000) return TitleScreen::NoCharacter;
+    if (new_game_ms > 0 && continue_ms == 0 && now_ms - new_game_ms >= 1000) return TitleScreen::NoCharacter;
     return TitleScreen::Other;
+}
+
+/// The title menu was built (New Game looked up) and Continue was not: wait, never Cross.
+inline bool TitleUndecided(std::int64_t continue_ms, std::int64_t new_game_ms) {
+    return new_game_ms > 0 && continue_ms == 0;
 }
 
 /// The presses on a first-launch screen, 1 s apart (its cursor starts on the top row): the
@@ -655,6 +660,15 @@ inline const char* GestureName(std::uint32_t id) {
         "Roar", "Beg for Life", "Brush off Dust", "Respect", "Deep Respect", "Make Contact", "Sit Down",
         "League Oath"};
     return id >= 1 && id <= static_cast<std::uint32_t>(kGestureCount) ? kNames[id - 1] : "?";
+}
+
+/// A gesture played: a gesture animation (a000_104000 .. a000_104259) in the player's recent
+/// animations that was not among them before the request.
+inline bool GestureSeen(const std::vector<int>& before, const std::vector<int>& after) {
+    for (int a : after) {
+        if (a >= 104000 && a < 104260 && std::find(before.begin(), before.end(), a) == before.end()) return true;
+    }
+    return false;
 }
 
 /// A hunter tool / throwable was used when its use cost something: one of the item (throwables,
