@@ -1758,7 +1758,7 @@ struct Global {
     std::string label = "party";
     std::string dump_dir;
     int scan_ms = 1000;
-    std::vector<u32> test_clear;  // BB_PARTY_PROGRESS_TEST_CLEAR: cleared once, first steady own world
+    std::vector<u32> test_clear;  // BB_PARTY_PROGRESS_TEST_CLEAR: cleared once, first world (own or summoned)
     std::vector<u32> test_set;    // BB_PARTY_PROGRESS_TEST_SET: set once, same place (after the clears)
     std::vector<u32> test_read;
     FlagSnapshot host_snap;       // guest: the host's last full snapshot (late-joiner catch-up)
@@ -2397,9 +2397,12 @@ void Tick(const GameSnapshot& s) {
         WriteDumps(g, store, s);
         g.label = keep;
     }
-    if ((!g.test_clear.empty() || !g.test_set.empty()) && store.LoadMode() == 0) {
+    if ((!g.test_clear.empty() || !g.test_set.empty()) && (store.LoadMode() == 0 || store.LoadMode() == 1)) {
         // Test fixture (a guest save that lacks some host progress, or holds a stale NPC state):
-        // before anything is applied.
+        // before anything is applied. Load mode 1 too (smokefix 2026-10-16): a guest whose first
+        // world is the host's (title join, summoned at once) wrote it only at its first own-world
+        // load, so its C3 ledger was seeded with the fixture's reward flag still set (smoke s2: the
+        // Cleric Beast's reward "0 new" on the summoned guest, no item box). Mode 1 writes the pool.
         for (const bool on : {false, true}) {
             std::vector<u32>& ids = on ? g.test_set : g.test_clear;
             if (ids.empty()) {
