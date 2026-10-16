@@ -450,22 +450,25 @@ inline bool ArenaSpotOk(const float spot[3], const float settled[3], const float
 /// brightness / controls screens (a save folder without the game's system data: confirmed with
 /// their defaults), a title with New Game but no Continue (no character: the run ends, a Cross
 /// would start a New Game), anything else (Cross until the save is continued).
-/// Arguments: the last lookup times (ms, 0 = never) of a text with "brightness", "Continue" and
-/// "New Game", and now: the brightness screen when its text is the latest of the three; no
-/// character when the title's New Game was built 3 s ago or more and Continue never was.
-enum class TitleScreen : std::uint8_t { Other, FirstLaunch, NoCharacter };
-inline TitleScreen ClassifyTitle(std::int64_t brightness_ms, std::int64_t continue_ms, std::int64_t new_game_ms,
-                                 std::int64_t now_ms) {
-    if (brightness_ms > 0 && brightness_ms >= continue_ms && brightness_ms >= new_game_ms) return TitleScreen::FirstLaunch;
+/// Arguments: the last lookup times (ms, 0 = never) of a text of the brightness screen
+/// ("brightness"), of the controls screen ("Camera X-Axis"), "Continue" and "New Game", and now.
+/// A first-launch screen when its text is the latest; no character when the title's New Game was
+/// built 3 s ago or more and Continue never was.
+enum class TitleScreen : std::uint8_t { Other, Brightness, Controls, NoCharacter };
+inline TitleScreen ClassifyTitle(std::int64_t brightness_ms, std::int64_t controls_ms, std::int64_t continue_ms,
+                                 std::int64_t new_game_ms, std::int64_t now_ms) {
+    const std::int64_t menu = std::max(continue_ms, new_game_ms);
+    if (controls_ms > 0 && controls_ms >= brightness_ms && controls_ms >= menu) return TitleScreen::Controls;
+    if (brightness_ms > 0 && brightness_ms >= menu) return TitleScreen::Brightness;
     if (new_game_ms > 0 && continue_ms == 0 && now_ms - new_game_ms >= 3000) return TitleScreen::NoCharacter;
     return TitleScreen::Other;
 }
 
-/// The presses through the first-launch screens, 1 s apart: Down to Next and Cross (brightness),
-/// then Up (wraps to Next) and Cross (controls), again from the top if a screen stays.
-inline std::uint32_t FirstLaunchPress(int step) {
-    static constexpr std::uint32_t kSeq[4] = {kDown, 0x4000u /* Cross */, kUp, 0x4000u};
-    return kSeq[((step % 4) + 4) % 4];
+/// The presses on a first-launch screen, 1 s apart (its cursor starts on the top row): the
+/// brightness screen Down to Next, Cross; the controls screen Up (wraps to Next), Cross.
+inline std::uint32_t FirstLaunchPress(TitleScreen screen, int step) {
+    const std::uint32_t move = screen == TitleScreen::Controls ? kUp : kDown;
+    return step % 2 == 0 ? move : 0x4000u /* Cross */;
 }
 
 /// An enemy's kind for the coverage (one kill per kind): its model cAAAA, the NpcParam row id's
