@@ -2174,7 +2174,8 @@ void FixtureTick(double now) {
                     with);
             }
         }
-        if (bd > 60.0f * 60.0f) {
+        // flag=F names one treasure: go to it wherever it is in the loaded map (no 60 m limit).
+        if (want ? bd > 1e8f : bd > 60.0f * 60.0f) {
             f.pickups = 0;
             Log("test: fixture: no untaken treasure within 60 m (nearest %.0f m)", std::sqrt(bd));
             return;
