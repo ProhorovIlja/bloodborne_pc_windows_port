@@ -3123,6 +3123,9 @@ void GiftTick(double now) {
     if (!q.world_up || q.loading || !mim || LoadMode(Ptr(kFlagMan)) != 0) {
         return;  // keep it until the host's own world is steady
     }
+    if (split::DialogUp()) {
+        return;  // the award's item box would open under a game message (parity67 D4): wait
+    }
     {
         std::lock_guard<std::mutex> lk(g_gift_mu);
         g_gift_due.pop_front();
