@@ -23,6 +23,7 @@
 #include "party_director.h"
 #include "party_flow.h"
 #include "party_progress.h"
+#include "party_split.h"
 #include "party_status.h"
 #include "seamless_rules.h"
 
@@ -697,6 +698,9 @@ const char* ItemPopupHold(const ItemApplyState& s) {
     }
     if (!s.boss_quiet) {
         return "boss defeat banner";
+    }
+    if (s.game_dialog) {
+        return "game message";
     }
     if (!s.calm) {
         return "in a fight";
@@ -3290,6 +3294,7 @@ void ItemsTick() {
     s.alive = PlayerHp(gs.player) != 0;
     s.cutscene = CutscenePlaying();
     s.boss_quiet = BossQuiet(Now());
+    s.game_dialog = gs.world_up && split::DialogUp();
     ItemGetWatchTick(gs, Now());
     KeyGoodsWatchTick(gs, s.load_mode, Now());
     SummonedGivesTick(gs, s.load_mode, Now());
