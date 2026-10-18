@@ -2433,7 +2433,7 @@ BB_COOP_SYSV void NetKickEntry(std::uint64_t man, std::uint64_t idx, std::uint64
 
 } // namespace
 
-bool StandAtObject(std::int32_t entity, float dist, float angle_deg, std::string* what) {
+bool StandAtObject(std::int32_t entity, float dist, float angle_deg, std::string* what, float dy) {
     std::uint32_t idx = 0xffffffffu;
     using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::uint32_t*);
     const std::uint64_t fn = Guest(0x13c9af0);
@@ -2443,7 +2443,7 @@ bool StandAtObject(std::int32_t entity, float dist, float angle_deg, std::string
         return false;
     }
     // 3x4 rows at +0x240 (m[4..15]): translation in column 3, the local z axis in column 2.
-    const float t[3] = {m[7], m[11], m[15]};
+    const float t[3] = {m[7], m[11] + dy, m[15]};
     return PutLocal(t, m[6], m[14], dist, angle_deg, what);
 }
 

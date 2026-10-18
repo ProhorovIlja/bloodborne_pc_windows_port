@@ -20,10 +20,13 @@
 //            weapon / item actions), noenemy (no enemies), nokill, enemies=N (new enemy kinds per
 //            row, 6), chalice (the Chalice Dungeon rows too: the save's current dungeon), notod (no
 //            time-of-day pass), nogear (no armor / weapon rotation), noremo (no cutscenes), bosses (idle bosses too),
-//            noitems (no item-effect pass), dump (log the player record).
+//            noitems (no item-effect pass), dump (log the player record), remoonly (only the
+//            cutscene pass), remos=A+B (the cutscene pass's cutscenes), remoskip=S (a cutscene is
+//            skipped S s after it started; 150).
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -56,8 +59,17 @@ struct Options {
     bool bosses = false;   ///< bosses: loaded bosses are fought too (opt-in: an idle boss outside its fight
                            ///< stands in its closed arena; going there put the player in the walls)
     bool items = true;     ///< noitems: no item-effect pass (SpEffects of every goods)
+    // Work in progress, opt-in (not verified live: the gesture request did not play a gesture on
+    // 2026-10-16; the tools' use is not checked yet): `gestures`, `tools`, `remopass`.
+    bool gestures = false; ///< gestures: the gesture pass
+    bool tools = false;    ///< tools: the hunter-tool / throwable pass
+    bool remo_pass = false; ///< remopass: the cutscene pass after the tour
+    int gestures_max = 0, tools_max = 0;  ///< gestures=N / tools=N: at most N of them (0: all)
     bool dump = false;     ///< dump: log the player record (equipment research)
     int enemies_per_row = 6;  ///< enemies=N: at most N new enemy kinds per row
+    bool remo_only = false;   ///< remoonly: only the cutscene pass (no tour, no time of day)
+    std::vector<std::uint32_t> remos;  ///< remos=: the cutscene pass's list (empty: every known one)
+    int remo_skip = 150;      ///< remoskip=S: skip a playing cutscene after S s
 };
 
 /// A word option ("noact", "chalice", ...): true when `item` is one (applied to `o`).
@@ -75,6 +87,12 @@ inline bool ApplyFlag(Options& o, const std::string& item) {
     else if (item == "bosses") o.bosses = true;
     else if (item == "noitems") o.items = false;
     else if (item == "dump") o.dump = true;
+    else if (item == "remoonly") o.remo_only = o.remo = true;
+    else if (item == "nogestures") o.gestures = false;
+    else if (item == "gestures") o.gestures = true;
+    else if (item == "notools") o.tools = false;
+    else if (item == "tools") o.tools = true;
+    else if (item == "remopass") o.remo_pass = true;
     else return false;
     return true;
 }
@@ -132,6 +150,10 @@ inline Options ParseOptions(const char* env) {
         else if (item.rfind("replay=", 0) == 0) o.replay = ParseIds(item.substr(7));
         else if (item.rfind("max=", 0) == 0) o.max = std::max(0, std::atoi(item.c_str() + 4));
         else if (item.rfind("enemies=", 0) == 0) o.enemies_per_row = std::max(0, std::atoi(item.c_str() + 8));
+        else if (item.rfind("remos=", 0) == 0) o.remos = ParseIds(item.substr(6));
+        else if (item.rfind("gestures=", 0) == 0) o.gestures = true, o.gestures_max = std::max(0, std::atoi(item.c_str() + 9));
+        else if (item.rfind("tools=", 0) == 0) o.tools = true, o.tools_max = std::max(0, std::atoi(item.c_str() + 6));
+        else if (item.rfind("remoskip=", 0) == 0) o.remo_skip = std::max(5, std::atoi(item.c_str() + 9));
         else ApplyFlag(o, item);
     }
     return o;
@@ -178,10 +200,16 @@ struct Progress {
     // Content seen in earlier sessions of the run (resume: not fought / played again).
     std::set<std::uint32_t> kinds;      ///< "kind <model>": enemy models killed (or bosses fought)
     std::set<std::uint32_t> remos;      ///< "remo <id>": cutscenes played (or tried)
+    std::map<std::uint32_t, int> remo_tries;  ///< "remo <id>" lines per cutscene
+    std::set<std::uint32_t> remos_ok;   ///< "remook <id>": cutscenes that started and played
     std::set<std::uint64_t> tod_done;   ///< "tod <value> <rp> ...": time-of-day rows (value << 32 | rp)
     int tod_orig = -1;                  ///< "todorig <value>": the save's own time of day
     bool effects_done = false;          ///< "effects": the item-effect pass ran
     std::set<std::uint32_t> fx;         ///< "fx <id>": item effects applied (or crashed in)
+    std::set<std::uint32_t> gestures;   ///< "gesture <n>": gestures played (1-based param id)
+    std::set<std::uint32_t> tools;      ///< "tool <goods>": hunter tools / throwables tried
+    std::set<std::uint32_t> tools_ok;   ///< "toolok <goods>": ... whose use was seen (its cost)
+    std::set<std::uint32_t> gestures_ok; ///< "gestureok <n>": gestures seen playing
 };
 
 inline Progress ParseProgress(const std::string& text) {
@@ -218,7 +246,12 @@ inline Progress ParseProgress(const std::string& text) {
         if (!rp) continue;
         if (word == "kind") p.kinds.insert(rp);
         else if (word == "fx") p.fx.insert(rp);
-        else if (word == "remo") p.remos.insert(rp);
+        else if (word == "remo") p.remos.insert(rp), ++p.remo_tries[rp];
+        else if (word == "remook") p.remos_ok.insert(rp);
+        else if (word == "gesture") p.gestures.insert(rp);
+        else if (word == "tool") p.tools.insert(rp);
+        else if (word == "toolok") p.tools_ok.insert(rp);
+        else if (word == "gestureok") p.gestures_ok.insert(rp);
         else if (word == "start") ++p.starts[rp];
         else if (word == "done") p.done.insert(rp);
         else if (word == "skip") p.skipped.insert(rp);
@@ -343,6 +376,119 @@ inline float Seconds(const std::vector<PadStep>& steps) {
     return s;
 }
 
+/// Bosses (`bosses`): an idle boss stands in its closed arena, and a spot taken from the player's
+/// side of it (as for other enemies) lands in the arena's wall. Candidate spots instead: first the
+/// arena's own entry floor (kBossArenas: the MSB point the fog wall's stuck check warps a player to,
+/// just inside the fog, or the boss's entry region where a map has no fog wall), from where the
+/// fight starts as in the game; then 4 m in front of the boss (an idle boss faces into its arena),
+/// to its right, left and back. Each is checked (ArenaSpotOk / BossSpotOk) before the fight, the
+/// next one tried otherwise.
+struct BossArena {
+    std::uint32_t boss;  ///< the boss's map entity id
+    float x, y, z;       ///< the arena's entry floor (MSB, 1.09)
+};
+inline constexpr BossArena kBossArenas[] = {
+    {2200800, -329.75f, 1.6f, 699.3f},     {2200801, -329.75f, 1.6f, 699.3f},    // Witch of Hemwick
+    {2300800, -88.3f, -126.5f, 14.0f},                                           // Blood-starved Beast
+    {2300810, 134.6f, -120.1f, -85.4f},                                          // Darkbeast Paarl
+    {2400800, 51.9f, 35.7f, 312.3f},                                             // Vicar Amelia
+    {2410800, -153.5f, -27.0f, 35.8f},                                           // Cleric Beast
+    {2410810, -49.6f, -40.8f, 71.6f},      {2410811, -49.6f, -40.8f, 71.6f},     // Father Gascoigne
+    {2420800, 94.4f, 4.17f, 387.7f},                                             // Ebrietas
+    {2420810, -4.8f, 55.3f, 293.0f},                                             // Celestial Emissary
+    {2500800, 34.4f, 112.1f, -331.2f},     {2500801, 34.4f, 112.1f, -331.2f},    // Martyr Logarius
+    {2600800, 142.0f, 1125.1f, -37.7f},    {2600801, 142.0f, 1125.1f, -37.7f},   // Mergo's Wet Nurse
+    {2700800, -323.5f, -185.9f, 493.8f},   {2700801, -323.5f, -185.9f, 493.8f},  // Shadows of Yharnam
+    {2700802, -323.5f, -185.9f, 493.8f},
+    {2800800, 381.6f, -122.5f, -216.2f},                                         // The One Reborn
+    {3200800, -513.9f, -271.25f, 352.9f},                                        // Rom
+    {3300800, -48.2f, 1461.0f, -68.6f},                                          // Amygdala
+    {3400800, -407.9f, 1503.8f, -744.6f},                                        // Ludwig
+    {3400850, -436.5f, 1535.7f, -266.0f},                                        // Laurence
+    {3500800, -477.2f, 1595.5f, -824.4f},                                        // Lady Maria
+    {3600800, -700.2f, 1578.5f, -929.2f},                                        // Orphan of Kos
+};
+inline constexpr int kBossSpots = 5;  ///< the arena's entry floor, then four round the boss
+inline constexpr float kBossSpotDistance = 4.0f;
+
+/// The yaw that faces from `from` to `to` (the game's convention: forward = (-sin, -cos)).
+inline float FaceYaw(const float from[3], const float to[3]) {
+    return std::atan2(-(to[0] - from[0]), -(to[2] - from[2]));
+}
+
+/// The arena's entry floor of boss `entity` (kBossArenas); false: none known.
+inline bool BossArenaSpot(std::uint32_t entity, float out[3]) {
+    for (const BossArena& a : kBossArenas) {
+        if (a.boss == entity) {
+            out[0] = a.x, out[1] = a.y, out[2] = a.z;
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Candidate spot `i` round a boss at `boss` facing `yaw` (0: in front, 1 right, 2 left, 3 back).
+inline void BossSpot(const float boss[3], float yaw, int i, float out[3]) {
+    static constexpr float kTurn[4] = {0.0f, -1.5707963f, 1.5707963f, 3.14159265f};
+    const float a = yaw + kTurn[((i % 4) + 4) % 4];
+    out[0] = boss[0] - std::sin(a) * kBossSpotDistance;
+    out[1] = boss[1] + 0.3f;
+    out[2] = boss[2] - std::cos(a) * kBossSpotDistance;
+}
+
+/// A boss spot is usable when, after settling (`settled`) and a short walk toward the boss
+/// (`walked`), the player stands on the boss's floor (within 2.5 m of its height: not fallen
+/// through, not stuck on a wall's top), near it (under 8 m) and could walk (came 0.4 m or more
+/// closer: not stuck inside a wall).
+inline bool BossSpotOk(const float boss[3], const float settled[3], const float walked[3]) {
+    auto flat = [&](const float p[3]) {
+        const float dx = p[0] - boss[0], dz = p[2] - boss[2];
+        return std::sqrt(dx * dx + dz * dz);
+    };
+    const float d0 = flat(settled), d1 = flat(walked);
+    return std::fabs(settled[1] - boss[1]) < 2.5f && std::fabs(walked[1] - boss[1]) < 2.5f && d0 < 8.0f &&
+           d0 - d1 >= 0.4f;
+}
+
+/// The arena's entry floor checked against the spot itself (`spot`: where the player was put): on
+/// its floor (within 2.5 m of its height: not fallen through) and the walk toward the boss moved
+/// the player 0.4 m or more (not stuck in geometry).
+inline bool ArenaSpotOk(const float spot[3], const float settled[3], const float walked[3]) {
+    const float dx = walked[0] - settled[0], dz = walked[2] - settled[2];
+    return std::fabs(settled[1] - spot[1]) < 2.5f && std::fabs(walked[1] - spot[1]) < 2.5f &&
+           std::sqrt(dx * dx + dz * dz) >= 0.4f;
+}
+
+/// The title-stage screens the warper tells apart (from the texts on screen): the first-launch
+/// brightness / controls screens (a save folder without the game's system data: confirmed with
+/// their defaults), a title with New Game but no Continue (no character: the run ends, a Cross
+/// would start a New Game), anything else (Cross until the save is continued).
+/// Arguments: the last lookup times (ms, 0 = never) of a text of the brightness screen
+/// ("brightness"), of the controls screen ("Camera X-Axis"), "Continue" and "New Game", and now.
+/// A first-launch screen when its text is the latest; no character when the title's New Game was
+/// built 3 s ago or more and Continue never was.
+enum class TitleScreen : std::uint8_t { Other, Brightness, Controls, NoCharacter };
+inline TitleScreen ClassifyTitle(std::int64_t brightness_ms, std::int64_t controls_ms, std::int64_t continue_ms,
+                                 std::int64_t new_game_ms, std::int64_t now_ms) {
+    const std::int64_t menu = std::max(continue_ms, new_game_ms);
+    if (controls_ms > 0 && controls_ms >= brightness_ms && controls_ms >= menu) return TitleScreen::Controls;
+    if (brightness_ms > 0 && brightness_ms >= menu) return TitleScreen::Brightness;
+    if (new_game_ms > 0 && continue_ms == 0 && now_ms - new_game_ms >= 1000) return TitleScreen::NoCharacter;
+    return TitleScreen::Other;
+}
+
+/// The title menu was built (New Game looked up) and Continue was not: wait, never Cross.
+inline bool TitleUndecided(std::int64_t continue_ms, std::int64_t new_game_ms) {
+    return new_game_ms > 0 && continue_ms == 0;
+}
+
+/// The presses on a first-launch screen, 1 s apart (its cursor starts on the top row): the
+/// brightness screen Down to Next, Cross; the controls screen Up (wraps to Next), Cross.
+inline std::uint32_t FirstLaunchPress(TitleScreen screen, int step) {
+    const std::uint32_t move = screen == TitleScreen::Controls ? kUp : kDown;
+    return step % 2 == 0 ? move : 0x4000u /* Cross */;
+}
+
 /// An enemy's kind for the coverage (one kill per kind): its model cAAAA, the NpcParam row id's
 /// first four digits (100010, 10100080, 100007000: c1000, c1010, c1000).
 constexpr std::uint32_t EnemyKind(std::uint32_t npc_param_id) {
@@ -361,6 +507,36 @@ constexpr bool EnemyRowFightable(std::uint32_t npc_param_id) {
 /// The packed map (AA << 24 | BB << 16) a cutscene belongs to: remo AABBnnnn.
 constexpr std::uint32_t RemoMap(std::uint32_t remo) {
     return (remo / 1000000u) << 24 | (remo / 10000u % 100u) << 16;
+}
+
+/// A cutscene is asked for at most this many times in a run (the tour's try and the cutscene
+/// pass's): one that did not start twice is left out.
+inline constexpr int kMaxRemoTries = 2;
+
+/// The cutscene pass (after the tour): every cutscene of `remos` that has not played yet (tried
+/// fewer than kMaxRemoTries times), each with a row of its map from `tour` to warp to (a fresh
+/// warp before every cutscene: two asked for in one visit ended the game). The rows of a map
+/// take turns, so a retry starts from another row. Cutscenes of maps without a row are left out.
+inline std::vector<std::pair<std::uint32_t, std::uint32_t>> CutsceneRoute(const std::vector<std::uint32_t>& tour,
+                                                                         const std::vector<std::uint32_t>& remos,
+                                                                         const Progress& p) {
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> out;
+    std::map<std::uint32_t, std::size_t> turn;  // map -> how many cutscenes of it so far
+    for (std::uint32_t id : remos) {
+        if (p.remos_ok.count(id)) continue;
+        const auto t = p.remo_tries.find(id);
+        if (t != p.remo_tries.end() && t->second >= kMaxRemoTries) continue;
+        std::vector<std::uint32_t> rows;
+        for (std::uint32_t rp : tour) {
+            if (!ChaliceRow(rp) && MapOfRow(rp) == RemoMap(id)) rows.push_back(rp);
+        }
+        if (rows.empty()) continue;
+        std::size_t& n = turn[RemoMap(id)];
+        const std::size_t tried = t == p.remo_tries.end() ? 0 : static_cast<std::size_t>(t->second);
+        out.emplace_back(rows[(n + tried) % rows.size()], id);
+        ++n;
+    }
+    return out;
 }
 
 /// The time-of-day values (event flags 9800..9802 as one 3-bit value, party_story kTodTable):
@@ -455,6 +631,67 @@ constexpr bool ItemEffectAllowed(std::uint32_t goods, std::uint32_t speffect) {
     default:
         return false;
     }
+}
+
+/// The gestures (the gesture menu's 23 entries; table 0x55526D0, entry p = 1..23: gesture index
+/// p - 1, animation 104000 + 10 * (motion - 1), all in c0000's behaviour as Gesture<index>). The
+/// game plays one when MenuMan (*0x5562878) +0x2BC holds its param id p (the player's pad update
+/// 0x1526750 reads and clears it; no "learned" check), as the gesture menu asks for it.
+inline constexpr int kGestureCount = 23;
+inline constexpr float kGestureSeconds = 4.5f;  ///< played, then a dodge ends a looping one
+
+/// The hunter tools and throwables (goods in the quick-item slots; EquipParamGoods refCategory 1:
+/// a Bullet row) used once each per run, from quick slot 0 with Square: the throwables (Molotov
+/// 1200, Delayed Molotov 1201, Poison Knife 1210, Oil Urn 1220, Pebble 1230, Throwing Knife 1240,
+/// Rope Molotov 1250, Delayed Rope Molotov 1251, Pungent Blood Cocktail 1260, Numbing Mist 1270)
+/// and the quicksilver tools (Tiny Music Box 700, Augur of Ebrietas 2000, A Call Beyond 2010,
+/// Beast Roar 2020, Lead Elixir 2030, Choir Bell 2050, Tiny Tonitrus 2070, Executioner's Gloves
+/// 2080, Shaman Bone Blade 2090, Messenger's Gift 2110, Blacksky Eye 2120).
+inline constexpr std::uint32_t kWarperTools[] = {1200, 1201, 1210, 1220, 1230, 1240, 1250, 1251, 1260, 1270,
+                                                 700,  2000, 2010, 2020, 2030, 2050, 2070, 2080, 2090, 2110, 2120};
+inline constexpr std::uint32_t kQuicksilverBullets = 900;  ///< goods: the tools' ammunition
+inline constexpr float kToolSeconds = 4.0f;
+
+/// A gesture's English name (param id 1..23, the gesture menu's order).
+inline const char* GestureName(std::uint32_t id) {
+    static constexpr const char* kNames[kGestureCount] = {
+        "Point Forward", "Hunter's Salutation", "Conviction", "Joy", "Shake off Cape", "Church Bow (male)",
+        "Curtsy", "Church Bow (female)", "Wave", "Pray", "Wait", "Shh!", "Hunter's Rally", "Triumph", "Approval",
+        "Roar", "Beg for Life", "Brush off Dust", "Respect", "Deep Respect", "Make Contact", "Sit Down",
+        "League Oath"};
+    return id >= 1 && id <= static_cast<std::uint32_t>(kGestureCount) ? kNames[id - 1] : "?";
+}
+
+/// A gesture played: a gesture animation (a000_104000 .. a000_104259) in the player's recent
+/// animations that was not among them before the request.
+inline bool GestureSeen(const std::vector<int>& before, const std::vector<int>& after) {
+    for (int a : after) {
+        if (a >= 104000 && a < 104260 && std::find(before.begin(), before.end(), a) == before.end()) return true;
+    }
+    return false;
+}
+
+/// A hunter tool / throwable was used when its use cost something: one of the item (throwables,
+/// counts before / after, -1 unknown) or quicksilver bullets (the tools).
+inline bool ToolUseSeen(int held_before, int held_after, int bullets_before, int bullets_after) {
+    return (held_before > 0 && held_after >= 0 && held_after < held_before) ||
+           (bullets_before > 0 && bullets_after >= 0 && bullets_after < bullets_before);
+}
+
+/// The gestures / tools still to do in a run (resume: the ones in the progress file are done).
+inline std::vector<std::uint32_t> GesturesLeft(const Progress& p) {
+    std::vector<std::uint32_t> v;
+    for (std::uint32_t g = 1; g <= static_cast<std::uint32_t>(kGestureCount); ++g) {
+        if (!p.gestures.count(g)) v.push_back(g);
+    }
+    return v;
+}
+inline std::vector<std::uint32_t> ToolsLeft(const Progress& p) {
+    std::vector<std::uint32_t> v;
+    for (std::uint32_t t : kWarperTools) {
+        if (!p.tools.count(t)) v.push_back(t);
+    }
+    return v;
 }
 
 /// Weapon actions after a gear change: the right-hand weapon in both forms (R1, R2, charged R2,
