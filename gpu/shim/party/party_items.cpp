@@ -5,6 +5,7 @@
 // byte before anything is written. Offsets are ours (raw ELF VA). The game's code is System V:
 // every call into it goes through a BB_COOP_SYSV pointer at Guest(off).
 #include "party_items.h"
+#include "party_b2.h"
 #include "party_async_io.h"
 #include "party_perf.h"
 
@@ -2861,11 +2862,14 @@ void ItemGetWatchTick(const GameSnapshot& gs, double now) {
                 }
             } else if (n <= 0 && lifted) {
                 lifted = false;
-                if (gs.session_role == 6 && gate == 0) {
+                // After a boss clear the hold is the boss-clear one, lifted for good (issue #4).
+                const bool k10 = b2::K10ActionHoldLifted();
+                if (gs.session_role == 6 && gate == 0 && !k10) {
                     const u8 one = 1;
                     SafeWrite(man + 0x52, &one, 1);
                 }
-                Log("item notice closed: the action-button hold put back");
+                Log("item notice closed: %s", k10 ? "the action-button hold stays lifted (after a boss clear the party stays)"
+                                                   : "the action-button hold put back");
             }
         }
     }
