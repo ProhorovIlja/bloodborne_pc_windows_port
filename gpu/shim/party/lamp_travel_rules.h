@@ -180,4 +180,30 @@ inline bool Offer(const Situation& s) {
     return s.world_up && !s.loading && !s.cutscene && !s.boss && area != 21 && s.map != 0xffffffffu;
 }
 
+/// Other observers of the talk command switch 0x203FFD0, which lamp travel replaces (issue #4: the
+/// shared NPC talk's choice observer could not hook it after lamp travel and never ran). They are
+/// registered before the game runs and called first in every call, as a prologue hook would be.
+template <typename Fn, std::size_t N = 4>
+class ObserverList {
+public:
+    /// False: full, null, or already there (registered once).
+    bool Add(Fn fn) {
+        if (!fn || count_ >= N) return false;
+        for (std::size_t i = 0; i < count_; ++i) {
+            if (fns_[i] == fn) return false;
+        }
+        fns_[count_++] = fn;
+        return true;
+    }
+    template <typename... A>
+    void Dispatch(A... args) const {
+        for (std::size_t i = 0; i < count_; ++i) fns_[i](args...);
+    }
+    std::size_t Size() const { return count_; }
+
+private:
+    Fn fns_[N] = {};
+    std::size_t count_ = 0;
+};
+
 } // namespace coop::lamptravel
