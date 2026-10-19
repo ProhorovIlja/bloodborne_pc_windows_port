@@ -1233,6 +1233,13 @@ int EnemyHp(u64 chr) {
     return dm ? Field<int>(dm, 0xf8, -1) : -1;
 }
 
+bool SetEnemyHpZero(u64 chr) {
+    const u64 dm = Field<u64>(Field<u64>(chr, 0x3b0), 0x20);
+    if (!dm || Field<int>(dm, 0xf8, -1) <= 0) return false;
+    const int zero = 0;
+    return SafeWrite(dm + 0xf8, &zero, 4);
+}
+
 bool ChrPosition(u64 chr, float out[3]) {
     const u64 phys = Field<u64>(Field<u64>(Field<u64>(Field<u64>(chr, 0x58), 8), 0x3b0), 0x68);
     return phys && SafeRead(phys + 0x1e0, out, 12);
