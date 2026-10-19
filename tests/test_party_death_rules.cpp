@@ -4,6 +4,8 @@
 #include "party/party_death_rules.h"
 
 #include <cstdio>
+#include <limits>
+#include <vector>
 
 using namespace coop::deathrules;
 
@@ -308,6 +310,82 @@ int main() {
         CHECK(HostDeathPlanName(HostDeathPlan(i))[0] != '?');
     }
     CHECK(DownTickName(DownTick::Wipe)[0] != '?');
+    // Issue #4 item 6: the guest died first and spectated > 90 s, then the host died in the boss
+    // fight. The down record lasts (it used to expire after 90 s: "1 member(s), 0 down", limbo).
+    {
+        DownLedger led;
+        std::vector<MemberNow> m{{1, true, true, false}};  // slot 1 in the roster, its vitals: HP 0
+        led.Down(1, 100.0);
+        for (double t = 100.0; t <= 100.0 + 400.0; t += 0.5) led.Reconcile(m, t);
+        CHECK(led.Count() == 1);
+        HostDeathView v;
+        v.members = 1;
+        v.down_reported = led.Count();
+        v.down_seen = SeenDown(m);
+        v.boss_fight = true;
+        CHECK(PlanHostDeath(v) == HostDeathPlan::Wipe);
+        // Even with no vitals at all (stale: a spectator that stopped sending), the notice counts.
+        std::vector<MemberNow> stale{{1, true, false, false}};
+        CHECK(led.Reconcile(stale, 600.0) == 0 && led.Count() == 1);
+        v.down_seen = SeenDown(stale);
+        CHECK(v.down_seen == 0 && PlanHostDeath(v) == HostDeathPlan::Wipe);
+        // A host already in limbo: the recount each frame also wipes.
+        DownView dv;
+        dv.members = 1, dv.down_reported = led.Count(), dv.limbo = true, dv.boss_active = true, dv.down_for = 5;
+        CHECK(PlanDownTick(dv) == DownTick::Wipe);
+        // Seen at HP 0 alone (the notice lost) is a wipe too.
+        dv.down_reported = 0, dv.down_seen = SeenDown(m);
+        CHECK(PlanDownTick(dv) == DownTick::Wipe);
+    }
+    // A confirmed revival / a rejoin (new chr: "arrived") / a leave clears the old death.
+    {
+        DownLedger led;
+        led.Down(1, 10.0);
+        led.Down(2, 10.0);
+        led.Down(0, 10.0);   // the host's own slot is never a member
+        led.Down(16, 10.0);  // out of range
+        CHECK(led.Count() == 2);
+        led.Clear(1);  // member_revived / arrived
+        CHECK(!led.Has(1) && led.Has(2));
+        std::vector<MemberNow> gone;  // slot 2 left the roster (replaced by nobody)
+        int slot = -1;
+        CHECK(led.Reconcile(gone, 11.0, &slot) == 1 && slot == 2 && led.Count() == 0);
+        // A member that comes back alive without a notice (a lost member_revived): its own vitals
+        // alive for kDownAliveConfirm s, once the notice is kDownNoticeGrace s old.
+        led.Down(1, 20.0);
+        std::vector<MemberNow> alive{{1, true, true, true}};
+        led.Reconcile(alive, 20.5);  // vitals lag the notice: not yet
+        led.Reconcile(alive, 22.9);
+        CHECK(led.Has(1));
+        led.Reconcile(alive, 23.0);  // grace over: the confirm starts
+        led.Reconcile(alive, 25.0);
+        CHECK(led.Has(1));
+        led.Reconcile(std::vector<MemberNow>{{1, true, true, false}}, 25.5);  // dead again: the confirm restarts
+        led.Reconcile(alive, 26.0);
+        led.Reconcile(alive, 28.9);
+        CHECK(led.Has(1));
+        led.Reconcile(alive, 29.0);
+        CHECK(!led.Has(1));
+        // A lost-but-kept member (not connected: no fresh vitals) keeps its death until it rejoins.
+        led.Down(1, 40.0);
+        std::vector<MemberNow> lost{{1, true, false, false}};
+        CHECK(led.Reconcile(lost, 200.0) == 0 && led.Has(1));
+        // A new death after the revival is counted again.
+        led.ClearAll();
+        led.Down(1, 300.0);
+        CHECK(led.Count() == 1);
+    }
+    // Issue #4 item 7: a guest's respawn at a lamp of the loaded map.
+    CHECK(PlanGuestRevive(12.0, 0.0, true) == GuestRevive::InPlace);         // near, a normal death
+    CHECK(PlanGuestRevive(59.9, 2.0, true) == GuestRevive::InPlace);         // a stumble is no fall
+    CHECK(PlanGuestRevive(122.5, 0.0, true) == GuestRevive::LoadFar);        // the issue's distance
+    CHECK(PlanGuestRevive(60.1, 0.0, false) == GuestRevive::LoadFar);
+    CHECK(PlanGuestRevive(10.0, 6.0, true) == GuestRevive::LoadFall);        // a fall, even near
+    CHECK(PlanGuestRevive(10.0, 30.0, false) == GuestRevive::InPlace);       // no history: distance only
+    CHECK(PlanGuestRevive(std::numeric_limits<double>::quiet_NaN(), 0.0, true) == GuestRevive::LoadFar);  // spot unknown
+    CHECK(FallDrop(-20.0, -40.0, -80.0) == 60.0);                            // into the void: still dropping
+    CHECK(FallDrop(-20.0, -21.0, -21.0) == 1.0);
+    CHECK(GuestReviveName(GuestRevive::LoadFall)[0] != '?');
     CHECK(RestLoadName(RestLoad::TooSoon)[0] != '?');
     if (g_failures) {
         std::fprintf(stderr, "%d failure(s)\n", g_failures);
