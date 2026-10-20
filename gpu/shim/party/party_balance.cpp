@@ -908,6 +908,11 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     const auto now = Clock::now();
     const Rules r = host ? FromSettings() : InForce();
     party::status::SetShareLamps(r.share_lamps);
+    {   // The rot for System > Party and the party HUD (none while it is off).
+        int kinds[party::status::kRotKinds] = {};
+        for (int k = 0; k < kRotKinds && k < party::status::kRotKinds; ++k) kinds[k] = r.rot ? g_kind[k].load() : 0;
+        party::status::SetRot(kinds);
+    }
     if (host) {
         std::lock_guard<std::mutex> lk(g_mu);
         g_have_host = false;  // a host's own settings count
