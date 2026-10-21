@@ -1494,6 +1494,19 @@ void GuestWorldMirror::Receive(const WorldImage& img) {
     }
 }
 
+void GuestWorldMirror::Hold(u32 id, bool on) {
+    if (on) {
+        held_.insert(id);
+        return;
+    }
+    if (held_.erase(id) && have_) {
+        const int key = PoolKeyOfId(id);
+        if (key >= 0 && WorldMirrorKey(key)) {
+            dirty_.insert(key);  // a host change kept pending meanwhile goes in with the next Apply
+        }
+    }
+}
+
 int GuestWorldMirror::TestCorrupt() {
     if (!have_ || image_.empty()) {
         return -1;
@@ -1578,14 +1591,23 @@ bool GuestWorldMirror::Apply(const std::map<u32, u64>& overlay, const MemOps& op
         if (!ops.read(it->second, cur.data(), kBlockBytes)) {
             return;
         }
-        GroupBytes next = cur;
+        // liftfix: held flags (Hold) keep the overlay's bit and their host change stays pending.
+        GroupBytes keep{};
+        const u32 base = BlockOfPoolKey(key) * kBitsPerBlock;
+        for (const u32 id : held_) {
+            if (id >= base && id - base < kBitsPerBlock) {
+                PutBit(keep.data(), id - base, true);
+            }
+        }
+        GroupBytes next = cur, applied = want;
         for (u32 i = 0; i < kBlockBytes; ++i) {
             // full: every masked bit becomes the host's; else only the bits the host changed since
             // the last apply (the guest's own runtime bits in the overlay stay).
-            const u8 m = full ? mask[i] : u8(mask[i] & (applied_[key][i] ^ want[i]));
+            const u8 m = u8((full ? mask[i] : u8(mask[i] & (applied_[key][i] ^ want[i]))) & ~keep[i]);
             next[i] = u8((cur[i] & ~m) | (want[i] & m));
+            applied[i] = u8((want[i] & ~keep[i]) | (applied_[key][i] & keep[i]));
         }
-        applied_[key] = want;
+        applied_[key] = applied;
         if (next == cur) {
             return;
         }
@@ -2865,6 +2887,12 @@ bool HostWorldFlag(u32 id, bool* value) {
     }
     *value = GetBit(g.mirror.Group(key).data(), id % kBitsPerBlock);
     return true;
+}
+
+void SetMirrorHold(u32 id, bool hold) {
+    Global& g = G();
+    std::lock_guard<std::mutex> lk(g.mu);
+    g.mirror.Hold(id, hold);
 }
 
 int FlagLoadMode() {

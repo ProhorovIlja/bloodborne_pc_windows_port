@@ -85,71 +85,6 @@ bool WorldActionAllowed(std::uint32_t id, bool clear, std::uint32_t host_map) {
     return area == (host_map >> 24);  // the guest acts in the host's world: the host's area
 }
 
-const std::vector<Lift>& Lifts() {
-    // flag_tool emevd + an instruction dump of every elevator event (lifts071): {pos, busy, host
-    // state, car}. Old lifts (down / up events only): busy is set at the ride's start and cleared
-    // with pos at its end. Newer ones (init / host state / up / down): pos flips at the start.
-    static const std::vector<Lift> lifts = {
-        {12200125u, 12200126u, 0u, 2201210},         // Hemwick
-        {12400150u, 12400151u, 0u, 2401101},         // Cathedral Ward (church lift)
-        {12400827u, 12400828u, 0u, 2401102},         // Cathedral Ward <-> Old Yharnam
-        {12410350u, 12415350u, 12410351u, 2411320},  // Central Yharnam
-        {12420154u, 12420155u, 0u, 2421250},         // Upper Cathedral Ward (to Ebrietas)
-        {12500074u, 12505074u, 0u, 2501010},         // Cainhurst Castle (liftfall)
-        // Nightmare of Mensis (liftfall: its common up / down events 12601320 / 12601330, slots 0-5;
-        // the library lift 12601352 has no position flag and stays out)
-        {12601250u, 12605250u, 0u, 2601210},
-        {12601251u, 12605251u, 0u, 2601220},         // roof lift (start state reversed, 12601340)
-        {12601252u, 12605252u, 0u, 2601230},
-        {12601254u, 12605253u, 0u, 2601280},         // roof lift
-        {12601255u, 12605254u, 0u, 2601290},         // roof lift
-        {12601256u, 12605256u, 0u, 2601240},         // first shortcut lift (28 m, lamp 2602953)
-        // the library lift (12601351 / 12601352, after Micolash: the 60 m ride down of the player's
-        // report): no network sync, no busy flag; the end its own copy leaves (pos 1: gate 9 / car 7,
-        // pos 0: gate 7 / car 9) is replayed on the other games
-        {12601253u, 0u, 0u, 2601260, 2601261, 7, 9, 9, 7},
-        {12700134u, 12700135u, 0u, 2701032},         // Forbidden Woods
-        {12700144u, 12700145u, 0u, 2701042},         // Forbidden Woods
-        {12800610u, 12804700u, 12800611u, 2801400},  // Yahar'gul
-        {13300115u, 13300116u, 0u, 3301000},         // Nightmare Frontier (liftfall)
-        {13501106u, 13504100u, 13501107u, 3501100},  // m35 altar lift (DLC)
-        {13501116u, 13504110u, 13501117u, 3501105},  // m35 1F <-> 3F (DLC)
-        {13501126u, 13504120u, 13501127u, 3501110},  // m35 3F <-> 5F (DLC)
-        {13601106u, 13604100u, 13601107u, 3601100},  // Fishing Hamlet (DLC)
-    };
-    return lifts;
-}
-
-const Lift* LiftByPosFlag(std::uint32_t pos) {
-    for (const Lift& l : Lifts()) {
-        if (l.pos == pos) {
-            return &l;
-        }
-    }
-    return nullptr;
-}
-
-LiftSync HostLiftSync(bool host_pos, bool host_busy, bool car_loaded, bool want, bool replays, bool occupied) {
-    if (host_pos == want) {
-        return LiftSync::same;
-    }
-    if (host_busy) {
-        return LiftSync::busy;
-    }
-    if (car_loaded && replays) {
-        return occupied ? LiftSync::occupied : LiftSync::apply;
-    }
-    return car_loaded ? LiftSync::loaded : LiftSync::apply;
-}
-
-bool LiftNeedsReplay(const Lift& l, bool pos_now, std::int32_t car_anim) {
-    return l.Replays() && car_anim != (pos_now ? l.car_end_on : l.car_end_off);
-}
-
-bool GuestLiftRideDone(bool pos_now, bool pos_changed_to, bool busy) {
-    return !busy && pos_now == pos_changed_to;
-}
-
 bool BossKillActionAllowed(std::uint32_t id, bool clear, std::uint32_t member_map, bool apart) {
     if (!apart || clear || member_map == 0xffffffffu || id < 10000000u ||
         progress::CategoryOf(id) != Category::boss_defeated || progress::NeverWritable(id)) {
@@ -727,6 +662,8 @@ struct State {
     std::set<std::uint32_t> fog_apart;  // guest: put back out of that boss room this stay (D3)
     std::set<std::uint32_t> story_sent;  // guest: story triggers it reported (D10), once per map
     std::map<std::uint32_t, bool> lift_pending;  // guest: lift pos flag -> the end its own ride goes to (D3)
+    std::set<std::uint64_t> lift_baseline;       // guest: lift flag * 2 + value held back by the baseline
+    std::map<std::uint32_t, int> lift_sent;      // guest: lift pos flag -> the end last sent to the host
     bool pickups = false;           // D4 patches in: the guest sees and takes the host world's treasure
     Stats stats;
 } g_st;
@@ -969,6 +906,9 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.steady = true;
         st.steady_since = now;
         st.known.clear();
+        st.lift_baseline.clear();
+        st.lift_pending.clear();
+        st.lift_sent.clear();
     }
     if (now - st.last_scan < 0.25 || now - st.steady_since < 3.0) {
         return;
@@ -988,6 +928,9 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
             // a difference is always a pickup this guest made (also one during a map change).
             if (!(st.pickups && MapItemFlag(id))) {
                 st.known.insert(std::uint64_t(id) * 2 + (v ? 1 : 0));
+                if (LiftByPosFlag(id)) {
+                    st.lift_baseline.insert(std::uint64_t(id) * 2 + (v ? 1 : 0));
+                }
             }
         }
         st.baselined = true;
@@ -1056,18 +999,23 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
             continue;
         }
         const std::uint64_t k = std::uint64_t(id) * 2 + (v ? 1 : 0);
-        if (st.known.count(k)) {
-            continue;
-        }
-        st.known.insert(k);
         if (LiftByPosFlag(id) && id / 100000u % 100u == (s.map_id >> 24)) {
             // D3 (lifts071): this guest's own copy of the lift's events moved the car, in any block of
             // the area (live l8: Cathedral Ward's lift while the guest's map still read Central
             // Yharnam). A host with the lift's block loaded ran its copy too (the game's own sync);
-            // one that has it streamed out did not. Sent once the ride is over (GuestLiftRideDone).
-            st.lift_pending[id] = v;
+            // one that has it streamed out did not. Sent once the ride is over (GuestLiftReport).
+            // liftfix: every ride, not once per (flag, value) for the whole stay (`known`): a second
+            // ride to an end reported before never went up; only the baseline's differences (an init
+            // event's own write while loading) stay local.
+            if (!st.lift_baseline.count(k)) {
+                st.lift_pending[id] = v;
+            }
             continue;
         }
+        if (st.known.count(k)) {
+            continue;
+        }
+        st.known.insert(k);
         // A map flag only of the block the guest stands in: a streamed-in neighbour block runs its
         // constructors (NPC states, live run 9: m24_00's 12400501.. while in m24_01) - not the
         // guest's doing; once the guest's map is that block, the new baseline holds them back.
@@ -1099,6 +1047,13 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
     if (!local.empty()) {
         Log("guest: local flag change(s) kept local (not a world action): %s", IdList(local).substr(0, 500).c_str());
     }
+    // liftfix: an end sent before is forgotten once the host's world has the guest's end again (its own
+    // ride, or ours applied), so the next ride to it goes up too.
+    for (auto it = st.lift_sent.begin(); it != st.lift_sent.end();) {
+        bool pos = false, host = false;
+        const bool same = progress::ReadFlag(it->first, &pos) && progress::HostWorldFlag(it->first, &host) && pos == host;
+        it = same ? st.lift_sent.erase(it) : std::next(it);
+    }
     for (auto it = st.lift_pending.begin(); it != st.lift_pending.end();) {
         const Lift* l = LiftByPosFlag(it->first);
         bool pos = false, busy = false, host = false;
@@ -1109,19 +1064,22 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         if (!l->busy) {
             busy = LiftBusyHere(*l, kLiftInCarRadius);  // liftfall: no busy flag: the car or its rider here
         }
-        if (busy) {
+        const bool known_host = progress::HostWorldFlag(l->pos, &host);
+        const auto sent = st.lift_sent.find(l->pos);
+        const liftrules::GuestReport what =
+            liftrules::GuestLiftReport(pos, known_host ? host : !pos, busy, sent == st.lift_sent.end() ? -1 : sent->second);
+        if (what == liftrules::GuestReport::wait) {
             ++it;  // the ride runs: its end decides
             continue;
         }
-        if (GuestLiftRideDone(pos, it->second, busy)) {
-            if (progress::HostWorldFlag(l->pos, &host) && host == pos) {
-                Log("guest: lift %d ride over (flag %u = %d): the host's world has that end already", l->car, l->pos,
-                    pos ? 1 : 0);
-            } else if ((pos ? r.lift_set : r.lift_clr).size() < kMaxLift) {
-                (pos ? r.lift_set : r.lift_clr).push_back(l->pos);
-                Log("guest: lift %d ride over (flag %u = %d, the host's world %s): to the host", l->car, l->pos, pos ? 1 : 0,
-                    progress::HostWorldFlag(l->pos, &host) ? (host ? "1" : "0") : "unknown");
-            }
+        if (what == liftrules::GuestReport::same) {
+            Log("guest: lift %d ride over (flag %u = %d): the host's world has that end already", l->car, l->pos,
+                pos ? 1 : 0);
+        } else if (what == liftrules::GuestReport::send && (pos ? r.lift_set : r.lift_clr).size() < kMaxLift) {
+            (pos ? r.lift_set : r.lift_clr).push_back(l->pos);
+            st.lift_sent[l->pos] = pos ? 1 : 0;
+            Log("guest: lift %d ride over (flag %u = %d, the host's world %s): to the host", l->car, l->pos, pos ? 1 : 0,
+                known_host ? (host ? "1" : "0") : "unknown");
         }
         it = st.lift_pending.erase(it);
     }
@@ -1679,7 +1637,9 @@ void HostTick(const GameSnapshot& s) {
                 if (l->busy) progress::ReadFlag(l->busy, &busy);
                 ObjAnimState car;
                 const bool loaded = ReadObjAnim(l->car, &car);
-                const bool occupied = loaded && l->Replays() && LiftBusyHere(*l, kLiftCarRadius);
+                // liftfix: also while the host's own copy rides (its car shows a ride or plays its end)
+                const bool occupied = loaded && l->Replays() &&
+                                      (LiftBusyHere(*l, kLiftCarRadius) || liftrules::MirrorHold(*l, car.anim, car.playing));
                 const LiftSync what = HostLiftSync(pos, busy, loaded, want, l->Replays(), occupied);
                 bool ok = true;
                 if (what == LiftSync::apply) {
@@ -2811,37 +2771,64 @@ bool OnMovingLiftCar(const float p[3]) {
 
 void LiftReplayTick(const GameSnapshot& s) {
     static std::map<std::uint32_t, bool> last;  // a replaying lift's pos flag -> its value last tick
+    static std::set<std::uint32_t> held;        // pos flags the world mirror holds back (liftfix)
     static std::uint32_t map = 0xffffffffu;
+    auto hold = [](const Lift& l, bool on, std::int32_t anim) {
+        if (on == (held.count(l.pos) != 0)) {
+            return;
+        }
+        progress::SetMirrorHold(l.pos, on);
+        if (on) {
+            held.insert(l.pos);
+            Log("lift %d: this game's own ride (car anim %d): flag %u from the host's world waits for its end", l.car,
+                anim, l.pos);
+        } else {
+            held.erase(l.pos);
+            Log("lift %d: this game's ride is over (car anim %d): flag %u follows the host's world again", l.car, anim,
+                l.pos);
+        }
+    };
     if (!s.world_up || s.loading || s.map_id != map) {
         last.clear();  // a load: the block's init event puts each car at its flag's end
+        for (const Lift& l : Lifts()) {
+            hold(l, false, -1);
+        }
         map = (s.world_up && !s.loading) ? s.map_id : 0xffffffffu;
         return;
     }
+    const bool guest = progress::FlagLoadMode() == 1;
     for (const Lift& l : Lifts()) {
         bool v = false;
         if (!l.Replays() || l.pos / 100000u % 100u != (s.map_id >> 24) || !progress::ReadFlag(l.pos, &v)) {
+            hold(l, false, -1);
             continue;
         }
+        ObjAnimState car;
+        const bool loaded = ReadObjAnim(l.car, &car);
+        // liftfix: a guest's mirror keeps the host's flip of this flag back while this game's copy of a
+        // ride has not written its own end (liftrules::MirrorHold); the release lets it in.
+        hold(l, guest && loaded && liftrules::MirrorHold(l, car.anim, car.playing), loaded ? car.anim : -1);
         const auto it = last.find(l.pos);
         if (it == last.end() || it->second == v) {
             last[l.pos] = v;
             continue;
         }
-        ObjAnimState car;
-        if (!ReadObjAnim(l.car, &car)) {
+        if (!loaded) {
             it->second = v;
             Log("lift %d: flag %u = %d here, the car is not loaded (its init puts it at that end)", l.car, l.pos, v ? 1 : 0);
             continue;
         }
-        // A ride runs here (the car animates) or the local player stands in the car: this game's own
-        // copy decides; looked at again once neither holds (its own end then needs no replay). A
-        // guest's copy reads the flag at its ride's end to pick that end (12601352: "goto if 12601253
-        // on"): the host's flip that the mirror wrote meanwhile is put back, so the copy ends where it
-        // rode and sets the same value itself.
-        if (LiftBusyHere(l, kLiftInCarRadius)) {
+        // This game's copy rides (its car shows a ride animation): it reads the flag once its player
+        // has left the car, to pick its end (12601352: "goto if 12601253 on"). The mirror holds the
+        // host's flip back meanwhile (above); a flip that came in anyway (a full mirror copy) is put
+        // back on a guest, so the copy ends where it rode and writes its value itself; looked at again
+        // once the car stands at an end (liftfix: only then - 0.7.1 also held while the player stood
+        // near the car, and put back the copy's own end written in the same tick as the host's flip:
+        // liftrules::HoldMirrorFlip).
+        if (liftrules::HoldMirrorFlip(l, car.anim)) {
             if (progress::FlagLoadMode() == 1 && WriteEventFlag(l.pos, it->second)) {
-                Log("lift %d: flag %u = %d from the host's world during this game's own ride: kept at %d until "
-                    "its end", l.car, l.pos, v ? 1 : 0, it->second ? 1 : 0);
+                Log("lift %d: flag %u = %d from the host's world during this game's own ride (car anim %d): kept at "
+                    "%d until its end", l.car, l.pos, v ? 1 : 0, car.anim, it->second ? 1 : 0);
             }
             continue;
         }
