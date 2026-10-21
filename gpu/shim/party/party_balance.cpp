@@ -29,6 +29,7 @@
 #include "party_droproll.h"
 #include "party_flow.h"
 #include "party_link.h"
+#include "party_npc_mirror.h"
 #include "party_status.h"
 #include "party_travel.h"
 #include "party_worldact.h"
@@ -903,7 +904,170 @@ void EnemyHpTestTick(const GameSnapshot& s) {
         int(Field<u32>(s.game_data_man, 0x68, 0xffffffffu)), line.c_str());
 }
 
+/// Test aid (BB_PARTY_CHR_DUMP=R, prologue NPC check): every non-player chr within R m (default
+/// 40) of the local player - entity id (+0x1F0), handle, team, HP, position, disabled / draw bits -
+/// once the world has stood 4 s, again whenever that set changes (a chr enabled, disabled, killed,
+/// added): the host's and a guest's lists side by side show a chr only one game has.
+void ChrDumpTick(const GameSnapshot& s) {
+    static const float radius = [] {
+        const char* v = std::getenv("BB_PARTY_CHR_DUMP");
+        return v && v[0] && v[0] != '0' ? (std::atof(v) > 1.0 ? float(std::atof(v)) : 40.0f) : 0.0f;
+    }();
+    if (radius <= 0) return;
+    static Clock::time_point steady_since{}, next{};
+    static std::string last_sig;
+    const auto now = Clock::now();
+    if (!s.world_up || s.loading || !s.player) {
+        steady_since = {};
+        return;
+    }
+    if (steady_since == Clock::time_point{}) steady_since = now;
+    if (now - steady_since < std::chrono::seconds(4) || now < next) return;
+    next = now + std::chrono::seconds(1);
+    const u64 wcm = Slot(kSlotWorldChrMan);
+    float me[3] = {};
+    if (!wcm || !ChrPosition(s.player, me)) return;
+    const int sets = std::min(Field<int>(Field<u64>(wcm, 8), 0x18, -2) + 2, kMaxSets);
+    std::vector<std::string> lines;
+    std::string sig;
+    for (int set = 0; set < sets; ++set) {
+        const u64 tab = Field<u64>(wcm, 0x850 + u64(set) * 8);
+        const int count = Field<int>(tab, 0, 0);
+        const u64 entries = Field<u64>(tab, 8);
+        if (!tab || !entries || count <= 0 || count > kMaxPerSet) continue;
+        for (int i = 0; i < count; ++i) {
+            const u64 chr = Field<u64>(entries + u64(i) * 0x38, 0);
+            float p[3] = {};
+            if (!chr || IsPlayer(wcm, chr) || !ChrPosition(chr, p)) continue;
+            const float dx = p[0] - me[0], dy = p[1] - me[1], dz = p[2] - me[2];
+            const float d = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (!(d <= radius)) continue;
+            const u64 npc = Field<u64>(Field<u64>(chr, 0x3c8), 8);
+            const u64 dm = Field<u64>(Field<u64>(chr, 0x3b0), 0x20);
+            const int entity = Field<int>(chr, 0x1f0, -1), hp = Field<int>(dm, 0xf8, -1);
+            const bool off = (Field<u8>(Field<u64>(chr, 0x18), 0x20) & 1) || (Field<std::uint16_t>(Field<u64>(chr, 0x58), 0x114) & 0x40);
+            char b[200];
+            std::snprintf(b, sizeof b, "entity %d chr %x team %d HP %d/%d at (%.1f, %.1f, %.1f) %.1f m%s", entity,
+                          Field<u32>(chr, 8, ~0u), npc ? int(Field<u8>(npc, 0x12f, 0xff)) : -1, hp, Field<int>(dm, 0xfc, -1),
+                          double(p[0]), double(p[1]), double(p[2]), double(d), off ? " DISABLED" : "");
+            lines.push_back(b);
+            char k[48];
+            std::snprintf(k, sizeof k, "%d/%d/%d;", entity, hp > 0 ? 1 : 0, off ? 1 : 0);
+            sig += k;
+        }
+    }
+    if (sig == last_sig) return;
+    last_sig = sig;
+    Log("chr dump (%s, within %.0f m of (%.1f, %.1f, %.1f)): %zu chr(s)", MapName(s.map_id).c_str(), double(radius),
+        double(me[0]), double(me[1]), double(me[2]), lines.size());
+    for (const std::string& l : lines) Log("chr dump: %s", l.c_str());
+}
+
+// ---- NPC presence mirror (party_npc_mirror.h) ----
+bool ChrOff(u64 chr) {
+    return (Field<u8>(Field<u64>(chr, 0x18), 0x20) & 1) || (Field<std::uint16_t>(Field<u64>(chr, 0x58), 0x114) & 0x40);
+}
+
+struct NpcMirrorState {
+    std::mutex mu;
+    std::uint32_t host_map = 0;  // the host's last list (guest), under mu
+    std::vector<std::uint32_t> host_off;
+    Clock::time_point host_at{};
+    std::vector<std::uint32_t> ours;  // main thread: chrs this mirror turned off
+    std::uint32_t ours_map = 0;
+    Clock::time_point steady_since{}, next{}, next_send{};
+    std::string last_sent;
+};
+NpcMirrorState& NM() {
+    static NpcMirrorState st;
+    return st;
+}
+
+void NpcMirrorTick(const GameSnapshot& s, party::PartyLink* link, bool host) {
+    static const bool on = !EnvIsZero("BB_PARTY_NPC_MIRROR");
+    NpcMirrorState& st = NM();
+    const auto now = Clock::now();
+    const bool steady = on && link && s.world_up && !s.loading && s.player && s.map_id != 0xffffffffu;
+    if (!steady || (!host && s.session_role != 6) || s.map_id != st.ours_map) {
+        st.steady_since = {};
+        st.ours.clear();  // a load rebuilds the chrs
+        st.ours_map = s.map_id;
+        if (!steady || (!host && s.session_role != 6)) return;
+    }
+    if (st.steady_since == Clock::time_point{}) st.steady_since = now;
+    if (now - st.steady_since < std::chrono::seconds(3) || now < st.next) return;
+    st.next = now + std::chrono::milliseconds(500);
+    const u64 wcm = Slot(kSlotWorldChrMan);
+    if (!wcm) return;
+    if (host) {
+        // The non-player, non-enemy chrs with a map entity id that are off in the host's world.
+        std::vector<std::uint32_t> off;
+        const int sets = std::min(Field<int>(Field<u64>(wcm, 8), 0x18, -2) + 2, kMaxSets);
+        for (int set = 0; set < sets && off.size() < npcmirror::kMaxIds; ++set) {
+            const u64 tab = Field<u64>(wcm, 0x850 + u64(set) * 8);
+            const int count = Field<int>(tab, 0, 0);
+            const u64 entries = Field<u64>(tab, 8);
+            if (!tab || !entries || count <= 0 || count > kMaxPerSet) continue;
+            for (int i = 0; i < count && off.size() < npcmirror::kMaxIds; ++i) {
+                const u64 chr = Field<u64>(entries + u64(i) * 0x38, 0);
+                if (!chr || IsPlayer(wcm, chr) || !ChrOff(chr)) continue;
+                const int entity = Field<int>(chr, 0x1f0, -1);
+                const u64 npc = Field<u64>(Field<u64>(chr, 0x3c8), 8);
+                if (entity < 1000000 || entity > 99999999 || (npc && Field<u8>(npc, 0x12f, 0xff) == kEnemyTeam)) continue;
+                off.push_back(std::uint32_t(entity));
+            }
+        }
+        std::sort(off.begin(), off.end());
+        const std::string j = npcmirror::ToJson(s.map_id, off);
+        if (j != st.last_sent || now >= st.next_send) {
+            link->post_event(party::kBroadcast, npcmirror::kEventName, j);
+            if (j != st.last_sent) Log("NPC mirror: %zu NPC(s) off in the host's world (%s) sent to the party", off.size(), MapName(s.map_id).c_str());
+            st.last_sent = j;
+            st.next_send = now + std::chrono::seconds(10);
+        }
+        return;
+    }
+    std::vector<std::uint32_t> host_off;
+    {
+        std::lock_guard<std::mutex> lk(st.mu);
+        if (st.host_map != s.map_id || now - st.host_at > std::chrono::seconds(30)) return;
+        host_off = st.host_off;
+    }
+    std::vector<npcmirror::LocalNpc> local;
+    std::vector<u64> chrs;
+    auto add = [&](std::uint32_t id, bool ours) {
+        for (const auto& n : local)
+            if (n.entity == id) return;
+        const u64 chr = ChrByEntity(int(id));
+        if (!chr || IsPlayer(wcm, chr)) return;
+        const u64 npc = Field<u64>(Field<u64>(chr, 0x3c8), 8);
+        if (npc && Field<u8>(npc, 0x12f, 0xff) == kEnemyTeam) return;  // enemies: the census / kill record
+        local.push_back({id, !ChrOff(chr), ours});
+        chrs.push_back(chr);
+    };
+    for (std::uint32_t id : st.ours) add(id, true);
+    for (std::uint32_t id : host_off) add(id, false);
+    const npcmirror::Plan plan = npcmirror::PlanMirror(host_off, local);
+    using SetDisableFn = void(BB_COOP_SYSV*)(u64, u8);
+    const auto set = [&](std::uint32_t id, bool off) {
+        for (std::size_t k = 0; k < local.size(); ++k)
+            if (local[k].entity == id) reinterpret_cast<SetDisableFn>(Guest(0x18c6390))(chrs[k], off ? 1 : 0);
+    };
+    for (std::uint32_t id : plan.disable) {
+        set(id, true);
+        if (std::find(st.ours.begin(), st.ours.end(), id) == st.ours.end()) st.ours.push_back(id);
+        Log("NPC mirror: NPC %u is not in the host's world (%s): turned off here too", id, MapName(s.map_id).c_str());
+    }
+    for (std::uint32_t id : plan.enable) {
+        set(id, false);
+        st.ours.erase(std::remove(st.ours.begin(), st.ours.end(), id), st.ours.end());
+        Log("NPC mirror: NPC %u is back in the host's world: on again here", id);
+    }
+}
+
 void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
+    ChrDumpTick(s);
+    NpcMirrorTick(s, link, host);
     KillEchoTick(s);
     EnemyHpTestTick(s);
     if (!On()) return;
@@ -1259,6 +1423,43 @@ bool SetEnemyDeadQuietly(u64 chr) {
     if (!SafeWrite(chr + 0x1e3, &b, 1)) return false;
     droproll::SkipDrop(chr);
     return SetEnemyHpZero(chr);
+}
+
+bool OnNpcOff(int slot, const std::string& json) {
+    std::uint32_t map = 0;
+    std::vector<std::uint32_t> off;
+    if (slot != 0 || !npcmirror::FromJson(json, &map, &off)) return false;
+    NpcMirrorState& st = NM();
+    std::lock_guard<std::mutex> lk(st.mu);
+    st.host_map = map;
+    st.host_off = std::move(off);
+    st.host_at = Clock::now();
+    return true;
+}
+
+bool ApplySpEffectToEntity(int entity, int id, std::string* what) {
+    const u64 chr = ChrByEntity(entity);
+    if (!chr || !ApplyEffect(chr, id)) return false;
+    if (what) {
+        // Every doping node (a second one is what the dedupe keeps out) and the HP rate product.
+        const u64 list = Field<u64>(chr, 0x1c8);
+        std::string rows;
+        for (u64 n = Field<u64>(list, 8); n && rows.size() < 160; n = Field<u64>(n, 0x58)) {
+            const int nid = Field<int>(n, 0x40, -1);
+            if (nid >= 7500 && nid <= 7503) {
+                char e[32];
+                std::snprintf(e, sizeof e, " %d/%x", nid, Field<u32>(n, 0x1c));
+                rows += e;
+            }
+        }
+        const u64 dm = Field<u64>(Field<u64>(chr, 0x3b0), 0x20);
+        char b[256];
+        std::snprintf(b, sizeof b, "chr %x: doping rows%s; HP %d / %d, rate %.3f", Field<u32>(chr, 8, ~0u),
+                      rows.empty() ? " none" : rows.c_str(), Field<int>(dm, 0xf8, -1), Field<int>(dm, 0xfc, -1),
+                      double(list && g_rate_orig ? reinterpret_cast<RateFn>(g_rate_orig)(list, 0) : -1.0f));
+        *what = b;
+    }
+    return true;
 }
 
 bool ChrPosition(u64 chr, float out[3]) {
