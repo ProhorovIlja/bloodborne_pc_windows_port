@@ -787,6 +787,14 @@ keeps: one stack, kept at home. Following from that, the summoned key give (10.3
 `KeyGoodsWatchTick` no longer notes a key that reached a summoned guest for the home check (it stays).
 `ItemStacks` (the in-memory `DUPLICATE STACK` check) counts the key section out of view too.
 Not changed: the host (never mode 3); the own-world path.
+The plaza gate's `KeyItemGate` (party_worldact.cpp) inverted the emblem check for a summoned guest
+with the pickup flag, because its emblem read 0; with the own section shown it reads 1, so the
+inversion would have taken the "need the emblem" branch. It now inverts only while the held count
+reads 0 (`KeyItemGateInvert(..., held)`; live run5: `own pickup flag 52400450 1, host world's 1,
+held 1` -> "as in the data"). In that run (test save, Amelia dead, 12400160 cleared on the host)
+the press at 2401220 gave "Closed by a device." to the guest and to the host with its own emblem
+alike; nothing opened and no flag changed on either side, so it says nothing about the emblem
+branch itself.
 
 ## 11. Gestures (2026-10-20)
 
