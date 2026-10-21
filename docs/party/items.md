@@ -128,6 +128,16 @@ overlay, which is thrown away on return (event_flags.md 3); the item stays. That
   `0x1789A40(*0x553D6D0, 0x2C, buf, 8)`; on the host `0x17DE6E0` + give unless role 6 (`0x17D88BB`). Spawning a
   shared item on a client goes the same way (`0x17D8370`, packet 0x2C subtype 3). [static; the host's reply
   path for 0x2C is not traced]
+* **Pickup animation** (live 2026-10-20, agent pickupanim): the action-button handler `0x12FD880` calls the pickup, then
+  `0x132E960(luaEv, 4010, 1|2)`: Lua event 4010 locally and, with `+0x8B` set, packet `0xE {0xC, 4010, arg, 0, playId}` to
+  every other member (playId = own PlayerGameData `+0x10`). `global_event.lua` `OnEvent_4010_1/2` ->
+  `Luafunc_PlaySynchroAnimation`: a net message plays `ANIMEID_PICK` (7520; TimeAct 101140) on entity
+  `NET_PLAYER (10001) + GetPlayID()`, which `0x13C97A0` resolves to the first player chr (WorldChrMan `+0x38`, the
+  local one included) whose `+0x3B8` equals the id. Remote chrs get `+0x3B8` from their GameData row `+0x10`
+  (`0x1E50090` -> `0x18DB500` -> `0x18D8100`). The title join and the A5 arrival wrote a fixed `+0x10 = 2`, so with
+  two or more guests they shared id 2 and one guest's pickup knelt the other guest's own character (and, on the
+  host, the first chr with id 2). Fixed: the own room member id (`SummonedPlayId`, party_b2.cpp; host 1, guests
+  2, 3, 4, what a vanilla join of a second guest left: 3). `BB_PARTY_ANIM_WATCH=1` logs ids and animations.
 * **Enemy drops** (`0x17DD0B0`): byte [2] gate only (`0x17DD1C3`; types 0/1/8 pass), then
   `isClient` is stored at `0x17DD193` and used once at `0x17DD75D`: a client keeps an item only if its
   equip param has `isGuestDrop` (goods byte 0x47 bit 3, weapon 0x104 bit 4, protector 0xDF bit 0; gems
