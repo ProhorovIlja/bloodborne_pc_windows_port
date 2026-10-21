@@ -2491,18 +2491,27 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         slots.push_back(s);
     }
     if (!SummonedGiveAllowed(slots) && !(g.source == ItemSource::Repeat && RepeatSummonedGiveAllowed(slots))) {
-        // 0.6.2: never a key item / unique goods while summoned (its held count reads 0 here; the
-        // game refuses a second copy with a blocking box). The own world gives it, held checked.
+        // A key item / unique goods: its held count reads 0 here whether the save holds it or not
+        // (0.6.2), and the game may refuse a second copy with a blocking box. This lot's done flag
+        // is not in the own save (checked above), so the save never got it: given now, and owed
+        // too (on disk): the own world reads the real held count and gives it there only if the
+        // summoned copy did not stay (KeyCatchupTick, SummonedGivesTick). BB_PARTY_KEY_ITEMS_SUMMONED=0:
+        // the old rule (only in the own world).
         std::string keys;
         for (const LotSlotState& s : slots) {
             if (KeyGoods(s)) {
                 keys += (keys.empty() ? "" : ", ") + std::to_string(s.id);
             }
         }
-        Log("%s: key item / unique goods %s: not given while summoned; waits for the own world",
-            DescribeItem(g).c_str(), keys.c_str());
         NoteOwedLot(g.lot);
-        return SummonedResult::Defer;
+        if (EnvOff("BB_PARTY_KEY_ITEMS_SUMMONED")) {
+            Log("%s: key item / unique goods %s: not given while summoned; waits for the own world",
+                DescribeItem(g).c_str(), keys.c_str());
+            return SummonedResult::Defer;
+        }
+        Log("%s: key item / unique goods %s: given now while summoned; also owed to the own world, which "
+            "checks the held count",
+            DescribeItem(g).c_str(), keys.c_str());
     }
     std::string why;
     const LotFit fit = ClassifyLotFit(slots, &why);
