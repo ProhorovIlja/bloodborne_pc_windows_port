@@ -787,6 +787,30 @@ keeps: one stack, kept at home. Following from that, the summoned key give (10.3
 `KeyGoodsWatchTick` no longer notes a key that reached a summoned guest for the home check (it stays).
 `ItemStacks` (the in-memory `DUPLICATE STACK` check) counts the key section out of view too.
 Not changed: the host (never mode 3); the own-world path.
+The plaza gate's `KeyItemGate` (party_worldact.cpp) inverted the emblem check for a summoned guest
+with the pickup flag, because its emblem read 0; with the own section shown it reads 1, so the
+inversion would have taken the "need the emblem" branch. It now inverts only while the held count
+reads 0 (`KeyItemGateInvert(..., held)`). GoodsCount there runs inside the game's EMEVD dispatch
+(0x17B93A0, from SprjEmkEventIns::Update) right before the game's own 3[4] handler 0x17AD240 reads
+the same inventory hash the same way (0x14D9F60 / 0x14D9E80, read-only, no locks); the hash is only
+rebuilt at a load (0x1AC5720 from 0x1937570).
+
+Live (run8 2026-10-21, 2 instances): the host's emblem taken away (`goods=4011:0`), 12400160 and
+Amelia's 12401800 cleared on both, the pickup flag 52400450 set in the host's world; the guest
+summoned to the Cathedral Ward with its own emblem (`key goods held: ... 4011 x1 ... load mode 1`),
+`key item gate: ... as in the data (summoned 1, own pickup flag 52400450 1, host world's 1, held 1)`,
+at the gate's action point (2401220, 1.2 m, 180 deg - the plaza side; 0 deg is the far side, where
+"Closed by a device." shows for anyone) Cross: "A special emblem opened the main gate" on **both**
+screens, the guest `opened key-item gate (flag 12400160) with its own key: the host's far-side ObjAct
+kick goes up; own save set`, the host `host flag 12400160 = 1 (world_state)`; the guest back home
+reads `12400160=1/1` (own save / visible). Both end with the gate open.
+
+Key Items tab while summoned: not captured yet. A scripted walk (`BB_TEST_MENU_FILE`) found the
+pause menu opening on Inventory (`options`, `cross`: the Inventory book, Consumables tab, 9 tab icons,
+the key icon third); R1 / L1 move the item cursor (a page), not the tab (run9, 2026-10-21). Next
+walk to try: `options/cross/right/right` (or `up` to the tab row first). The view itself is shown by
+the game's own inventory reads (`key goods held: ... 4011 x1 ... load mode 1` after every host-world
+load) and by the 4118 give that stayed (run2).
 
 ## 11. Gestures (2026-10-20)
 
