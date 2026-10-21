@@ -1809,6 +1809,50 @@ void KillTick(Fixture& f, double now) {
 
 void FixtureTick(double now) {
     Fixture& f = g_fx;
+    if (static const bool watch = std::getenv("BB_PARTY_ANIM_WATCH") != nullptr; watch) {
+        // Test aid: every new animation the local player's TimeAct ring ([[chr+0x3B0]+0x18]: 10 x
+        // {anim id, ...} at +0x20, next write index at +0xC0) records, so an animation that the other
+        // players' actions start on this player shows in the log.
+        static std::int32_t last_idx = -1;
+        std::uint64_t wcm = 0, player = 0, cm = 0, ta = 0;
+        std::int32_t idx = -1;
+        if (SafeGet(Guest(0x553e878), &wcm) && wcm && SafeGet(wcm + 0x60, &player) && player &&
+            SafeGet(player + 0x3b0, &cm) && cm && SafeGet(cm + 0x18, &ta) && ta && SafeGet(ta + 0xc0, &idx) &&
+            idx >= 0 && idx < 10 && idx != last_idx) {
+            static std::int32_t last_anim = 0;
+            std::int32_t anim = 0;
+            SafeGet(ta + 0x20 + std::uint64_t((idx + 9) % 10) * 0x10, &anim);
+            if (last_idx >= 0 && anim != last_anim) {
+                Log("test: anim watch: local player animation %d (t %.2f)", anim, now);
+            }
+            last_anim = anim;
+            last_idx = idx;
+        }
+        // The pickup's net event carries the sender's play id (PlayerGameData +0x10); a receiver
+        // plays the animation on the player chr whose +0x3B8 equals it (0x13C97A0, entity 10001 + id).
+        static std::string last_ids;
+        std::uint64_t gdm = 0, pgd = 0;
+        std::int32_t pid = -1, n = 0;
+        if (SafeGet(Guest(0x553b130), &gdm) && gdm && SafeGet(gdm + 8, &pgd) && pgd) {
+            SafeGet(pgd + 0x10, &pid);
+        }
+        std::string ids = "own play id " + std::to_string(pid) + "; player chrs";
+        std::uint64_t arr = 0;
+        if (wcm && SafeGet(wcm + 0x30, &n) && SafeGet(wcm + 0x38, &arr) && arr && n > 0 && n <= 8) {
+            for (std::int32_t i = 0; i < n; ++i) {
+                std::uint64_t c = 0;
+                std::int32_t no = -1;
+                if (SafeGet(arr + std::uint64_t(i) * 0x38, &c) && c) {
+                    SafeGet(c + 0x3b8, &no);
+                    ids += " [" + std::to_string(i) + (c == player ? " local" : "") + " +0x3B8 " + std::to_string(no) + "]";
+                }
+            }
+        }
+        if (ids != last_ids) {
+            Log("test: anim watch: %s", ids.c_str());
+            last_ids = ids;
+        }
+    }
     if (const std::uint64_t m = g_rec_man.load()) {
         // Test diagnostics: the treasure record count on this game, logged when it changes.
         static int last = -1;
