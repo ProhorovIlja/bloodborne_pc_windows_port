@@ -16,7 +16,7 @@
 // (ChrIns_SetDisable 0x18c6390, as the event does); one it turned off that the host turns on
 // again is turned on again. Nothing else is touched (an NPC the host shows and the guest does
 // not stays as it is: enabling chrs on a client is the host's events' job).
-// BB_PARTY_NPC_MIRROR=0: off. Pure parts here (unit test tests/test_party_npc_mirror.cpp).
+// The host's rule (System > Shared world, party_npc_mirror; BB_PARTY_NPC_MIRROR=0/1 at start). Pure parts here (unit test tests/test_party_npc_mirror.cpp).
 #pragma once
 
 #include <algorithm>
