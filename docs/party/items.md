@@ -483,6 +483,39 @@ items [8:102001x1 [gem 102001 (flags 2, rank 1, effects 1125000 -1 -1 -1 -1 -1)]
 -1 -1 -1) (inventory add, item-get dialog); own-save flag(s) 52700180 set (pool, load mode 1),
 overlay untouched`. Unit tests: `test_gems` (party-items-test).
 
+### 10.3 Item spots hidden by their own event flag (playtest 2026-10-20)
+
+Some host-only (`2003[4]`) map awards sit at an item spot whose visibility is **not** the lot's
+pickup flag but the awarding event's own completion flag: Old Yharnam's altar, event 12300130
+(`祭壇を調べる`: `3[24]` action button 2300000 on object 2301500, `2003[4]` lot 2300170 Ritual
+Blood (1) x2, `1003[2]` ends it once 12300130 is set). Its flag is an `item_lot_picked` flag
+(party_flags.inc "chest / item award"), so it is instanced (world_actions.md 4): the host's 12300130
+is skipped on a guest (`guest applied 0 flags ... skipped 1`), and the guest's own copy set by its
+event run stays "kept local". The guest got the lot from C3 (its own pool: 52300170), but nothing
+put 12300130 into its own pool; at the next load the overlay's item bits were rebuilt from the own
+pool (`GuestItemOverlaySync`), the altar was offered again, and the guest's press awarded the lot
+with hostOnly 1 on a client: refused (`0x17DDD3E`), no item box, nothing given (playtest guest log,
+mark 3: 19:58:37 shared, 20:00:19 the host's death respawn, 20:04:19 the empty press).
+
+Fix: `item_tool.py gen-inc` writes `ITEM_AWARD_SPOT(lot, spot flag, note)`: the flagged lots a
+map's EMEVD `2003[4]` gives whose event flag (event id + slot) is an `item_lot_picked` flag of
+party_flags.inc (27 rows: the altar, chests, NPC gift spots; not area 29, not restart-on-reload
+events, not per-player 6000-8999 lots; flagless ledger lots keep their ledger bit only, see the
+ledger seeding in 9). A guest that is given such a lot (summoned: `ApplySummoned`, the flags go
+into the own pool before the give; at home: `Apply`) also gets the spot flag, and a lot found
+"already given" gets a missing spot flag too (a save from before the fix is repaired at the next
+item list). The overlay follows the own pool, so the spot is gone for the guest at once and after
+every load; no item is given twice (the lot's flag still decides the give). `BB_PARTY_ITEM_SPOTS=0`
+turns it off. Unit test: `ItemAwardSpotFlags` (party-items-test).
+Live (2 loopback instances, both saves with 12300130 / 52300170 cleared, the host awards lot
+2300170 through `0x17DDC50` with 12300130 (`BB_PARTY_ITEMS_HOST_TEST(_FLAGS)`), party travel to
+Old Yharnam, the host's death respawn, the guest warped to the altar and Cross): before the fix the
+guest's own pool had 52300170 but not 12300130, the altar showed "Inspect" after the respawn and the
+press logged `award lot 2300170 (hostOnly 1, flag 52300170) in another's world, role guest` with
+nothing given (the playtest exactly); with it `gave ... own-save flag(s) 52300170,12300130 set`,
+12300130 stayed 1 through both loads, no prompt at the same spot and no award (three tries).
+
+
 ### 10.2 The item-get dialog (2026-10-11)
 
 How it works [static]: the give list `0x17D89F0` (and our `ShowItemGet`) pushes an entry with
