@@ -95,9 +95,19 @@ const std::vector<Lift>& Lifts() {
         {12400827u, 12400828u, 0u, 2401102},         // Cathedral Ward <-> Old Yharnam
         {12410350u, 12415350u, 12410351u, 2411320},  // Central Yharnam
         {12420154u, 12420155u, 0u, 2421250},         // Upper Cathedral Ward (to Ebrietas)
+        {12500074u, 12505074u, 0u, 2501010},         // Cainhurst Castle (liftfall)
+        // Nightmare of Mensis (liftfall: its common up / down events 12601320 / 12601330, slots 0-5;
+        // the library lift 12601352 has no position flag and stays out)
+        {12601250u, 12605250u, 0u, 2601210},
+        {12601251u, 12605251u, 0u, 2601220},         // roof lift (start state reversed, 12601340)
+        {12601252u, 12605252u, 0u, 2601230},
+        {12601254u, 12605253u, 0u, 2601280},         // roof lift
+        {12601255u, 12605254u, 0u, 2601290},         // roof lift
+        {12601256u, 12605256u, 0u, 2601240},         // the long lift down past Mergo's Loft (60 m; the report)
         {12700134u, 12700135u, 0u, 2701032},         // Forbidden Woods
         {12700144u, 12700145u, 0u, 2701042},         // Forbidden Woods
         {12800610u, 12804700u, 12800611u, 2801400},  // Yahar'gul
+        {13300115u, 13300116u, 0u, 3301000},         // Nightmare Frontier (liftfall)
         {13501106u, 13504100u, 13501107u, 3501100},  // m35 altar lift (DLC)
         {13501116u, 13504110u, 13501117u, 3501105},  // m35 1F <-> 3F (DLC)
         {13501126u, 13504120u, 13501127u, 3501110},  // m35 3F <-> 5F (DLC)
