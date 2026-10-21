@@ -164,10 +164,11 @@ Step Decide(bool home, int learned, bool summoned_before) {
     if (learned < 0) {
         return Step::Wait;
     }
-    if (!home && summoned_before) {
-        return Step::Wait;  // learned here once; only the own world can say the save kept it
+    if (!learned) {
+        return Step::Learn;  // missing (lost, or another save's state): a bit, never a duplicate
     }
-    return learned ? Step::Have : Step::Learn;
+    // Learned while summoned: kept owed until the own world reads it.
+    return !home && summoned_before ? Step::Wait : Step::Have;
 }
 
 } // namespace coop::gestures

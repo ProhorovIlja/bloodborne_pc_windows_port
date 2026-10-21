@@ -548,3 +548,87 @@ Live (r18, 2 instances, guest summoned, fixed shot.py, 2 s after each give): hos
 the same dialog - `Clear Deep Sea 1` (the host's blood gem, recreated on the guest), then
 `Clear Deep Sea 1` + `Poison Knife 8` with `OK`. No game or port change was needed; the
 bisect notes above stay as the record of what was ruled out.
+
+### 10.3 Key items while summoned (2026-10-20)
+
+Why they used to wait for the own world (0.6.2 - 0.6.9): a summoned guest's key items (goodsType
+1) and unique goods (maxNum 1, no storage) read 0 in its live inventory whatever its save holds
+(verify_c6: the Oedon Tomb Key read 0 after every host-world load and 1 at home; the 0.6.1
+regression run: Amelia's 4001 read 0 summoned, 1 at home). So (a) a give there cannot tell an
+item the guest already has (the game then refuses the second copy with the blocking "Unable to
+acquire ... inventory or storage max" box, seen live in 0.6.1 for lot 50000001), and (b) the
+playtest guest's real save (0.6.0) did not keep a key item given while summoned (4114 "held 0 -> 1",
+gone an hour later): what the summoned inventory shows is not all the save keeps.
+
+Now (`BB_PARTY_KEY_ITEMS_SUMMONED`, default on): a key-item grant whose done flag (lot flag / ledger
+bit) is not in the guest's own save - so the save never got this lot - is given at once while
+summoned (direct give, its flags into the own pool, the item-get dialog, a save request) and is
+**also** owed (`party_owed_lots.txt`, per save slot) and noted as a summoned give
+(`party_summoned_gives.txt`). In the next own world `SummonedGivesTick` (3 s) and `KeyCatchupTick`
+(4 s) read the real held count and give it only if the summoned copy did not stay; never a second
+copy (`KeyGiveAllowedHeld`). A grant whose done flag is set but whose unique items read 0
+(`LedgerSkipSuspicious`) still waits for the own world (it is most likely held). `=0`: the old rule.
+
+What the summoned view is [live, r1-r3 2026-10-20/21, `BB_PARTY_GESTURE_TEST` logs the inventory's
+two sections]: the inventory (PlayerGameData `+0x328`) keeps key items in its first section (index
+below `+0x24` = 64, entries at `+0x58`) and everything else in the second (`+0x48`). At home the
+first section held the test save's 7 key items; summoned it held **0** (the second section was the
+same 35 entries). A summoned give lands in that emptied section (`section 1 1 used`), and going home
+the game puts the saved key section back without it: "goods given while summoned are missing in
+the own world; given again: goods 4118 x1 (held 0 -> 1)". So the summoned copy is for the session
+in the host's world, the home check is what keeps it.
+
+Live (r3, 2 instances, guest summoned in the host's Dream, host `BB_PARTY_ITEMS_HOST_TEST=50800000`,
+Spark Hunter Badge 4118, not in the test save): guest `lot 50800000 ...: key item / unique goods
+4118: given now while summoned; also owed to the own world`, `goods 4118 x1 (held 0 -> 1, item-get
+dialog)`, the item box "Spark Hunter Badge 1" on the guest's screen; Leave -> own world: `given
+again: goods 4118 x1 (held 0 -> 1)`, then `owed lot 50800000: goods 4118 held 1 already: not given
+again`. Both saves on disk afterwards (`save_decode.py`, `user\savedata_party`): 4118 x1, flag
+60009038 set; the guest's save written after the rejoin (summoned again) still has 4118 x1.
+
+## 11. Gestures (2026-10-20)
+
+How the game keeps them [static, checked on the test save]: gestures are no inventory items and no
+flags of their own. `GestureGameData` (PlayerGameData `+0x5B8`, built in `0x14F1510`; its 0x78 bytes
+read / written with the character by `0x14EDD10` / `0x14EDD40`) holds 30 u32 entries at `+0x10`:
+`display index << 16 | param id << 1 | learned`. Param id p = gesture index + 1 indexes the static
+gesture table `0x55526D0` (filled by `0x14EC980`): {goods 800 + index (the EquipParamGoods row for
+the name / icon), message 301000 + index, index, motion}. The test save's entries (`userdata0000
++0x19120`) have bit 0 on for goods 800..803, 808, 809, 812, 813, 821; no goods 800..822 entry is in
+its inventory. A talk script teaches a gesture with ESD command `0x41` (the item-get notice of goods
+800 + i with a null handle, `0x16D8850`) and command `0x42` (index): bit 0 of that entry
+(`0x203FFD0` case 0x42; `0x14EDF10` does the same and has no caller), plus its "taught" flag, an
+argument of the teaching state: 6740 + i (804..820; League Oath 822 -> 6770), all in the personal
+block 6000-8999. Lots 2010150 (800) and 9906160 / 9906165 (801) are the only item lots with gesture
+goods; 800..803, 808, 812 and 821 are a new character's.
+
+What went wrong in a party: the taught flag stays in the guest's own pool when summoned, the
+learned bit did not reach the other members at all, and a guest's own bit learned in the host's
+world could be missing at home (the user's 0.6.9 report) while the flag said "taught", so the NPC
+never taught it again.
+
+`party_gestures.{h,cpp}`:
+* every member reads its learned bits every second in a steady world (own or summoned) and sends
+  them (EVENT `gestures` `{"goods":[...]}`) when they change and every 60 s: a guest to the host,
+  the host to everyone. The host learns a guest's new gesture at once, so its list is the party's.
+* a peer's gesture this save lacks is owed (`user\party_gestures.txt`, `owed SLOT GOODS SUMMONED`,
+  per save slot) and learned at once, summoned or at home: bit 0, the taught flag (own pool), the
+  item-get notice as the talk shows it, a save request.
+* a gesture learned while summoned (a party member's, or the guest's own NPC talk there) stays owed
+  with SUMMONED 1 until the own world reads its bit; missing there, it is learned again.
+* at home a taught flag without its bit (lost by an older build) is learned again.
+* peer lists: only goods 800..822, at most 64 (fuzzed: party-fuzz peerev).
+
+Live (r3, 2 instances, guest summoned in the host's Dream; `BB_PARTY_GESTURE_TEST`: the host learns
+League Oath 822 at home, the guest Make Contact 820 while summoned): guest `test (summoned): gesture
+820 (Make Contact) learned (item-get notice); taught flag 6760 set (own pool); load mode 1`; host
+1 s later `gesture 820 (Make Contact) from a party member: owed ...`, `a party member's gesture (own
+world): gesture 820 ... learned`; guest `a party member's gesture (summoned): gesture 822 (League
+Oath) learned ...; load mode 1`. Item boxes "Make Contact 1 / League Oath 1" on both screens. Leave
+-> the guest's own world: `learned 800 801 802 803 808 809 812 813 820 821 822`, `gesture 822 ...:
+in this save (own world, learned), the one learned while summoned kept; no longer owed`; rejoined:
+the same list summoned. On disk (both saves, GestureGameData found by its entry pattern): bits of
+800..803, 808, 809, 812, 813, 820, 821, 822; flags 6760 and 6770 set. r2 found a stale owed entry
+(SUMMONED 1, bit 0 after a fresh save) waiting forever while summoned: a missing bit is now learned
+in any world.
+Unit tests: `party-gestures-test` (ids and taught flags, JSON, entries, the owed store, the decision).
