@@ -29,6 +29,7 @@
 #include "seamless_rules.h"
 
 #include <atomic>
+#include <set>
 #include <chrono>
 #include <cstdarg>
 #include <cstdlib>
@@ -1139,6 +1140,10 @@ bool SummonedKeyGiveNow(const std::vector<LotSlotState>& slots) {
         }
     }
     return true;
+}
+
+bool SummonedRestoreAllowed(const LotSlotState& s, int held) {
+    return KeyRegiveAllowed(s) && held == 0;
 }
 
 bool OwedGiveAllowed(bool given, bool done_flag_set, const LotSlotState& s, int held) {
@@ -2614,8 +2619,10 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         // (0.6.2), and the game may refuse a second copy with a blocking box. This lot's done flag
         // is not in the own save (checked above), so the save never got it: given now, and owed
         // too (on disk): the own world reads the real held count and gives it there only if the
-        // summoned copy did not stay (KeyCatchupTick, SummonedGivesTick). BB_PARTY_KEY_ITEMS_SUMMONED=0:
-        // the old rule (only in the own world).
+        // summoned copy did not stay (KeyCatchupTick, SummonedGivesTick). Off by default since 0.7.0
+        // (BB_PARTY_KEY_ITEMS_SUMMONED=1 on): the summoned key view is rebuilt without it at the next
+        // host-world load, and a key the save already holds unseen would get a second stack in a save
+        // written while summoned (items.md 10.6). Off: only in the own world, as in 0.6.9.
         std::string keys;
         for (const LotSlotState& s : slots) {
             if (KeyGoods(s)) {
@@ -2625,7 +2632,8 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         // A usable unique item (Gold Pendant, Tear Stone) is never given here: used while summoned,
         // it would read 0 at home and the owed check could not tell it from a dropped copy.
         const bool usable = !SummonedKeyGiveNow(slots);
-        const bool now = !usable && !EnvOff("BB_PARTY_KEY_ITEMS_SUMMONED");
+        const char* give_now = std::getenv("BB_PARTY_KEY_ITEMS_SUMMONED");
+        const bool now = !usable && give_now && give_now[0] == '1' && !give_now[1];
         NoteOwedLot(g.lot, now);
         if (!now) {
             Log("%s: key item / unique goods %s: not given while summoned%s; waits for the own world",
@@ -3447,6 +3455,187 @@ bool OnHostGiftUp(int slot, const std::string& body, std::string* why) {
     return true;
 }
 
+// ---- 0.7.0: a summoned guest's key items put back after every host-world load ----
+// The character's key items (goods ids, per save slot), on disk: the own world's key section
+// (every load at home), plus what reached it while summoned. party_key_items.txt: "SLOT ID" lines.
+std::mutex g_known_mu;
+std::map<int, std::set<std::int32_t>> g_known;  // save slot -> goods ids
+bool g_known_loaded = false;
+std::set<std::int32_t> g_restored;  // put back since the last load (not a new gain for the watch)
+std::set<std::int32_t> g_gained;    // key items that reached this guest while summoned (this run)
+
+std::filesystem::path KnownKeysPath() {
+    return SummonedGivesPath().parent_path() / "party_key_items.txt";
+}
+
+/// Caller holds g_known_mu.
+void LoadKnownLocked() {
+    if (g_known_loaded) {
+        return;
+    }
+    g_known_loaded = true;
+    std::ifstream f(KnownKeysPath());
+    int slot = 0;
+    std::int32_t id = 0;
+    while (f >> slot >> id) {
+        if (id > 0 && g_known.size() < 16 && g_known[slot].size() < 128) {
+            g_known[slot].insert(id);
+        }
+    }
+}
+
+/// Caller holds g_known_mu.
+void SaveKnownLocked() {
+    std::error_code ec;
+    const std::filesystem::path path = KnownKeysPath();
+    const std::filesystem::path tmp = path.string() + ".tmp";
+    {
+        std::ofstream f(tmp, std::ios::trunc);
+        for (const auto& [slot, ids] : g_known) {
+            for (const std::int32_t id : ids) {
+                f << slot << ' ' << id << '\n';
+            }
+        }
+    }
+    std::filesystem::rename(tmp, path, ec);
+}
+
+void NoteKnownKey(std::int32_t id) {
+    std::lock_guard<std::mutex> lk(g_known_mu);
+    if (g_gained.size() < 128) {
+        g_gained.insert(id);
+    }
+}
+
+bool RestoredThisLoad(std::int32_t id) {
+    std::lock_guard<std::mutex> lk(g_known_mu);
+    return g_restored.count(id) != 0;
+}
+
+LotSlotState GoodsSlot(std::int32_t id) {
+    LotSlotState s;
+    s.category = 4;
+    s.id = id;
+    FillGoodsLimits(&s);
+    return s;
+}
+
+/// Main thread. Own world (3 s steady): the key section is the save's, recorded as this slot's
+/// known key items. Summoned (load mode 1, client): 0.3 s after each host-world load every known
+/// key item that is never used up and reads 0 is given back (GiveItemDirect: no item-get dialog,
+/// no sound); a second pass 3 s later catches one the game emptied after the first. A slot with no
+/// own-world record yet (a title join) takes the ledger / shared key lots whose done flag its save
+/// holds. Off unless BB_PARTY_KEY_RESTORE=1 (it duplicates keys in the save, see below).
+void SummonedKeyRestoreTick(const GameSnapshot& gs, int load_mode, double now) {
+    static bool armed = true;
+    static int pass = 0;
+    static double steady_at = -1;
+    // Off by default: a save written while summoned holds the hidden key section plus the summoned
+    // view, so a put-back key ends up twice in the save (live, run D 2026-10-21: 4000 and 4114 two
+    // stacks each on disk, also in the save written back home). BB_PARTY_KEY_RESTORE=1: on.
+    static const bool off = !(std::getenv("BB_PARTY_KEY_RESTORE") && std::getenv("BB_PARTY_KEY_RESTORE")[0] == '1');
+    const bool steady = gs.world_up && !gs.loading && gs.map_id != 0xffffffffu && gs.player_rec;
+    if (!steady) {
+        armed = true;
+        pass = 0;
+        steady_at = -1;
+        std::lock_guard<std::mutex> lk(g_known_mu);
+        g_restored.clear();
+        return;
+    }
+    if (steady_at < 0) {
+        steady_at = now;
+    }
+    if (!armed) {
+        return;
+    }
+    const int slot = party::flow::CurrentSaveSlot();
+    if (load_mode == 0) {
+        if (now - steady_at < 5.0 || OwnWorld() != 1) {  // after SummonedGivesTick (3 s)
+            return;
+        }
+        armed = false;
+        std::set<std::int32_t> ids;
+        for (const auto& [item, count] : KeySectionItems()) {
+            const std::int32_t id = static_cast<std::int32_t>(item & 0x0fffffffu);
+            if ((item >> 28) == 4 && KeyRegiveAllowed(GoodsSlot(id))) {
+                ids.insert(id);
+            }
+        }
+        std::lock_guard<std::mutex> lk(g_known_mu);
+        LoadKnownLocked();
+        g_gained.clear();  // at home now (or given back there)
+        if (!ids.empty() && g_known[slot] != ids) {
+            g_known[slot] = ids;
+            SaveKnownLocked();
+            Log("own world: %zu key item(s) recorded for the summoned restore (save slot %d)", ids.size(), slot);
+        }
+        return;
+    }
+    if (off || load_mode != 1 || gs.session_role != 6) {
+        armed = false;
+        return;
+    }
+    if (now - steady_at < (pass == 0 ? 0.3 : pass == 1 ? 1.0 : 3.0)) {
+        return;
+    }
+    ++pass;
+    if (pass >= 3) {
+        armed = false;
+    }
+    std::set<std::int32_t> known;
+    bool recorded = false;
+    {
+        std::lock_guard<std::mutex> lk(g_known_mu);
+        LoadKnownLocked();
+        const auto it = g_known.find(slot);
+        recorded = it != g_known.end() && !it->second.empty();
+        if (recorded) {
+            known = it->second;
+        }
+        known.insert(g_gained.begin(), g_gained.end());
+    }
+    if (!recorded) {
+        // No own-world record for this character yet: what its save says it was given.
+        auto from_lot = [&](std::int32_t lot) {
+            const std::int32_t flag = ItemLotFlag(lot);
+            const std::int32_t idx = flag > 0 ? kItemNone : ItemLedgerIndex(lot);
+            const std::int64_t done = flag > 0 ? flag : idx >= 0 ? std::int64_t(kItemLedgerBase) + idx : -1;
+            if (done >= 0 && OwnSaveFlag(done)) {
+                for (const LotSlotState& sl : LotSlots(lot)) {
+                    if (KeyRegiveAllowed(sl)) {
+                        known.insert(sl.id);
+                    }
+                }
+            }
+        };
+        for (const LedgerRow& r : kLedger) {
+            from_lot(r.lot);
+        }
+        for (const std::int32_t lot : kSharedKeyTreasureLots) {
+            from_lot(lot);
+        }
+    }
+    std::string text;
+    for (const std::int32_t id : known) {
+        const int held = ItemCount(0x40000000u, static_cast<u32>(id));
+        if (!SummonedRestoreAllowed(GoodsSlot(id), held)) {
+            continue;
+        }
+        const bool ok = GiveItem(0x40000000u, static_cast<u32>(id), 1);
+        {
+            std::lock_guard<std::mutex> lk(g_known_mu);
+            g_restored.insert(id);
+        }
+        text += (text.empty() ? "" : ", ") + std::to_string(id) + (ok ? "" : " (NOT given)");
+    }
+    if (!text.empty() || pass == 1) {
+        Log("summoned key items %s after the load (pass %d, %.1f s after it, %s): %s",
+            text.empty() ? "all held" : "put back", pass, now - steady_at,
+            recorded ? "known from the own world" : "from the save's flags", text.empty() ? "-" : text.c_str());
+    }
+}
+
 /// H3 diagnostic (par_c6): the unique key goods of the ledger lots (Oedon Tomb Key, badges, ...):
 /// their held counts are logged once in each world and every change after that, with the state
 /// (map, load mode, session), so a key that vanishes from a save shows where (live: a guest's
@@ -3492,6 +3681,9 @@ void KeyGoodsWatchTick(const GameSnapshot& gs, int load_mode, double now) {
             text += (text.empty() ? "" : ", ") + std::to_string(id) + " " + std::to_string(it->second) + " -> " +
                     std::to_string(n);
             if (load_mode == 1 && n > it->second && regive[id]) {
+                NoteKnownKey(id);
+            }
+            if (load_mode == 1 && n > it->second && regive[id] && !RestoredThisLoad(id)) {
                 // A key item that reached this summoned guest in the host's world by any way (an
                 // NPC's gift such as the Tonsil Stone, a pickup; playtest logs: 4310 0 -> 1, gone
                 // after the next load): the game drops it with the summoned key section at the next
@@ -3545,6 +3737,7 @@ void ItemsTick() {
     s.boss_quiet = BossQuiet(Now());
     s.game_dialog = gs.world_up && split::DialogUp();
     ItemGetWatchTick(gs, Now());
+    SummonedKeyRestoreTick(gs, s.load_mode, Now());
     KeyGoodsWatchTick(gs, s.load_mode, Now());
     SummonedGivesTick(gs, s.load_mode, Now());
     KeyCatchupTick(gs, s.load_mode, Now());

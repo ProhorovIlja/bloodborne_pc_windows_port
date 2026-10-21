@@ -632,7 +632,7 @@ acquire ... inventory or storage max" box, seen live in 0.6.1 for lot 50000001),
 playtest guest's real save (0.6.0) did not keep a key item given while summoned (4114 "held 0 -> 1",
 gone an hour later): what the summoned inventory shows is not all the save keeps.
 
-Now (`BB_PARTY_KEY_ITEMS_SUMMONED`, default on): a key-item grant whose done flag (lot flag / ledger
+Opt-in since 0.7.0 (`BB_PARTY_KEY_ITEMS_SUMMONED=1`; default off, see 10.6 for why): a key-item grant whose done flag (lot flag / ledger
 bit) is not in the guest's own save - so the save never got this lot - is given at once while
 summoned (direct give, its flags into the own pool, the item-get dialog, a save request) and is
 **also** owed (`party_owed_lots.txt`, per save slot) and noted as a summoned give
@@ -714,6 +714,29 @@ so a summoned give of a key item the save already holds would add a second stack
 older had one). Its build and logs are not ours, so the path that added it is not known; the
 summoned give is guarded by the lot's done flag, and usable unique goods are no longer given while
 summoned at all.
+
+### 10.6 Putting a summoned guest's key items back after each load (2026-10-21, off)
+
+Request: a summoned guest's key section is empty after every host-world load (10.3); give its key
+items back silently right after the load. `SummonedKeyRestoreTick` (party_items.cpp): 0.3 / 1 / 3 s
+after each load (load mode 1, client role) every known key item that is never used up
+(`SummonedRestoreAllowed` = `KeyRegiveAllowed` and held 0) is given with GiveItemDirect (no box, no
+sound); known = the own world's key section (`KeySectionItems`, recorded 5 s into each own world in
+`user\party_key_items.txt` per save slot) plus what reached the guest while summoned, or, for a
+character never seen at home, the ledger / shared-key lots whose done flag its save holds.
+
+Live (run D, 2 instances, guest summoned in the Dream, then `host_warp=2412953`): after the warp
+`summoned key items put back after the load (pass 1, 0.3 s after it, ...): 4000, 4114`, and the key
+item view on the guest's screen shows the Sword Hunter Badge while summoned. **But the save gets the
+keys twice**: `save_decode.py` on the guest's `savedata_party` written while summoned after the
+restore lists `4000 x1` and `4114 x1` twice (the 7 saved keys, then the restored ones), and so does
+the save written back home after the Leave (`+98 s`, "C3 goods given while summoned, kept at
+home"). A save written while summoned holds the hidden key section plus the summoned view (also seen
+in run B with 4118), so any give of a key the save already holds makes a second stack - most likely
+how a player's save got the Gold Pendant twice. The in-memory check (`ItemStacks`, "DUPLICATE
+STACK") did not see it: only the written save has the two stacks. So it is **off by default**
+(`BB_PARTY_KEY_RESTORE=1` for tests). Doing it right needs the place the game keeps the hidden key
+section while summoned (show or copy that, instead of a give) [not found yet].
 
 ## 11. Gestures (2026-10-20)
 
