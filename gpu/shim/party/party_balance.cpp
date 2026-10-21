@@ -698,6 +698,9 @@ Rules FromSettings() {
     r.share_lamps = v.party_share_lamps;
     r.host_revive = v.party_host_revive;
     r.host_limbo_revive = v.party_host_limbo_revive;
+    r.kill_record = v.party_kill_record;
+    r.npc_mirror = v.party_npc_mirror;
+    r.gather = v.party_gather;
     return Clamped(r);
 }
 
@@ -984,9 +987,23 @@ NpcMirrorState& NM() {
 }
 
 void NpcMirrorTick(const GameSnapshot& s, party::PartyLink* link, bool host) {
-    static const bool on = !EnvIsZero("BB_PARTY_NPC_MIRROR");
+    // The host's rule (System > Shared world, bbport.ini party_npc_mirror, BB_PARTY_NPC_MIRROR at
+    // start): the host's own setting, a guest follows the host's (party_balance Rules). Live.
+    const bool on = host ? BbSettings::Get().party_npc_mirror.load()
+                         : party::status::HostRuleOn(party::status::HostRule::NpcMirror);
     NpcMirrorState& st = NM();
     const auto now = Clock::now();
+    if (!on && !st.ours.empty()) {
+        // Turned off: the NPCs this mirror turned off stand again (the game's own state).
+        using SetDisableFn = void(BB_COOP_SYSV*)(u64, u8);
+        const u64 wcm = Slot(kSlotWorldChrMan);
+        const bool here = wcm && s.world_up && !s.loading && s.map_id == st.ours_map;
+        for (std::uint32_t id : st.ours)
+            if (const u64 chr = here ? ChrByEntity(int(id)) : 0; chr && !IsPlayer(wcm, chr))
+                reinterpret_cast<SetDisableFn>(Guest(0x18c6390))(chr, 0);
+        Log("NPC mirror: off: %zu NPC(s) it turned off are on again%s", st.ours.size(), here ? "" : " (after a load)");
+        st.ours.clear();
+    }
     const bool steady = on && link && s.world_up && !s.loading && s.player && s.map_id != 0xffffffffu;
     if (!steady || (!host && s.session_role != 6) || s.map_id != st.ours_map) {
         st.steady_since = {};
@@ -1078,6 +1095,9 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     party::status::SetHostRule(party::status::HostRule::Rot, r.rot);
     party::status::SetHostRule(party::status::HostRule::HostRevive, r.host_revive);
     party::status::SetHostRule(party::status::HostRule::HostLimboRevive, r.host_limbo_revive);
+    party::status::SetHostRule(party::status::HostRule::KillRecord, r.kill_record);
+    party::status::SetHostRule(party::status::HostRule::NpcMirror, r.npc_mirror);
+    party::status::SetHostRule(party::status::HostRule::Gather, r.gather);
     {   // The rot for System > Party and the party HUD (none while it is off).
         int kinds[party::status::kRotKinds] = {};
         for (int k = 0; k < kRotKinds && k < party::status::kRotKinds; ++k) kinds[k] = r.rot ? g_kind[k].load() : 0;
