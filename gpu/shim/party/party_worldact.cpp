@@ -2914,6 +2914,42 @@ void KeyGateRewriter(int event_id, int bank, int id, std::uint64_t event, std::u
             summoned ? 1 : 0, g->own_flag, own ? 1 : 0, host ? 1 : 0, held);
     }
 }
+
+// liftfix: the ride end of Cainhurst's lift and the Nightmare of Mensis' library lift waits for the
+// local player alone; in a party the game's sync passes it on every game as soon as the copy of a
+// player outside the car passes it, the rider still in the car (liftrules::LocalEndToAllPlayers). On
+// its first dispatch the instruction becomes the all-players check every other lift uses (3[7]): the
+// loaded script's bytes, kept for every later run of the event until the map unloads; every game of
+// the party does the same, so their copies agree.
+std::atomic<int> g_lift_end_rewrites{0};
+void LiftEndRewriter(int event_id, int bank, int id, std::uint64_t event, std::uint64_t instr) {
+    if (bank != 3 || id != 2 || !liftrules::LocalEndRideEvent(event_id)) {
+        return;
+    }
+    std::uint32_t size = 0;
+    const std::uint64_t args = EmevdInstructionArgs(event, instr, &size);
+    std::uint8_t a[12] = {};
+    if (!args || size < 12 || !SafeRead(args, a, sizeof a) ||
+        !liftrules::LocalEndToAllPlayers(event_id, bank, id, a, sizeof a)) {
+        return;
+    }
+    const std::int32_t all_players = 7;
+    if (!SafeWrite(args, a, sizeof a) || !SafeWrite(instr + 4, &all_players, 4)) {
+        Log("lift ride end: event %d: 3[2] -> 3[7] NOT written", event_id);
+        return;
+    }
+    std::int32_t region = 0;
+    std::memcpy(&region, a + 4, 4);
+    if (g_lift_end_rewrites.fetch_add(1) < 16) {
+        Log("lift ride end: event %d waits until every player is out of region %d (3[2] local player -> 3[7], as "
+            "the other lifts)", event_id, region);
+    }
+}
+
+void WorldactRewriter(int event_id, int bank, int id, std::uint64_t event, std::uint64_t instr) {
+    KeyGateRewriter(event_id, bank, id, event, instr);
+    LiftEndRewriter(event_id, bank, id, event, instr);
+}
 } // namespace
 
 void Init() {
@@ -2921,7 +2957,7 @@ void Init() {
     if (!st.enabled) {
         return;
     }
-    SetEmevdRewriter3(&KeyGateRewriter);
+    SetEmevdRewriter3(&WorldactRewriter);
     EnsureEmevdFilter();
     // push rbp; mov rbp, rsp; push r15; push r14; push r13; push r12; push rbx (13 bytes, both).
     const bool a = HookPrologue(0x13AE370, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53},

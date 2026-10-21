@@ -1500,9 +1500,13 @@ void GuestWorldMirror::Hold(u32 id, bool on) {
         return;
     }
     if (held_.erase(id) && have_) {
+        // The overlay's value stands (the guest's own copy wrote it); the host's value of the image is
+        // taken as applied without a write, so only a later host change goes in. (Applying it here put
+        // a stale image's old end over the copy's own: live run 2.)
         const int key = PoolKeyOfId(id);
         if (key >= 0 && WorldMirrorKey(key)) {
-            dirty_.insert(key);  // a host change kept pending meanwhile goes in with the next Apply
+            const u32 bit = id % kBitsPerBlock;
+            PutBit(applied_[key].data(), bit, GetBit(image_[key].data(), bit));
         }
     }
 }
