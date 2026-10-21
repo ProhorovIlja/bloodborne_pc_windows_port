@@ -1001,6 +1001,20 @@ LotPlan PlanSummonedLot(const std::vector<LotRowData>& chain, const std::vector<
     return p;
 }
 
+void GoodsLimitsFromRow(const std::uint8_t* row, LotSlotState* s) {
+    std::int16_t mx = 0, rep = 0;
+    std::memcpy(&mx, row + 0x36, sizeof mx);
+    std::memcpy(&rep, row + 0x48, sizeof rep);
+    s->max_num = mx;
+    s->max_storage = rep;
+    s->goods_type = row[0x3A];
+    // refId s32 +0x00 (the use's SpEffect / behaviour), goodsUseAnim u8 +0x3E: a goods item the
+    // player can use (and so use up: the Gold Pendant becomes a blood gem).
+    std::int32_t ref = -1;
+    std::memcpy(&ref, row + 0x00, sizeof ref);
+    s->usable = (ref >= 0 || row[0x3E] != 0) ? 1 : 0;
+}
+
 const char* LotFitName(LotFit f) {
     switch (f) {
     case LotFit::Give: return "fits";
@@ -1102,8 +1116,36 @@ bool KeyGiveAllowedHeld(const LotSlotState& s, int held) {
     return !KeyGoods(s) || held == 0;
 }
 
+bool KeyRegiveAllowed(const LotSlotState& s) {
+    return KeyGoods(s) && s.usable == 0;
+}
+
 bool KeyCatchupNeeded(const std::vector<LotSlotState>& slots) {
-    return LedgerSkipSuspicious(slots) && LotHasKeyGoods(slots);
+    if (!LedgerSkipSuspicious(slots) || !LotHasKeyGoods(slots)) {
+        return false;
+    }
+    for (const LotSlotState& s : slots) {
+        if (!KeyRegiveAllowed(s)) {
+            return false; // a usable unique item (Gold Pendant, Tear Stone): reading 0, it was used
+        }
+    }
+    return true;
+}
+
+bool SummonedKeyGiveNow(const std::vector<LotSlotState>& slots) {
+    for (const LotSlotState& s : slots) {
+        if (KeyGoods(s) && !KeyRegiveAllowed(s)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool OwedGiveAllowed(bool given, bool done_flag_set, const LotSlotState& s, int held) {
+    if (given) {
+        return KeyRegiveAllowed(s) && held == 0;
+    }
+    return !done_flag_set && KeyGiveAllowedHeld(s, held);
 }
 
 bool SummonedGiveForSlot(int entry_slot, int current_slot) {
@@ -1427,6 +1469,49 @@ bool GiveGem(const GrantItem& it, std::string* why) {
     reinterpret_cast<GiveListFn>(Guest(kGiveList))(mim, list);
     g_in_apply = false;
     reinterpret_cast<GaitemReleaseFn>(Guest(kGaitemRelease))(&handle); // the inventory keeps its own reference
+    return true;
+}
+
+/// Room left in the own storage for goods `id` (0x14D9A80, the give list's own check; -1 unknown).
+int StorageRoom(u32 id) {
+    const u64 player = [] {
+        u64 wcm = Ptr(0x553e878), p = 0;
+        return wcm && SafeGet(wcm + 0x60, &p) ? p : 0;
+    }();
+    u64 vt = 0, fn = 0, data = 0, st = 0;
+    if (!player || !SafeGet(player, &vt) || !SafeGet(vt + 0x1c8, &fn) || !fn) {
+        return -1;
+    }
+    data = reinterpret_cast<u64(BB_COOP_SYSV*)(u64)>(fn)(player);
+    if (!data || !SafeGet(data + 0x5b0, &st) || !st) {
+        return -1;
+    }
+    u32 item = 0x40000000u | (id & 0xfffffffu);
+    return reinterpret_cast<int(BB_COOP_SYSV*)(u64, u32*, int)>(Guest(0x14d9a80))(st, &item, 9999);
+}
+
+/// Guest, summoned: goods that would pass their inventory maximum go through the lot award's own
+/// give list 0x17D89F0, which fills the inventory, puts the rest into the storage (else on the
+/// ground, with the game's "inventory or storage max" box) and queues the item-get dialog.
+/// GiveItemDirect (0x131CB70) only adds to the inventory: past maxNum the rest was lost.
+bool GiveGoodsViaList(u32 id, int count) {
+    static const u8 kGive[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54,
+                               0x53, 0x48, 0x81, 0xec, 0xb8, 0x01, 0x00, 0x00, 0x49, 0x89, 0xf7};
+    const u64 mim = Ptr(kMapItemMan);
+    if (!mim || count <= 0 || !MatchesOriginal(kGiveList, kGive, sizeof kGive)) {
+        return false;
+    }
+    // ItemList as in GiveGem; a goods "gaitem" is its id with the goods tag (0x1A89070: bit 31 and
+    // type 3 in bits 28-30 decode to category 4).
+    u32 list[16] = {};
+    list[0] = 1;
+    list[1] = 0xB0000000u | (id & 0xfffffffu);
+    list[2] = 0x40000000u | (id & 0xfffffffu);
+    list[3] = static_cast<u32>(count);
+    list[4] = 0xffffffffu;
+    g_in_apply = true;
+    reinterpret_cast<GiveListFn>(Guest(kGiveList))(mim, list);
+    g_in_apply = false;
     return true;
 }
 
@@ -1836,22 +1921,18 @@ void FillGoodsLimits(LotSlotState* s) {
         return;
     }
     s->owned = ItemCount(0x40000000u, static_cast<u32>(s->id));
-    if (const u64 goods = GameParamRow("EquipParamGoods", "EQUIP_PARAM_GOODS_ST", static_cast<u32>(s->id))) {
-        std::int16_t mx = -1, rep = -1;
-        u8 type = 0xff;
-        if (SafeGet(goods + 0x36, &mx) && SafeGet(goods + 0x49, &rep)) {
-            s->max_num = mx;
-            s->max_storage = rep;
-        }
-        if (SafeGet(goods + 0x3A, &type)) {
-            s->goods_type = type;
-        }
+    // maxRepositoryNum is at +0x48 (0x15813A0); it was read at +0x49 until 2026-10-21, which gave
+    // 0 storage for most goods, so a give that the storage would have taken counted as "Full".
+    u8 row[kGoodsRowBytes];
+    if (const u64 goods = GameParamRow("EquipParamGoods", "EQUIP_PARAM_GOODS_ST", static_cast<u32>(s->id));
+        goods && SafeRead(goods, row, sizeof row)) {
+        GoodsLimitsFromRow(row, s);
     }
 }
 
 // ItemLotParam (ITEMLOT_PARAM_ST, 1.09 paramdef): lotItemId01..08 s32 +0x00, lotItemCategory01..08
 // u32 +0x20, lotItemBasePoint01..08 u16 +0x40, lotItemNum01..08 u8 +0x8A. EquipParamGoods
-// (EQUIP_PARAM_GOODS_ST): maxNum s16 +0x36, goodsType u8 +0x3A, maxRepositoryNum s16 +0x49.
+// (EQUIP_PARAM_GOODS_ST): maxNum s16 +0x36, goodsType u8 +0x3A, maxRepositoryNum s16 +0x48.
 /// A flagless lot whose awarding event is a boss defeat (its ledger row's done flag is a
 /// boss_defeated flag): boss rewards (keys, badges) are never handed to an NPC or used up.
 bool BossLedgerLot(const ItemGrant& g) {
@@ -1969,8 +2050,9 @@ bool Apply(const ItemGrant& g) {
             why.c_str());
     }
     if (IsFlag(man, done)) {
-        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && LedgerSkipSuspicious(LotSlots(g.lot))) {
-            // #16: the ledger says given, the player holds none of the lot's unique items.
+        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && KeyCatchupNeeded(LotSlots(g.lot))) {
+            // #16: the ledger says given, the player holds none of the lot's unique items, and
+            // they are never used up (a used Gold Pendant reads 0 too: skipped below).
             Log("%s: its done flag %lld is set but none of its unique items is held; giving it after all",
                 DescribeItem(g).c_str(), static_cast<long long>(done));
             if (g.flag >= 0) {
@@ -2177,15 +2259,19 @@ void SummonedGivesTick(const GameSnapshot& gs, int load_mode, double now) {
         if (n <= 0) {
             continue;
         }
-        if ((g.bits >> 28) == 4) {
-            LotSlotState ks;
-            ks.category = 4;
-            ks.id = static_cast<std::int32_t>(g.id);
-            FillGoodsLimits(&ks);
-            if (!KeyGiveAllowedHeld(ks, held)) {
-                Log("goods %u given while summoned: a key item / unique goods held %d: not given again", g.id, held);
-                continue;
-            }
+        // Only a key item that is never used up is given again: the game puts the saved key section
+        // back at home, without the summoned copy. Anything else given while summoned stays in the
+        // inventory, so fewer held now means used, dropped or sold (0.6.9: Ritual Blood / a pendant
+        // used while summoned came back at home).
+        LotSlotState ks;
+        ks.category = g.bits >> 28;
+        ks.id = static_cast<std::int32_t>(g.id);
+        FillGoodsLimits(&ks);
+        if (!KeyRegiveAllowed(ks) || !KeyGiveAllowedHeld(ks, held)) {
+            Log("%s %u given while summoned: held %d now (%d right after the give); not given again (%s)",
+                CategoryWord(g.bits >> 28), g.id, held, g.expect,
+                KeyRegiveAllowed(ks) ? "held" : "not a key item the game drops at home: used, dropped or sold");
+            continue;
         }
         const bool ok = GiveItem(g.bits, g.id, n);
         const int after = ItemCount(g.bits, g.id);
@@ -2225,6 +2311,7 @@ void SummonedGivesTick(const GameSnapshot& gs, int load_mode, double now) {
 struct OwedLot {
     std::int32_t lot = 0;
     int slot = -1;
+    bool given = true;  // given while summoned (only a dropped copy is given again); false: deferred
 };
 std::mutex g_owed_mu;
 std::vector<OwedLot> g_owed;
@@ -2241,8 +2328,17 @@ void LoadOwedLotsLocked() {
     }
     g_owed_loaded = true;
     std::ifstream f(OwedLotsPath());
-    OwedLot o;
-    while (f >> o.lot >> o.slot) {
+    std::string line;
+    while (std::getline(f, line)) {
+        std::istringstream in(line);
+        OwedLot o;
+        int given = 1;  // a file from before the third field: treated as given (never a second copy)
+        if (!(in >> o.lot >> o.slot)) {
+            continue;
+        }
+        if (in >> given) {
+            o.given = given != 0;
+        }
         g_owed.push_back(o);
     }
 }
@@ -2259,25 +2355,30 @@ void SaveOwedLotsLocked() {
     {
         std::ofstream f(tmp, std::ios::trunc);
         for (const OwedLot& o : g_owed) {
-            f << o.lot << ' ' << o.slot << '\n';
+            f << o.lot << ' ' << o.slot << ' ' << (o.given ? 1 : 0) << '\n';
         }
     }
     std::filesystem::rename(tmp, path, ec);
 }
 
-void NoteOwedLot(std::int32_t lot) {
+void NoteOwedLot(std::int32_t lot, bool given) {
     const int slot = party::flow::CurrentSaveSlot();
     std::lock_guard<std::mutex> lk(g_owed_mu);
     LoadOwedLotsLocked();
-    for (const OwedLot& o : g_owed) {
+    for (OwedLot& o : g_owed) {
         if (o.lot == lot && o.slot == slot) {
+            if (given && !o.given) {
+                o.given = true;
+                SaveOwedLotsLocked();
+            }
             return;
         }
     }
     if (g_owed.size() < 64) {
-        g_owed.push_back({lot, slot});
+        g_owed.push_back({lot, slot, given});
         SaveOwedLotsLocked();
-        Log("owed key item: lot %d kept for this character's next own world (save slot %d)", lot, slot);
+        Log("owed key item: lot %d (%s) kept for this character's next own world (save slot %d)", lot,
+            given ? "given while summoned" : "not given yet", slot);
     }
 }
 
@@ -2295,16 +2396,16 @@ void ForgetOwedLot(std::int32_t lot) {
 }
 
 /// Own world (KeyCatchupTick): the lots owed to this save slot whose items are still missing.
-std::vector<std::int32_t> TakeOwedLots() {
+std::vector<OwedLot> TakeOwedLots() {
     const int slot = party::flow::CurrentSaveSlot();
     std::lock_guard<std::mutex> lk(g_owed_mu);
     LoadOwedLotsLocked();
-    std::vector<std::int32_t> lots;
+    std::vector<OwedLot> lots;
     auto it = std::remove_if(g_owed.begin(), g_owed.end(), [&](const OwedLot& o) {
         if (!SummonedGiveForSlot(o.slot, slot)) {
             return false;
         }
-        lots.push_back(o.lot);
+        lots.push_back(o);
         return true;
     });
     if (it != g_owed.end()) {
@@ -2346,10 +2447,19 @@ void KeyCatchupTick(const GameSnapshot& gs, int load_mode, double now) {
     const std::vector<std::int32_t> lots = KeyCatchupLots(
         [man](std::uint32_t id) { return IsFlag(man, id); },
         [](std::uint32_t id) { return progress::CategoryOf(id) == progress::Category::boss_defeated; });
-    const std::vector<std::int32_t> owed = TakeOwedLots();
+    const std::vector<OwedLot> owed = TakeOwedLots();
     int gave = 0;
-    // Owed lots (deferred whole while summoned): every goods slot, a unique one only when missing.
-    for (const std::int32_t lot : owed) {
+    // Owed lots: deferred while summoned (every goods slot, a unique one only when missing, never
+    // once the lot's done flag is in this save) or given while summoned (only a dropped copy of an
+    // item that is never used up). The done flag goes into the save with the give, so the lot is
+    // never given a second time later (a rejoin's full list, the catch-up).
+    for (const OwedLot& o : owed) {
+        const std::int32_t lot = o.lot;
+        const std::int32_t flag = ItemLotFlag(lot);
+        const std::int32_t idx = flag > 0 ? kItemNone : ItemLedgerIndex(lot);
+        const std::int64_t done = flag > 0 ? flag : idx >= 0 ? std::int64_t(kItemLedgerBase) + idx : -1;
+        const bool done_set = done >= 0 && IsFlag(man, done);
+        bool any = false;
         for (const LotSlotState& sl : LotSlots(lot)) {
             if (sl.id <= 0) {
                 continue;
@@ -2361,14 +2471,23 @@ void KeyCatchupTick(const GameSnapshot& gs, int load_mode, double now) {
             }
             const int n = std::max(1, sl.num);
             const int held_now = ItemCount(0x40000000u, static_cast<u32>(sl.id));
-            if (!KeyGiveAllowedHeld(sl, held_now)) {
-                Log("owed lot %d: goods %d held %d already: not given again", lot, sl.id, held_now);
+            if (!OwedGiveAllowed(o.given, done_set, sl, held_now)) {
+                Log("owed lot %d (%s): goods %d held %d%s: not given again", lot,
+                    o.given ? "given while summoned" : "not given yet", sl.id, held_now,
+                    !o.given && done_set ? ", the lot's done flag is in this save"
+                    : o.given && !KeyRegiveAllowed(sl) ? ", it can be used up" : "");
                 continue;
             }
             const bool ok = GiveItem(0x40000000u, static_cast<u32>(sl.id), n);
-            Log("owed lot %d: %s goods %d x%d (held %d -> %d)", lot, ok ? "gave" : "could not give", sl.id, n, held_now,
-                ItemCount(0x40000000u, static_cast<u32>(sl.id)));
+            Log("owed lot %d (%s): %s goods %d x%d (held %d -> %d)", lot,
+                o.given ? "given while summoned, missing here" : "not given yet", ok ? "gave" : "could not give", sl.id,
+                n, held_now, ItemCount(0x40000000u, static_cast<u32>(sl.id)));
             gave += ok ? 1 : 0;
+            any = any || ok;
+        }
+        if (any && done >= 0 && !done_set) {
+            SetFlag(man, done);
+            Log("owed lot %d: done flag %lld set", lot, static_cast<long long>(done));
         }
     }
     for (const std::int32_t lot : lots) {
@@ -2424,7 +2543,7 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
     }
     if (OwnSaveFlag(done)) {
         const std::vector<LotSlotState> slots = LotSlots(g.lot);
-        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && LedgerSkipSuspicious(slots)) {
+        if ((BossLedgerLot(g) || g.source == ItemSource::Own) && KeyCatchupNeeded(slots)) {
             // verify_c6 (live): the summoned view never holds key items; the 0.6.1 regression run
             // saw the same for unique goods (Amelia's 4001: held 0 here, 1 at home). Every slot of
             // this lot is unique goods (LedgerSkipSuspicious), so a give here would put the game's
@@ -2503,10 +2622,14 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
                 keys += (keys.empty() ? "" : ", ") + std::to_string(s.id);
             }
         }
-        NoteOwedLot(g.lot);
-        if (EnvOff("BB_PARTY_KEY_ITEMS_SUMMONED")) {
-            Log("%s: key item / unique goods %s: not given while summoned; waits for the own world",
-                DescribeItem(g).c_str(), keys.c_str());
+        // A usable unique item (Gold Pendant, Tear Stone) is never given here: used while summoned,
+        // it would read 0 at home and the owed check could not tell it from a dropped copy.
+        const bool usable = !SummonedKeyGiveNow(slots);
+        const bool now = !usable && !EnvOff("BB_PARTY_KEY_ITEMS_SUMMONED");
+        NoteOwedLot(g.lot, now);
+        if (!now) {
+            Log("%s: key item / unique goods %s: not given while summoned%s; waits for the own world",
+                DescribeItem(g).c_str(), keys.c_str(), usable ? " (it can be used up)" : "");
             return SummonedResult::Defer;
         }
         Log("%s: key item / unique goods %s: given now while summoned; also owed to the own world, which "
@@ -2568,17 +2691,36 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         }
         const u32 bits = it.category << 28;
         const int before = ItemCount(bits, static_cast<u32>(it.id));
-        const bool ok = GiveItem(bits, static_cast<u32>(it.id), it.count);
+        LotSlotState lim;
+        lim.category = it.category;
+        lim.id = it.id;
+        FillGoodsLimits(&lim);
+        // Past the inventory maximum: the game's give list (the rest into the storage, its own
+        // item-get dialog); else the direct give and our dialog entry.
+        const bool over = it.category == 4 && lim.max_num > 0 && before >= 0 && before + it.count > lim.max_num;
+        const int room_before = over ? StorageRoom(static_cast<u32>(it.id)) : -1;
+        const bool via_list = over && GiveGoodsViaList(static_cast<u32>(it.id), it.count);
+        const int room_after = via_list ? StorageRoom(static_cast<u32>(it.id)) : -1;
+        const bool ok = via_list || GiveItem(bits, static_cast<u32>(it.id), it.count);
         const int after = ItemCount(bits, static_cast<u32>(it.id));
         // The game's own "item acquired" dialog entry, as the host's lot award shows it.
-        const bool shown = ok && ShowItemGet(bits, static_cast<u32>(it.id), it.count);
-        if (ok) {
+        const bool shown = via_list || (ok && ShowItemGet(bits, static_cast<u32>(it.id), it.count));
+        LotSlotState noted;
+        noted.category = it.category;
+        noted.id = it.id;
+        FillGoodsLimits(&noted);
+        if (ok && KeyRegiveAllowed(noted)) {  // only these can be dropped by the game at home
             NoteSummonedGive(bits, static_cast<u32>(it.id), it.count, after);
         }
         gave += ok ? 1 : 0;
         native += shown ? 1 : 0;
-        std::snprintf(b, sizeof b, "%s %d x%d (held %d -> %d%s%s)", CategoryWord(it.category), it.id, it.count,
-                      before, after, ok ? "" : ", GiveItemDirect unavailable",
+        char room[96] = "";
+        if (via_list) {
+            std::snprintf(room, sizeof room, ", past the maximum: the game's give list, storage room %d -> %d", room_before,
+                          room_after);
+        }
+        std::snprintf(b, sizeof b, "%s %d x%d (held %d -> %d%s%s%s)", CategoryWord(it.category), it.id, it.count,
+                      before, after, ok ? "" : ", GiveItemDirect unavailable", room,
                       !ok ? "" : shown ? ", item-get dialog" : ", NO item-get dialog");
         given += (given.empty() ? "" : "; ") + std::string(b);
         std::snprintf(b, sizeof b, "%s %d x%d", CategoryWord(it.category), it.id, it.count);
@@ -3323,12 +3465,20 @@ void KeyGoodsWatchTick(const GameSnapshot& gs, int load_mode, double now) {
     }
     next = now + 5.0;
     std::map<std::int32_t, int> held;
-    for (const LedgerRow& r : kLedger) {
-        for (const LotSlotState& sl : LotSlots(r.lot)) {
+    std::map<std::int32_t, bool> regive;  // KeyRegiveAllowed per goods id
+    auto add = [&](std::int32_t lot) {
+        for (const LotSlotState& sl : LotSlots(lot)) {
             if (sl.category == 4 && sl.max_num == 1 && sl.max_storage <= 0 && sl.owned >= 0) {
                 held[static_cast<std::int32_t>(sl.id)] = sl.owned;
+                regive[static_cast<std::int32_t>(sl.id)] = KeyRegiveAllowed(sl);
             }
         }
+    };
+    for (const LedgerRow& r : kLedger) {
+        add(r.lot);
+    }
+    for (const std::int32_t lot : kSharedKeyTreasureLots) {
+        add(lot);
     }
     if (held.empty()) {
         return;
@@ -3341,6 +3491,24 @@ void KeyGoodsWatchTick(const GameSnapshot& gs, int load_mode, double now) {
         } else if (it != last.end() && it->second != n) {
             text += (text.empty() ? "" : ", ") + std::to_string(id) + " " + std::to_string(it->second) + " -> " +
                     std::to_string(n);
+            if (load_mode == 1 && n > it->second && regive[id]) {
+                // A key item that reached this summoned guest in the host's world by any way (an
+                // NPC's gift such as the Tonsil Stone, a pickup; playtest logs: 4310 0 -> 1, gone
+                // after the next load): the game drops it with the summoned key section at the next
+                // load, so it is kept for the own-world check like a party give (count bounded by
+                // the held count right after it: a party give noted twice is still one).
+                NoteSummonedGive(0x40000000u, static_cast<u32>(id), n - it->second, n);
+                Log("key item %d reached this guest while summoned: kept for the own-world check", id);
+            }
+        }
+    }
+    if (!baseline || !text.empty()) {
+        // A unique item in two stacks (the save lists it twice): never expected (smoke_party.py checks it).
+        for (const auto& [id, n] : held) {
+            const int stacks = n > 0 ? ItemStacks(0x40000000u, static_cast<u32>(id)) : 0;
+            if (stacks > 1) {
+                Log("key goods %d: DUPLICATE STACK (%d entries in the inventory)", id, stacks);
+            }
         }
     }
     if (!text.empty()) {
