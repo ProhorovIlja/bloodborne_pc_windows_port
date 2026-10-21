@@ -515,6 +515,18 @@ press logged `award lot 2300170 (hostOnly 1, flag 52300170) in another's world, 
 nothing given (the playtest exactly); with it `gave ... own-save flag(s) 52300170,12300130 set`,
 12300130 stayed 1 through both loads, no prompt at the same spot and no award (three tries).
 
+Not a party bug (same playtest, mark 4): ~30 pickups of a Pebble (goods 1230: maxNum 20,
+maxRepositoryNum 99 at EquipParamGoods +0x48) that each opened a box. The give list `0x17D89F0`
+puts what fits in neither the inventory nor the storage on the ground as a kind-1 map item
+(`0x17DA960`, prompt 10010103 "Pick Up Item") and shows "Unable to acquire <item> due to inventory
+or storage max" (`0x13107B0`, menu texts 506000 / 506001); each try takes it, refuses it and drops
+it again. Live: a summoned guest with 20 held and the storage filled to 99 reproduced the box and
+the re-drop on every press; storage itself works for a summoned guest (room for 5 with 20 held).
+Vanilla behaviour of a player at the item's maximum.
+Side note: on a client the enemy drop and ground item inserts (`0x17D5320` / `0x17D4C40`) give
+every record the bare kind as its handle (0x2 / 0x1; the host numbers them, role 6 / session slot
+gates at `0x17D5642` / `0x17D4F54`), so the pickup's lookup `0x17D81A0` takes the newest record of
+that kind, not the nearest one (live: two drop records on a guest, both 0x2). Not changed here.
 
 ### 10.2 The item-get dialog (2026-10-11)
 
