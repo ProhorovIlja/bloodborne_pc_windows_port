@@ -672,7 +672,31 @@ decides, never the held count:
   goods: the second inventory section is the same summoned and at home, so anything else held below
   the count after the give was used, dropped or sold.
 
+* `KeyGoodsWatchTick`: a `KeyRegiveAllowed` key item whose count rises while summoned (an NPC's
+  gift in the host's world: playtest 2 guest logs, Tonsil Stone 4310 `0 -> 1` from the talk, `x0`
+  after the next load) is noted like a party give, so the own world gives it back if the save lost it.
+
 Unit tests: `test_key_catchup` (party-items-test). Test aid: `host_use=GOODS:take@S`.
+
+Live (run B, fixed build, 2 instances, `BB_PARTY_ITEMS_HOST_TEST=50800000,50000001`, host chain
+`host_use=4001:take`, `host_warp` x2): host first own world `4001 x0`, no catch-up; the award test
+gives the pendant (`4001 0 -> 1`), used (`held 1 -> 0`), after both warps `4001 x0`, nothing given.
+Guest (summoned): `skip ... lot 50000001 ...: already given (own-save flag 60009035 set; 4:4001
+held 0)` instead of the old "checked in the own world" (which the catch-up then gave).
+
+The guest's "all key items gone after an area load" (issue 1) is the game's summoned view, not a
+loss [live, run B, `save_decode.py` on the guest's `savedata_party` written every 15 s]: summoned,
+`key goods held` reads 4000 / 4114 `x0` after every host-world load and `x1` again at home; every
+save written during the session (Dream, Tomb of Oedon, Cathedral Ward, home) lists all 7 key items
+of the test save. A key item given while summoned (4118) is in the save written before the next
+load, gone from the one after it (the game rebuilds the key section from the saved one), and given
+again at home (`goods given while summoned are missing in the own world; given again: goods 4118
+x1`). Note: a save written while summoned holds the saved key section plus the summoned additions,
+so a summoned give of a key item the save already holds would add a second stack; a player's save
+(not a party test save) showed `4001 x1` twice in its key list after 0.1 h of play (the copy 0.1 h
+older had one). Its build and logs are not ours, so the path that added it is not known; the
+summoned give is guarded by the lot's done flag, and usable unique goods are no longer given while
+summoned at all.
 
 ## 11. Gestures (2026-10-20)
 

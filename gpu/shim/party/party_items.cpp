@@ -3440,6 +3440,15 @@ void KeyGoodsWatchTick(const GameSnapshot& gs, int load_mode, double now) {
             }
         }
     }
+    if (!baseline || !text.empty()) {
+        // A unique item in two stacks (the save lists it twice): never expected (smoke_party.py checks it).
+        for (const auto& [id, n] : held) {
+            const int stacks = n > 0 ? ItemStacks(0x40000000u, static_cast<u32>(id)) : 0;
+            if (stacks > 1) {
+                Log("key goods %d: DUPLICATE STACK (%d entries in the inventory)", id, stacks);
+            }
+        }
+    }
     if (!text.empty()) {
         Log("key goods %s: %s (%s, load mode %d%s)", baseline ? "changed" : "held", text.c_str(), Describe(gs).c_str(),
             load_mode, load_mode == 1 ? "; summoned: key items (goodsType 1) are not shown here, the own save keeps them" : "");
