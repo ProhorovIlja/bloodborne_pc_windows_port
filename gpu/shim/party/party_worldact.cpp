@@ -566,8 +566,8 @@ std::uint8_t KeyItemGateHeldState(const KeyItemGate& g, int group, bool invert) 
     return static_cast<std::uint8_t>((group == g.held_group) != invert ? 1 : 0);
 }
 
-bool KeyItemGateInvert(bool summoned_guest, bool own_flag, bool host_world_flag) {
-    return summoned_guest && (own_flag || host_world_flag);
+bool KeyItemGateInvert(bool summoned_guest, bool own_flag, bool host_world_flag, int held) {
+    return summoned_guest && (own_flag || host_world_flag) && held <= 0;
 }
 
 bool FirstFightVisitDone(bool host_flag_on, bool flag9180_on, bool cutscene, double visit_s, bool chained,
@@ -970,8 +970,14 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
             }
         }
         st.baselined = true;
-        Log("guest: %zu local flag difference(s) in the host's world held back as the baseline (%s)",
-            changes.size(), MapName(s.map_id).c_str());
+        // Which ones (the first 48, id=value): a world difference a guest sees alone (an NPC only
+        // its game shows) starts from this list.
+        std::string ids;
+        for (std::size_t k = 0; k < changes.size() && k < 48; ++k) {
+            ids += (k ? " " : "") + std::to_string(changes[k].first) + "=" + (changes[k].second ? "1" : "0");
+        }
+        Log("guest: %zu local flag difference(s) in the host's world held back as the baseline (%s): %s%s",
+            changes.size(), MapName(s.map_id).c_str(), ids.c_str(), changes.size() > 48 ? " ..." : "");
         if (GateCatchupOn()) {
             GateCatchup();
         }
@@ -2797,16 +2803,20 @@ void KeyGateRewriter(int event_id, int bank, int id, std::uint64_t event, std::u
         progress::ReadFlagOwnSave(g->own_flag, &own);
         progress::HostWorldFlag(g->own_flag, &host);
     }
-    const bool invert = KeyItemGateInvert(summoned, own, host);
+    // The local held count: 0 in the game's summoned key view, the real one with the own key
+    // section shown (items.md 10.7); -1 (unknown) counts as 0, the old rule.
+    const int held = summoned ? GoodsCount(static_cast<std::uint32_t>(g->goods)) : 0;
+    const bool invert = KeyItemGateInvert(summoned, own, host, held);
     const std::uint8_t want = KeyItemGateHeldState(*g, group, invert);
     if (want != state) {
         SafeWrite(args + 8, &want, 1);
     }
-    const int key = (invert ? 1 : 0) | (own ? 2 : 0) | (host ? 4 : 0);
+    const int key = (invert ? 1 : 0) | (own ? 2 : 0) | (host ? 4 : 0) | (held > 0 ? 8 : 0);
     if (g_keygate_last.exchange(key) != key) {
-        Log("key item gate: event %d checks goods %d %s (summoned %d, own pickup flag %u %d, host world's %d)",
+        Log("key item gate: event %d checks goods %d %s (summoned %d, own pickup flag %u %d, host world's %d, "
+            "held %d)",
             event_id, goods, invert ? "as held: the guest's own key opens it in the host's world" : "as in the data",
-            summoned ? 1 : 0, g->own_flag, own ? 1 : 0, host ? 1 : 0);
+            summoned ? 1 : 0, g->own_flag, own ? 1 : 0, host ? 1 : 0, held);
     }
 }
 } // namespace
