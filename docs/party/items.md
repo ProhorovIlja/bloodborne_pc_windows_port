@@ -630,5 +630,7 @@ in this save (own world, learned), the one learned while summoned kept; no longe
 the same list summoned. On disk (both saves, GestureGameData found by its entry pattern): bits of
 800..803, 808, 809, 812, 813, 820, 821, 822; flags 6760 and 6770 set. r2 found a stale owed entry
 (SUMMONED 1, bit 0 after a fresh save) waiting forever while summoned: a missing bit is now learned
-in any world.
+in any world. r4 (same fixtures, screenshots of the menus while summoned): the gesture menu's list
+(touchpad, Triangle) ends with "Make Contact" and "League Oath" on the guest and on the host; the
+guest's Inventory > Key Items tab shows "Spark Hunter Badge", held 1 / 1, while it is summoned.
 Unit tests: `party-gestures-test` (ids and taught flags, JSON, entries, the owed store, the decision).
