@@ -893,8 +893,14 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
             }
         }
         st.baselined = true;
-        Log("guest: %zu local flag difference(s) in the host's world held back as the baseline (%s)",
-            changes.size(), MapName(s.map_id).c_str());
+        // Which ones (the first 48, id=value): a world difference a guest sees alone (an NPC only
+        // its game shows) starts from this list.
+        std::string ids;
+        for (std::size_t k = 0; k < changes.size() && k < 48; ++k) {
+            ids += (k ? " " : "") + std::to_string(changes[k].first) + "=" + (changes[k].second ? "1" : "0");
+        }
+        Log("guest: %zu local flag difference(s) in the host's world held back as the baseline (%s): %s%s",
+            changes.size(), MapName(s.map_id).c_str(), ids.c_str(), changes.size() > 48 ? " ..." : "");
         if (GateCatchupOn()) {
             GateCatchup();
         }
