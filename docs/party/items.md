@@ -632,7 +632,7 @@ acquire ... inventory or storage max" box, seen live in 0.6.1 for lot 50000001),
 playtest guest's real save (0.6.0) did not keep a key item given while summoned (4114 "held 0 -> 1",
 gone an hour later): what the summoned inventory shows is not all the save keeps.
 
-Now (`BB_PARTY_KEY_ITEMS_SUMMONED`, default on): a key-item grant whose done flag (lot flag / ledger
+Opt-in since 0.7.0 (`BB_PARTY_KEY_ITEMS_SUMMONED=1`; default off, see 10.6 for why): a key-item grant whose done flag (lot flag / ledger
 bit) is not in the guest's own save - so the save never got this lot - is given at once while
 summoned (direct give, its flags into the own pool, the item-get dialog, a save request) and is
 **also** owed (`party_owed_lots.txt`, per save slot) and noted as a summoned give

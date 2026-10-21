@@ -2619,8 +2619,10 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         // (0.6.2), and the game may refuse a second copy with a blocking box. This lot's done flag
         // is not in the own save (checked above), so the save never got it: given now, and owed
         // too (on disk): the own world reads the real held count and gives it there only if the
-        // summoned copy did not stay (KeyCatchupTick, SummonedGivesTick). BB_PARTY_KEY_ITEMS_SUMMONED=0:
-        // the old rule (only in the own world).
+        // summoned copy did not stay (KeyCatchupTick, SummonedGivesTick). Off by default since 0.7.0
+        // (BB_PARTY_KEY_ITEMS_SUMMONED=1 on): the summoned key view is rebuilt without it at the next
+        // host-world load, and a key the save already holds unseen would get a second stack in a save
+        // written while summoned (items.md 10.6). Off: only in the own world, as in 0.6.9.
         std::string keys;
         for (const LotSlotState& s : slots) {
             if (KeyGoods(s)) {
@@ -2630,7 +2632,8 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         // A usable unique item (Gold Pendant, Tear Stone) is never given here: used while summoned,
         // it would read 0 at home and the owed check could not tell it from a dropped copy.
         const bool usable = !SummonedKeyGiveNow(slots);
-        const bool now = !usable && !EnvOff("BB_PARTY_KEY_ITEMS_SUMMONED");
+        const char* give_now = std::getenv("BB_PARTY_KEY_ITEMS_SUMMONED");
+        const bool now = !usable && give_now && give_now[0] == '1' && !give_now[1];
         NoteOwedLot(g.lot, now);
         if (!now) {
             Log("%s: key item / unique goods %s: not given while summoned%s; waits for the own world",
