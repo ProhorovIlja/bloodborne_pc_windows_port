@@ -1333,8 +1333,9 @@ const MirrorTables& Mirror() {
             for (u32 bit = 0; bit < kBitsPerBlock; ++bit) {
                 const u32 id = first + bit;
                 // Lamp / headstone "used" triggers are per player: mirrored, the host's headstone ran the
-                // guest's warp event too (playtest 1 bug 20).
-                if ((id >= 2000 && id <= 2099) || (id >= 9020 && id <= 9026) || deathrules::LampTriggerFlag(id)) {
+                // guest's warp event too (playtest 1 bug 20); so are the talk state flags of that shape.
+                if ((id >= 2000 && id <= 2099) || (id >= 9020 && id <= 9026) || deathrules::LampTriggerFlag(id) ||
+                    deathrules::TalkStateFlag(id)) {
                     PutBit(mask.data(), bit, false);
                 }
             }
