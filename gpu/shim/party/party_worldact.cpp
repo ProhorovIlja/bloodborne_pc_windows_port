@@ -1548,8 +1548,58 @@ void StoryTick(const GameSnapshot& s) {
 }
 } // namespace
 
+std::mutex g_lift_wait_mu;
+std::map<std::uint32_t, bool> g_lift_wait;  // host: lift pos flag -> a guest's end, applied once the host is out
+
+// liftfix: the host's answer to a guest's ride (HostLiftSync) and its write. Occupied: the host stands in
+// the car (within kLiftInCarRadius of its axis: 0.7.1 took 4 m, which on a landing beside Cainhurst's car
+// refused every ride) or its own copy rides.
+LiftSync HostLiftDecide(const Lift& l, bool want, bool* ok) {
+    bool pos = false, busy = false;
+    progress::ReadFlag(l.pos, &pos);
+    if (l.busy) progress::ReadFlag(l.busy, &busy);
+    ObjAnimState car;
+    const bool loaded = ReadObjAnim(l.car, &car);
+    const bool occupied = loaded && l.Replays() &&
+                          (LiftBusyHere(l, kLiftInCarRadius) || liftrules::MirrorHold(l, car.anim, car.playing));
+    const LiftSync what = HostLiftSync(pos, busy, loaded, want, l.Replays(), occupied);
+    *ok = true;
+    if (what == LiftSync::apply) {
+        *ok = progress::WriteFlagOwnSave(l.pos, want);
+        if (l.host_state) {
+            *ok = progress::WriteFlagOwnSave(l.host_state, want) && *ok;
+        }
+    }
+    return what;
+}
+
+// liftfix: guests' rides refused while the host stood in the car, applied once it is out.
+void HostLiftWaitTick() {
+    std::map<std::uint32_t, bool> wait;
+    {
+        std::lock_guard<std::mutex> lk(g_lift_wait_mu);
+        wait.swap(g_lift_wait);
+    }
+    for (const auto& [id, want] : wait) {
+        const Lift* l = LiftByPosFlag(id);
+        bool ok = true;
+        const LiftSync what = l ? HostLiftDecide(*l, want, &ok) : LiftSync::same;
+        if (what == LiftSync::occupied || what == LiftSync::busy) {
+            std::lock_guard<std::mutex> lk(g_lift_wait_mu);
+            g_lift_wait.emplace(id, want);  // still in the car / riding
+        } else if (l) {
+            Log("host: lift %d %u=%d (a guest's ride): %s", l->car, id, want ? 1 : 0,
+                what == LiftSync::apply ? (ok ? "applied now that the host is out of the car" : "NOT written")
+                                        : "the host's world has it by now");
+        }
+    }
+}
+
 void HostTick(const GameSnapshot& s) {
     State& st = S();
+    if (s.world_up && !s.loading && progress::FlagLoadMode() == 0) {
+        HostLiftWaitTick();
+    }
     std::deque<std::pair<int, Request>> in;
     {
         std::lock_guard<std::mutex> lk(st.mu);
@@ -1632,29 +1682,23 @@ void HostTick(const GameSnapshot& s) {
                     list += " lift " + std::to_string(id) + "(refused: another area)";
                     continue;
                 }
-                bool pos = false, busy = false;
-                progress::ReadFlag(l->pos, &pos);
-                if (l->busy) progress::ReadFlag(l->busy, &busy);
-                ObjAnimState car;
-                const bool loaded = ReadObjAnim(l->car, &car);
-                // liftfix: also while the host's own copy rides (its car shows a ride or plays its end)
-                const bool occupied = loaded && l->Replays() &&
-                                      (LiftBusyHere(*l, kLiftCarRadius) || liftrules::MirrorHold(*l, car.anim, car.playing));
-                const LiftSync what = HostLiftSync(pos, busy, loaded, want, l->Replays(), occupied);
                 bool ok = true;
+                const LiftSync what = HostLiftDecide(*l, want, &ok);
                 if (what == LiftSync::apply) {
-                    ok = progress::WriteFlagOwnSave(l->pos, want);
-                    if (l->host_state) {
-                        ok = progress::WriteFlagOwnSave(l->host_state, want) && ok;
-                    }
                     st.stats.applied += ok ? 1 : 0;
                     applied_any = applied_any || ok;
+                } else if (what == LiftSync::occupied) {
+                    // liftfix: applied once the host is out of the car (HostLiftWaitTick): a guest
+                    // reports a ride once, and a copy that did not follow the guest's ride (Cainhurst's
+                    // while the host sat in a cutscene, live run 5) would keep the host's car at the old end.
+                    std::lock_guard<std::mutex> lk(g_lift_wait_mu);
+                    g_lift_wait[l->pos] = want;
                 }
                 list += " lift " + std::to_string(l->car) + " " + std::to_string(id) + (want ? "=1" : "=0") +
                         (what == LiftSync::same    ? "(same here)"
                          : what == LiftSync::busy  ? "(a ride runs here: left alone)"
                          : what == LiftSync::loaded ? "(car loaded here, its copy did not follow: left alone)"
-                         : what == LiftSync::occupied ? "(the host stands at the car: left alone)"
+                         : what == LiftSync::occupied ? "(the host stands in the car: applied once it is out)"
                          : ok                      ? "(applied: the lift's block is not loaded here)"
                                                    : "(NOT written)");
             }
