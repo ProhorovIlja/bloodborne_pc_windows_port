@@ -771,8 +771,23 @@ State& S() {
 void WatchTick(const GameSnapshot& s) {
     State& st = S();
     static double last = 0;
-    static std::vector<int> prev;
-    if (st.watch.empty() || !s.world_up || s.loading || Now() - last < 0.5) {
+    static std::vector<int> prev, frame;
+    if (st.watch.empty() || !s.world_up || s.loading) {
+        return;
+    }
+    // Every frame: a visible value that flips between the 0.5 s status lines (a flag that pulses).
+    frame.resize(st.watch.size(), -1);
+    static int pulses = 0;
+    for (std::size_t i = 0; i < st.watch.size() && pulses < 800; ++i) {
+        bool vis = false;
+        const int v = progress::ReadFlag(st.watch[i], &vis) ? (vis ? 1 : 0) : 2;
+        if (frame[i] >= 0 && v != frame[i]) {
+            ++pulses;
+            Log("watch %u: visible %d -> %d (frame)", st.watch[i], frame[i], v);
+        }
+        frame[i] = v;
+    }
+    if (Now() - last < 0.5) {
         return;
     }
     last = Now();
@@ -1852,6 +1867,26 @@ void FixtureTick(double now) {
         if (ids != last_ids) {
             Log("test: anim watch: %s", ids.c_str());
             last_ids = ids;
+        }
+        // "BB_PARTY_ANIM_WATCH=210691,210698": the same ring of these characters (talk id or entity:
+        // GuestSvcFindChr), e.g. the Bath Messengers while another player uses their shop.
+        static const std::vector<std::uint32_t> npcs = ParseIds(std::getenv("BB_PARTY_ANIM_WATCH"));
+        static std::int32_t npc_idx[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+        static std::int32_t npc_anim[8] = {};
+        for (std::size_t i = 0; i < npcs.size() && i < 8; ++i) {
+            const std::uint64_t c = GuestSvcFindChr(npcs[i]);
+            std::uint64_t ncm = 0, nta = 0;
+            std::int32_t ni = -1, anim = 0;
+            if (!c || !SafeGet(c + 0x3b0, &ncm) || !ncm || !SafeGet(ncm + 0x18, &nta) || !nta ||
+                !SafeGet(nta + 0xc0, &ni) || ni < 0 || ni >= 10 || ni == npc_idx[i]) {
+                continue;
+            }
+            SafeGet(nta + 0x20 + std::uint64_t((ni + 9) % 10) * 0x10, &anim);
+            if (npc_idx[i] >= 0 && anim != npc_anim[i]) {
+                Log("test: anim watch: npc %u animation %d (t %.2f)", npcs[i], anim, now);
+            }
+            npc_anim[i] = anim;
+            npc_idx[i] = ni;
         }
     }
     if (const std::uint64_t m = g_rec_man.load()) {
