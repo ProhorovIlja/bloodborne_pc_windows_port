@@ -31,6 +31,19 @@ none), put the fixture into that instance's own copy before the run: `instances.
 `ROOT\inst1\user\savedata` with the fixture's `savedata` folder and keep `--fresh-saves` (it copies
 `savedata` to `savedata_party`, the folder a party session plays from).
 
+### Distinct-looking players (no save copy needed)
+
+Every instance Continues the same save, so every hunter looks alike and a wrong look on another
+player's screen cannot be seen. The director test step `armor=SET` (`BB_PARTY_DIRECTOR_TEST`,
+per instance with `--ienv I:...`) puts on armor set SET (EquipParamProtector SET, SET+1000,
+SET+2000, SET+3000: head, chest, arms, legs) 3 s into the instance's first world, as the
+equipment menu does, and in a session asks the peers to rebuild the chr from the new record (the
+mirror's path). Log: `test: armor set N put on: 4 of 4 pieces`. The ids are the world warper's
+`kWarperArmorSets` (world_warper_content.inc). Used by the samemodel runs (2026-10-20): host
+default look, guest 1 `armor=280000`, guest 2 `armor=200000`, e.g. `--ienv "1:BB_PARTY_DIRECTOR_TEST=armor=280000"`
+`--ienv "2:BB_PARTY_DIRECTOR_TEST=armor=200000"` next to the host's steps (3 players, the host's
+death at the Tomb of Oedon lamp).
+
 ## How a fixture is made (reproducible)
 
 One instance, the default save, `--party` (a host alone), test aids only, then copy
