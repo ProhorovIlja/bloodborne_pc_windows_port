@@ -74,15 +74,23 @@ only 100% when it meets it.
 
 | Area | Plan done | ERSC parity (evidence-weighted) |
 |---|---|---|
-| A. Session & joining | 100% | 95% |
-| B. World & travel | 100% | 95% |
-| C. Death & respawn | 99% | 94% |
-| D. Progress (anyone can progress) | 99% | 95% |
-| E. Services & UI | 100% | 95% |
-| F. Network & robustness | 93% | 92% |
-| G. BB-specific (chalice, insight, bath) | 100% | 95% |
-| H. Bloodborne rule (feels like SP in a party) | 100% | 95% |
-| **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~99%** | **~95%** |
+| A. Session & joining | 100% | 88% |
+| B. World & travel | 100% | 92% |
+| C. Death & respawn | 99% | 85% |
+| D. Progress (anyone can progress) | 99% | 90% |
+| E. Services & UI | 100% | 90% |
+| F. Network & robustness | 93% | 88% |
+| G. BB-specific (chalice, insight, bath) | 100% | 90% |
+| H. Bloodborne rule (feels like SP in a party) | 100% | 80% |
+| **Overall (unweighted mean of the 48 scored rows; "not planned" rows and section I excluded)** | **~99%** | **~87%** |
+
+0.7.0 re-score (2026-10-21) after playtest 2 (0.6.9, 2026-10-20, two PCs over the Internet, 2 h): joining,
+travel, deaths and boss kills held up, but rows the table had near 95 failed on the real line: C1 (a guest
+frozen while the host died, the spectator camera), H1 / H4 (one-time shop items, gestures and key items
+not kept by guests, guests unable to talk to Gehrman) and A5 (a direct summon timed out). 0.7.0 fixes
+every one of those, but on one PC only, so their areas are scored down until a real session confirms
+them; the honest overall is ~87% (range ~82-91%). Logs from a third group's session were on another
+build (a version mismatch refused every join), so they add no co-op evidence.
 
 ## Evidence and ERSC parity (evidence-weighted)
 
