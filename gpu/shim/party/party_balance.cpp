@@ -694,6 +694,8 @@ Rules FromSettings() {
     r.enemy_poise = v.party_enemy_poise;
     r.friendly_fire = v.party_friendly_fire;
     r.share_lamps = v.party_share_lamps;
+    r.host_revive = v.party_host_revive;
+    r.host_limbo_revive = v.party_host_limbo_revive;
     return Clamped(r);
 }
 
@@ -908,6 +910,9 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     const auto now = Clock::now();
     const Rules r = host ? FromSettings() : InForce();
     party::status::SetShareLamps(r.share_lamps);
+    party::status::SetHostRule(party::status::HostRule::Rot, r.rot);
+    party::status::SetHostRule(party::status::HostRule::HostRevive, r.host_revive);
+    party::status::SetHostRule(party::status::HostRule::HostLimboRevive, r.host_limbo_revive);
     {   // The rot for System > Party and the party HUD (none while it is off).
         int kinds[party::status::kRotKinds] = {};
         for (int k = 0; k < kRotKinds && k < party::status::kRotKinds; ++k) kinds[k] = r.rot ? g_kind[k].load() : 0;
