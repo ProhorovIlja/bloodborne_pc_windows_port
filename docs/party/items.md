@@ -787,6 +787,33 @@ keeps: one stack, kept at home. Following from that, the summoned key give (10.3
 `KeyGoodsWatchTick` no longer notes a key that reached a summoned guest for the home check (it stays).
 `ItemStacks` (the in-memory `DUPLICATE STACK` check) counts the key section out of view too.
 Not changed: the host (never mode 3); the own-world path.
+The plaza gate's `KeyItemGate` (party_worldact.cpp) inverted the emblem check for a summoned guest
+with the pickup flag, because its emblem read 0; with the own section shown it reads 1, so the
+inversion would have taken the "need the emblem" branch. It now inverts only while the held count
+reads 0 (`KeyItemGateInvert(..., held)`). GoodsCount there runs inside the game's EMEVD dispatch
+(0x17B93A0, from SprjEmkEventIns::Update) right before the game's own 3[4] handler 0x17AD240 reads
+the same inventory hash the same way (0x14D9F60 / 0x14D9E80, read-only, no locks); the hash is only
+rebuilt at a load (0x1AC5720 from 0x1937570).
+
+Live (run8 2026-10-21, 2 instances): the host's emblem taken away (`goods=4011:0`), 12400160 and
+Amelia's 12401800 cleared on both, the pickup flag 52400450 set in the host's world; the guest
+summoned to the Cathedral Ward with its own emblem (`key goods held: ... 4011 x1 ... load mode 1`),
+`key item gate: ... as in the data (summoned 1, own pickup flag 52400450 1, host world's 1, held 1)`,
+at the gate's action point (2401220, 1.2 m, 180 deg - the plaza side; 0 deg is the far side, where
+"Closed by a device." shows for anyone) Cross: "A special emblem opened the main gate" on **both**
+screens, the guest `opened key-item gate (flag 12400160) with its own key: the host's far-side ObjAct
+kick goes up; own save set`, the host `host flag 12400160 = 1 (world_state)`; the guest back home
+reads `12400160=1/1` (own save / visible). Both end with the gate open.
+
+Key Items tab while summoned (run10, 2026-10-21): the guest summoned at the host's Central Yharnam
+lamp, a scripted walk `options/cross/right/right` (the pause menu opens on Inventory, Consumables tab;
+Right twice = the key tab; R1 / L1 only move the item cursor, the touchpad opens the sort box) shows
+"Key Items" with the guest's own Oedon Tomb Key, Hunter Chief Emblem, Eye of a Blood-drunk Hunter,
+Blood Gem Workshop Tool, Saw / Sword Hunter Badge, Old Hunter Bell; the director's
+`watch_text` logged `text shows: "Oedon Tomb Key"` (and the other names). `up/right/right` lands
+there too. Smoke s2 (`keyitems`) runs that walk on guest 1 4 s after its arrival at m24_01
+(`BB_TEST_MENU_FILE` line `m24_01 4 ...`: a map instead of title / world / joined waits for that
+map, together) and needs the key name in the log.
 
 ## 11. Gestures (2026-10-20)
 
