@@ -1898,8 +1898,57 @@ void NoteLocalSet(u32 id) {
     }
 }
 
+// Test aid (BB_PARTY_WORLD_WATCH=id,...): every write of a watched flag through SetEventFlag /
+// CompleteEvent, with the game return addresses found on the stack (who wrote it); 600 lines at most.
+const std::vector<u32>& WatchedWrites() {
+    static const std::vector<u32> ids = [] {
+        std::vector<u32> v;
+        const char* e = std::getenv("BB_PARTY_WORLD_WATCH");
+        while (e && *e) {
+            char* end = nullptr;
+            const unsigned long x = std::strtoul(e, &end, 10);
+            if (end == e) {
+                break;
+            }
+            v.push_back(u32(x));
+            e = *end ? end + 1 : end;
+        }
+        return v;
+    }();
+    return ids;
+}
+__attribute__((noinline)) void TraceWatchedWrite(const char* via, u64 man, u32 id, u32 on) {
+    static std::atomic<int> lines{0};
+    if (lines.load(std::memory_order_relaxed) >= 600) {
+        return;
+    }
+    const std::vector<u32>& w = WatchedWrites();
+    if (std::find(w.begin(), w.end(), id) == w.end()) {
+        return;
+    }
+    lines.fetch_add(1, std::memory_order_relaxed);
+    const u64 base = Guest(0), size = ImageSize();
+    char callers[160] = {};
+    int n = 0, len = 0;
+    const u64* sp = static_cast<const u64*>(__builtin_frame_address(0));
+    for (int i = 0; i < 160 && n < 5; ++i) {
+        u64 v = 0;
+        if (!SafeGet(reinterpret_cast<u64>(sp + i), &v) || v <= base || v >= base + size) {
+            continue;
+        }
+        len += std::snprintf(callers + len, sizeof callers - std::size_t(len), " 0x%llx", static_cast<unsigned long long>(v - base));
+        ++n;
+    }
+    std::printf("Party progress: watched flag write %u = %u via %s (%s manager); stack:%s\n", id, on, via,
+                man == 0 ? "no" : "a", callers);
+    std::fflush(stdout);
+}
+
 BB_COOP_SYSV void OnSetEventFlag(u64 man, u64 id, u64 on, u64, u64, u64) {
     perf::Scope z(perf::Zone::HookSetFlag);
+    if (!WatchedWrites().empty()) {
+        TraceWatchedWrite(man == Manager() ? "SetEventFlag" : "SetEventFlag (other manager)", man, u32(id), u32(on));
+    }
     if (Capturing() && man == Manager()) {
         NoteId(u32(id));
     }
@@ -1920,6 +1969,9 @@ BB_COOP_SYSV void OnSetEventFlagValue(u64 man, u64 first, u64 bits, u64, u64, u6
 
 BB_COOP_SYSV void OnBroadcastSetFlag(u64, u64 id, u64, u64, u64, u64) {
     perf::Scope z(perf::Zone::HookBroadcastFlag);
+    if (!WatchedWrites().empty()) {
+        TraceWatchedWrite("CompleteEvent", 1, u32(id), 1);
+    }
     if (std::int32_t(u32(id)) >= 0) {
         NoteLocalSet(u32(id));
     }
