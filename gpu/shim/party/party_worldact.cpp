@@ -2923,7 +2923,7 @@ void KeyGateRewriter(int event_id, int bank, int id, std::uint64_t event, std::u
 // the party does the same, so their copies agree.
 std::atomic<int> g_lift_end_rewrites{0};
 void LiftEndRewriter(int event_id, int bank, int id, std::uint64_t event, std::uint64_t instr) {
-    if (bank != 3 || id != 2 || !liftrules::LocalEndRideEvent(event_id)) {
+    if (bank != 3 || (id != 2 && id != 7) || !liftrules::LocalEndRideEvent(event_id)) {
         return;
     }
     std::uint32_t size = 0;
@@ -2933,10 +2933,15 @@ void LiftEndRewriter(int event_id, int bank, int id, std::uint64_t event, std::u
         !liftrules::LocalEndToAllPlayers(event_id, bank, id, a, sizeof a)) {
         return;
     }
+    // The id stays in the loaded script; the argument bytes come afresh with every run of the event
+    // (live run 3), so they are moved on every dispatch, the id only the first time.
     const std::int32_t all_players = 7;
-    if (!SafeWrite(args, a, sizeof a) || !SafeWrite(instr + 4, &all_players, 4)) {
+    if (!SafeWrite(args, a, sizeof a) || (id == 2 && !SafeWrite(instr + 4, &all_players, 4))) {
         Log("lift ride end: event %d: 3[2] -> 3[7] NOT written", event_id);
         return;
+    }
+    if (id == 7) {
+        return;  // a later run of the event: logged once, at the first rewrite
     }
     std::int32_t region = 0;
     std::memcpy(&region, a + 4, 4);
