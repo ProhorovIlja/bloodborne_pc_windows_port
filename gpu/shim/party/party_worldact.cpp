@@ -103,7 +103,11 @@ const std::vector<Lift>& Lifts() {
         {12601252u, 12605252u, 0u, 2601230},
         {12601254u, 12605253u, 0u, 2601280},         // roof lift
         {12601255u, 12605254u, 0u, 2601290},         // roof lift
-        {12601256u, 12605256u, 0u, 2601240},         // the long lift down past Mergo's Loft (60 m; the report)
+        {12601256u, 12605256u, 0u, 2601240},         // first shortcut lift (28 m, lamp 2602953)
+        // the library lift (12601351 / 12601352, after Micolash: the 60 m ride down of the player's
+        // report): no network sync, no busy flag; the end its own copy leaves (pos 1: gate 9 / car 7,
+        // pos 0: gate 7 / car 9) is replayed on the other games
+        {12601253u, 0u, 0u, 2601260, 2601261, 7, 9, 9, 7},
         {12700134u, 12700135u, 0u, 2701032},         // Forbidden Woods
         {12700144u, 12700145u, 0u, 2701042},         // Forbidden Woods
         {12800610u, 12804700u, 12800611u, 2801400},  // Yahar'gul
@@ -125,14 +129,21 @@ const Lift* LiftByPosFlag(std::uint32_t pos) {
     return nullptr;
 }
 
-LiftSync HostLiftSync(bool host_pos, bool host_busy, bool car_loaded, bool want) {
+LiftSync HostLiftSync(bool host_pos, bool host_busy, bool car_loaded, bool want, bool replays, bool occupied) {
     if (host_pos == want) {
         return LiftSync::same;
     }
     if (host_busy) {
         return LiftSync::busy;
     }
+    if (car_loaded && replays) {
+        return occupied ? LiftSync::occupied : LiftSync::apply;
+    }
     return car_loaded ? LiftSync::loaded : LiftSync::apply;
+}
+
+bool LiftNeedsReplay(const Lift& l, bool pos_now, std::int32_t car_anim) {
+    return l.Replays() && car_anim != (pos_now ? l.car_end_on : l.car_end_off);
 }
 
 bool GuestLiftRideDone(bool pos_now, bool pos_changed_to, bool busy) {
@@ -1091,9 +1102,12 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
     for (auto it = st.lift_pending.begin(); it != st.lift_pending.end();) {
         const Lift* l = LiftByPosFlag(it->first);
         bool pos = false, busy = false, host = false;
-        if (!l || !progress::ReadFlag(l->pos, &pos) || !progress::ReadFlag(l->busy, &busy)) {
+        if (!l || !progress::ReadFlag(l->pos, &pos) || (l->busy && !progress::ReadFlag(l->busy, &busy))) {
             it = st.lift_pending.erase(it);
             continue;
+        }
+        if (!l->busy) {
+            busy = LiftBusyHere(*l, kLiftInCarRadius);  // liftfall: no busy flag: the car or its rider here
         }
         if (busy) {
             ++it;  // the ride runs: its end decides
@@ -1662,10 +1676,11 @@ void HostTick(const GameSnapshot& s) {
                 }
                 bool pos = false, busy = false;
                 progress::ReadFlag(l->pos, &pos);
-                progress::ReadFlag(l->busy, &busy);
+                if (l->busy) progress::ReadFlag(l->busy, &busy);
                 ObjAnimState car;
                 const bool loaded = ReadObjAnim(l->car, &car);
-                const LiftSync what = HostLiftSync(pos, busy, loaded, want);
+                const bool occupied = loaded && l->Replays() && LiftBusyHere(*l, kLiftCarRadius);
+                const LiftSync what = HostLiftSync(pos, busy, loaded, want, l->Replays(), occupied);
                 bool ok = true;
                 if (what == LiftSync::apply) {
                     ok = progress::WriteFlagOwnSave(l->pos, want);
@@ -1679,6 +1694,7 @@ void HostTick(const GameSnapshot& s) {
                         (what == LiftSync::same    ? "(same here)"
                          : what == LiftSync::busy  ? "(a ride runs here: left alone)"
                          : what == LiftSync::loaded ? "(car loaded here, its copy did not follow: left alone)"
+                         : what == LiftSync::occupied ? "(the host stands at the car: left alone)"
                          : ok                      ? "(applied: the lift's block is not loaded here)"
                                                    : "(NOT written)");
             }
@@ -2771,6 +2787,88 @@ bool ReadObjAnim(std::int32_t entity, ObjAnimState* out) {
     return true;
 }
 
+bool LiftBusyHere(const Lift& l, float radius) {
+    ObjAnimState car;
+    float at[3], me[4], rot[4];
+    if (!ReadObjAnim(l.car, &car)) {
+        return false;
+    }
+    return car.playing || (ObjectPoint(l.car, 0, 0, at) && LocalChrPose(me, rot) &&
+                           std::hypot(me[0] - at[0], me[2] - at[2]) < radius);
+}
+
+bool OnMovingLiftCar(const float p[3]) {
+    for (const Lift& l : Lifts()) {
+        ObjAnimState car;
+        float at[3];
+        if (ReadObjAnim(l.car, &car) && car.playing && ObjectPoint(l.car, 0, 0, at) &&
+            std::hypot(p[0] - at[0], p[2] - at[2]) < kLiftCarRadius) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void LiftReplayTick(const GameSnapshot& s) {
+    static std::map<std::uint32_t, bool> last;  // a replaying lift's pos flag -> its value last tick
+    static std::uint32_t map = 0xffffffffu;
+    if (!s.world_up || s.loading || s.map_id != map) {
+        last.clear();  // a load: the block's init event puts each car at its flag's end
+        map = (s.world_up && !s.loading) ? s.map_id : 0xffffffffu;
+        return;
+    }
+    for (const Lift& l : Lifts()) {
+        bool v = false;
+        if (!l.Replays() || l.pos / 100000u % 100u != (s.map_id >> 24) || !progress::ReadFlag(l.pos, &v)) {
+            continue;
+        }
+        const auto it = last.find(l.pos);
+        if (it == last.end() || it->second == v) {
+            last[l.pos] = v;
+            continue;
+        }
+        ObjAnimState car;
+        if (!ReadObjAnim(l.car, &car)) {
+            it->second = v;
+            Log("lift %d: flag %u = %d here, the car is not loaded (its init puts it at that end)", l.car, l.pos, v ? 1 : 0);
+            continue;
+        }
+        // A ride runs here (the car animates) or the local player stands in the car: this game's own
+        // copy decides; looked at again once neither holds (its own end then needs no replay). A
+        // guest's copy reads the flag at its ride's end to pick that end (12601352: "goto if 12601253
+        // on"): the host's flip that the mirror wrote meanwhile is put back, so the copy ends where it
+        // rode and sets the same value itself.
+        if (LiftBusyHere(l, kLiftInCarRadius)) {
+            if (progress::FlagLoadMode() == 1 && WriteEventFlag(l.pos, it->second)) {
+                Log("lift %d: flag %u = %d from the host's world during this game's own ride: kept at %d until "
+                    "its end", l.car, l.pos, v ? 1 : 0, it->second ? 1 : 0);
+            }
+            continue;
+        }
+        it->second = v;
+        if (!LiftNeedsReplay(l, v, car.anim)) {
+            Log("lift %d: flag %u = %d by this game's own ride (car anim %d)", l.car, l.pos, v ? 1 : 0, car.anim);
+            continue;
+        }
+        // Another game's ride (the mirror brought the host's to this guest, or the host took a
+        // guest's): the car and its gate to the end that game's copy left them at, as that copy's
+        // 2003[18] does (0x13CBFD0: entity, animation, loop, -).
+        using PlayAnim = void(BB_COOP_SYSV*)(std::int32_t, std::uint32_t, std::uint64_t, std::uint32_t);
+        const std::uint64_t fn = Guest(0x13cbfd0);
+        if (!fn) {
+            continue;
+        }
+        const std::int32_t gate_anim = v ? l.gate_end_on : l.gate_end_off;
+        const std::int32_t car_anim = v ? l.car_end_on : l.car_end_off;
+        if (l.gate && gate_anim >= 0) {
+            reinterpret_cast<PlayAnim>(fn)(l.gate, std::uint32_t(gate_anim), 0, 0);
+        }
+        reinterpret_cast<PlayAnim>(fn)(l.car, std::uint32_t(car_anim), 0, 0);
+        Log("lift %d: flag %u = %d from another game's ride (car anim %d here): car to that end (anim %d, gate %d anim %d)",
+            l.car, l.pos, v ? 1 : 0, car.anim, car_anim, l.gate, gate_anim);
+    }
+}
+
 bool StandAtChr(std::int32_t entity, float dist, float angle_deg, std::string* what) {
     using Find = std::uint64_t(BB_COOP_SYSV*)(std::int32_t, std::int32_t, std::uint64_t);
     const std::uint64_t fn = Guest(0x13c97a0);
@@ -3058,6 +3156,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
         return;
     }
     const PartyRole role = PartyDirector::Get().Role();
+    LiftReplayTick(s);
     droproll::Tick(s, link, role == PartyRole::Host);
     if (role == PartyRole::Guest) {
         g_fog_host_map.store(b2::MemberMap(0), std::memory_order_relaxed);
