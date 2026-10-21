@@ -26,6 +26,7 @@
 #include "party_progress.h"
 #include "party_split.h"
 #include "party_status.h"
+#include "../bbport_settings.h"
 #include "seamless_rules.h"
 
 #include <atomic>
@@ -2642,12 +2643,18 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
         // dropped copy.
         const bool usable = !SummonedKeyGiveNow(slots);
         const bool view = SummonedKeyViewActive();
-        const bool now = SummonedKeyGiveNowRule(view, std::getenv("BB_PARTY_KEY_ITEMS_SUMMONED"), usable);
+        // With the view: System > Party rewards "Key items at once" (bbport.ini
+        // party_key_items_summoned; BB_PARTY_KEY_ITEMS_SUMMONED at start), live. Without: only an
+        // explicit BB_PARTY_KEY_ITEMS_SUMMONED=1 (the setting's default on means nothing there).
+        const bool now = SummonedKeyGiveNowRule(
+            view, view ? (BbSettings::Get().party_key_items_summoned.load() ? "1" : "0")
+                       : std::getenv("BB_PARTY_KEY_ITEMS_SUMMONED"),
+            usable);
         NoteOwedLot(g.lot, now);
         if (!now) {
             Log("%s: key item / unique goods %s: not given while summoned%s; waits for the own world",
                 DescribeItem(g).c_str(), keys.c_str(),
-                view ? " (BB_PARTY_KEY_ITEMS_SUMMONED=0)" : usable ? " (it can be used up)" : "");
+                view ? " (Key items at once is off)" : usable ? " (it can be used up)" : "");
             return SummonedResult::Defer;
         }
         Log("%s: key item / unique goods %s: given now while summoned%s; also owed to the own world, which "
@@ -2796,8 +2803,11 @@ void BB_COOP_SYSV KeyViewHook(u64 container, u32 summoned) {
 }
 
 void InstallKeyView() {
-    if (!KeyViewOn(std::getenv("BB_PARTY_KEY_VIEW"))) {
-        Log("BB_PARTY_KEY_VIEW=0: the game's summoned key view (empty after each host-world load)");
+    // System > Party rewards "Own key items as guest" (bbport.ini party_key_view; BB_PARTY_KEY_VIEW
+    // at start): read here once, next start.
+    if (!KeyViewOn(BbSettings::Get().party_key_view.load() ? "1" : "0")) {
+        Log("own key items as guest off (party_key_view / BB_PARTY_KEY_VIEW=0): the game's summoned key "
+            "view (empty after each host-world load)");
         return;
     }
     // lea rdi, [rbx + 0x338]; mov esi, 1 before the call, and 0x1AC5600's own first bytes.
