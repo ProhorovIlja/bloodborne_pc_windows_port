@@ -112,6 +112,29 @@ except 6000-8999.
 guest is in mode 1; and write the visible tree (SetEventFlag) when it is in mode 0. On the host
 (always mode 0) SetEventFlag is correct.
 
+**Shop stock (per player).** The one-time ShopLineupParam rows' stock flags (`flag_tool.py
+params`, sellQuantity 1) are 6610/6650/6660 (bells, chalice: block 6, own pool), **70009000-70009490**
+step 10 (global T7 zone 9: the Bath Messengers' armor, Hunter Chief Emblem, Gold Ardeo, the
+Insight shop's attire, the Sinister chalices) and **72101000-72101002 / 72101010-72101011**
+(m21_00 T7 zone 1: the Dream's starting weapons). The last two groups are overlay groups in mode 1:
+the guest's shop reads and writes the host-world copy. Player report 2026-10-20: the host's purchase
+reached the guest through the world mirror (`world mirror: blocks changed by the host: 70009:1`,
+Gascoigne's set 70009300-330) and showed sold out there, and the guest's own purchases
+(70009340-370) stayed in the discarded overlay (`kept local (not a world action)`). Now
+(`ShopStockFlag`, party_progress): the mirror never writes these bits (`WorldMirrorMask` without
+them, so D3 never reports them either), and in mode 1 the guest merges the overlay's stock bits with
+its own pool every frame, set-only both ways (`guest shop stock: purchase N ... saved to the own
+save`, `... own purchase(s) shown in the host's world`), then requests a game save.
+Live 2026-10-21 (two loopback instances, default save, the upper Insight messenger t210698): before
+(`BB_PARTY_SHOP_STOCK=0` on the guest) the host's 70009300 reached the guest's overlay
+(`world mirror: blocks changed by the host: 70009:1`, watch `70009300: visible 1, own save 0, host
+image 1`). After: host save holds Gascoigne's Cap / Garb (70009300/310), the host's Attire tab lists
+only Gloves / Trousers, the guest's lists all four; the guest bought the Cap (`purchase 70009300 ...
+saved to the own save`, Insight 6 -> 5, save requested), was killed 8 s later and rejoined: `test
+read ... 70009300=1/0`, then `own purchase(s) shown in the host's world: 70009250 70009300`, and its
+next buy took the Garb (70009310, Insight 5 -> 2), not the Cap again; its Attire tab then listed
+Gloves / Trousers only.
+
 ## 4. Vanilla multiplayer flag channels
 
 1. **Join snapshot (host -> client), packet 0x10.** 0x1786050 serializes with 0x13be3c0 into an

@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <mutex>
 #include <set>
 #include <stdexcept>
@@ -1301,6 +1302,7 @@ struct MirrorTables {
     std::vector<int> keys;
     std::vector<GroupBytes> masks;  // per pool key; all zero outside the mirror
     std::vector<GroupBytes> items;  // per pool key: the masked item_lot_picked bits
+    std::vector<GroupBytes> shop;   // per pool key: the shop stock bits (never in `masks`)
 };
 std::atomic<bool> g_instanced_items{false};
 const MirrorTables& Mirror() {
@@ -1308,6 +1310,10 @@ const MirrorTables& Mirror() {
         MirrorTables m;
         m.masks.assign(kPoolBlocks, GroupBytes{});
         m.items.assign(kPoolBlocks, GroupBytes{});
+        m.shop.assign(kPoolBlocks, GroupBytes{});
+        // BB_PARTY_SHOP_STOCK=0: the 0.6.9 behaviour (the host's stock mirrored; a live repro aid).
+        const char* ss = std::getenv("BB_PARTY_SHOP_STOCK");
+        const bool shop_per_player = !(ss && ss[0] == '0');
         for (int key = 0; key < int(kPoolBlocks); ++key) {
             const u32 block = BlockOfPoolKey(key);
             if (block == 0xffffffffu) {
@@ -1337,6 +1343,11 @@ const MirrorTables& Mirror() {
                 if ((id >= 2000 && id <= 2099) || (id >= 9020 && id <= 9026) || deathrules::LampTriggerFlag(id)) {
                     PutBit(mask.data(), bit, false);
                 }
+                // Shop stock is per player: mirrored, the host's purchase sold the item out on the guest.
+                if (shop_per_player && ShopStockFlag(id)) {
+                    PutBit(mask.data(), bit, false);
+                    PutBit(m.shop[key].data(), bit, true);
+                }
             }
             for (u32 bit = kBitsPerBlock; bit < kBlockBytes * 8; ++bit) {
                 PutBit(mask.data(), bit, false);  // padding bits of the last byte
@@ -1357,6 +1368,47 @@ bool NonZero(const GroupBytes& g) {
     return std::any_of(g.begin(), g.end(), [](u8 b) { return b != 0; });
 }
 } // namespace
+
+bool ShopStockFlag(u32 id) {
+    // The "shop stock row" rows of party_flags.inc (flag_tool.py gen-inc: every ShopLineupParam
+    // eventFlag), as sorted ranges.
+    static const std::vector<std::pair<u32, u32>> ranges = [] {
+        std::vector<std::pair<u32, u32>> r;
+        for (const Row& row : kRows) {
+            if (row.note && std::strncmp(row.note, "shop stock row", 14) == 0) {
+                r.emplace_back(row.first, row.last);
+            }
+        }
+        std::sort(r.begin(), r.end());
+        return r;
+    }();
+    auto it = std::upper_bound(ranges.begin(), ranges.end(), std::make_pair(id, 0xffffffffu));
+    return it != ranges.begin() && id <= std::prev(it)->second;
+}
+
+const GroupBytes& WorldShopMask(int key) {
+    return key >= 0 && key < int(kPoolBlocks) ? Mirror().shop[key] : kZeroGroup;
+}
+
+ShopMerge MergeShopStock(u32 block, const GroupBytes& mask, GroupBytes* overlay, GroupBytes* pool) {
+    ShopMerge r;
+    for (u32 i = 0; i < kBlockBytes; ++i) {
+        const u8 to_pool = u8((*overlay)[i] & ~(*pool)[i] & mask[i]);
+        const u8 to_overlay = u8((*pool)[i] & ~(*overlay)[i] & mask[i]);
+        for (u32 b = 0; (to_pool | to_overlay) && b < 8; ++b) {
+            const u8 m = u8(0x80u >> b);
+            if (to_pool & m) {
+                r.saved.push_back(block * kBitsPerBlock + i * 8 + b);
+            }
+            if (to_overlay & m) {
+                r.shown.push_back(block * kBitsPerBlock + i * 8 + b);
+            }
+        }
+        (*pool)[i] = u8((*pool)[i] | to_pool);
+        (*overlay)[i] = u8((*overlay)[i] | to_overlay);
+    }
+    return r;
+}
 
 bool WorldMirrorKey(int key) {
     const auto& k = Mirror().keys;
@@ -2151,6 +2203,53 @@ std::size_t GuestItemOverlaySync(const FlagStore& store, const std::map<u32, u64
     return bits;
 }
 
+/// Guest, main thread, load mode 1: shop stock is per player (ShopStockFlag). The shop reads and
+/// writes the host-world overlay (global T7 zone 9, m21_00 T7 zone 1), which the mirror leaves
+/// alone for these bits: each frame the overlay's stock bits and the own pool's are merged set-only
+/// both ways, so the guest's shop shows the guest's own purchases and a purchase made here is saved.
+void GuestShopStockTick(const FlagStore& store) {
+    static const std::vector<int> keys = [] {
+        std::vector<int> k;
+        for (int key : WorldMirrorKeys()) {
+            const GroupBytes& m = WorldShopMask(key);
+            if (std::any_of(m.begin(), m.end(), [](u8 b) { return b != 0; })) {
+                k.push_back(key);
+            }
+        }
+        return k;
+    }();
+    bool saved = false;
+    for (int key : keys) {
+        const u32 block = BlockOfPoolKey(key);
+        BlockRef r;
+        const u64 pool = store.PoolBlockAddress(key);
+        if (!pool || !store.FindBlock(block, &r) || r.kind != 2 || !r.data || r.data == pool) {
+            continue;  // not this map's overlay group (another map's T7 zone 1: not in the tree)
+        }
+        GroupBytes cur, own;
+        if (!store.ops().read(r.data, cur.data(), kBlockBytes) || !store.ops().read(pool, own.data(), kBlockBytes)) {
+            continue;
+        }
+        const ShopMerge m = MergeShopStock(block, WorldShopMask(key), &cur, &own);
+        if (!m.saved.empty() && store.ops().write(pool, own.data(), kBlockBytes)) {
+            saved = true;
+            for (u32 id : m.saved) {
+                Log("guest shop stock: purchase %u in the host's world saved to the own save (per player)", id);
+            }
+        }
+        if (!m.shown.empty() && store.ops().write(r.data, cur.data(), kBlockBytes)) {
+            std::string list;
+            for (u32 id : m.shown) {
+                list += (list.empty() ? "" : " ") + std::to_string(id);
+            }
+            Log("guest shop stock: %zu own purchase(s) shown in the host's world: %s", m.shown.size(), list.c_str());
+        }
+    }
+    if (saved) {
+        RequestGameSave("shop purchase in the host's world");
+    }
+}
+
 const char* MirrorWhy(bool full, u64 id, u64 last) {
     return !full ? "host changes" : id != last ? "new overlay" : "snapshot applied";
 }
@@ -2445,6 +2544,9 @@ void Tick(const GameSnapshot& s) {
     if (role == Role::Host && store.LoadMode() == 0) {
         HostTick(g, store, s, now);
     } else if (role == Role::Guest) {
+        if (store.LoadMode() == 1) {
+            GuestShopStockTick(store);
+        }
         GuestTick(g, store, s.map_id);
     }
     if (g.dump) {
