@@ -49,6 +49,13 @@ The ten things most likely to go wrong in the next ~5 hours, and what to do in g
    guest's next solo death to the Gaol). The guest's own save gets 9421 / 9423 (key_event: "kidnap
    done") and, once it goes home and rings again, the Gaol as its own last lamp (the bell's gather
    lamp warp to the host's lamp) - the same state as a solo kidnap, never a pending one.
+   *Fixed (kidnap071, 2026-10-21, live, smoke group `kidnap`):* 0.7.0's default host revive
+   (`BB_PARTY_B2_HOST_REVIVE`) had turned the kidnap into a lone load (the Gaol is in another map:
+   `the host loads it alone (the guests stay)`) and the guests, still in the Cathedral Ward, got
+   the host's waking scene 28000010 as a live mirror without the cell's scenery (a player report;
+   reproduced on master). A scripted death warp (`deathrules::ScriptedDeathWarp`, see "Scripted
+   warps into another map") is now always the party's respawn load, and a live mirror plays only
+   in its own map (`MirrorMapOk`; a missed scene's summoned replay waits for its map too).
    *Fixed (parg, live):* the host's +1 Insight at the end of 9422 (SpEffect 4680, host only) now
    reaches every guest present (`DirectInsight`, party_phantom.h): live, host 6 -> 7 at the end of
    the waking scene, `event 9422 gave the host 1 Insight`, guest `+1 here`, 14 -> 15.
@@ -284,7 +291,7 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 
 | Event | ids | Host | Guest | Risk | Fix |
 |---|---|---|---|---|---|
-| Hypogean Gaol (kidnap) | common 9421 (respawn 2802959), 9422 (remo 28000010 in m28, sets 9423, SpEffect 4680; `End if Client`) | wakes in a cell | follows the respawn with one loading screen, beside the host (live, P7); its loading screen holds through the host's waking scene; the host's +1 Insight of 9422 reaches the guest (parg, live) | ok | F1, checklist 1 |
+| Hypogean Gaol (kidnap) | common 9421 (respawn 2802959; ends once 9423 is on: only the first kidnap goes to the Gaol), 9422 (remo 28000010 in m28, sets 9423, SpEffect 4680; `End if Client`) | wakes in a cell | follows the respawn with one loading screen, beside the host (live, P7; again live in 0.7.x, kidnap071: the host's revive no longer takes it alone); its loading screen holds through the host's waking scene (the mirror of 28000010 is dropped while it is not in m28, then it plays the scene as its own replay in the cell); the host's +1 Insight of 9422 reaches the guest (parg, live) | ok | F1, checklist 1, "Scripted warps" |
 | First-sacrifice multiplayer block | 12800160: SpEffects 9120/9121 while 9802 is off | | cutscenes_endings.md 5.2: unknown effect on summons in m28 | major (untested) | P6 |
 | Time of day | 12800400 (sets 2800 never_sync, 70002802), gates 12800402/12800403 by 9802 | | mirrored | ok | |
 | Upper Cathedral Key | lot 2800290 (treasure) | picks up | was per player | major | F2 |
@@ -361,6 +368,35 @@ major / minor / ok; **fix** = done here (F#), proposal (P#, list at the end) or 
 | Research Hall keys | Underground Cell Key 3500800 (treasure, F2), Inner Chamber Key 43220 (Simon, flag 50002350 global), Balcony Key 43010 / 43030 (flag 50002250 global), Astral Clocktower Key 3501850 (award), Celestial Dial 3501800 (award), Eye Pendant 3401810 (flag 9470) | | shared | ok after F2 | |
 | Clocktower altar | 13501105 (goods 4017, phantom-aware), 13501140 | | | minor | |
 | Research Hall talk NPCs | NpcParam 402080, 402090, 402280, 402281, 402290, 402300 (talks 3505xx), Fishing Hamlet 405100 (t360507), 409000 (t340540), Ludwig's head 451100 (t340508) keep the ghost bit | | solid since P3 (2026-10-15; only these talk NPCs use the rows): the guest can talk | ok | P3 |
+
+### Scripted warps into another map (kidnap071, 2026-10-21)
+
+Every EMEVD instruction that moves a player to another map, from the game data (`flag_tool.py
+emevd` with 2003[23] added as a marker; every 2002[4] / [6] cutscene warp stays in its own map, so
+none is listed). Rule for all of them: the whole party is taken together with one loading screen
+(a death's respawn load or a party travel), and no guest mirrors a cutscene of a map it has not
+loaded (`MirrorMapOk`, party_story.h: the remo id AABBnnnn names its map; a missed scene's
+summoned replay waits for that map or the own world).
+
+| Warp | Event (trigger, gate) | Destination | Who can trigger it | The rest of the party | Status |
+|---|---|---|---|---|---|
+| Snatcher kidnap | 12400780 (m24_00, 4 slots) / 12700500 (m27): local chr type 0, its death by the Snatcher, 9401 + 9404 -> 9420; common 9421 (`End if Client`, until 9423) -> `2003[23] 2802959` | the Gaol cell (m28) on the death's respawn | the host only (a guest is chr type 1) | the host's death is a scripted death warp: the party's respawn load (`host death: a scripted death warp: the Snatcher's kidnap ...`, then `the respawn load for the whole party at lamp 2802959`); every guest wakes beside the host (live: smoke `kidnap`) | fixed (0.7.0 regression) |
+| First death with Insight | common 9404 (`End if Client`): 9401 on, Insight >= 1, the player's death -> `2003[23] 2102961` (12100110 sets 9404 at the Doll's awakening) | the Hunter's Dream (m21) on the death's respawn | the host only | the same rule: the respawn record moved between the host's last frame alive and the funnel to another map (`RespawnMovedAtDeath`), so the party's respawn load; unit-tested, not reached live (no fixture for a first death with Insight) | fixed (unit) |
+| Prologue first death | common 9400 (`End if Client`, ends on 9401 / 12410999) -> `2003[23] 2102962` | the first Dream | the host only | the clinic has no multiplayer (campaign_start.md): never in a party | n/a |
+| DLC entry (the Eye of a Blood-drunk Hunter) | 12405263 (m24_00, Oedon Chapel: Amygdala 2400899 shown at the Blood Moon or 12404001; its grab = event message 710 + goods 4311 held by the local player): remo 24000000 (m24_00), then chr type 0 only: 12401000, `2003[49] 3402959`; arrival 13401000 (no scene, respawn 3402958) | the Hunter's Nightmare (m34) | the host's grab warps; a guest's grab plays the m24 scene only and stays | story warp (P8): "Travel with the party?", YES (default) = the party travel with one load each; the grab scene plays in the map everyone has loaded (live kw: `host_lamp 3402959 as a story warp`, every game in m34_00) | ok |
+| Yahar'gul Amygdala grab (Tonsil Stone) | 12800431 (m28: Amygdala 2800745 shown at Insight >= 40 or the Blood Moon; event message 10 + goods 4310 held; **no client guard**): remo 28000040 / 28001040 (m28), 12800434, `2003[49] 3202958`; arrival 13200950 (no scene) | the Lecture Building (m32) | any player holding the Tonsil Stone | story warp: the triggering player's question, YES = the party travel (live kw: guest 1's `guest_lamp 3202958 as a story warp`, every game in m32_00) | ok |
+| One Reborn altar | 12800430 (`End if Client`) -> `2003[49] 3202959` | the Lecture Building | the host only | story warp question | ok (P8) |
+| Rom -> Blood Moon | 13201803 (host) -> remo, `2003[49] 2802958` | Yahar'gul (m28) | the host only | story warp question | ok (P8, live parg) |
+| Hemwick carriage | 12200131 (action button) -> remo, `2003[49] 2502959` | Cainhurst (m25) | any player | story warp question | ok (P8) |
+| Lecture Building doors | 13200310 -> `2003[49] 2602959` (Mensis), 13200311 -> `3302959` (Nightmare Frontier) | m26 / m33 | any player | story warp question (P4: one question) | ok (P8, parab) |
+| DLC cleanup | common 3503 (chr type 0, 6899 off) -> `2003[49] 2102961` | the Dream | the host only | story warp question | ok |
+| Chalice leftovers | m29 12900990 (`2003[14]` to m20_01 / m29_01 / m29_02 points), m29_03 12900780 ("December version" return statue, `2003[14]` 2100980) | | no object of a released dungeon runs them | | n/a |
+
+There is no Amygdala grab in Lumenwood Garden or anywhere in the Upper Cathedral Ward (m24_02 has
+no warp instruction); the Nightmare Frontier is reached through the Lecture Building's door
+13200311. The grab attacks themselves are not scripted in the tests (an Amygdala's grab hit is the
+trigger): phase `kw` runs the same warps the events run (`host_lamp=ID:story`) and plays the Gaol
+scene on the host outside m28 (`BB_PARTY_STORY_TEST=host:28000010`) to show no guest mirrors it.
 
 ### Chalice dungeons
 
