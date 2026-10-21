@@ -75,6 +75,17 @@ constexpr LedgerRow kLedger[] = {
 #undef ITEM_LEDGER
 };
 
+struct AwardSpot {
+    std::int32_t lot;
+    std::int32_t spot_flag;
+    const char* note;
+};
+constexpr AwardSpot kAwardSpots[] = {
+#define ITEM_AWARD_SPOT(lot, spot, note) {lot, spot, note},
+#include "party_items.inc"
+#undef ITEM_AWARD_SPOT
+};
+
 struct SourceName {
     ItemSource source;
     const char* name;
@@ -244,6 +255,16 @@ std::int32_t ItemLedgerLot(std::int32_t idx) {
         }
     }
     return kItemNone;
+}
+
+std::vector<std::int32_t> ItemAwardSpotFlags(std::int32_t lot) {
+    std::vector<std::int32_t> out;
+    for (const AwardSpot& r : kAwardSpots) {
+        if (r.lot == lot && std::find(out.begin(), out.end(), r.spot_flag) == out.end()) {
+            out.push_back(r.spot_flag);
+        }
+    }
+    return out;
 }
 
 std::size_t ItemLotFlagCount() {
@@ -1905,6 +1926,25 @@ void AttachHostRoll(ItemGrant* g) {
     Log("host rolled random lot %d once for the party: %zu item(s)", g->lot, g->items.size());
 }
 
+/// ItemAwardSpotFlags unless BB_PARTY_ITEM_SPOTS=0 (the spot stays as before: only the lot's flag).
+std::vector<std::int32_t> SpotFlags(std::int32_t lot) {
+    static const bool off = EnvOff("BB_PARTY_ITEM_SPOTS");
+    return off ? std::vector<std::int32_t>() : ItemAwardSpotFlags(lot);
+}
+
+/// At home (load mode 0: the live store is the own save): the lot's item spot flags
+/// (ItemAwardSpotFlags) once the lot counts as given here. Returns the ids it set ("" if none).
+std::string SetAwardSpotsHome(u64 man, const ItemGrant& g) {
+    std::string set;
+    for (const std::int32_t f : SpotFlags(g.lot)) {
+        if (!IsFlag(man, f)) {
+            SetFlag(man, f);
+            set += (set.empty() ? "" : ",") + std::to_string(f);
+        }
+    }
+    return set;
+}
+
 /// True when the award ran (a popup may have opened).
 bool Apply(const ItemGrant& g) {
     const u64 man = Ptr(kFlagMan);
@@ -1937,7 +1977,9 @@ bool Apply(const ItemGrant& g) {
                 SetFlag(man, done, false); // the award's roll skips rows whose flag is set; it sets it again
             }
         } else {
-            Log("skip %s: already given (flag %lld set)", DescribeItem(g).c_str(), static_cast<long long>(done));
+            const std::string spots = SetAwardSpotsHome(man, g);
+            Log("skip %s: already given (flag %lld set)%s%s", DescribeItem(g).c_str(), static_cast<long long>(done),
+                spots.empty() ? "" : "; item spot flag(s) set: ", spots.c_str());
             return false;
         }
     }
@@ -1957,8 +1999,9 @@ bool Apply(const ItemGrant& g) {
     const LotFit fit = ClassifyLotFit(LotSlots(g.lot), &why);
     if (fit != LotFit::Give) {
         SetFlag(man, done);
-        Log("skip %s: %s (%s); flag %lld set instead", DescribeItem(g).c_str(), LotFitName(fit), why.c_str(),
-            static_cast<long long>(done));
+        const std::string spots = SetAwardSpotsHome(man, g);
+        Log("skip %s: %s (%s); flag %lld set instead%s%s", DescribeItem(g).c_str(), LotFitName(fit), why.c_str(),
+            static_cast<long long>(done), spots.empty() ? "" : ", item spot flag(s) ", spots.c_str());
         ForgetOwedLot(g.lot);  // held already: not owed
         return false;
     }
@@ -1977,8 +2020,10 @@ bool Apply(const ItemGrant& g) {
         SetFlag(man, done, false);
     }
     const bool now_set = IsFlag(man, done);
-    Log("gave %s: 0x17DDC50(lot %d, 0) added %u item entr%s; flag %lld is %s", DescribeItem(g).c_str(), g.lot, added,
-        added == 1 ? "y" : "ies", static_cast<long long>(done), now_set ? "set" : "CLEAR (nothing given)");
+    const std::string spots = now_set ? SetAwardSpotsHome(man, g) : std::string();
+    Log("gave %s: 0x17DDC50(lot %d, 0) added %u item entr%s; flag %lld is %s%s%s", DescribeItem(g).c_str(), g.lot,
+        added, added == 1 ? "y" : "ies", static_cast<long long>(done), now_set ? "set" : "CLEAR (nothing given)",
+        spots.empty() ? "" : "; item spot flag(s) set: ", spots.c_str());
     if (added > 0) {
         ForgetOwedLot(g.lot);  // given at home in this session: not owed any more
     }
@@ -2390,8 +2435,20 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
                 DescribeItem(g).c_str(), static_cast<long long>(done), HeldSummary(g.lot).c_str());
             return SummonedResult::Defer;
         }
-        Log("skip %s: already given (own-save flag %lld set; %s)", DescribeItem(g).c_str(),
-            static_cast<long long>(done), HeldSummary(g.lot).c_str());
+        // The lot's item spot (an altar's event flag, ITEM_AWARD_SPOT) goes with it: a save that
+        // got the lot before this rule still offers the spot after every load (playtest 2026-10-20).
+        std::string spots;
+        for (const std::int32_t f : SpotFlags(g.lot)) {
+            if (!OwnSaveFlag(f) && progress::WriteFlagOwnSave(static_cast<u32>(f), true)) {
+                spots += (spots.empty() ? "" : ",") + std::to_string(f);
+            }
+        }
+        Log("skip %s: already given (own-save flag %lld set; %s)%s%s", DescribeItem(g).c_str(),
+            static_cast<long long>(done), HeldSummary(g.lot).c_str(),
+            spots.empty() ? "" : "; item spot flag(s) set in the own pool: ", spots.c_str());
+        if (!spots.empty()) {
+            RequestGameSave("C3 item spot flags");
+        }
         return SummonedResult::Skipped;
     }
     const std::vector<LotRowData> chain = LotChain(g.lot);
@@ -2466,6 +2523,14 @@ SummonedResult ApplySummoned(const ItemGrant& g) {
     }
     for (const std::int32_t f : plan.row_flags) {
         if (f != done && f > 0) {
+            flags.push_back(f);
+        }
+    }
+    // The item spot's own flag (ITEM_AWARD_SPOT): the guest's overlay item bits follow its own pool
+    // (D4), so the spot is gone for it once the lot was shared - after loads too (an altar offered
+    // again after the host's death respawn, playtest 2026-10-20).
+    for (const std::int32_t f : SpotFlags(g.lot)) {
+        if (std::find(flags.begin(), flags.end(), f) == flags.end()) {
             flags.push_back(f);
         }
     }
