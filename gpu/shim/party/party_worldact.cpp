@@ -1604,6 +1604,7 @@ struct Fixture {
     bool parsed = false;
     std::vector<std::int32_t> objs, chrs;
     int pickups = 0;  // "pickup=N": the N treasures nearest the guest, one try each
+    int pickups0 = 0;  // its parsed N (FixtureRearm)
     std::string map;  // "map=NAME": only while the current map's name contains NAME
     int kills = 0;    // "kill=N": N times the nearest live map enemy: ForceDead, then pick up its drop
     std::int32_t loot = 0;  // "loot=ENTITY": wait until that enemy is dead (killed anywhere), then pick up its drop
@@ -1622,6 +1623,8 @@ struct Fixture {
     std::int32_t kill_id = 0;
     double after = 8;
     int talk = 4;  // "talk=N": Cross presses at a character (the first opens the talk), default 4
+    std::uint32_t prompt = 0;  // "prompt=ID": press only while that action prompt is the only one up
+    double gap = 0;            // "gap=S": S s before each further object / character
     std::size_t idx = 0;
     int tries = 0, presses = 0;
     double next = 0, release = 0;
@@ -1918,6 +1921,7 @@ void FixtureTick(double now) {
         }
         if (const std::size_t a = v.find("pickup="); a != std::string::npos) {
             f.pickups = std::atoi(v.c_str() + a + 7);
+            f.pickups0 = f.pickups;
         }
         if (const std::size_t a = v.find("map="); a != std::string::npos) {
             f.map = v.substr(a + 4, v.find(';', a) == std::string::npos ? std::string::npos : v.find(';', a) - a - 4);
@@ -1938,6 +1942,12 @@ void FixtureTick(double now) {
         }
         if (const std::size_t a = v.find("kill="); a != std::string::npos) {
             f.kills = std::atoi(v.c_str() + a + 5);
+        }
+        if (const std::size_t a = v.find("prompt="); a != std::string::npos) {
+            f.prompt = std::uint32_t(std::strtoul(v.c_str() + a + 7, nullptr, 10));
+        }
+        if (const std::size_t a = v.find("gap="); a != std::string::npos) {
+            f.gap = std::atof(v.c_str() + a + 4);
         }
         Log("test: fixture: %zu object(s), %zu character(s), %.0f s after a steady world", f.objs.size(),
             f.chrs.size(), f.after);
@@ -2308,10 +2318,14 @@ void FixtureTick(double now) {
         ++f.idx;
         f.tries = 0;
         f.presses = 0;
-        f.next = now + 1.0;
+        f.next = now + 1.0 + f.gap;
         return;
     }
-    if (f.tries > 0 && GuestSvcPromptUp(&prompt)) {
+    std::uint32_t other = 0;
+    if (f.tries > 0 && f.prompt && GuestSvcPromptUp(&prompt) && !GuestSvcOnlyPrompt(f.prompt, &other)) {
+        Log("test: fixture: %s %d: prompt %u is not only %u (also %u); next spot", kind, ent, prompt, f.prompt, other);
+    } else if (f.tries > 0 && GuestSvcPromptUp(&prompt)) {
+        prompt = f.prompt ? f.prompt : prompt;
         Log("test: fixture: %s %d: prompt %u up after %d spot(s); Cross", kind, ent, prompt, f.tries);
         runtime_pad_director_press(0x4000);
         f.release = now + 0.15;
@@ -2512,6 +2526,23 @@ BB_COOP_SYSV void NetKickEntry(std::uint64_t man, std::uint64_t idx, std::uint64
 }
 
 } // namespace
+
+void FixtureRearm() {
+    // The objects and the treasure pickups once more (treasures tried before stay skipped), "after"
+    // counted from now: the same checks again after an in-place revive (guest_fixture step).
+    Fixture& f = g_fx;
+    if (!f.parsed || (f.objs.empty() && f.chrs.empty() && f.pickups0 <= 0)) {
+        Log("test: fixture: re-arm: no fixture");
+        return;
+    }
+    f.done = false;
+    f.idx = 0;
+    f.tries = 0;
+    f.presses = 0;
+    f.pickups = f.pickups0;
+    f.next = Now() + f.after;
+    Log("test: fixture: re-armed: %zu object(s), %d pickup(s) in %.0f s", f.objs.size(), f.pickups, f.after);
+}
 
 bool StandAtObject(std::int32_t entity, float dist, float angle_deg, std::string* what, float dy) {
     std::uint32_t idx = 0xffffffffu;
