@@ -658,6 +658,63 @@ again: goods 4118 x1 (held 0 -> 1)`, then `owed lot 50800000: goods 4118 held 1 
 again`. Both saves on disk afterwards (`save_decode.py`, `user\savedata_party`): 4118 x1, flag
 60009038 set; the guest's save written after the rejoin (summoned again) still has 4118 x1.
 
+### 10.5 Used-up items never come back (2026-10-21)
+
+Report (0.6.9 playtest 2): "the host can have key items brought back after using them (a gold
+blood gem)". The item is Amelia's **Gold Pendant** (goods 4001, ledger lot 50000001, done flag
+12401800): goodsType 0, maxNum 1, no storage, and usable from the menu (refId 3392, use anim 29:
+it becomes a blood gem). So it was `KeyGoods` / `LedgerSkipSuspicious`, and the 0.6.2 rule
+"ledger bit and boss flag in the save, held 0 -> it was lost" (`KeyCatchupTick`, every own-world
+load, any role) gave it back after every use. The same rule ran in `Apply` (#16, a rejoin's full
+list at home) and, on master, in the owed check after a summoned give and in `SummonedGivesTick`
+(held below the count right after a summoned give -> given again, for any goods).
+
+Mechanism [live, run A 2026-10-21, master = 0.6.9 code here, default test save, which holds the
+ledger seed sources but no pendant]: host, first own world: `key item catch-up: gave goods 4001 x1
+(lot 50000001, ledger 35 = flag 60009035 set with boss flag 12401800 in this save; held 0 -> 1)`.
+
+Rule now: a held count of 0 means "lost" only for KeyGoods that cannot be used up
+(`KeyRegiveAllowed`: EquipParamGoods refId < 0 and goodsUseAnim 0, read into
+`LotSlotState::usable` - keys, badges, workshop tools, chalices). For everything else the grant
+decides, never the held count:
+* `KeyCatchupNeeded` / `Apply` #16 / the summoned "checked in the own world" defer: only lots whose
+  every slot is `KeyRegiveAllowed` (Gold Pendant, Tear Stone 4301, Iosefka's vial: skipped as given).
+* summoned key give (10.3): only when every KeyGoods slot is `KeyRegiveAllowed`; a usable unique
+  item waits for the own world as in 0.6.2 - 0.6.9 (`SummonedKeyGiveNow`).
+* owed lots (`party_owed_lots.txt`, now `LOT SLOT GIVEN`; an old two-field line counts as given):
+  given while summoned -> only a `KeyRegiveAllowed` item reading 0; deferred -> once, only when the
+  lot's done flag is not in the save, and the give sets it (`OwedGiveAllowed`), so a rejoin's full
+  list never gives it again after it was used.
+* `SummonedGivesTick` re-gives (and `party_summoned_gives.txt` records) only `KeyRegiveAllowed`
+  goods: the second inventory section is the same summoned and at home, so anything else held below
+  the count after the give was used, dropped or sold.
+
+* `KeyGoodsWatchTick`: a `KeyRegiveAllowed` key item whose count rises while summoned (an NPC's
+  gift in the host's world: playtest 2 guest logs, Tonsil Stone 4310 `0 -> 1` from the talk, `x0`
+  after the next load) is noted like a party give, so the own world gives it back if the save lost it.
+
+Unit tests: `test_key_catchup` (party-items-test). Test aid: `host_use=GOODS:take@S`.
+
+Live (run B, fixed build, 2 instances, `BB_PARTY_ITEMS_HOST_TEST=50800000,50000001`, host chain
+`host_use=4001:take`, `host_warp` x2): host first own world `4001 x0`, no catch-up; the award test
+gives the pendant (`4001 0 -> 1`), used (`held 1 -> 0`), after both warps `4001 x0`, nothing given.
+Guest (summoned): `skip ... lot 50000001 ...: already given (own-save flag 60009035 set; 4:4001
+held 0)` instead of the old "checked in the own world" (which the catch-up then gave).
+
+The guest's "all key items gone after an area load" (issue 1) is the game's summoned view, not a
+loss [live, run B, `save_decode.py` on the guest's `savedata_party` written every 15 s]: summoned,
+`key goods held` reads 4000 / 4114 `x0` after every host-world load and `x1` again at home; every
+save written during the session (Dream, Tomb of Oedon, Cathedral Ward, home) lists all 7 key items
+of the test save. A key item given while summoned (4118) is in the save written before the next
+load, gone from the one after it (the game rebuilds the key section from the saved one), and given
+again at home (`goods given while summoned are missing in the own world; given again: goods 4118
+x1`). Note: a save written while summoned holds the saved key section plus the summoned additions,
+so a summoned give of a key item the save already holds would add a second stack; a player's save
+(not a party test save) showed `4001 x1` twice in its key list after 0.1 h of play (the copy 0.1 h
+older had one). Its build and logs are not ours, so the path that added it is not known; the
+summoned give is guarded by the lot's done flag, and usable unique goods are no longer given while
+summoned at all.
+
 ## 11. Gestures (2026-10-20)
 
 How the game keeps them [static, checked on the test save]: gestures are no inventory items and no
