@@ -26,6 +26,7 @@
 #include "party_enemy_census.h"
 #include "party_ids.h"
 #include "party_director.h"
+#include "party_droproll.h"
 #include "party_flow.h"
 #include "party_link.h"
 #include "party_status.h"
@@ -1248,6 +1249,16 @@ bool SetEnemyHpZero(u64 chr) {
     if (!dm || Field<int>(dm, 0xf8, -1) <= 0) return false;
     const int zero = 0;
     return SafeWrite(dm + 0xf8, &zero, 4);
+}
+
+bool SetEnemyDeadQuietly(u64 chr) {
+    if (EnemyHp(chr) <= 0) return false;
+    u8 b = 0;
+    if (!SafeGet(chr + 0x1e3, &b)) return false;
+    b |= 0x04;  // +0x1E1 bit 0x40000: echoes paid
+    if (!SafeWrite(chr + 0x1e3, &b, 1)) return false;
+    droproll::SkipDrop(chr);
+    return SetEnemyHpZero(chr);
 }
 
 bool ChrPosition(u64 chr, float out[3]) {
