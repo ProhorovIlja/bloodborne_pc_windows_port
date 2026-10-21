@@ -805,12 +805,15 @@ screens, the guest `opened key-item gate (flag 12400160) with its own key: the h
 kick goes up; own save set`, the host `host flag 12400160 = 1 (world_state)`; the guest back home
 reads `12400160=1/1` (own save / visible). Both end with the gate open.
 
-Key Items tab while summoned: not captured yet. A scripted walk (`BB_TEST_MENU_FILE`) found the
-pause menu opening on Inventory (`options`, `cross`: the Inventory book, Consumables tab, 9 tab icons,
-the key icon third); R1 / L1 move the item cursor (a page), not the tab (run9, 2026-10-21). Next
-walk to try: `options/cross/right/right` (or `up` to the tab row first). The view itself is shown by
-the game's own inventory reads (`key goods held: ... 4011 x1 ... load mode 1` after every host-world
-load) and by the 4118 give that stayed (run2).
+Key Items tab while summoned (run10, 2026-10-21): the guest summoned at the host's Central Yharnam
+lamp, a scripted walk `options/cross/right/right` (the pause menu opens on Inventory, Consumables tab;
+Right twice = the key tab; R1 / L1 only move the item cursor, the touchpad opens the sort box) shows
+"Key Items" with the guest's own Oedon Tomb Key, Hunter Chief Emblem, Eye of a Blood-drunk Hunter,
+Blood Gem Workshop Tool, Saw / Sword Hunter Badge, Old Hunter Bell; the director's
+`watch_text` logged `text shows: "Oedon Tomb Key"` (and the other names). `up/right/right` lands
+there too. Smoke s2 (`keyitems`) runs that walk on guest 1 4 s after its arrival at m24_01
+(`BB_TEST_MENU_FILE` line `m24_01 4 ...`: a map instead of title / world / joined waits for that
+map, together) and needs the key name in the log.
 
 ## 11. Gestures (2026-10-20)
 
