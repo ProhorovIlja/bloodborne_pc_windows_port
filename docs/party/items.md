@@ -632,7 +632,8 @@ acquire ... inventory or storage max" box, seen live in 0.6.1 for lot 50000001),
 playtest guest's real save (0.6.0) did not keep a key item given while summoned (4114 "held 0 -> 1",
 gone an hour later): what the summoned inventory shows is not all the save keeps.
 
-Opt-in since 0.7.0 (`BB_PARTY_KEY_ITEMS_SUMMONED=1`; default off, see 10.6 for why): a key-item grant whose done flag (lot flag / ledger
+Opt-in in 0.7.0 (`BB_PARTY_KEY_ITEMS_SUMMONED=1`; off, see 10.6 for why; on by default since 0.7.1
+with the own key section in view, 10.7): a key-item grant whose done flag (lot flag / ledger
 bit) is not in the guest's own save - so the save never got this lot - is given at once while
 summoned (direct give, its flags into the own pool, the item-get dialog, a save request) and is
 **also** owed (`party_owed_lots.txt`, per save slot) and noted as a summoned give
@@ -715,7 +716,7 @@ older had one). Its build and logs are not ours, so the path that added it is no
 summoned give is guarded by the lot's done flag, and usable unique goods are no longer given while
 summoned at all.
 
-### 10.6 Putting a summoned guest's key items back after each load (2026-10-21, off)
+### 10.6 Putting a summoned guest's key items back after each load (2026-10-21, removed in 0.7.1)
 
 Request: a summoned guest's key section is empty after every host-world load (10.3); give its key
 items back silently right after the load. `SummonedKeyRestoreTick` (party_items.cpp): 0.3 / 1 / 3 s
@@ -736,7 +737,56 @@ in run B with 4118), so any give of a key the save already holds makes a second 
 how a player's save got the Gold Pendant twice. The in-memory check (`ItemStacks`, "DUPLICATE
 STACK") did not see it: only the written save has the two stacks. So it is **off by default**
 (`BB_PARTY_KEY_RESTORE=1` for tests). Doing it right needs the place the game keeps the hidden key
-section while summoned (show or copy that, instead of a give) [not found yet].
+section while summoned (show or copy that, instead of a give): found, 10.7; `SummonedKeyRestoreTick`
+and `BB_PARTY_KEY_RESTORE` are gone.
+
+### 10.7 The two key sections, and showing the own one while summoned (H4, 0.7.1)
+
+Where the hidden key section is [static, 1.09; live run 2026-10-21 below]. The inventory
+(`EquipInventoryData`, PlayerGameData `+0x328`; vtable `0x536F320`, debug menu `0x14DBFF0`) holds an
+item container at `+0x10`, built by `0x1AC5340(container, 0x800, 0x40)`. Offsets from the inventory:
+
+| offset | what |
+|---|---|
+| `+0x18` / `+0x20` | normal section: 1984 entries / used count |
+| `+0x24` | key section size (64) - the split every lookup uses |
+| `+0x28` / `+0x30` | **the key section the character keeps** (the save's): 64 entries / count |
+| `+0x38` / `+0x40` | **the summoned key section**: 64 entries / count |
+| `+0x48` / `+0x50` | view: normal entries / pointer to its count |
+| `+0x58` / `+0x60` | **view: key entries / pointer to its count** (`+0x28` or `+0x38`) |
+| `+0x68`, `+0x78` | id hash (0x7E1 buckets) and chain, rebuilt from the views by `0x1AC5720` |
+| `+0x88` | tail index |
+
+How the summoned view is built: the in-game step's start `0x1937570` reads the game mode
+(`*(0x553D6D0) + 0x84`). Mode 3 (a summoned load) calls `0x1AC5600(inventory + 0x10, 1)` at
+`0x1937A97`: views = normal + **summoned** section, every summoned entry cleared (gaitem handles
+released), its count 0, then `0x1AC5720` rebuilds the hash. Any other mode sets the views to normal +
+**own** section inline (`+0x48 = +0x18`, `+0x58 = +0x28`) and rebuilds the hash. `0x1AC5600(c, 0)`
+does the same as that inline code. So nothing is ever copied: the own section stays untouched in
+`+0x28` while summoned, out of view; a give (GiveItemDirect, the give list) lands in the summoned
+one.
+
+The save writer (`0x14D8F60` -> `0x1AC5D10`) writes the three sections in turn, each as a u32 count
+plus all its entries: normal (1984), own key (64), summoned key (64), then the tail index. That is
+the "hidden key section plus the summoned view" of 10.6: a key put into the summoned section while
+the own one holds it is two stacks in the file. `save_decode.py` now finds the two key sections
+(`key section (saved)` / `(summoned)`) and `--check-dup` exits 1 on a key in both.
+
+Live (vanilla call, 2 instances, guest summoned into the host's Dream): `inventory +0x28 =
+0x100806F730, +0x30 = 7` (the test save's 7 keys, 4114 / 4312 / 4110 / 4000 / 4103 / 4011 / 4311,
+read from that address), `+0x38 = 0x100806FB50, +0x40 = 0`, `+0x58 = 0x100806FB50` (the summoned
+one in view), while the guest logged `key goods held: ... 4000 x0 ... 4114 x0 ... load mode 1`;
+back home `4000 x1 ... 4114 x1`. The guest's save afterwards: own section 7, summoned 0.
+
+0.7.1 (`BB_PARTY_KEY_VIEW`, on; `0` = the game's view): a call-site hook on `0x1937A97` runs the
+game's `0x1AC5600(c, 1)` (the summoned section emptied as before, so an old save's leftovers there
+go too) and then `0x1AC5600(c, 0)`: the own section is in view with the game's own index. A summoned
+guest then reads its real held counts, and a give while summoned lands in the section the save
+keeps: one stack, kept at home. Following from that, the summoned key give (10.3) is on by default
+(`BB_PARTY_KEY_ITEMS_SUMMONED=0` off; a key already held counts as given, the fit rule), and
+`KeyGoodsWatchTick` no longer notes a key that reached a summoned guest for the home check (it stays).
+`ItemStacks` (the in-memory `DUPLICATE STACK` check) counts the key section out of view too.
+Not changed: the host (never mode 3); the own-world path.
 
 ## 11. Gestures (2026-10-20)
 
