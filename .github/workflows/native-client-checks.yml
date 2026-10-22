@@ -55,6 +55,9 @@ jobs:
       - name: Native BBSC Win64 source adaptation safety tests
         run: python -m unittest discover -s tests -p 'test_prepare_bbnet20_windows.py' -v
 
+      - name: Audited community mod ZIP importer and overlay conflict regressions
+        run: python -m unittest discover -s tests -p 'test_community_mods.py' -v
+
       - name: CLS BBSC 0.0.2 source parity analyzer (offline)
         run: python -m unittest discover -s tests -p 'test_compare_bbsc_versions.py' -v
 
@@ -165,6 +168,9 @@ jobs:
           & .\legacy-loader-smoke.exe present
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Remove-Item -Force gpu/bbnet20.dll, legacy-loader-smoke.exe
+
+      - name: Community gameplay mod preflight (Windows)
+        run: python -m unittest discover -s tests -p 'test_community_mods.py' -v
 
       - name: Launcher import smoke
         run: python -c "import launcher; print('Launcher module imported')"
