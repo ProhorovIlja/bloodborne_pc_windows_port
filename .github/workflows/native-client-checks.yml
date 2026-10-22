@@ -64,6 +64,9 @@ jobs:
       - name: Read-only Hunter profile parsing and malicious save fixtures
         run: python -m unittest discover -s tests -p 'test_hunter_profiles.py' -v
 
+      - name: Hunter-owned weapons, bounds-safe localized inventory decoding
+        run: python -m unittest discover -s tests -p 'test_hunter_armory.py' -v
+
       - name: Audited community mod ZIP importer and overlay conflict regressions
         run: python -m unittest discover -s tests -p 'test_community_mods.py' -v
 
@@ -187,6 +190,9 @@ jobs:
 
       - name: Windows read-only Hunter profile fixtures
         run: python -m unittest discover -s tests -p 'test_hunter_profiles.py' -v
+
+      - name: Windows Hunter armory safety fixtures
+        run: python -m unittest discover -s tests -p 'test_hunter_armory.py' -v
 
       - name: Community gameplay mod preflight (Windows)
         run: python -m unittest discover -s tests -p 'test_community_mods.py' -v
