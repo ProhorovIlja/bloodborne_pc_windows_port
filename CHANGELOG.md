@@ -20,6 +20,8 @@ For actual shipped release notes, consult this fork's
 - Added read-only Hunter/Saves browser to the existing launcher. Validated decrypted character slots can display name, level, stats, Echoes, Insight, playtime and save provenance; unknown fields remain unspecified. No slot selection or import is performed.
 - Extended Hunter details with *owned* weapons and upgrade levels, optionally resolved to localized names from the player's own game archives. Active equipped slots remain unknown; weapons are never altered.
 - Replaced the indiscriminate launcher "Everything on" button with a preview-and-confirm Balanced 60 FPS preset that leaves mods, XML patches, co-op rules, input, save files and online settings unchanged.
+- Redesigned the start screen into a compact Hunter's Refuge with readable game/client/party status, category shortcuts, independently scrollable settings, collapsed diagnostic logs, keyboard shortcuts and no removed legacy settings.
+- Hunters/Saves can pin a selected character's **read-only preview** to Home. On restart the slot is re-read and stale/invalid save data is not displayed. A pinned preview does NOT switch the save slot used by the game, and the pin can be cleared.
 
 ### Research and planned work, not shipped features
 - Unified launcher and in-game settings UX, Hunter Hub character overview, optional save/chalice tools.
