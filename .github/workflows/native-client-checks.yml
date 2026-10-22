@@ -53,6 +53,9 @@ jobs:
       - name: Real shadNet wire greeting protocol (offline)
         run: python -m unittest discover -s tests -p 'test_bbsc_shadnet_wire.py' -v
 
+      - name: BBSC shadNet Login wire and safe account error handling (offline)
+        run: python -m unittest discover -s tests -p 'test_shadnet_account.py' -v
+
       - name: Seamless Hunt read-only connection contract
         run: python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
 
@@ -72,12 +75,13 @@ jobs:
           python-version: '3.12'
 
       - name: Compile launcher and diagnostics
-        run: python -m compileall -q launcher.py scripts/seamless_hunt.py scripts/seamless_hunt_network.py
+        run: python -m compileall -q launcher.py scripts/seamless_hunt.py scripts/seamless_hunt_network.py scripts/bbsc_shadnet_wire.py scripts/shadnet_account.py
 
       - name: Native Windows network diagnostics tests (offline)
         run: |
           python -m unittest discover -s tests -p 'test_seamless_hunt_network.py' -v
           python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
+          python -m unittest discover -s tests -p 'test_shadnet_account.py' -v
 
       - name: Launcher import smoke
         run: python -c "import launcher; print('Launcher module imported')"
