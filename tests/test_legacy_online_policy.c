@@ -10,6 +10,10 @@ int main(void) {
     assert(!legacy_net_opted_in("true",0));
     assert(legacy_net_opted_in("1",0));
     assert(!legacy_net_opted_in("1",1));
+    assert(!legacy_net_bbsc_enabled(NULL));
+    assert(!legacy_net_bbsc_enabled("0"));
+    assert(!legacy_net_bbsc_enabled("1garbage"));
+    assert(legacy_net_bbsc_enabled("1"));
     assert(legacy_net_supported_game("CUSA03173","Bloodborne","1.09"));
     assert(legacy_net_supported_game("CUSA00207","Bloodborne","1.09"));
     assert(!legacy_net_supported_game("CUSA03173","Bloodborne","1.08"));
