@@ -115,9 +115,8 @@ jobs:
           export BB_CC=clang BB_AR=llvm-ar BB_NM=llvm-nm
           export MINGW_DIR="$(cygpath -w "$MINGW_PREFIX")"
           cmd.exe //C "call build.bat" || exit 1
-          test -f out/bbport.exe || { echo "Native Windows executable missing after build"; exit 1; }
           # GPU code is statically linked on Windows; no bbgpu.dll exists.
-          test -f out/bbport.exe || { echo "Windows native exe missing"; exit 1; }
+          test -f out/bbport.exe || { echo "Native Windows executable missing after build"; exit 1; }
 
       - name: Offline party C++ checks
         shell: msys2 {0}
