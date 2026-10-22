@@ -27,6 +27,7 @@ static char game_folder[4096], game_serial[16], game_title[128], game_ver[16];
 static HMODULE module;
 static BbNetResolveFn network_resolve;
 static int tried_load;
+static int valid_game_identity;
 
 static void safe_copy(char *dst, size_t limit, const char *source) {
     if (!source) source="";
@@ -39,9 +40,15 @@ void runtime_legacy_net_configure(const char *app0, const char *serial,
     safe_copy(game_serial,sizeof(game_serial),serial);
     safe_copy(game_title,sizeof(game_title),title);
     safe_copy(game_ver,sizeof(game_ver),version);
+    /* Only the real gameplay boot configures this. CPU-only/import analysis
+     * must NEVER start a network module with an uninitialized title.
+     */
+    valid_game_identity=game_folder[0] && game_serial[0] &&
+                        strcmp(game_serial,"UNKNOWN") != 0;
 }
 int runtime_legacy_net_requested(void) {
-    return legacy_net_opted_in(getenv("BB_LEGACY_NET"), bb_party_enabled());
+    return valid_game_identity &&
+           legacy_net_opted_in(getenv("BB_LEGACY_NET"), bb_party_enabled());
 }
 
 static BbNetResolveFn load_module(void) {
