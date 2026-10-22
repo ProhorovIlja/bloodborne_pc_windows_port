@@ -49,8 +49,8 @@ void runtime_legacy_net_configure(const char *app0, const char *serial,
     /* Only the real gameplay boot configures this. CPU-only/import analysis
      * must NEVER start a network module with an uninitialized title.
      */
-    valid_game_identity=game_folder[0] && game_serial[0] &&
-                        strcmp(game_serial,"UNKNOWN") != 0;
+    valid_game_identity=game_folder[0] &&
+                        legacy_net_supported_game(game_serial,game_title,game_ver);
 }
 int runtime_legacy_net_requested(void) {
     return valid_game_identity &&
