@@ -103,6 +103,15 @@ jobs:
         shell: msys2 {0}
         run: bash tools/setup_windows_deps.sh
 
+      - name: Prove pinned wepoll actually delivers Windows UDP loopback events
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          clang -std=c11 -O2 -Ithird_party/ext-wepoll \
+            tests/test_wepoll_win.c third_party/ext-wepoll/wepoll.c \
+            -o out/wepoll-win-smoke.exe -lws2_32
+          out/wepoll-win-smoke.exe
+
       - name: Configure actual Windows bbnet20 target
         shell: msys2 {0}
         run: |
