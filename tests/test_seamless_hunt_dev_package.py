@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 from tools.release import stage_seamless_hunt_dev as kit
+from tools.release import verify_seamless_hunt_dev as checker
 
 SHA = "a" * 40
 
@@ -115,6 +116,36 @@ class DeveloperKitTest(unittest.TestCase):
         hidden.write_text("do not include")
         with self.assertRaisesRegex(ValueError, "Unexpected Python runtime file"):
             kit.pack(self.root, Path(self.temp.name) / "bad.zip", SHA)
+
+    def test_archive_is_verified_without_extraction(self):
+        path = Path(self.temp.name) / "valid.zip"
+        kit.pack(self.root, path, SHA)
+        status = checker.verify(path)
+        self.assertEqual(status["source_commit"], SHA)
+        self.assertTrue(status["portable_python"])
+        self.assertFalse(status["live_coop_verified"])
+
+    def test_reject_modified_file_with_stale_manifest(self):
+        source = Path(self.temp.name) / "source.zip"
+        tampered = Path(self.temp.name) / "tampered.zip"
+        kit.pack(self.root, source, SHA)
+        with zipfile.ZipFile(source) as z, zipfile.ZipFile(tampered, "w") as out:
+            for info in z.infolist():
+                raw = z.read(info.filename)
+                if info.filename == "launcher.py":
+                    raw = b"tampered content"
+                out.writestr(info, raw)
+        with self.assertRaisesRegex(ValueError, "content hash mismatch"):
+            checker.verify(tampered)
+
+    def test_reject_zip_traversal_and_windows_case_collision(self):
+        for name in ("../user/savedata/secret.bin", "Launcher.py"):
+            path = Path(self.temp.name) / (name.replace("/", "_") + ".zip")
+            kit.pack(self.root, path, SHA)
+            with zipfile.ZipFile(path, "a") as z:
+                z.writestr(name, "not allowed")
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "unsafe|colliding"):
+                checker.verify(path)
 
     def test_reject_invalid_revision(self):
         with self.assertRaisesRegex(ValueError, "40-character"):
