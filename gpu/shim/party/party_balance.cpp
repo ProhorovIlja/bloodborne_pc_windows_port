@@ -30,6 +30,7 @@
 #include "party_flow.h"
 #include "party_link.h"
 #include "party_npc_mirror.h"
+#include "party_rot_rules.h"
 #include "party_status.h"
 #include "party_travel.h"
 #include "party_worldact.h"
@@ -159,6 +160,44 @@ TickState& S() {
     return s;
 }
 
+// ---- 0.7.2: what else cleanses rot (party_rot_rules.h) ----
+// The ledger (one entry per death that added a stack) is under g_rot_mu (party_rot.txt keeps its
+// stain's kind); events from other threads (the host's boss notice) wait in g_cleanse_q for the tick.
+rot::Ledger g_ledger;  // under g_rot_mu
+struct CleanseEvent {
+    rot::Why why = rot::Why::Killer;
+    u32 entity = 0;  // Boss / Killer: the entity that died (0 unknown)
+    u64 chr = 0;     // Killer: its chr on this game (0: by its entity id only)
+    bool reset = false;  // the world reset instead (the kill record's new world)
+    std::string from;
+};
+std::mutex g_cleanse_mu;
+std::vector<CleanseEvent> g_cleanse_q;  // under g_cleanse_mu
+std::atomic<bool> g_kill_world_followed{false};  // a guest whose kill record follows the host's world
+// The lethal hit's attacker (the game's kill log 0x1FEB2A0(victim, attacker, ...), called by the
+// damage step 0x1A2A600 when a hit leaves the victim at HP 0; attacker 0 there goes to 0x1FEBFF0).
+constexpr u64 kKilledByLog = 0x1feb2a0;
+using KilledByFn = void(BB_COOP_SYSV*)(u64, u64, u32);
+void* g_killed_by_orig = nullptr;
+std::atomic<u64> g_local_chr{0};     // the local player's chr (the hook compares the victim)
+std::atomic<u64> g_killer_chr{0};    // the attacker of the local player's lethal hit
+std::atomic<std::int64_t> g_killer_at{0};  // when (steady clock ticks; 0 none)
+std::atomic<std::uint32_t> g_killed_by_calls{0};
+
+BB_COOP_SYSV void KilledByHook(u64 victim, u64 attacker, u32 x) {
+    if (victim && victim == g_local_chr.load(std::memory_order_relaxed)) {
+        g_killer_chr.store(attacker);
+        g_killer_at.store(Clock::now().time_since_epoch().count());
+    }
+    g_killed_by_calls.fetch_add(1, std::memory_order_relaxed);
+    reinterpret_cast<KilledByFn>(g_killed_by_orig)(victim, attacker, x);
+}
+
+void QueueCleanse(CleanseEvent e) {
+    std::lock_guard<std::mutex> lk(g_cleanse_mu);
+    if (g_cleanse_q.size() < 256) g_cleanse_q.push_back(std::move(e));
+}
+
 // ---- Rot persistence ----
 std::filesystem::path RotPath() {
     std::string dir = bbnet::settings().user_dir;
@@ -180,6 +219,7 @@ SlotRot ActiveRot(int slot) {
     SlotRot r;
     r.slot = slot;
     for (int k = 0; k < kRotKinds; ++k) r.kind[k] = g_kind[k].load();
+    r.stain = g_ledger.StainKind();
     return r;
 }
 
@@ -257,6 +297,8 @@ void RotForSlot(int slot) {
         before.Stacks());
     g_rot_slot = slot;
     UseRot(next);
+    // The deaths' links: only the stain outlives a restart / another save (its killers respawned).
+    g_ledger.Restore(next.stain);
     WriteRotLocked();
 }
 
@@ -340,6 +382,10 @@ void CleanseRot(const Rules& r, const char* why, Clock::time_point now, TickStat
         Log("%s: rot cleansed (%d stack(s))", why, g_stacks.load());
         g_stacks = 0;
         for (auto& c : g_kind) c = 0;
+        {
+            std::lock_guard<std::mutex> lk(g_rot_mu);
+            g_ledger.Clear();
+        }
         SaveRot();
         if (r.rot) party::status::SetLastEvent("The rot is cleansed");
     } else if (now >= st.next_rest_note) {
@@ -701,6 +747,9 @@ Rules FromSettings() {
     r.kill_record = v.party_kill_record;
     r.npc_mirror = v.party_npc_mirror;
     r.gather = v.party_gather;
+    r.rot_cleanse_boss = v.party_rot_cleanse_boss;
+    r.rot_cleanse_killer = v.party_rot_cleanse_killer;
+    r.rot_cleanse_echoes = v.party_rot_cleanse_echoes;
     return Clamped(r);
 }
 
@@ -753,6 +802,48 @@ void NoteLampMenuOpened() {
     g_lamp_menu_opened = true;
 }
 
+void NoteBossDefeated(std::uint32_t entity, const char* from) {
+    if (!On()) return;
+    CleanseEvent e;
+    e.why = rot::Why::Boss;
+    e.entity = entity;
+    e.from = from ? from : "";
+    QueueCleanse(std::move(e));
+}
+
+void NotePartyKill(std::uint32_t entity, const char* from) {
+    if (!On() || !entity) return;
+    {
+        // Only a killer's death matters (most kills are someone else's enemy).
+        std::lock_guard<std::mutex> lk(g_rot_mu);
+        bool killer = false;
+        for (const rot::Death& d : g_ledger.deaths()) killer = killer || (d.killer_link && d.killer.entity == entity);
+        if (!killer) return;
+    }
+    CleanseEvent e;
+    e.why = rot::Why::Killer;
+    e.entity = entity;
+    e.from = from ? from : "";
+    QueueCleanse(std::move(e));
+}
+
+void NoteKillWorld(bool follows_host_world, bool new_world, const char* from) {
+    g_kill_world_followed = follows_host_world;
+    if (!On() || !new_world) return;
+    CleanseEvent e;
+    e.reset = true;
+    e.from = from ? from : "";
+    QueueCleanse(std::move(e));
+}
+
+void NoteEchoesRetrieved(const char* from) {
+    if (!On()) return;
+    CleanseEvent e;
+    e.why = rot::Why::Echoes;
+    e.from = from ? from : "";
+    QueueCleanse(std::move(e));
+}
+
 void Init() {
     if (!On()) {
         Log("off (BB_PARTY_BALANCE=0 or no party)");
@@ -792,6 +883,11 @@ void Init() {
                                                        &g_kind_orig[kRotDiscovery], "balance: item discovery sum (rot)");
     }
     SetLampUseObserver(&OnLampUse);
+    // 0.7.2 "cleansed by killing your killer": who dealt the local player's lethal hit.
+    const bool killer_hooked = ReplacePrologue(kKilledByLog, {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56},
+                                               reinterpret_cast<const void*>(&KilledByHook), &g_killed_by_orig,
+                                               "balance: kill log (rot: the killer)");
+    if (!killer_hooked) Log("the kill log is not hooked: no killer is known (rot cleansed by the killer's death: never)");
     std::string kinds;
     for (int k = 0; k < kRotKinds; ++k)
         kinds += std::string(" ") + kRotKindName[k] + (g_kind_hooked[k] ? "" : "(NOT hooked)") + "=" +
@@ -1082,6 +1178,101 @@ void NpcMirrorTick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     }
 }
 
+/// 0.7.2 (party_rot_rules.h): the loads, the killers this game sees die, and the queued cleanse
+/// events (a boss, a party kill, the bloodstain), applied to the stacks.
+void RotCleanseTick(const GameSnapshot& s, const Rules& r, bool host, bool in_world, Clock::time_point now) {
+    static bool was_loading = false;
+    if (s.loading && !was_loading) {
+        // A load on this game: new chr instances. The host's load is a new world for everyone (a
+        // rest, a death, a travel: every enemy respawned); a guest's own load is not, unless its
+        // kill record does not follow the host's world (then every load counts: no way to tell).
+        std::lock_guard<std::mutex> lk(g_rot_mu);
+        const std::size_t had = g_ledger.deaths().size();
+        g_ledger.OnLocalLoad();
+        const bool reset = host || !g_kill_world_followed.load();
+        if (reset) g_ledger.OnWorldReset();
+        if (had) Log("rot: a load (%s): %zu death link(s) -> %zu", reset ? "a new world" : "the host's world stays", had,
+                     g_ledger.deaths().size());
+    }
+    was_loading = s.loading;
+    std::vector<CleanseEvent> due;
+    {
+        std::lock_guard<std::mutex> lk(g_cleanse_mu);
+        due.swap(g_cleanse_q);
+    }
+    // A killer this game has loaded and sees dead now (its own chr, the same census key).
+    static Clock::time_point next_poll{};
+    if (in_world && now >= next_poll) {
+        next_poll = now + std::chrono::milliseconds(250);
+        std::vector<rot::Death> deaths;
+        {
+            std::lock_guard<std::mutex> lk(g_rot_mu);
+            deaths = g_ledger.deaths();
+        }
+        for (const rot::Death& d : deaths) {
+            if (!d.killer_link || !d.killer.chr) continue;
+            if (Field<u32>(d.killer.chr, 0x3b8, 0) != d.killer.key || EnemyHp(d.killer.chr) != 0) continue;
+            CleanseEvent e;
+            e.why = rot::Why::Killer;
+            e.entity = d.killer.entity;
+            e.chr = d.killer.chr;
+            e.from = "dead on this game";
+            due.push_back(e);
+        }
+    }
+    for (const CleanseEvent& e : due) {
+        if (e.reset) {
+            std::lock_guard<std::mutex> lk(g_rot_mu);
+            const std::size_t had = g_ledger.deaths().size();
+            g_ledger.OnWorldReset();
+            if (had != g_ledger.deaths().size()) Log("rot: %s: a new world, the killers respawned", e.from.c_str());
+            continue;
+        }
+        rot::Toggles t;
+        t.rot = r.rot;
+        t.boss = r.rot_cleanse_boss;
+        t.killer = r.rot_cleanse_killer;
+        t.echoes = r.rot_cleanse_echoes;
+        int taken = 0;
+        int links = 0;  // the death links this event used up
+        const auto count_links = [] {
+            int n = 0;
+            for (const rot::Death& d : g_ledger.deaths()) n += int(d.killer_link) + int(d.stain_link);
+            return n;
+        };
+        {
+            std::lock_guard<std::mutex> lk(g_rot_mu);
+            links = count_links();
+            int stacks[kRotKinds];
+            for (int k = 0; k < kRotKinds; ++k) stacks[k] = g_kind[k].load();
+            taken = rot::Apply(e.why, t, &g_ledger, stacks, e.entity, e.chr);
+            int sum = 0;
+            for (int k = 0; k < kRotKinds; ++k) {
+                g_kind[k] = stacks[k];
+                sum += stacks[k];
+            }
+            g_stacks = sum;
+            links -= count_links();
+        }
+        const char* what = e.why == rot::Why::Boss     ? "a boss died"
+                           : e.why == rot::Why::Killer ? "an enemy died"
+                                                       : "the bloodstain was picked up";
+        if (taken > 0) {
+            char b[96];
+            std::snprintf(b, sizeof b, rot::NoticeText(e.why, taken), taken);
+            party::status::SetLastEvent(b);
+            Log("rot: %s (entity %u, %s): %d stack(s) off, %d left; notice: %s", what, e.entity, e.from.c_str(), taken,
+                g_stacks.load(), b);
+            SaveRot();
+        } else if (links > 0 || (e.why == rot::Why::Boss && g_stacks.load() > 0)) {
+            Log("rot: %s (entity %u, %s): nothing off (rot %s; cleanse boss %s, killer %s, echoes %s; %d stack(s))", what,
+                e.entity, e.from.c_str(), r.rot ? "on" : "off", r.rot_cleanse_boss ? "on" : "off",
+                r.rot_cleanse_killer ? "on" : "off", r.rot_cleanse_echoes ? "on" : "off", g_stacks.load());
+            SaveRot();  // a link used up (the stain's kind in party_rot.txt)
+        }
+    }
+}
+
 void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     ChrDumpTick(s);
     NpcMirrorTick(s, link, host);
@@ -1098,6 +1289,9 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     party::status::SetHostRule(party::status::HostRule::KillRecord, r.kill_record);
     party::status::SetHostRule(party::status::HostRule::NpcMirror, r.npc_mirror);
     party::status::SetHostRule(party::status::HostRule::Gather, r.gather);
+    party::status::SetHostRule(party::status::HostRule::RotCleanseBoss, r.rot_cleanse_boss);
+    party::status::SetHostRule(party::status::HostRule::RotCleanseKiller, r.rot_cleanse_killer);
+    party::status::SetHostRule(party::status::HostRule::RotCleanseEchoes, r.rot_cleanse_echoes);
     {   // The rot for System > Party and the party HUD (none while it is off).
         int kinds[party::status::kRotKinds] = {};
         for (int k = 0; k < kRotKinds && k < party::status::kRotKinds; ++k) kinds[k] = r.rot ? g_kind[k].load() : 0;
@@ -1137,6 +1331,10 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
                 g_stacks.load());
             g_stacks = 0;
             for (auto& c : g_kind) c = 0;
+            {
+                std::lock_guard<std::mutex> lk(g_rot_mu);
+                g_ledger.Clear();
+            }
             SaveRot();
         }
     }
@@ -1173,9 +1371,40 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
                 }
                 ++g_stacks;
                 g_kind[kind] = g_kind[kind].load() + 1;
-                SaveRot();
             }
         }
+        // 0.7.2: who killed this player (the lethal hit's attacker, a chr that is no player) and
+        // the death's stack in the ledger (its killer's death or its bloodstain gives it back).
+        rot::Killer killer;
+        const char* killer_what = "nobody (a fall, the environment, a scripted death)";
+        {
+            const std::int64_t at = g_killer_at.exchange(0);
+            const u64 attacker = g_killer_chr.exchange(0);
+            const double seen_s =
+                at ? std::chrono::duration<double>(now.time_since_epoch() - Clock::duration(at)).count() : -1.0;
+            const u64 wcm = Slot(kSlotWorldChrMan);
+            const bool self = attacker && attacker == s.player;
+            const bool player = attacker && wcm && IsPlayer(wcm, attacker);
+            if (rot::KillerCounts(seen_s, self, attacker && !player)) {
+                killer.chr = attacker;
+                killer.key = Field<u32>(attacker, 0x3b8, 0);
+                killer.entity = Field<u32>(attacker, 0x1f0, 0);
+                if (!rot::PartyEntity(killer.entity)) killer.entity = 0;
+                killer_what = "an enemy";
+            } else if (at) {
+                killer_what = self ? "itself" : player ? "a player" : !attacker ? "nobody" : "a hit too long before";
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lk(g_rot_mu);
+            g_ledger.OnDeath(kind, killer);
+        }
+        Log("death %d: killed by %s (chr %llx, entity %u, key %u); its stack (%s): %s", g_deaths.load(), killer_what,
+            (unsigned long long)killer.chr, killer.entity, killer.key, kind >= 0 ? kRotKindName[kind] : "none",
+            kind < 0         ? "-"
+            : killer.Any()   ? "its killer's death or its bloodstain gives it back"
+                             : "its bloodstain gives it back");
+        if (kind >= 0) SaveRot();
         const int k = g_stacks.load();
         Log("death %d; rot %s, %d stack(s) (this one: %s): health %d, stamina %d, stamina cost %d, rally %d, "
             "discovery %d",
@@ -1196,6 +1425,14 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
         ++st.hits;
         Log("hit: HP %d -> %d (-%d), max %d", st.last_hp, hp, st.last_hp - hp, max_hp);
     }
+    // Test aid (smoke group rot): BB_PARTY_ROT_TEST_FRAIL=1: any HP loss leaves this player at 1 HP,
+    // so the next enemy hit kills it (a death with a killer, the game's own death path).
+    static const bool frail = std::getenv("BB_PARTY_ROT_TEST_FRAIL") && std::getenv("BB_PARTY_ROT_TEST_FRAIL")[0] == '1';
+    if (frail && dm && in_world && s.player == st.last_player && st.last_hp > 0 && hp > 1 && hp < st.last_hp) {
+        const int one = 1;
+        if (SafeWrite(dm + 0xf8, &one, 4)) Log("test: frail (BB_PARTY_ROT_TEST_FRAIL): HP %d -> 1", hp);
+    }
+    RotCleanseTick(s, r, host, in_world, now);
     if (!st.toast.empty()) {
         if (!(in_world && hp > 0)) {
             st.toast_at = Clock::time_point{};
@@ -1209,6 +1446,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     }
     st.last_player = in_world ? s.player : 0;
     st.last_hp = in_world ? hp : -1;
+    g_local_chr.store(in_world ? s.player : 0, std::memory_order_relaxed);
     if (in_world && hp >= 0) g_hp_now = hp;
     if (in_world && hp > 0 && s.player == st.last_player) st.up_since_death = true;
     if (g_rest_pending.exchange(false)) {
