@@ -154,7 +154,7 @@ jobs:
           # the primary PE executable. Otherwise the plugin's own STATIC
           # bbgpu copy would receive cinematic input and loading UI instead.
           llvm-objdump -p out/bbport.exe > out/bbport.exports.txt
-          for symbol in bbgpu_add_event_filter bbgpu_overlay_banner; do
+          for symbol in bbnet20_exe_add_event_filter bbnet20_exe_overlay_banner; do
             if ! grep -q -E "[[:space:]]${symbol}([[:space:]]|$)" out/bbport.exports.txt; then
               echo "Primary game EXE missing BBSC GPU bridge export: ${symbol}" >&2
               exit 1
