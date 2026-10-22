@@ -3080,9 +3080,38 @@ void LiftEndRewriter(int event_id, int bank, int id, std::uint64_t event, std::u
     }
 }
 
+
+// liftfix: the Research Hall lifts' busy clear moved to their ride event's end (liftrules::BusyDefer).
+std::atomic<int> g_busy_defer_logs{0};
+void BusyDeferRewriter(int event_id, int bank, int id, std::uint64_t event, std::uint64_t instr) {
+    if ((bank != 2003 || id != 2) && (bank != 1000 || id != 4)) {
+        return;
+    }
+    std::int32_t index = -1;
+    SafeGet(event + 0xa0, &index);
+    std::uint32_t size = 0;
+    const std::uint64_t args = EmevdInstructionArgs(event, instr, &size);
+    std::uint32_t flag = 0;
+    if (bank == 2003 && (!args || size < 5 || !SafeGet(args, &flag))) {
+        return;
+    }
+    const liftrules::BusyDefer* d = nullptr;
+    const liftrules::BusyStep step = liftrules::BusyDeferStep(event_id, bank, id, index, flag, &d);
+    if (step == liftrules::BusyStep::keep) {
+        const std::uint8_t on = 1;
+        SafeWrite(args + 4, &on, 1);  // busy stays on until the end (the loaded script's bytes: every run)
+    } else if (step == liftrules::BusyStep::clear && d) {
+        WriteEventFlag(d->busy, false);
+        if (g_busy_defer_logs.fetch_add(1) < 16) {
+            Log("lift ride end: event %d clears busy %u after its end animation (not in the frame its rider left "
+                "the car: the car left again at once with the rider on its edge)", event_id, d->busy);
+        }
+    }
+}
 void WorldactRewriter(int event_id, int bank, int id, std::uint64_t event, std::uint64_t instr) {
     KeyGateRewriter(event_id, bank, id, event, instr);
     LiftEndRewriter(event_id, bank, id, event, instr);
+    BusyDeferRewriter(event_id, bank, id, event, instr);
 }
 } // namespace
 
