@@ -106,6 +106,52 @@ class DeveloperKitTest(unittest.TestCase):
                 self.assertEqual(len(archive.read(entry["path"])), entry["bytes"])
             self.assertNotIn("MANIFEST.json", [e["path"] for e in manifest["files"]])
 
+    def test_opt_in_bbsc_candidate_packs_real_nested_dll_only(self):
+        candidate = Path(self.temp.name) / "candidate.zip"
+        result = kit.pack(self.root, candidate, SHA, include_native_bbsc=True)
+        self.assertTrue(result["native_bbsc_candidate_included"])
+        with zipfile.ZipFile(candidate) as archive:
+            names = set(archive.namelist())
+            self.assertIn("out/gpu/bbnet20.dll", names)
+            self.assertNotIn("out/gpu/bbgpu.dll", names)
+            manifest = json.loads(archive.read("MANIFEST.json"))
+            self.assertTrue(manifest["native_bbsc_candidate_included"])
+            self.assertIn("out/gpu/bbnet20.dll",
+                          [entry["path"] for entry in manifest["files"]])
+            self.assertIn("EXPERIMENTAL CLS BBSC",
+                          archive.read("README-DEVELOPER-BUILD.txt").decode())
+        status = checker.verify(candidate, require_native_bbsc=True)
+        self.assertTrue(status["native_bbsc_candidate_included"])
+        self.assertFalse(status["live_coop_verified"])
+        with self.assertRaisesRegex(ValueError, "candidate inclusion"):
+            checker.verify(candidate)
+        extracted = Path(self.temp.name) / "candidate-extracted"
+        with zipfile.ZipFile(candidate) as archive:
+            archive.extractall(extracted)
+        report = client_integrity.verify_installed(extracted)
+        self.assertEqual(report.critical_errors, 0)
+        dll = extracted / "out" / "gpu" / "bbnet20.dll"
+        dll.write_bytes(b"corrupt")
+        report = client_integrity.verify_installed(extracted)
+        self.assertEqual(report.critical_errors, 1)
+        self.assertIn("out/gpu/bbnet20.dll (mismatch)", client_integrity.summary(report))
+
+    def test_candidate_requires_explicit_dll(self):
+        dll = self.root / "out" / "gpu" / "bbnet20.dll"
+        dll.unlink()
+        path = Path(self.temp.name) / "invalid-candidate.zip"
+        with self.assertRaisesRegex(ValueError, "Missing file"):
+            kit.pack(self.root, path, SHA, include_native_bbsc=True)
+        self.assertFalse(path.exists())
+
+    def test_normal_zip_cannot_smuggle_candidate_dll(self):
+        normal = Path(self.temp.name) / "normal.zip"
+        kit.pack(self.root, normal, SHA)
+        with zipfile.ZipFile(normal, "a") as z:
+            z.writestr("out/gpu/bbnet20.dll", b"unlisted")
+        with self.assertRaisesRegex(ValueError, "candidate inclusion"):
+            checker.verify(normal)
+
     def test_deterministic_bytes(self):
         first = Path(self.temp.name) / "one.zip"
         second = Path(self.temp.name) / "two.zip"
