@@ -1,7 +1,7 @@
 """Prepare hash-verified deadinside bbnet20 sources for a separate Win64 DLL build.
 
 This never builds a DLL, touches game files or modifies the production server.
-Only two explicit Linux-to-Windows adaptations are applied to pinned sources.
+Pinned sources are validated before applying allowlisted Win64 ABI, save, and network adaptations.
 """
 from __future__ import annotations
 import argparse
@@ -261,7 +261,7 @@ def prepare(staged: Path, workspace: Path) -> dict:
                     dest.unlink()
             raise
     return {"source_revision": REVISION, "files_staged": len(sources),
-            "adapted": [GLUE, CMAKE], "windows_online_dll_built": False}
+            "adapted": [GLUE, BBSC_GLUE, RELAY, CMAKE], "windows_online_dll_built": False}
 
 
 def main() -> int:
