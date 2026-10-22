@@ -573,6 +573,7 @@ FogAction HostFogAction(const BossGate& g, bool guest_starts_on, bool intro_done
 #include "party_droproll.h"
 #include "party_items.h"
 #include "seamless_rules.h"
+#include "party_bossfog_rules.h"
 #include "bbport_present_hold.h"
 
 #include <atomic>
@@ -660,6 +661,8 @@ struct State {
     std::set<std::uint64_t> known;  // id * 2 + value: local changes already sent or held back
     std::set<std::uint32_t> fog_in;  // guest: boss fogs it went through (B2), reported once
     std::set<std::uint32_t> fog_apart;  // guest: put back out of that boss room this stay (D3)
+    std::set<std::uint32_t> fog_out;    // guest: guest-entered flags seen 0 this stay (bossfog rules)
+    std::set<std::uint32_t> fog_stale;  // guest: ... already 1 at the stay's start: not a walk-through
     std::set<std::uint32_t> story_sent;  // guest: story triggers it reported (D10), once per map
     std::map<std::uint32_t, bool> lift_pending;  // guest: lift pos flag -> the end its own ride goes to (D3)
     std::set<std::uint64_t> lift_baseline;       // guest: lift flag * 2 + value held back by the baseline
@@ -892,6 +895,8 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.map = s.map_id;
         st.fog_in.clear();
         st.fog_apart.clear();
+        st.fog_out.clear();
+        st.fog_stale.clear();
         st.story_sent.clear();
         // A gift trigger set in the own world (its own 9040 awards it) or during a load: not the host's.
         if (const std::vector<std::uint32_t> g = TakeGiftSets(); !g.empty()) {
@@ -909,6 +914,15 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         st.lift_baseline.clear();
         st.lift_pending.clear();
         st.lift_sent.clear();
+    }
+    for (const BossGate& g : BossGates()) {
+        // 0.7.2 known issue 2: from the stay's first steady frame on, which guest-entered flags of
+        // this block read 0 - only a 0 -> 1 after that is this guest's walk through the fog.
+        bool in = false;
+        if (BossGateInBlock(g, s.map_id) && progress::ReadFlag(g.guest_flag, &in) && !in) {
+            st.fog_out.insert(g.guest_flag);
+            st.fog_stale.erase(g.guest_flag);
+        }
     }
     if (now - st.last_scan < 0.25 || now - st.steady_since < 3.0) {
         return;
@@ -1101,6 +1115,19 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
         bool in = false;
         progress::ReadFlag(g.guest_flag, &in);
         const bool was = st.fog_in.count(g.guest_flag) != 0;
+        if (bossfog::StaleFogFlag(st.fog_out.count(g.guest_flag) != 0, in, was || st.fog_stale.count(g.guest_flag))) {
+            // Set since before this stay (it came with the load): not this guest's walk through the
+            // fog. Not sent (the host opened the fight from it at the lamp), not "in the boss room".
+            st.fog_stale.insert(g.guest_flag);
+            bool host_in = false;
+            progress::ReadFlag(g.host_flag, &host_in);
+            Log("guest: boss fog (event %u): guest-entered flag %u already 1 when this stay began (host-entered "
+                "%u = %d): not a walk through the fog, not sent", g.guest_event, g.guest_flag, g.host_flag,
+                host_in ? 1 : 0);
+        }
+        if (st.fog_stale.count(g.guest_flag)) {
+            continue;  // until it reads 0 again (then a real walk-through counts)
+        }
         const std::uint32_t host_map = b2::MemberMap(0);
         const bool apart = !GuestFogOpenWhileHostAt(g, host_map);
         if (!apart || !in) {
@@ -1123,7 +1150,7 @@ void GuestTick(const GameSnapshot& s, party::PartyLink* link) {
                 "area%s", g.guest_event, g.guest_flag, MapName(host_map).c_str(),
                 was ? "the host left during the fight" : "went through the fog", dead ? "; the boss is dead here" :
                 "; putting back outside");
-        } else if (in && !was && r.fog.size() < kMaxFog) {
+        } else if (bossfog::FogWalkedThrough(st.fog_out.count(g.guest_flag) != 0, in, was) && r.fog.size() < kMaxFog) {
             st.fog_in.insert(g.guest_flag);
             r.fog.push_back(g.guest_flag);
             Log("guest: went through boss fog (event %u, flag %u): the host opens the fight", g.guest_event, g.guest_flag);
@@ -1548,8 +1575,58 @@ void StoryTick(const GameSnapshot& s) {
 }
 } // namespace
 
+std::mutex g_lift_wait_mu;
+std::map<std::uint32_t, bool> g_lift_wait;  // host: lift pos flag -> a guest's end, applied once the host is out
+
+// liftfix: the host's answer to a guest's ride (HostLiftSync) and its write. Occupied: the host stands in
+// the car (within kLiftInCarRadius of its axis: 0.7.1 took 4 m, which on a landing beside Cainhurst's car
+// refused every ride) or its own copy rides.
+LiftSync HostLiftDecide(const Lift& l, bool want, bool* ok) {
+    bool pos = false, busy = false;
+    progress::ReadFlag(l.pos, &pos);
+    if (l.busy) progress::ReadFlag(l.busy, &busy);
+    ObjAnimState car;
+    const bool loaded = ReadObjAnim(l.car, &car);
+    const bool occupied = loaded && l.Replays() &&
+                          (LiftBusyHere(l, kLiftInCarRadius) || liftrules::MirrorHold(l, car.anim, car.playing));
+    const LiftSync what = HostLiftSync(pos, busy, loaded, want, l.Replays(), occupied);
+    *ok = true;
+    if (what == LiftSync::apply) {
+        *ok = progress::WriteFlagOwnSave(l.pos, want);
+        if (l.host_state) {
+            *ok = progress::WriteFlagOwnSave(l.host_state, want) && *ok;
+        }
+    }
+    return what;
+}
+
+// liftfix: guests' rides refused while the host stood in the car, applied once it is out.
+void HostLiftWaitTick() {
+    std::map<std::uint32_t, bool> wait;
+    {
+        std::lock_guard<std::mutex> lk(g_lift_wait_mu);
+        wait.swap(g_lift_wait);
+    }
+    for (const auto& [id, want] : wait) {
+        const Lift* l = LiftByPosFlag(id);
+        bool ok = true;
+        const LiftSync what = l ? HostLiftDecide(*l, want, &ok) : LiftSync::same;
+        if (what == LiftSync::occupied || what == LiftSync::busy) {
+            std::lock_guard<std::mutex> lk(g_lift_wait_mu);
+            g_lift_wait.emplace(id, want);  // still in the car / riding
+        } else if (l) {
+            Log("host: lift %d %u=%d (a guest's ride): %s", l->car, id, want ? 1 : 0,
+                what == LiftSync::apply ? (ok ? "applied now that the host is out of the car" : "NOT written")
+                                        : "the host's world has it by now");
+        }
+    }
+}
+
 void HostTick(const GameSnapshot& s) {
     State& st = S();
+    if (s.world_up && !s.loading && progress::FlagLoadMode() == 0) {
+        HostLiftWaitTick();
+    }
     std::deque<std::pair<int, Request>> in;
     {
         std::lock_guard<std::mutex> lk(st.mu);
@@ -1632,29 +1709,23 @@ void HostTick(const GameSnapshot& s) {
                     list += " lift " + std::to_string(id) + "(refused: another area)";
                     continue;
                 }
-                bool pos = false, busy = false;
-                progress::ReadFlag(l->pos, &pos);
-                if (l->busy) progress::ReadFlag(l->busy, &busy);
-                ObjAnimState car;
-                const bool loaded = ReadObjAnim(l->car, &car);
-                // liftfix: also while the host's own copy rides (its car shows a ride or plays its end)
-                const bool occupied = loaded && l->Replays() &&
-                                      (LiftBusyHere(*l, kLiftCarRadius) || liftrules::MirrorHold(*l, car.anim, car.playing));
-                const LiftSync what = HostLiftSync(pos, busy, loaded, want, l->Replays(), occupied);
                 bool ok = true;
+                const LiftSync what = HostLiftDecide(*l, want, &ok);
                 if (what == LiftSync::apply) {
-                    ok = progress::WriteFlagOwnSave(l->pos, want);
-                    if (l->host_state) {
-                        ok = progress::WriteFlagOwnSave(l->host_state, want) && ok;
-                    }
                     st.stats.applied += ok ? 1 : 0;
                     applied_any = applied_any || ok;
+                } else if (what == LiftSync::occupied) {
+                    // liftfix: applied once the host is out of the car (HostLiftWaitTick): a guest
+                    // reports a ride once, and a copy that did not follow the guest's ride (Cainhurst's
+                    // while the host sat in a cutscene, live run 5) would keep the host's car at the old end.
+                    std::lock_guard<std::mutex> lk(g_lift_wait_mu);
+                    g_lift_wait[l->pos] = want;
                 }
                 list += " lift " + std::to_string(l->car) + " " + std::to_string(id) + (want ? "=1" : "=0") +
                         (what == LiftSync::same    ? "(same here)"
                          : what == LiftSync::busy  ? "(a ride runs here: left alone)"
                          : what == LiftSync::loaded ? "(car loaded here, its copy did not follow: left alone)"
-                         : what == LiftSync::occupied ? "(the host stands at the car: left alone)"
+                         : what == LiftSync::occupied ? "(the host stands in the car: applied once it is out)"
                          : ok                      ? "(applied: the lift's block is not loaded here)"
                                                    : "(NOT written)");
             }
