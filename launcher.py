@@ -1787,6 +1787,9 @@ class BloodborneLauncher(tk.Tk):
         ttk.Label(main, text="BLOODBORNE PC", style="Header.TLabel").pack(anchor="w")
         ttk.Label(main, text="Native Windows Port (bbport) Launcher",
                   style="SubHeader.TLabel").pack(anchor="w", pady=(0, 8))
+        # A single on-demand release panel, not an updater that touches game files.
+        ttk.Button(main, text="What's New / Updates", style="Secondary.TButton",
+                   command=self.show_release_center).pack(anchor="e", pady=(0, 8))
         # Update notice (scripts/update_check.py): packed here once a newer release is known.
         self.update_label = tk.Label(main, text="", fg="#c5a059", bg="#1a1a1a", cursor="hand2",
                                      font=("Segoe UI", 10, "underline"), anchor="w")
@@ -3513,6 +3516,94 @@ class BloodborneLauncher(tk.Tk):
         self.log(f"[PARTY] Copied {user / ps.SOLO} to {user / ps.PARTY}"
                  + (f" (the old party save is in {backup})" if backup else ""))
         return True
+
+    def show_release_center(self):
+        """Read-only changelog and manual release check; never installs software."""
+        from scripts import release_center
+        from queue import Empty
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Seamless Hunt PC | Updates & Changelog")
+        dialog.geometry("760x580")
+        dialog.minsize(540, 380)
+        dialog.transient(self)
+        body = ttk.Frame(dialog, padding=18)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="Updates & Changelog", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(body, text=f"Installed launcher version: {PORT_VERSION}  |  Stable release channel",
+                  style="SubHeader.TLabel").pack(anchor="w", pady=(2, 7))
+        status = tk.StringVar(value="Local changelog. Online check is optional and read-only.")
+        ttk.Label(body, textvariable=status, style="SubHeader.TLabel", wraplength=675
+                  ).pack(anchor="w", pady=(0, 10))
+        frame = ttk.Frame(body)
+        frame.pack(fill="both", expand=True)
+        output = tk.Text(frame, wrap="word", relief="flat", bg="#1e1e20",
+                         fg="#e0d9ce", insertbackground="#e0d9ce",
+                         font=("Segoe UI", 10), padx=14, pady=12)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=output.yview)
+        output.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        output.pack(side="left", fill="both", expand=True)
+
+        def display(notes):
+            output.configure(state="normal")
+            output.delete("1.0", "end")
+            output.insert("1.0", notes)
+            output.configure(state="disabled")
+
+        def show_local():
+            display(release_center.local_changelog(APP_DIR / "CHANGELOG.md"))
+            status.set("Bundled notes for this build. Unreleased changes are not shipped updates.")
+
+        controls = ttk.Frame(body)
+        controls.pack(fill="x", pady=(12, 0))
+        pending = queue.Queue(maxsize=1)
+        busy = {"value": False}
+
+        def poll_results():
+            if not dialog.winfo_exists():
+                return
+            try:
+                releases = pending.get_nowait()
+            except Empty:
+                dialog.after(150, poll_results)
+                return
+            busy["value"] = False
+            check_button.configure(state="normal")
+            if not releases:
+                status.set("No release history received (offline, rate limited or no published releases).")
+                return
+            display(release_center.format_history(releases))
+            newest = releases[0]["tag"]
+            if release_center.update_check.newer(newest, PORT_VERSION):
+                status.set(f"New stable version {newest} listed. Read the notes before visiting Releases.")
+            else:
+                status.set("Published release history loaded. Current development build may differ.")
+
+        def check_now():
+            if busy["value"]:
+                return
+            busy["value"] = True
+            check_button.configure(state="disabled")
+            status.set("Checking this fork's official GitHub Releases…")
+            def worker():
+                pending.put(release_center.fetch_history(channel="stable"))
+            threading.Thread(target=worker, daemon=True).start()
+            dialog.after(150, poll_results)
+
+        check_button = ttk.Button(controls, text="Check now", style="Secondary.TButton",
+                                  command=check_now)
+        check_button.pack(side="left")
+        ttk.Button(controls, text="Bundled changelog", style="Secondary.TButton",
+                   command=show_local).pack(side="left", padx=(7, 0))
+        ttk.Button(controls, text="Official Releases", style="Secondary.TButton",
+                   command=lambda: webbrowser.open(release_center.RELEASES_PAGE)
+                   ).pack(side="left", padx=(7, 0))
+        ttk.Button(controls, text="Close", style="Secondary.TButton",
+                   command=dialog.destroy).pack(side="right")
+        ttk.Label(body, text="No auto-install yet: signed packages, rollback and user-data isolation are required.",
+                  style="Hint.TLabel").pack(anchor="w", pady=(10, 0))
+        show_local()
 
     def start_update_check(self):
         """Background check for a newer release (scripts/update_check.py); never blocks or fails."""
