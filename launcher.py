@@ -16,7 +16,7 @@ import tkinter as tk
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 
 APP_DIR = Path(__file__).resolve().parent
 # The port's version (VERSION at the repository root; the release has no such file).
@@ -5747,7 +5747,33 @@ class BloodborneLauncher(tk.Tk):
                 parent=self):
                 self.log("[LEGACY BBSC] Experimental start cancelled.")
                 return
-            legacy_bbsc_launch.activate(env)
+            account = simpledialog.askstring(
+                "BBSC game account", "Enter your shadNet NP ID for the selected realm:",
+                parent=self)
+            if account is None:
+                return
+            secret = simpledialog.askstring(
+                "BBSC game account",
+                "Enter your shadNet password. IMPORTANT: upstream shadNet sends "
+                "credentials over unencrypted TCP. Use a UNIQUE password and a trusted server.",
+                show="*", parent=self)
+            if secret is None:
+                return
+            try:
+                legacy_bbsc_launch.activate(env)
+                self._legacy_override_file = legacy_bbsc_launch.configure_realm(
+                    env, APP_DIR, host=self.seamless_hunt_host_var.get().strip(),
+                    account=account.strip(), password=secret)
+            except (OSError, ValueError) as exc:
+                legacy_bbsc_launch.clear_legacy_env(env)
+                self.log("[LEGACY BBSC] Cannot configure experimental connection: " + str(exc))
+                messagebox.showerror("Native CLS BBSC", str(exc), parent=self)
+                return
+            finally:
+                # Credential content is never saved in launcher_settings.json.
+                secret = ""
+            self.log("[LEGACY BBSC] Configured shadNet realm and temporary game HTTP redirect. "
+                     "Actual game login and multiplayer remain unverified.")
         env["BB_GAME_DIR"] = str(game_dir)
         if warper:
             warper_env(env, warper_paths())
@@ -5875,6 +5901,15 @@ class BloodborneLauncher(tk.Tk):
         crashed = rc != 0 or new_crash_logs(getattr(self, "launch_time", None))
         self.proc = None
         self.close_log_file()
+        # Temporary game server routing file contains no secrets, but remove it
+        # after the process exits to avoid abandoned per-launch artifacts.
+        redirect = getattr(self, "_legacy_override_file", None)
+        self._legacy_override_file = None
+        if redirect:
+            try:
+                Path(redirect).unlink(missing_ok=True)
+            except OSError:
+                self.log("[LEGACY BBSC] Could not remove temporary HTTP routing file.")
         if crashed and self.auto_support_bundle.get() and not getattr(self, "_stop_requested", False):
             self.write_support_bundle(None, note=f"automatic: the game ended with code {code}")
         self.launch_btn.config(state="normal")
