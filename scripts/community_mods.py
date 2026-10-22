@@ -251,6 +251,61 @@ def install(plan: Plan, data_dir: Path):
             "original_game_untouched": True, "requires_restart": True}
 
 
+def installed_mods(data_dir: Path):
+    """Installed mod names and enabled state from the existing bbport mods.json."""
+    from scripts import mods
+    base = Path(data_dir).resolve()
+    available = mods.discover(base / "mods")
+    active = set(mods.selected(base / "mods", base / "mods.json"))
+    return [(name, name in active) for name in available]
+
+
+def save_mod_selection(data_dir: Path, enabled_names):
+    """Atomically store individual mod switches without touching load order/saves."""
+    from scripts import mods
+    base = Path(data_dir).resolve()
+    available = mods.discover(base / "mods")
+    requested = set(enabled_names)
+    if not requested.issubset(available):
+        raise ValueError("Selection contains an unknown or uninstalled mod")
+    lower = {name.casefold() for name in requested}
+    if "moal" in lower and "dollrebirth" not in lower:
+        raise ValueError("MOAL 2.1 needs DollRebirth enabled for its Rebirth menu")
+    if "dollrebirth" in lower:
+        if not (base / "patches/DollRebirth.xml").is_file():
+            raise ValueError("DollRebirth requires patches/DollRebirth.xml")
+        disabled = {str(x).casefold() for x in _settings(base / "patches.json").get("disabled", [])}
+        if "dollrebirth.xml/doll rebirth (respec)" in disabled:
+            raise ValueError("Enable the Doll Rebirth XML patch as well")
+    config = base / "mods.json"
+    if config.is_symlink():
+        raise ValueError("Refusing symlink mods.json")
+    settings = _settings(config)
+    previous = settings.get("disabled", [])
+    if not isinstance(previous,list) or not all(isinstance(x,str) for x in previous):
+        raise ValueError("Invalid mods.json disabled list")
+    settings["disabled"] = sorted(
+        set(previous) - set(available) | (set(available) - requested),
+        key=str.casefold)
+    base.mkdir(parents=True, exist_ok=True)
+    name = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=base,
+                                          prefix=".mods-",suffix=".json",
+                                          delete=False) as stream:
+            name = stream.name
+            json.dump(settings, stream, indent=2, ensure_ascii=False)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, config)
+    finally:
+        if name and os.path.exists(name):
+            os.unlink(name)
+    return {"enabled": sorted(requested), "disabled": settings["disabled"],
+            "restart_required": True}
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("archives", nargs="+", type=Path)
