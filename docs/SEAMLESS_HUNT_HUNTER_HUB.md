@@ -16,6 +16,11 @@ Selecting a character from a detected save source must not silently convert, ove
 - Added synthetic multilingual/broken-save fixtures and CI tests on Windows and Linux. CI passing is not proof a real user's native/shadPS4/Awaken save parses correctly. Actual save comparison with in-game values remains a release gate.
 - Upstream format credit: Supermedo `bbport_character.py` (GPL-2.0-or-later), Noxde. We have not redistributed a real save or copyrighted game files.
 
+## Compact Home + pinned preview milestone (2026-10-22)
+- Implemented a main-window Hunter's Refuge panel with honest game-file/native-client status, native party mode, quick links to every existing settings tab and a persistent read-only pinned Hunter preview. Logs are collapsed by default; long settings pages scroll while the Play button stays accessible.
+- A Hunter chosen in the read-only browser can be pinned or cleared. `scripts/hunter_preview.py` stores only local folder/slot/source metadata in launcher settings; it validates the slot and reads the file again after restart. Corrupt, missing or moved saves are **not** displayed from stale cached data. This is explicitly not the game's active character slot selector.
+- Windows CI now creates the real Tk UI and tests expanding settings, category selection and diagnostics. Offline pin tests verify no save changes. A visually polished final Windows redesign and actual save/gameplay verification remain release gates.
+
 ## Read-only inventory milestone (2026-10-22)
 - Added `scripts/hunter_armory.py` with bounded inventory weapon ID decoding (right-hand / left-hand *owned* weapons only) and best-upgrade-level grouping. Zero/unrecognized ID entries are excluded.
 - Optional item-name lookup reads `dvdroot_ps4/msg/<language>/item.msgbnd.dcx` from the user's own game directory, bounds DCX decompression and BND4/FMG indexes, and gracefully falls back to numeric IDs when message archives are unavailable.
