@@ -1721,6 +1721,14 @@ class BloodborneLauncher(tk.Tk):
         style.configure("SubHeader.TLabel", font=("Segoe UI", 9), foreground="#888888", background=bg_dark)
         style.configure("Section.TLabel", font=("Segoe UI", 8, "bold"), foreground="#c5a059", background=bg_card)
         style.configure("Hint.TLabel", font=("Segoe UI", 8), foreground="#888888", background=bg_card)
+        # Calm, high-contrast Home surface. No decorative fake statuses.
+        style.configure("Hub.TFrame", background="#202629")
+        style.configure("HubTitle.TLabel", background="#202629",
+                        foreground="#c4ad87", font=("Segoe UI", 10, "bold"))
+        style.configure("HubCaption.TLabel", background="#202629",
+                        foreground="#9ea5a5", font=("Segoe UI", 9, "bold"))
+        style.configure("HubInfo.TLabel", background="#202629",
+                        foreground="#f0ece4", font=("Segoe UI", 10))
         style.map("Card.TCheckbutton", background=[("active", "#2d2d30")],
                   foreground=[("disabled", "#666666")])
 
@@ -2585,6 +2593,30 @@ class BloodborneLauncher(tk.Tk):
         self.diagnostics_bar.pack_forget()
         self.diagnostics_log_frame.pack_forget()
         self.settings_open = False
+        self._bind_settings_wheel(self.notebook)
+
+    def _bind_settings_wheel(self, widget):
+        # Tk mouse wheel is sent to the hovered child. Bind informative widgets
+        # but not comboboxes/text entries, whose own wheel behavior is useful.
+        for child in widget.winfo_children():
+            if isinstance(child, (ttk.Frame, ttk.Label, ttk.Checkbutton, tk.Label)):
+                child.bind("<MouseWheel>", self._settings_wheel, add="+")
+                child.bind("<Button-4>", self._settings_wheel, add="+")
+                child.bind("<Button-5>", self._settings_wheel, add="+")
+            self._bind_settings_wheel(child)
+
+    def _settings_wheel(self, event):
+        if not getattr(self, "settings_open", False):
+            return
+        if getattr(event, "num", None) == 4:
+            ticks = -1
+        elif getattr(event, "num", None) == 5:
+            ticks = 1
+        else:
+            ticks = -(event.delta // 120) if event.delta else 0
+        if ticks:
+            self.settings_canvas.yview_scroll(ticks, "units")
+            return "break"
 
     def _settings_resize(self, event):
         # Keep the notebook wide enough to show its existing two-column controls.
