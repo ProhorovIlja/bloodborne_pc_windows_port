@@ -94,7 +94,9 @@ class NativeBbscPrepareTests(unittest.TestCase):
         self.assertIn("_putenv_s(", glue)
         self.assertIn("#ifndef _WIN32", glue)
         self.assertIn("BBSC_SAVE_DIR", glue)
-        self.assertIn("    unsigned writable = 0;\n#else\n", glue)
+        self.assertEqual(glue.count("    unsigned writable = 0;"), 2)
+        self.assertIn("#ifdef _WIN32", glue)
+        self.assertIn("#else", glue)
         self.assertIn("    unsigned writable = 0;\n    if (FILE* maps", glue)
 
     def _replace_fixture(self, name, blob):
