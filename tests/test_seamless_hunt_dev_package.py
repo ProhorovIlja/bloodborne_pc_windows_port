@@ -9,6 +9,7 @@ from pathlib import Path
 
 from tools.release import stage_seamless_hunt_dev as kit
 from tools.release import verify_seamless_hunt_dev as checker
+from scripts import client_integrity
 
 SHA = "a" * 40
 
@@ -137,6 +138,26 @@ class DeveloperKitTest(unittest.TestCase):
         self.assertTrue(status["portable_python"])
         self.assertFalse(status["live_coop_verified"])
         self.assertIn("CHANGELOG.md", [x["path"] for x in json.loads(zipfile.ZipFile(path).read("MANIFEST.json"))["files"]])
+
+    def test_extracted_build_manifest_matches_files_and_detects_corruption(self):
+        source = Path(self.temp.name) / "portable.zip"
+        extracted = Path(self.temp.name) / "portable"
+        kit.pack(self.root, source, SHA)
+        with zipfile.ZipFile(source) as z:
+            z.extractall(extracted)
+        report = client_integrity.verify_installed(extracted)
+        self.assertEqual(report.critical_errors, 0)
+        self.assertEqual(report.optional_changes, 0)
+        self.assertEqual(report.revision, SHA)
+        # A custom XML patch is a non-core difference: never delete or alter it.
+        xml = extracted / "patches" / "Bloodborne.xml"
+        xml.write_bytes(b"<custom/>")
+        changed = client_integrity.verify_installed(extracted)
+        self.assertEqual(changed.critical_errors, 0)
+        self.assertEqual(changed.optional_changes, 1)
+        self.assertEqual(xml.read_bytes(), b"<custom/>")
+        (extracted / "out" / "bbport.exe").write_bytes(b"damaged runtime")
+        self.assertEqual(client_integrity.verify_installed(extracted).critical_errors, 1)
 
     def test_reject_modified_file_with_stale_manifest(self):
         source = Path(self.temp.name) / "source.zip"
