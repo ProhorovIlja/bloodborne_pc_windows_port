@@ -4485,6 +4485,7 @@ class BloodborneLauncher(tk.Tk):
         gamepad = dict(self.gamepad_choices).get(gamepad_label, "")
         return {
             "eboot": self.eboot_var.get().strip(),
+            "discovery_roots": self.settings.get("discovery_roots", [])[:16],
             "fps": self.fps_var.get(),
             "res": self.res_var.get(),
             "aniso": self.aniso_var.get(),
@@ -4770,8 +4771,8 @@ class BloodborneLauncher(tk.Tk):
         self.discovery_busy = True
         if not silent:
             self.log("[DISCOVERY] Scanning game libraries and known save roots (read-only)...")
-        roots = [Path(p) for p in self.settings.get("discovery_roots", [])
-                 if isinstance(p, str)][:16]
+        configured = self.settings.get("discovery_roots", [])
+        roots = [Path(p) for p in configured if isinstance(p, str)][:16] if isinstance(configured, list) else []
         def job():
             try:
                 from scripts import install_discovery
@@ -4865,7 +4866,8 @@ class BloodborneLauncher(tk.Tk):
             folder = filedialog.askdirectory(parent=dlg,title="Additional game or port folder to search")
             if not folder:
                 return
-            roots = list(self.settings.get("discovery_roots", []))
+            configured = self.settings.get("discovery_roots", [])
+            roots = [p for p in configured if isinstance(p, str)] if isinstance(configured, list) else []
             if folder not in roots:
                 roots.append(folder)
             self.settings["discovery_roots"] = roots[-16:]
