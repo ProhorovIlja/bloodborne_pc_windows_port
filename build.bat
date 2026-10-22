@@ -165,6 +165,14 @@ if errorlevel 1 (
 )
 :cmake_configured
 
+rem Native bbnet20 candidate CI only needs the configured CMake target graph,
+rem not a complete bbport.exe/FSR renderer rebuild on every network-module fix.
+rem Normal build.bat without an argument still builds the full Windows client.
+if /i "%~1"=="--configure-only" (
+    echo CMake configured; candidate module build is handled separately.
+    exit /b 0
+)
+
 rem All logical CPUs by default (BB_BUILD_JOBS overrides); a failed parallel build is retried with
 rem -j 1, which also shows the first error on its own (from Mrsuss60/bloodborne_pc_windows_port b1f71e6).
 if not defined BB_BUILD_JOBS set "BB_BUILD_JOBS=%NUMBER_OF_PROCESSORS%"
