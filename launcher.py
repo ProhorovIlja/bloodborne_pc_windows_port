@@ -3523,7 +3523,7 @@ class BloodborneLauncher(tk.Tk):
 
     def show_hunters(self):
         """Read-only Hunter Hub preview. Never activates, edits or moves game saves."""
-        from scripts import hunter_profiles, install_discovery
+        from scripts import hunter_armory, hunter_profiles, install_discovery
         from queue import Empty
 
         dialog = tk.Toplevel(self)
@@ -3559,14 +3559,20 @@ class BloodborneLauncher(tk.Tk):
         vs.pack(side="right", fill="y")
         tree.pack(side="left", fill="both", expand=True)
 
-        details = tk.Text(view, wrap="word", height=19, relief="flat", padx=12, pady=12,
+        details_frame = ttk.Frame(view)
+        details_frame.grid(row=0, column=1, sticky="nsew")
+        details = tk.Text(details_frame, wrap="word", height=19, relief="flat", padx=12, pady=12,
                           bg="#202023", fg="#e0d9ce", insertbackground="#e0d9ce",
                           font=("Segoe UI", 10))
-        details.grid(row=0, column=1, sticky="nsew")
+        details_scroll = ttk.Scrollbar(details_frame, orient="vertical", command=details.yview)
+        details.configure(yscrollcommand=details_scroll.set)
+        details_scroll.pack(side="right", fill="y")
+        details.pack(side="left", fill="both", expand=True)
         details.insert("1.0", "Choose a Hunter to see verified character stats.\n"
                        "Weapon equipment and last lamp: not yet decoded reliably.")
         details.configure(state="disabled")
         profiles = []
+        armory_names = {}
         pending = queue.Queue(maxsize=1)
         state = {"busy": False}
 
@@ -3577,6 +3583,12 @@ class BloodborneLauncher(tk.Tk):
             h = profiles[int(selection[0])]
             hours, seconds = divmod(h.playtime_seconds, 3600)
             minutes = seconds // 60
+            weapon_items = h.owned_weapon_ids
+            weapons_list = ("\n".join("  " + hunter_armory.weapon_description(i, armory_names)
+                                       for i in weapon_items[:22])
+                            if weapon_items else "  No weapon entries recognized")
+            if len(weapon_items) > 22:
+                weapons_list += f"\n  ... and {len(weapon_items) - 22} more"
             desc = (
                 f"{h.name}  |  Blood Level {h.level}\n"
                 f"{h.build_guess}\n\n"
@@ -3591,10 +3603,12 @@ class BloodborneLauncher(tk.Tk):
                 f"Play time        {hours}h {minutes}m\n"
                 f"Deaths           {h.deaths}\n"
                 f"NG cycle marker  {h.journey} (raw)\n\n"
+                f"OWNED WEAPONS ({len(weapon_items)})\n{weapons_list}\n"
+                "Not necessarily equipped. Names come from your game files when available.\n\n"
                 f"Save type        {hunter_profiles.source_label(h.source)}\n"
                 f"Slot             {h.slot}\n"
                 f"Folder           {h.folder}\n\n"
-                "Equipment / last known location: not verified by this parser.\n"
+                "Equipped hand slots / last known location: not yet verified.\n"
                 "This viewer does not choose a game slot or edit a save."
             )
             details.configure(state="normal")
@@ -3611,7 +3625,7 @@ class BloodborneLauncher(tk.Tk):
             if not dialog.winfo_exists():
                 return
             try:
-                result, error = pending.get_nowait()
+                result, names, error = pending.get_nowait()
             except Empty:
                 dialog.after(120, poll)
                 return
@@ -3619,6 +3633,8 @@ class BloodborneLauncher(tk.Tk):
             scan_btn.configure(state="normal")
             browse_btn.configure(state="normal")
             profiles[:] = result
+            armory_names.clear()
+            armory_names.update(names)
             for item in tree.get_children():
                 tree.delete(item)
             for i, h in enumerate(profiles):
@@ -3642,6 +3658,7 @@ class BloodborneLauncher(tk.Tk):
             status.set("Reading known save folders without altering files…")
             configured = self.settings.get("discovery_roots", [])
             roots = [Path(p) for p in configured if isinstance(p, str)][:16] if isinstance(configured, list) else []
+            game_dir = resolve_game_dir(self.eboot_var.get().strip())
 
             def worker():
                 try:
@@ -3650,9 +3667,10 @@ class BloodborneLauncher(tk.Tk):
                     else:
                         saves = install_discovery.find_saves(APP_DIR, extra_roots=roots)
                         characters = hunter_profiles.from_discovery([vars(x) for x in saves])
-                    pending.put((characters, ""))
+                    names = hunter_armory.game_weapon_names(str(game_dir)) if game_dir else {}
+                    pending.put((characters, names, ""))
                 except (OSError, ValueError) as exc:
-                    pending.put(([], f"Read-only scan failed: {exc}"))
+                    pending.put(([], {}, f"Read-only scan failed: {exc}"))
             threading.Thread(target=worker, daemon=True,
                              name="bloodborne-hunter-preview").start()
             dialog.after(120, poll)
