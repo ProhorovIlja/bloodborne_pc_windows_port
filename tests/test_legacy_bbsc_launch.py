@@ -10,7 +10,8 @@ import legacy_bbsc_launch as bbsc
 class NativeLegacyLaunchTests(unittest.TestCase):
     def test_opt_in_is_explicit_never_implicit(self):
         environment = {"BB_PARTY": "host", "BB_BBSC": "1",
-                       "BB_LEGACY_NET": "1", "BBSC_SAVE_DIR": "/wrong/save",
+                       "BB_LEGACY_NET": "1", "BB_ONLINE": "1",
+                       "BB_NET_BACKEND": "thd", "BBSC_SAVE_DIR": "/wrong/save",
                        "SHADPS4_BLOODBORNE_SEAMLESS_COOP": "1",
                        "OTHER_SETTING": "keep"}
         bbsc.clear_legacy_env(environment)
@@ -24,6 +25,8 @@ class NativeLegacyLaunchTests(unittest.TestCase):
         self.assertEqual(environment["BB_PARTY"], "")
         self.assertEqual(environment["BB_BBSC"], "1")
         self.assertEqual(environment["BB_LEGACY_NET"], "1")
+        self.assertEqual(environment["BB_ONLINE"], "1")
+        self.assertEqual(environment["BB_NET_BACKEND"], "shadnet")
         self.assertEqual(environment["SHADPS4_BLOODBORNE_SEAMLESS_COOP"], "1")
         self.assertEqual(environment["BB_SKIP_NETWORK_CHOICE"], "online")
         self.assertNotIn("BBSC_SAVE_DIR", environment)
