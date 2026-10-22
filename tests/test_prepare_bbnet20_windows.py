@@ -69,7 +69,7 @@ class NativeBbscPrepareTests(unittest.TestCase):
         glue = (self.workspace / GLUE).read_text()
         self.assertIn('SeamlessBbsc::ActiveSaveFolder(', glue)
         self.assertIn('#include "../shim/bbsc_native_save_dir.h"', glue)
-        self.assertIn('std::filesystem::equivalent(active_save,', glue)
+        self.assertIn('SeamlessBbsc::MatchesActiveSaveFolder(active_save,', glue)
         self.assertIn('g_host.serial ? g_host.serial : ""', glue)
         self.assertIn('game_ver == "1.09" ? "01.09"', glue)
         self.assertIn('native active save for retail title not found', glue)
