@@ -43,3 +43,29 @@ jobs:
 
       - name: Seamless Hunt read-only connection contract
         run: python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
+
+      - name: UDP STUN and IPv6 route diagnostics
+        run: python -m unittest discover -s tests -p 'test_seamless_hunt_network.py' -v
+
+  windows-launcher-network:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Configure Python with Tk
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile launcher and diagnostics
+        run: python -m compileall -q launcher.py scripts/seamless_hunt.py scripts/seamless_hunt_network.py
+
+      - name: Native Windows network diagnostics tests (offline)
+        run: |
+          python -m unittest discover -s tests -p 'test_seamless_hunt_network.py' -v
+          python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
+
+      - name: Launcher import smoke
+        run: python -c "import launcher; print('Launcher module imported')"
