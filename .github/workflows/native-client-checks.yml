@@ -52,6 +52,9 @@ jobs:
           cc -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o /tmp/legacy-online-policy
           /tmp/legacy-online-policy
 
+      - name: CLS BBSC 0.0.2 source parity analyzer (offline)
+        run: python -m unittest discover -s tests -p 'test_compare_bbsc_versions.py' -v
+
       - name: Pinned BBSC native online source import integrity
         run: python -m unittest discover -s tests -p 'test_stage_bbnet20.py' -v
 
@@ -90,6 +93,12 @@ jobs:
           ref: 8185b88d80573fa300595d5c54450183b4109935
           path: upstream-bbnet20
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: CLSAMG22/BBSC
+          ref: 4f11faf88b6ba658ebde6fe5fbefdadedba4fa41
+          path: official-bbsc-002
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -97,6 +106,10 @@ jobs:
         run: |
           python tools/interop/stage_bbnet20.py --from-checkout upstream-bbnet20 --output out/interop/bbnet20
           python -c "import json; from pathlib import Path; m=json.loads(Path('out/interop/bbnet20/PORT-SOURCE-MANIFEST.json').read_text()); assert m['revision']=='8185b88d80573fa300595d5c54450183b4109935'; assert len(m['files'])>10; print('Pinned BBSC code inventoried:',len(m['files']),'source files')"
+      - name: Compare CLS 0.0.2 with native BBSC gameplay hooks
+        run: |
+          python tools/interop/compare_bbsc_versions.py --official official-bbsc-002 --native out/interop/bbnet20 --output out/interop/bbsc-002-parity.json
+
 
   windows-launcher-network:
     runs-on: windows-latest
