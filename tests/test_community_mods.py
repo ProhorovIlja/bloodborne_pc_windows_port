@@ -109,6 +109,13 @@ class CommunityModTests(unittest.TestCase):
         cm.save_mod_selection(self.data,["DollRebirth","MOAL"])
         self.assertTrue(dict(cm.installed_mods(self.data))["MOAL"])
 
+    def test_refuse_wrong_custom_root_instead_of_silent_nonworking_install(self):
+        jump = self.make_zip("jump")
+        import os
+        with patch.dict(os.environ, {"BB_MODS_DIR": str(self.root / "elsewhere") }):
+            with self.assertRaisesRegex(ValueError,"BB_MODS_DIR"):
+                cm.inspect([jump],self.data)
+
     def test_manage_doll_requires_active_code_patch(self):
         doll = self.make_zip("doll")
         cm.install(cm.inspect([doll],self.data),self.data)
