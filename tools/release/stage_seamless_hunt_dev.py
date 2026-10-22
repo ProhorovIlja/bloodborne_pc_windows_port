@@ -42,7 +42,9 @@ OPTIONAL = (
     "LICENSE",
     "README.md",
     "README.ru.md",
+    "docs/PARTY.md",
 )
+
 DIRECTORY_SUFFIXES = {
     "scripts": frozenset((".py",)),
     "patches": frozenset((".xml", ".json")),
