@@ -358,6 +358,11 @@ else()
 endif()
 
 # Explicit test targets; neither launches the game nor needs a Vulkan device.
+# Native upstream visy VRAM collector policy: fixed budgets, gradual eviction
+# and per-presented-frame limits; no Vulkan device/game required for this test.
+add_executable(gc-policy-test EXCLUDE_FROM_ALL ../tests/test_gc_policy.cpp)
+target_compile_options(gc-policy-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+target_include_directories(gc-policy-test PRIVATE ..)
 add_executable(shader-user-data-test EXCLUDE_FROM_ALL ../tests/test_shader_user_data.cpp)
 target_compile_options(shader-user-data-test PRIVATE -UNDEBUG)
 target_include_directories(shader-user-data-test PRIVATE shim shadps4 third_party/gcn/include)

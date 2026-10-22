@@ -1,3 +1,4 @@
+- Integrated visy upstream's native Vulkan texture-GC policy with bounded VRAM budget and per-frame eviction quotas, preserving Windows Clang compatibility. GPU impact awaits device tests.
 - Integrated the latest visy native Hunter editor export into Hunter Hub: read-only game save, separate editor copy, exact region/user/slot guards, and manifest path validation. Cross-port saves and editor import remain disabled pending real save acceptance.\n# Seamless Hunt PC — Changelog
 
 This is the development changelog for the Seamless Hunt native Windows fork.

@@ -22,6 +22,7 @@
 #include "video_core/multi_level_page_table.h"
 #include "video_core/texture_cache/blit_helper.h"
 #include "video_core/texture_cache/image.h"
+#include "video_core/texture_cache/gc_policy.h"
 #include "video_core/texture_cache/image_view.h"
 #include "video_core/texture_cache/sampler.h"
 #include "video_core/texture_cache/tile_manager.h"
@@ -148,8 +149,7 @@ public:
     /// bbport: whether UpdateImage has nothing to do for this image (its fast path).
     [[nodiscard]] bool IsUpToDate(ImageId image_id) const {
         const Image& image = slot_images[image_id];
-        // atomic_ref<T> requires a non-const T even for load() on Clang/libc++.
-        // The underlying image slot is mutable; this method only reads it.
+        // Preserve native Win64 Clang's non-const atomic_ref<T> workaround.
         u32& flag_word = const_cast<u32&>(reinterpret_cast<const u32&>(image.flags));
         const u32 flags = std::atomic_ref<u32>(flag_word).load(std::memory_order_acquire);
         constexpr u32 Dirty = static_cast<u32>(ImageFlagBits::Dirty);
@@ -454,6 +454,16 @@ private:
     /// bbport: gc_tick at each of the last 64 seconds (GarbageCollectImages).
     std::array<u64, 64> gc_tick_at_second{};
     u64 gc_second = 0;
+    /// bbport: the collector's marks (GcPolicy::MarksFor), the gc tick at each recent frame, what
+    /// this frame may still evict, the effective usage last measured (once a frame), and bytes
+    /// of images freed but not destroyed yet (DeleteImage's deferred EraseImage).
+    GcPolicy::Marks gc_marks{};
+    GcPolicy::FrameTicks<> gc_frame_ticks{};
+    GcPolicy::FrameQuota gc_quota{};
+    u32 gc_measured_frame = ~0u;
+    u64 gc_measured_tick = 0;
+    u64 gc_kept_gpu = 0, gc_freed_bytes = 0; ///< pressure report
+    std::atomic<u64> gc_pending_free_bytes{0};
     u64 trigger_gc_memory = 0;
     u64 pressure_gc_memory = 0;
     u64 critical_gc_memory = 0;

@@ -61,6 +61,11 @@ jobs:
           cc -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o /tmp/legacy-online-policy
           /tmp/legacy-online-policy
 
+      - name: Upstream GPU VRAM collector quotas and pressure thresholds (C++)
+        run: |
+          c++ -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. tests/test_gc_policy.cpp -o /tmp/bb-gc-policy-test
+          /tmp/bb-gc-policy-test
+
       - name: Native BBSC active user and retail-region save isolation (C++)
         run: |
           c++ -std=c++17 -Wall -Wextra -Werror tests/test_bbsc_native_save_dir.cpp -o /tmp/bbsc-save-dir-test
@@ -196,6 +201,14 @@ jobs:
           & "C:\Program Files\LLVM\bin\clang.exe" -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o legacy-online-policy.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\legacy-online-policy.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Windows GPU VRAM collector upstream policy (C++)
+        shell: pwsh
+        run: |
+          & "C:\Program Files\LLVM\bin\clang++.exe" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. tests/test_gc_policy.cpp -o bb-gc-policy-test.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\bb-gc-policy-test.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Windows active-save title and user isolation (C++)
