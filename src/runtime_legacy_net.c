@@ -109,9 +109,14 @@ static BbNetResolveFn load_module(void) {
 
 uintptr_t runtime_legacy_net_resolve(const char *scoped_nid) {
     if (!runtime_legacy_net_requested()) return 0;
+    if (!scoped_nid) return 0;
     const char *symbol=runtime_symbol(scoped_nid);
-    if (!symbol) symbol=scoped_nid;
-    if (!legacy_net_online_symbol(symbol)) return 0;
+    /* Known names remain strictly limited to NP/Net/HTTP/SSL. For an
+     * unrecognized hash, let the network module's own explicit NID registry
+     * decide: imported NIDs are not necessarily all in our diagnostics map.
+     */
+    if (symbol ? !legacy_net_online_symbol(symbol)
+               : !legacy_net_scoped_nid(scoped_nid)) return 0;
     BbNetResolveFn resolve=load_module();
     return resolve ? resolve(scoped_nid) : 0;
 }
