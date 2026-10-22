@@ -103,6 +103,15 @@ jobs:
         shell: msys2 {0}
         run: bash tools/setup_windows_deps.sh
 
+      - name: Verify exact upstream BBSC host ABI against compiled Win64 loader
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          clang -std=c11 -Wall -Wextra -Werror -I. \
+            tests/test_bbnet_host_layout_candidate.c \
+            -o out/bbnet-host-abi-smoke.exe
+          out/bbnet-host-abi-smoke.exe
+
       - name: Prove pinned wepoll actually delivers Windows UDP loopback events
         shell: msys2 {0}
         run: |
