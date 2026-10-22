@@ -54,6 +54,7 @@ void runtime_legacy_net_configure(const char *app0, const char *serial,
 }
 int runtime_legacy_net_requested(void) {
     return valid_game_identity &&
+           legacy_net_bbsc_enabled(getenv("BB_BBSC")) &&
            legacy_net_opted_in(getenv("BB_LEGACY_NET"), bb_party_enabled());
 }
 
