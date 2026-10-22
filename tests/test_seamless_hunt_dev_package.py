@@ -35,6 +35,16 @@ class DeveloperKitTest(unittest.TestCase):
             f = self.root / name
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_bytes(("TEST:" + name).encode("ascii"))
+        # The included Python runtime supports double-click GUI without a system Python.
+        for name in (
+            "python/python.exe", "python/pythonw.exe", "python/python312.dll",
+            "python/LICENSE.txt", "python/LICENSE-tcltk.txt",
+            "python/Lib/tkinter/__init__.py", "python/Lib/json/__init__.py",
+            "python/DLLs/_tkinter.pyd", "python/tcl/tk8.6/tk.tcl",
+        ):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(("PY:" + name).encode("ascii"))
         # These must NEVER make it into a downloadable dev kit:
         for name in [
             "user/savedata/1/character.bin",
@@ -57,6 +67,10 @@ class DeveloperKitTest(unittest.TestCase):
         with zipfile.ZipFile(out) as archive:
             names = set(archive.namelist())
             self.assertIn("out/bbport.exe", names)
+            self.assertIn("python/python.exe", names)
+            self.assertIn("python/pythonw.exe", names)
+            self.assertIn("python/DLLs/_tkinter.pyd", names)
+            self.assertIn("python/tcl/tk8.6/tk.tcl", names)
             self.assertNotIn("out/gpu/bbgpu.dll", names)
             self.assertIn("scripts/seamless_hunt.py", names)
             self.assertIn("patches/Bloodborne.xml", names)
@@ -88,6 +102,18 @@ class DeveloperKitTest(unittest.TestCase):
     def test_fails_closed_without_native_binary(self):
         (self.root / "out/bbport.exe").unlink()
         with self.assertRaisesRegex(ValueError, "Missing file"):
+            kit.pack(self.root, Path(self.temp.name) / "bad.zip", SHA)
+
+    def test_python_bundle_is_required(self):
+        (self.root / "python/python.exe").unlink()
+        with self.assertRaisesRegex(ValueError, "Missing file"):
+            kit.pack(self.root, Path(self.temp.name) / "bad.zip", SHA)
+
+    def test_reject_untrusted_python_runtime_payload(self):
+        hidden = self.root / "python" / "site-packages" / "credentials.json"
+        hidden.parent.mkdir(parents=True, exist_ok=True)
+        hidden.write_text("do not include")
+        with self.assertRaisesRegex(ValueError, "Unexpected Python runtime file"):
             kit.pack(self.root, Path(self.temp.name) / "bad.zip", SHA)
 
     def test_reject_invalid_revision(self):
