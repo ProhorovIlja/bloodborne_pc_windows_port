@@ -23,7 +23,7 @@ REQUIRED = frozenset({
 })
 ALLOWED_TOP = frozenset({"out", "python", "scripts", "patches", "launcher",
                          "licenses", "docs", "tools", "VERSION", "LICENSE",
-                         "README.md", "README.ru.md", "launch_gui.bat",
+                         "README.md", "README.ru.md", "CHANGELOG.md", "launch_gui.bat",
                          "run.bat", "launcher.py", "MANIFEST.json",
                          "README-DEVELOPER-BUILD.txt"})
 DENIED_PARTS = frozenset({"user", "savedata", "save", "secrets", "mods", ".git",
