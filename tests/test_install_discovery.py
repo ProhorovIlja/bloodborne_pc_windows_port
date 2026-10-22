@@ -111,6 +111,22 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(kinds,{"mods","patches","cheats"})
         self.assertFalse(result["saves_migrated"])
 
+    def test_custom_port_user_data_and_extras(self):
+        external = self.base / "Custom Data"
+        save = external/"user"/"savedata"/"4"/"CUSA03179"/"SPRJ0005"
+        self.add_save(save)
+        (external/"mods"/"JumpOnL3").mkdir(parents=True)
+        (external/"patches").mkdir()
+        (external/"cheats").mkdir()
+        (external/"patches"/"BBSC.xml").write_text("unchanged")
+        (external/"cheats"/"profile.json").write_text("{}")
+        with patch.dict(os.environ,{"BB_DATA_DIR":str(external)}):
+            results=discovery.scan(self.launcher)
+        folders={p["folder"] for p in results["saves"]}
+        self.assertIn(str(save.resolve()),folders)
+        kinds={p["kind"] for p in results["extras"]}
+        self.assertEqual(kinds,{"mods","patches","cheats"})
+
     def test_symlinked_game_is_not_followed(self):
         real = self.add_game(self.base/"Outside"/"CUSA03173","CUSA03173")
         link = self.base/"Games"/"CUSA03173"
