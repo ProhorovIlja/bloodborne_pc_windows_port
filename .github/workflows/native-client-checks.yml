@@ -115,6 +115,10 @@ jobs:
       - name: Compare CLS 0.0.2 with native BBSC gameplay hooks
         run: |
           python tools/interop/compare_bbsc_versions.py --official official-bbsc-002 --native out/interop/bbnet20 --output out/interop/bbsc-002-parity.json
+      - name: Prove CLS 0.0.2 relay understands native BBR1 frames without server traffic
+        run: |
+          python tools/interop/check_relay_wire.py --official official-bbsc-002 --native out/interop/bbnet20
+
       - name: Prepare isolated native Win64 BBSC source candidate with export fixes
         run: python tools/interop/prepare_bbnet20_windows.py --staged out/interop/bbnet20 --workspace .
 
