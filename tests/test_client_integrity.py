@@ -74,7 +74,8 @@ class ClientIntegrityTests(unittest.TestCase):
 
     def test_case_collision_and_bad_hash(self):
         data = json.loads((self.root / "MANIFEST.json").read_text())
-        data["files"].append({**data["files"][0], "path": data["files"][0]["path"].upper()})
+        original = next(item for item in data["files"] if item["path"] == "python/python.exe")
+        data["files"].append({**original, "path": "python/PYTHON.EXE"})
         (self.root / "MANIFEST.json").write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError, "Duplicate"):
             checker.verify_installed(self.root)
