@@ -6,6 +6,7 @@
  * Priorities/affinity are recorded, not enforced by a PS4 scheduler. */
 #define _GNU_SOURCE
 #include "runtime.h"
+#include "runtime_legacy_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -334,13 +335,16 @@ static void *host_start(void *p) {
     return t->result;
 }
 
-static int32_t create(GuestThread **out,ThreadAttr **attr_slot,GuestEntry entry,void *argument,const char *name) {
+static int32_t create_with_stack(GuestThread **out,ThreadAttr **attr_slot,GuestEntry entry,
+                                 void *argument,const char *name,uint64_t requested_stack) {
+    if (requested_stack > 32ULL*1024*1024) return ERR(22);
     if (!out || !entry) return ERR(22);
     ThreadAttr *a=NULL;
     if (attr_slot && !(a=find_attr(attr_slot))) return ERR(22);
     GuestThread *t=new_thread();
     if (!t) return ERR(12);
     if (a) { t->attr=*a; t->attr.next=NULL; }
+    if (requested_stack) t->attr.stack=requested_stack;
     t->entry=entry; t->argument=argument; t->detached=t->attr.detached;
     snprintf(t->name,sizeof(t->name),"%s",name ? name : "guest");
     uint64_t stack=t->attr.stack<MIN_STACK ? MIN_STACK : t->attr.stack;
@@ -371,6 +375,11 @@ static int32_t create(GuestThread **out,ThreadAttr **attr_slot,GuestEntry entry,
     host_lock(&lock); ++created; host_unlock(&lock);
     printf("Runtime: guest thread '%s' created (stack=%llu, prio=%d)\n",t->name,(unsigned long long)stack,t->attr.prio);
     return 0;
+}
+
+static int32_t create(GuestThread **out,ThreadAttr **attr,GuestEntry entry,
+                      void *argument,const char *name) {
+    return create_with_stack(out,attr,entry,argument,name,0);
 }
 
 static ABI int32_t thread_create(GuestThread **out,ThreadAttr **attr,GuestEntry entry,void *argument,const char *name) {
@@ -404,6 +413,23 @@ static ABI __attribute__((noreturn)) void thread_exit(void *value) {
     if (t->host_owned) { fputs("STOP: pthread_exit on host-owned/main thread\n",stderr); exit(21); }
     t->result=value;
     EXIT_JUMP(t->exit_jump);
+}
+
+/* BbNetHost ABI v2 callbacks: host Win64 ABI, guest entry remains System V.
+ * Reuse the exact guest TLS/TCB and thread bookkeeping used for native threads.
+ * No separate untracked pthreads may call Bloodborne's guest callbacks.
+ */
+int32_t runtime_legacy_thread_spawn(void **thread, GuestEntry entry, void *arg,
+                                    uint64_t stack_size, const char *name) {
+    if (!thread || !entry) return ERR(22);
+    return create_with_stack((GuestThread **)thread,NULL,entry,arg,name,stack_size);
+}
+int32_t runtime_legacy_thread_join(void *thread,void **result) {
+    return thread_join((GuestThread *)thread,result);
+}
+__attribute__((noreturn)) void runtime_legacy_thread_exit(void *value) {
+    thread_exit(value);
+    __builtin_unreachable();
 }
 
 static ABI int32_t thread_yield(void) { host_yield(); return 0; }
