@@ -50,6 +50,9 @@ jobs:
       - name: Read-only release history and changelog tests
         run: python -m unittest discover -s tests -p 'test_release_center.py' -v
 
+      - name: Installed-client checksum verifier and private-file isolation
+        run: python -m unittest discover -s tests -p 'test_client_integrity.py' -v
+
       - name: Legacy BBSC NP import routing policy (C)
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o /tmp/legacy-online-policy
@@ -166,6 +169,9 @@ jobs:
 
       - name: Windows settings search tests (offline)
         run: python -m unittest discover -s tests -p 'test_settings_index.py' -v
+
+      - name: Windows installed-client integrity fixtures
+        run: python -m unittest discover -s tests -p 'test_client_integrity.py' -v
 
       - name: Windows actual launcher UI smoke (Tk settings and diagnostics)
         run: python -m unittest discover -s tests -p 'test_launcher_ui_layout.py' -v
