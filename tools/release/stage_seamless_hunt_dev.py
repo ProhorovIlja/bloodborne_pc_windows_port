@@ -88,8 +88,12 @@ def _safe_file(base: Path, rel: str) -> Path:
     return obj
 
 
-def _collect(source: Path) -> dict[str, Path]:
+def _collect(source: Path, include_native_bbsc: bool = False) -> dict[str, Path]:
     out = {rel: _safe_file(source, rel) for rel in REQUIRED}
+    if include_native_bbsc:
+        # Explicitly opted-in experimental game-less build, never part of
+        # normal user distributions and never a wildcard GPU/build tree.
+        out["out/gpu/bbnet20.dll"] = _safe_file(source, "out/gpu/bbnet20.dll")
     for rel in OPTIONAL:
         obj = source.joinpath(*PurePosixPath(rel).parts)
         if obj.is_file() and not obj.is_symlink():
@@ -165,12 +169,13 @@ def _zip_info(name: str) -> zipfile.ZipInfo:
     return info
 
 
-def pack(source: Path, destination: Path, revision: str) -> dict:
+def pack(source: Path, destination: Path, revision: str,
+         *, include_native_bbsc: bool = False) -> dict:
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Revision must be a 40-character Git commit SHA")
     source = source.resolve(strict=True)
     destination = destination.resolve()
-    collected = _collect(source)
+    collected = _collect(source, include_native_bbsc=include_native_bbsc)
     # Refuse package output within itself, and never include the user's game.
     if any(destination == obj.resolve() for obj in collected.values()):
         raise ValueError("Output overlaps a packaged file")
@@ -184,11 +189,20 @@ def pack(source: Path, destination: Path, revision: str) -> dict:
                             "sha256": hashlib.sha256(data).hexdigest()})
             output.writestr(_zip_info(rel), data)
         metadata = {"format": "seamless-hunt-native-windows-dev-v2",
-                    "source_commit": revision, "files": entries}
+                    "source_commit": revision, "files": entries,
+                    "native_bbsc_candidate_included": include_native_bbsc}
         output.writestr(_zip_info("MANIFEST.json"),
                         (json.dumps(metadata, indent=2, sort_keys=True) + "\n").encode("utf-8"))
-        output.writestr(_zip_info("README-DEVELOPER-BUILD.txt"), DOC.encode("utf-8"))
+        candidate_warning = (
+            "\nEXPERIMENTAL CLS BBSC DLL IS INCLUDED IN THIS CANDIDATE.\n"
+            "It is NOT validated for live server login, bell matchmaking or\n"
+            "cross-play. Use an isolated game/save copy and unique account.\n"
+            "The ordinary developer ZIP excludes bbnet20.dll entirely.\n"
+        ) if include_native_bbsc else ""
+        output.writestr(_zip_info("README-DEVELOPER-BUILD.txt"),
+                        (DOC + candidate_warning).encode("utf-8"))
     return {"source_commit": revision, "files": len(collected),
+            "native_bbsc_candidate_included": include_native_bbsc,
             "archive": str(destination), "bytes": destination.stat().st_size}
 
 
@@ -197,9 +211,12 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--include-native-bbsc-candidate", action="store_true",
+                        help="Include out/gpu/bbnet20.dll in explicitly experimental test ZIP")
     args = parser.parse_args()
     try:
-        result = pack(args.source, args.output, args.revision)
+        result = pack(args.source, args.output, args.revision,
+                      include_native_bbsc=args.include_native_bbsc_candidate)
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         parser.error(str(exc))
     print(json.dumps(result, sort_keys=True))
