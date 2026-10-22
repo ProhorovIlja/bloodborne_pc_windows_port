@@ -1651,8 +1651,9 @@ class BloodborneLauncher(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"Seamless Hunt PC | Bloodborne {PORT_VERSION}")
-        self.geometry("780x760")  # the Party tab is the tallest settings tab
-        self.minsize(720, 680)
+        # Compact launch-first window. Advanced settings scroll inside their panel.
+        self.geometry("900x630")
+        self.minsize(740, 510)
 
         self.proc = None
         self.log_fh = None
@@ -1680,15 +1681,17 @@ class BloodborneLauncher(tk.Tk):
 
         self.build_style()
         self.build_ui()
-        # Tall enough for the tallest settings tab when the screen allows (the tabs outgrew a fixed
-        # 760); on a smaller screen the tabs are clipped, never the Launch row (build_ui).
+        # Notebook pages remain mounted but are hidden until requested; their scrollable
+        # container is sized independently of the tallest page and the player's screen.
         self.update_idletasks()
-        req_h = max(self.notebook.nametowidget(t).winfo_reqheight() for t in self.notebook.tabs())
-        need = self.winfo_reqheight() - self.notebook.winfo_reqheight() + req_h + 40
-        self.geometry(f"780x{max(760, min(need, self.winfo_screenheight() - 80))}")
+        self.refresh_home_state()
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.bind("<Control-f>", lambda _event: self.show_settings_search(), add="+")
+        self.bind("<Control-1>", lambda _event: self.show_settings_section("Display"), add="+")
+        self.bind("<Control-2>", lambda _event: self.show_settings_section("Party"), add="+")
+        self.bind("<Control-3>", lambda _event: self.show_settings_section("Game"), add="+")
+        self.bind("<Escape>", lambda _event: self.hide_settings_panel(), add="+")
         self._ini_stamp = self.ini_stamp()
         self.bind("<FocusIn>", lambda e: self.refresh_game_settings() if e.widget is self else None, add="+")
         self.after(50, self.poll_queue)
@@ -1784,8 +1787,8 @@ class BloodborneLauncher(tk.Tk):
         main = ttk.Frame(self, padding=(16, 12, 16, 12))
         main.pack(fill="both", expand=True)
 
-        ttk.Label(main, text="BLOODBORNE PC", style="Header.TLabel").pack(anchor="w")
-        ttk.Label(main, text="Native Windows Port (bbport) Launcher",
+        ttk.Label(main, text="SEAMLESS HUNT  /  BLOODBORNE", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(main, text="NATIVE WINDOWS CLIENT  ·  HUNTER'S REFUGE",
                   style="SubHeader.TLabel").pack(anchor="w", pady=(0, 8))
         # Contextual tools: a read-only character viewer and release history.
         head_actions = ttk.Frame(main)
@@ -1817,6 +1820,7 @@ class BloodborneLauncher(tk.Tk):
                 initial_path = str(DEFAULT_GAME)
 
         self.eboot_var = tk.StringVar(value=initial_path)
+        self.eboot_var.trace_add("write", lambda *_: self.refresh_home_state())
         eboot_entry = ttk.Entry(select_frame, textvariable=self.eboot_var, font=("Consolas", 10))
         eboot_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         browse_btn = ttk.Button(select_frame, text="Browse...", style="Secondary.TButton",
@@ -1833,6 +1837,38 @@ class BloodborneLauncher(tk.Tk):
                      "update 1.09 merged. The folder is passed to run.bat as BB_GAME_DIR.")
         Tooltip(eboot_entry, eboot_tip)
         Tooltip(browse_btn, "Pick the game's eboot.bin. " + eboot_tip.split(": ", 1)[1])
+
+        # A small, truthful home dashboard. The dense settings surface stays
+        # available through five clear category shortcuts and Ctrl+F.
+        overview = ttk.Frame(main, style="Hub.TFrame", padding=(16, 12, 16, 12))
+        overview.pack(fill="x", pady=(0, 10))
+        ttk.Label(overview, text="YOUR HUNT", style="HubTitle.TLabel").pack(anchor="w", pady=(0, 6))
+        self.home_game_var = tk.StringVar(value="Checking selected game...")
+        self.home_client_var = tk.StringVar(value="Checking native client files...")
+        self.home_party_var = tk.StringVar(value="Checking play mode...")
+        for label, variable in (("GAME", self.home_game_var),
+                                ("CLIENT", self.home_client_var),
+                                ("PLAY MODE", self.home_party_var)):
+            line = ttk.Frame(overview, style="Hub.TFrame")
+            line.pack(fill="x", pady=2)
+            ttk.Label(line, text=label, style="HubCaption.TLabel", width=12).pack(side="left")
+            ttk.Label(line, textvariable=variable, style="HubInfo.TLabel").pack(
+                side="left", fill="x", expand=True)
+        nav = ttk.Frame(main)
+        nav.pack(fill="x", pady=(0, 8))
+        for label, tab_title in (
+                ("Graphics", "Display"),
+                ("Performance", "Performance & Shaders"),
+                ("Online / Party", "Party"),
+                ("Game & Mods", "Game"),
+                ("Advanced", "Advanced / Debug")):
+            ttk.Button(nav, text=label, style="Secondary.TButton",
+                       command=lambda t=tab_title: self.show_settings_section(t)).pack(
+                           side="left", padx=(0, 7))
+        self.settings_toggle_button = ttk.Button(
+            nav, text="All settings  ▾", style="Secondary.TButton",
+            command=self.toggle_settings_panel)
+        self.settings_toggle_button.pack(side="right")
 
         # ---- setting variables
         fps = self.settings.get("fps", "uncap")
@@ -2038,9 +2074,22 @@ class BloodborneLauncher(tk.Tk):
                               "and tracing off. Does not touch your mods, gameplay patches, party "
                               "configuration, resolution, HDR, saves or input.")
 
-        # ---- settings notebook
-        self.notebook = ttk.Notebook(main)
-        self.notebook.pack(fill="x", pady=(0, 8))
+        # Scrollable settings panel (collapsed by default). No options are removed:
+        # the exact same notebook stays alive for search and in-game setting sync.
+        self.settings_panel = ttk.Frame(main)
+        self.settings_canvas = tk.Canvas(
+            self.settings_panel, bg="#15191b", borderwidth=0,
+            highlightthickness=0, height=380)
+        self.settings_scrollbar = ttk.Scrollbar(
+            self.settings_panel, orient="vertical", command=self.settings_canvas.yview)
+        self.settings_canvas.configure(yscrollcommand=self.settings_scrollbar.set)
+        self.settings_scrollbar.pack(side="right", fill="y")
+        self.settings_canvas.pack(side="left", fill="both", expand=True)
+        self.notebook = ttk.Notebook(self.settings_canvas)
+        self.settings_canvas_item = self.settings_canvas.create_window(
+            (0, 0), window=self.notebook, anchor="nw")
+        self.notebook.bind("<Configure>", lambda _e: self._settings_update_scroll(), add="+")
+        self.settings_canvas.bind("<Configure>", self._settings_resize, add="+")
 
         # 1. Display
         tab = self._tab("Display")
@@ -2465,12 +2514,14 @@ class BloodborneLauncher(tk.Tk):
 
         self.update_res_scaling_state()
         self.update_party_state()
-        self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.refresh_party_code(), add="+")
+        self.notebook.bind("<<NotebookTabChanged>>", lambda e: (
+            self.refresh_party_code(), self.after_idle(self._settings_update_scroll)),
+                           add="+")
 
-        # Launch, log and log buttons: packed before the notebook, so a window shorter than the
-        # content clips the settings tabs and then shrinks the log, never the Launch button.
-        bottom = ttk.Frame(main)
-        bottom.pack(side="bottom", fill="both", expand=True, before=self.notebook)
+        # The primary Play button is always visible. Settings scroll independently
+        # above it, even on smaller displays.
+        bottom = self.bottom = ttk.Frame(main)
+        bottom.pack(side="bottom", fill="x")
 
         # launch / stop
         action = ttk.Frame(bottom)
@@ -2489,7 +2540,10 @@ class BloodborneLauncher(tk.Tk):
         # log header
         log_header = ttk.Frame(bottom)
         log_header.pack(fill="x")
-        ttk.Label(log_header, text="Launcher Log:", font=("Segoe UI", 9, "bold")).pack(side="left")
+        self.diagnostics_button = ttk.Button(
+            log_header, text="Diagnostics & logs  ▸", style="Secondary.TButton",
+            command=self.toggle_diagnostics)
+        self.diagnostics_button.pack(side="left")
         self.hide_vk_var = tk.BooleanVar(value=self.settings.get("hide_vk", True))
         hide_vk_cb = ttk.Checkbutton(log_header, text="Hide Vulkan warnings", variable=self.hide_vk_var)
         hide_vk_cb.pack(side="right")
@@ -2519,12 +2573,92 @@ class BloodborneLauncher(tk.Tk):
         # log text + scrollbar
         log_frame = ttk.Frame(bottom)
         log_frame.pack(fill="both", expand=True, pady=(2, 0))
+        self.diagnostics_bar = bar
+        self.diagnostics_log_frame = log_frame
         self.log_text = tk.Text(log_frame, height=3, bg="#111111", fg="#a0a0a0", insertbackground="white",
                                 font=("Consolas", 9), relief="flat", wrap="word")
         scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.log_text.pack(side="left", fill="both", expand=True)
+        self.diagnostics_open = False
+        self.diagnostics_bar.pack_forget()
+        self.diagnostics_log_frame.pack_forget()
+        self.settings_open = False
+
+    def _settings_resize(self, event):
+        # Keep the notebook wide enough to show its existing two-column controls.
+        # Narrow screens still expose all vertical rows through the scrollbar.
+        try:
+            wanted = max(event.width, self.notebook.winfo_reqwidth())
+            self.settings_canvas.itemconfigure(self.settings_canvas_item, width=wanted)
+            self._settings_update_scroll()
+        except tk.TclError:
+            pass
+
+    def _settings_update_scroll(self):
+        try:
+            self.settings_canvas.configure(scrollregion=self.settings_canvas.bbox("all"))
+        except tk.TclError:
+            pass
+
+    def show_settings_section(self, section: str):
+        """Reveal the existing real settings page, never change user options."""
+        if not getattr(self, "settings_open", False):
+            self.settings_panel.pack(fill="both", expand=True, before=self.bottom)
+            self.settings_open = True
+            self.settings_toggle_button.configure(text="Hide settings  ▴")
+        for tab in self.notebook.tabs():
+            if self.notebook.tab(tab, "text") == section:
+                self.notebook.select(tab)
+                break
+        self.after_idle(lambda: (self._settings_update_scroll(),
+                                 self.settings_canvas.yview_moveto(0)))
+        # Preserve available room for the fixed Play bar without going off-screen.
+        wanted = min(810, max(540, self.winfo_screenheight() - 100))
+        self.geometry(f"{max(900, self.winfo_width())}x{wanted}")
+
+    def hide_settings_panel(self):
+        if getattr(self, "settings_open", False):
+            self.settings_panel.pack_forget()
+            self.settings_open = False
+            self.settings_toggle_button.configure(text="All settings  ▾")
+            self.geometry("900x630")
+
+    def toggle_settings_panel(self):
+        if getattr(self, "settings_open", False):
+            self.hide_settings_panel()
+        else:
+            self.show_settings_section(self.notebook.tab(self.notebook.select(), "text"))
+
+    def toggle_diagnostics(self):
+        """Logs remain in memory/on disk while visually collapsed."""
+        if getattr(self, "diagnostics_open", False):
+            self.diagnostics_bar.pack_forget()
+            self.diagnostics_log_frame.pack_forget()
+            self.diagnostics_open = False
+            self.diagnostics_button.configure(text="Diagnostics & logs  ▸")
+        else:
+            self.diagnostics_bar.pack(side="bottom", fill="x", pady=(6, 0))
+            self.diagnostics_log_frame.pack(fill="both", expand=True, pady=(2, 0))
+            self.diagnostics_open = True
+            self.diagnostics_button.configure(text="Hide diagnostics  ▾")
+
+    def refresh_home_state(self):
+        """Do not claim readiness, validated saves, online authentication or crossplay."""
+        if not hasattr(self, "home_game_var"):
+            return
+        from scripts import launcher_home_state
+        try:
+            selected = self.eboot_var.get().strip()
+            found = bool(selected and resolve_game_dir(selected))
+            self.home_game_var.set(launcher_home_state.game_label(selected, found))
+            self.home_client_var.set(launcher_home_state.client_label(
+                (APP_DIR / "out" / "bbport.exe").is_file(), RUN_BAT.is_file()))
+            mode = self.party_mode() if hasattr(self, "party_mode_var") else ""
+            self.home_party_var.set(launcher_home_state.party_label(mode))
+        except (OSError, ValueError, tk.TclError):
+            self.home_game_var.set("Game information unavailable · verify before Play")
 
     # Settings tab helpers: a tab holds two side-by-side sections; a section is a grid of
     # checkboxes (full width) and label + combobox rows, each with a tooltip.
@@ -3073,6 +3207,7 @@ class BloodborneLauncher(tk.Tk):
 
     def on_party_change(self):
         self.update_party_state()
+        self.refresh_home_state()
         self.save_settings()
 
     def update_party_state(self):
@@ -4169,7 +4304,7 @@ class BloodborneLauncher(tk.Tk):
             if not picked or not matches:
                 return
             _, _, tab_name, target = rows[matches[picked[0]]]
-            self.notebook.select(tab_name)
+            self.show_settings_section(self.notebook.tab(tab_name, "text"))
             dialog.destroy()
             self.after_idle(target.focus_set)
 
@@ -5363,7 +5498,7 @@ class BloodborneLauncher(tk.Tk):
 
         party_problems = [] if warper else self.party_problems()
         if party_problems:
-            self.notebook.select(self.party_tab)
+            self.show_settings_section("Party")
             messagebox.showerror("Party settings", "Fix the Party tab before launching:\n\n"
                                  + "\n".join(party_problems))
             return
