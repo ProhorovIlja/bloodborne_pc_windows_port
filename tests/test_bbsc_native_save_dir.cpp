@@ -46,10 +46,26 @@ int main() {
 
     assert(ActiveSaveFolder(native, "CUSA03173") == eu);
     assert(ActiveSaveFolder(native, "CUSA00207") == us_region);
-    assert(ActiveSaveFolder(native, "CUSA00900").empty()); // no accidental party save
-    assert(ActiveSaveFolder(native, "CUSA03023").empty()); // no fallback to another region
+    // A NEW character can start before the game's first savedata mount. Bind
+    // the future native destination, but never the existing party/other region.
+    const auto jp_new = us / "CUSA00900" / "SPRJ0005";
+    const auto kr_new = us / "CUSA03023" / "SPRJ0005";
+    assert(ActiveSaveFolder(native, "CUSA00900") == jp_new);
+    assert(ActiveSaveFolder(native, "CUSA03023") == kr_new);
+    assert(!fs::exists(jp_new)); // Resolver itself must never create saves.
+    assert(!fs::exists(kr_new));
+    assert(fs::exists(party / "userdata0000"));
     assert(ActiveSaveFolder(native, "CUSA0317X").empty());
     assert(ActiveSaveFolder(native / "missing", "CUSA03173").empty());
+    const auto first_root = base / "brand new user";
+    fs::create_directories(first_root);
+    const auto first_save = first_root / "savedata" / "1" / "CUSA03173" / "SPRJ0005";
+    assert(ActiveSaveFolder(first_root, "CUSA03173") == first_save);
+    assert(!fs::exists(first_root / "savedata")); // No side effects.
+    // Files, not folders, must refuse the lookup (also before first save).
+    const auto bad_region = us / "CUSA01363";
+    std::ofstream(bad_region) << "NOT A SAVE DIRECTORY";
+    assert(ActiveSaveFolder(native, "CUSA01363").empty());
     assert(fs::exists(eu / "userdata0000"));
     assert(fs::exists(us_region / "userdata0000"));
     assert(fs::exists(party / "userdata0000"));
@@ -58,6 +74,10 @@ int main() {
     auto linked = us / "CUSA03023";
     fs::create_directory_symlink(other_user.parent_path(), linked, err);
     if (!err) assert(ActiveSaveFolder(native, "CUSA03023").empty());
+    err.clear();
+    const auto symlinked_slot = us / "CUSA00900";
+    fs::create_directory_symlink(party.parent_path(), symlinked_slot, err);
+    if (!err) assert(ActiveSaveFolder(native, "CUSA00900").empty());
     err.clear();
 
     // Do not delete other people's folders on a cleanup failure: only remove
