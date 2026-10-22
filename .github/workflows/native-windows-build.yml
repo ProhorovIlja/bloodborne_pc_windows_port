@@ -145,6 +145,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Bundle isolated CPython 3.12/Tcl/Tk for double-click launch
+        shell: pwsh
+        run: |
+          python tools/release/make_python_bundle.py --src "$env:pythonLocation" --out python
+          & .\python\python.exe -I -B -c "import tkinter, json, xml.etree.ElementTree, zipfile, ssl; print('Bundled Python and Tcl/Tk import OK')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Stage Windows runtime libraries
         shell: pwsh
         run: python scripts/stage_dlls.py
