@@ -43,14 +43,14 @@ class ParityTests(unittest.TestCase):
                 (b / NATIVE / name).write_bytes(b"old")
             (a / OFFICIAL / "new" / "game_event.inc").write_bytes(b"original")
             (b / NATIVE / "new" / "game_event.inc").write_bytes(b"changed script")
-            (a / OFFICIAL / "legacy_only.cpp").write_bytes(b"legacy")
-            (b / NATIVE / "native_only.cpp").write_bytes(b"native")
+            (a / OFFICIAL / "bbsc_legacy_only.cpp").write_bytes(b"legacy")
+            (b / NATIVE / "bbsc_native_only.cpp").write_bytes(b"native")
             (a / OFFICIAL / "save_data.json").write_text('{"secret":"do not report"}')
             x = compare(a, b)
             report = x["full_inventory"]
             self.assertEqual(report["counts"]["shared"], len(COMPONENTS)+1)
             self.assertEqual(report["counts"]["changed"], 1)
-            self.assertEqual(report["changed"][0]["path"], "new/game_event.inc")
+            self.assertEqual(report["changed"][0]["path"], "new/bbsc_game_event.inc")
             self.assertEqual(report["counts"]["official_only"], 1)
             self.assertEqual(report["counts"]["native_only"], 1)
             self.assertNotIn("secret", str(report))
@@ -65,8 +65,8 @@ class ParityTests(unittest.TestCase):
             for name in COMPONENTS:
                 (a / OFFICIAL / name).write_bytes(b"x")
                 (b / NATIVE / name).write_bytes(b"x")
-            (a / OFFICIAL / "NAME.cpp").write_bytes(b"a")
-            (a / OFFICIAL / "name.cpp").write_bytes(b"b")
+            (a / OFFICIAL / "BBSC_NAME.cpp").write_bytes(b"a")
+            (a / OFFICIAL / "bbsc_name.cpp").write_bytes(b"b")
             with self.assertRaisesRegex(ValueError,"case-colliding"):
                 compare(a,b)
 
