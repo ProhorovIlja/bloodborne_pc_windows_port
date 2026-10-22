@@ -1787,9 +1787,13 @@ class BloodborneLauncher(tk.Tk):
         ttk.Label(main, text="BLOODBORNE PC", style="Header.TLabel").pack(anchor="w")
         ttk.Label(main, text="Native Windows Port (bbport) Launcher",
                   style="SubHeader.TLabel").pack(anchor="w", pady=(0, 8))
-        # A single on-demand release panel, not an updater that touches game files.
-        ttk.Button(main, text="What's New / Updates", style="Secondary.TButton",
-                   command=self.show_release_center).pack(anchor="e", pady=(0, 8))
+        # Contextual tools: a read-only character viewer and release history.
+        head_actions = ttk.Frame(main)
+        head_actions.pack(fill="x", pady=(0, 8))
+        ttk.Button(head_actions, text="Hunters / Saves", style="Secondary.TButton",
+                   command=self.show_hunters).pack(side="left")
+        ttk.Button(head_actions, text="What's New / Updates", style="Secondary.TButton",
+                   command=self.show_release_center).pack(side="right")
         # Update notice (scripts/update_check.py): packed here once a newer release is known.
         self.update_label = tk.Label(main, text="", fg="#c5a059", bg="#1a1a1a", cursor="hand2",
                                      font=("Segoe UI", 10, "underline"), anchor="w")
@@ -3516,6 +3520,158 @@ class BloodborneLauncher(tk.Tk):
         self.log(f"[PARTY] Copied {user / ps.SOLO} to {user / ps.PARTY}"
                  + (f" (the old party save is in {backup})" if backup else ""))
         return True
+
+    def show_hunters(self):
+        """Read-only Hunter Hub preview. Never activates, edits or moves game saves."""
+        from scripts import hunter_profiles, install_discovery
+        from queue import Empty
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Seamless Hunt PC | Hunters")
+        dialog.geometry("830x590")
+        dialog.minsize(590, 420)
+        dialog.transient(self)
+        body = ttk.Frame(dialog, padding=16)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="Your Hunters", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(body, text="Characters detected in native, party, shadPS4 and other-port save slots.",
+                  style="SubHeader.TLabel").pack(anchor="w", pady=(4, 9))
+        status = tk.StringVar(value="No save files are modified. Only validated, decrypted slots are shown.")
+        ttk.Label(body, textvariable=status, style="SubHeader.TLabel",
+                  wraplength=765).pack(anchor="w", pady=(0, 9))
+
+        view = ttk.Frame(body)
+        view.pack(fill="both", expand=True)
+        view.columnconfigure(0, weight=1)
+        view.columnconfigure(1, weight=1)
+        view.rowconfigure(0, weight=1)
+        tree_frame = ttk.Frame(view)
+        tree_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        tree = ttk.Treeview(tree_frame, columns=("hunter", "level", "source"),
+                            show="headings", selectmode="browse", height=13)
+        for col, label, width in (("hunter", "Hunter", 160),
+                                  ("level", "Level", 58),
+                                  ("source", "Save source", 162)):
+            tree.heading(col, text=label)
+            tree.column(col, width=width, stretch=(col != "level"))
+        vs = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vs.set)
+        vs.pack(side="right", fill="y")
+        tree.pack(side="left", fill="both", expand=True)
+
+        details = tk.Text(view, wrap="word", height=19, relief="flat", padx=12, pady=12,
+                          bg="#202023", fg="#e0d9ce", insertbackground="#e0d9ce",
+                          font=("Segoe UI", 10))
+        details.grid(row=0, column=1, sticky="nsew")
+        details.insert("1.0", "Choose a Hunter to see verified character stats.\n"
+                       "Weapon equipment and last lamp: not yet decoded reliably.")
+        details.configure(state="disabled")
+        profiles = []
+        pending = queue.Queue(maxsize=1)
+        state = {"busy": False}
+
+        def show_details(_event=None):
+            selection = tree.selection()
+            if not selection:
+                return
+            h = profiles[int(selection[0])]
+            hours, seconds = divmod(h.playtime_seconds, 3600)
+            minutes = seconds // 60
+            desc = (
+                f"{h.name}  |  Blood Level {h.level}\n"
+                f"{h.build_guess}\n\n"
+                f"VITALITY         {h.vitality}\n"
+                f"ENDURANCE        {h.endurance}\n"
+                f"STRENGTH         {h.strength}\n"
+                f"SKILL            {h.skill}\n"
+                f"BLOODTINGE       {h.bloodtinge}\n"
+                f"ARCANE           {h.arcane}\n\n"
+                f"Blood Echoes     {h.echoes:,}\n"
+                f"Insight          {h.insight}\n"
+                f"Play time        {hours}h {minutes}m\n"
+                f"Deaths           {h.deaths}\n"
+                f"NG cycle marker  {h.journey} (raw)\n\n"
+                f"Save type        {h.source}\n"
+                f"Slot             {h.slot}\n"
+                f"Folder           {h.folder}\n\n"
+                "Equipment / last known location: not verified by this parser.\n"
+                "This viewer does not choose a game slot or edit a save."
+            )
+            details.configure(state="normal")
+            details.delete("1.0", "end")
+            details.insert("1.0", desc)
+            details.configure(state="disabled")
+
+        tree.bind("<<TreeviewSelect>>", show_details)
+
+        controls = ttk.Frame(body)
+        controls.pack(fill="x", pady=(10, 0))
+
+        def poll():
+            if not dialog.winfo_exists():
+                return
+            try:
+                result, error = pending.get_nowait()
+            except Empty:
+                dialog.after(120, poll)
+                return
+            state["busy"] = False
+            scan_btn.configure(state="normal")
+            browse_btn.configure(state="normal")
+            profiles[:] = result
+            tree.delete(*tree.get_children())
+            for i, h in enumerate(profiles):
+                tree.insert("", "end", iid=str(i), values=(h.name, h.level, h.source))
+            if profiles:
+                tree.selection_set("0")
+                tree.focus("0")
+                tree.see("0")
+                show_details()
+            status.set(error or (f"{len(profiles)} validated characters found (read-only)."
+                                if profiles else
+                                "No validated decrypted character slots found. Try Browse Save Folder."))
+
+        def launch_scan(folder=None):
+            if state["busy"]:
+                return
+            state["busy"] = True
+            scan_btn.configure(state="disabled")
+            browse_btn.configure(state="disabled")
+            status.set("Reading known save folders without altering files…")
+            configured = self.settings.get("discovery_roots", [])
+            roots = [Path(p) for p in configured if isinstance(p, str)][:16] if isinstance(configured, list) else []
+
+            def worker():
+                try:
+                    if folder is not None:
+                        characters = hunter_profiles.read_group(Path(folder), source="manual:folder")
+                    else:
+                        saves = install_discovery.find_saves(APP_DIR, extra_roots=roots)
+                        characters = hunter_profiles.from_discovery([vars(x) for x in saves])
+                    pending.put((characters, ""))
+                except (OSError, ValueError) as exc:
+                    pending.put(([], f"Read-only scan failed: {exc}"))
+            threading.Thread(target=worker, daemon=True,
+                             name="bloodborne-hunter-preview").start()
+            dialog.after(120, poll)
+
+        def browse_save():
+            folder = filedialog.askdirectory(
+                parent=dialog, title="Choose the SPRJ0005 folder containing userdata0000..0009")
+            if folder:
+                launch_scan(folder)
+
+        scan_btn = ttk.Button(controls, text="Scan saved characters",
+                              style="Secondary.TButton", command=launch_scan)
+        scan_btn.pack(side="left")
+        browse_btn = ttk.Button(controls, text="Browse Save Folder",
+                                style="Secondary.TButton", command=browse_save)
+        browse_btn.pack(side="left", padx=(8, 0))
+        ttk.Button(controls, text="Close", style="Secondary.TButton",
+                   command=dialog.destroy).pack(side="right")
+        ttk.Label(body, text="Preview only. Save switching/import and editable inventory require separate verification.",
+                  style="Hint.TLabel").pack(anchor="w", pady=(8, 0))
+        dialog.after(80, launch_scan)
 
     def show_release_center(self):
         """Read-only changelog and manual release check; never installs software."""
