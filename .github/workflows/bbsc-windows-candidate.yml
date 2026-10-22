@@ -119,7 +119,7 @@ jobs:
           clang++ -std=c++23 -O1 -shared -DBBNET20_BRIDGE_TEST_EXPORTS=1 \
             gpu/shim/bbnet20_gpu_host_bridge.cpp \
             -o out/bbnet20-gpu-bridge-test.dll
-          clang++ -std=c++23 -O1 -DBBGPU_BBSC_HOST_EXPORTS=1 \
+          clang++ -std=c++23 -O1 \
             tests/test_bbnet20_gpu_host_bridge_win.cpp \
             -o out/bbnet20-gpu-bridge-host.exe
           out/bbnet20-gpu-bridge-host.exe \
@@ -154,6 +154,14 @@ jobs:
           # the primary PE executable. Otherwise the plugin's own STATIC
           # bbgpu copy would receive cinematic input and loading UI instead.
           llvm-objdump -p out/bbport.exe > out/bbport.exports.txt
+          # A statically linked renderer inside the plugin must never
+          # export its own alternate SDL/UI callback state.
+          for forbidden in bbgpu_add_event_filter bbgpu_overlay_banner; do
+            if grep -q -E "[[:space:]]${forbidden}([[:space:]]|$)" out/gpu/bbnet20.exports.txt; then
+              echo "BBSC DLL unexpectedly exported a duplicate GPU host callback: ${forbidden}" >&2
+              exit 1
+            fi
+          done
           for symbol in bbnet20_exe_add_event_filter bbnet20_exe_overlay_banner; do
             if ! grep -q -E "[[:space:]]${symbol}([[:space:]]|$)" out/bbport.exports.txt; then
               echo "Primary game EXE missing BBSC GPU bridge export: ${symbol}" >&2
