@@ -19,12 +19,14 @@ REQUIRED = (
     "gpu/bbnet20/bbsc/core/bloodborne_re.cpp", "gpu/bbnet/bbnet.h",
     "gpu/shim/bbport_guest_code_hooks.cpp",
     "gpu/shim/bbport_guest_code_hooks.h", "src/runtime_net.c",
+    "gpu/third_party/httplib/httplib.h", "gpu/third_party/httplib/LICENSE",
 )
 STAGE_ROOTS = (
     "gpu/bbnet20", "gpu/bbnet/bbnet.h",
     "gpu/shim/bbport_guest_code_hooks.cpp",
     "gpu/shim/bbport_guest_code_hooks.h",
     "src/runtime_net.c", "docs/BBSC.md", "LICENSE",
+    "gpu/third_party/httplib",
 )
 
 
