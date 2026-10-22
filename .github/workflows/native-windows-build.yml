@@ -104,6 +104,15 @@ jobs:
             sleep 10
           done
 
+      - name: Export active CLANG64 paths for portable runtime and license staging
+        shell: msys2 {0}
+        run: |
+          printf 'MINGW_BIN=%s\n' "$(cygpath -w "$MINGW_PREFIX/bin")" >> "$GITHUB_ENV"
+          printf 'MSYS2_ROOT=%s\n' "$(cygpath -w /)" >> "$GITHUB_ENV"
+          printf 'MSYSTEM=CLANG64\n' >> "$GITHUB_ENV"
+          test -f "$MINGW_PREFIX/bin/SDL3.dll"
+          test -f "$MINGW_PREFIX/bin/objdump.exe"
+
       - name: Provision pinned upstream header and archive libraries
         shell: msys2 {0}
         run: bash tools/setup_windows_deps.sh
