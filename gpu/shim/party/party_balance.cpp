@@ -1032,6 +1032,7 @@ void NpcMirrorTick(const GameSnapshot& s, party::PartyLink* link, bool host) {
                 const int entity = Field<int>(chr, 0x1f0, -1);
                 const u64 npc = Field<u64>(Field<u64>(chr, 0x3c8), 8);
                 if (entity < 1000000 || entity > 99999999 || (npc && Field<u8>(npc, 0x12f, 0xff) == kEnemyTeam)) continue;
+                if (!npcmirror::Mirrored(std::uint32_t(entity))) continue;  // NPCs only: never a lamp's talk chr
                 off.push_back(std::uint32_t(entity));
             }
         }
