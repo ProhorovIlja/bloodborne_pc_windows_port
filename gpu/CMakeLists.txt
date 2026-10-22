@@ -252,6 +252,11 @@ set(COMMON
 file(GLOB AVPLAYER CONFIGURE_DEPENDS shadps4/core/libraries/avplayer/*.cpp)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
 file(GLOB SHIM_SOURCES CONFIGURE_DEPENDS shim/*.cpp shim/*/*.cpp)
+# This *plugin-only* Win64 PE bridge must NOT be linked into bbgpu itself:
+# bbgpu is STATIC inside bbport.exe, whereas bbnet20 DLL dynamically looks
+# up these exact host exports. A duplicate bridge in the renderer would hide
+# the actual boundary we are trying to test and inflate every default build.
+list(FILTER SHIM_SOURCES EXCLUDE REGEX "bbnet20_gpu_host_bridge[.]cpp$")
 # The layer's own modules (independent of the shadPS4 code): layer/.
 file(GLOB LAYER_SOURCES CONFIGURE_DEPENDS layer/*.cpp)
 # Game profiles (what the translator knows about one game, out of its core): games/.
