@@ -10,7 +10,6 @@
  * rather than inventing another incompatible game-network API.
  */
 #define _GNU_SOURCE
-#include "runtime.h"
 #include "runtime_legacy_net.h"
 #include "runtime_legacy_policy.h"
 #include "runtime_legacy_host.h"
@@ -18,6 +17,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Keep this native Win64 DLL adapter independent of the guest thread/runtime
+ * implementation headers. The production runtime supplies these two callbacks.
+ * This also allows a genuine Windows loader/DLL integration smoke in isolation.
+ */
+extern const char *runtime_symbol(const char *nid);
+extern int runtime_memory_is_mapped(uintptr_t address, uint64_t size);
 
 #ifdef _WIN32
 #include <windows.h>
