@@ -601,6 +601,10 @@ extern "C" int bbgpu_test_key(const char* name) {
     return 1;
 }
 
+extern "C" void bbgpu_overlay_banner(const char* message) {
+    BbOverlay::SetModuleBanner(message);
+}
+
 extern "C" void bbgpu_request_quit(void) {
     // Like the window's close button: the window thread ends the process (party BYE first).
     SDL_Event quit;
