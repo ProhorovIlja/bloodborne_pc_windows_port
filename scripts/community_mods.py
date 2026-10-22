@@ -137,7 +137,12 @@ def _settings(path: Path):
 
 
 def _enabled_mod_files(mod_root: Path, config: Path):
-    from scripts import mods
+    try:
+        from scripts import mods
+    except ModuleNotFoundError:
+        # Also support "python scripts/community_mods.py" without the repo root
+        # on sys.path (the Windows run.bat invokes scripts this way).
+        import mods
     result = {}
     for name in mods.selected(mod_root, config):
         for relative, _ in mods.mod_files(mod_root / name):
