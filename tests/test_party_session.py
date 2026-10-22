@@ -106,6 +106,21 @@ class PartySessionTests(unittest.TestCase):
         ps.undo(self.user)
         self.assertEqual(tree(self.user / "savedata_party"), after)
 
+    def test_same_second_undo_must_choose_newest_snapshot(self):
+        from unittest import mock
+        with mock.patch.object(ps, "_stamp", return_value="20300101-121314"):
+            session, _ = self.start_session()
+            new_state = synthetic_slot(level=42)
+            write(self.user / "savedata_party" / SAVE / "userdata0000", new_state)
+            restored, backup = ps.undo(self.user)
+            self.assertEqual(restored.path, session.path)
+            # The first session and before-undo backup share a timestamp:
+            # the latter MUST be chosen as the next undo target.
+            self.assertEqual(ps.last_session(self.user).path, backup)
+            ps.undo(self.user)
+            self.assertEqual((self.user / "savedata_party" / SAVE / "userdata0000").read_bytes(),
+                             new_state)
+
     def test_launcher_snapshots_are_pruned(self):
         for _ in range(ps.KEEP + 3):
             ps.snapshot_now(self.user, kind="before-undo")
