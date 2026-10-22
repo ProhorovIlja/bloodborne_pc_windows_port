@@ -111,11 +111,15 @@ def _game_info(root: Path) -> Game | None:
         id_valid = title_id in SUPPORTED_TITLES
         folder_hint = root.name.upper() in SUPPORTED_TITLES
         name_valid = "bloodborne" in title.casefold()
-        if not id_valid and not (folder_hint and not title_id):
+        if not id_valid and not (folder_hint and not title_id) and not (
+                name_valid and CUSA.fullmatch(title_id)):
             return None
-        if not id_valid and not name_valid:
+        if not id_valid and not (name_valid or (folder_hint and not title_id)):
             return None
-        if version in (SUPPORTED_VERSION, "1.09", "01.09"):
+        if not id_valid and title_id and CUSA.fullmatch(title_id) and name_valid:
+            status = "unverified_region"
+            reason = "Bloodborne title detected in unrecognized CUSA region; no game/patch hook support confirmed"
+        elif version in (SUPPORTED_VERSION, "1.09", "01.09"):
             status = "candidate_109"
             reason = "Retail edition identified; exact executable hash is checked before launch"
         elif not version:
