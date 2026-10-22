@@ -116,12 +116,13 @@ class ClientIntegrityTests(unittest.TestCase):
 
     def test_path_schema_is_strict(self):
         for path in ["../out/bbport.exe", "user/savedata/1/hero",
-                     "mods/cheat.dll", "out/gpu/bbnet20.dll",
+                     "mods/cheat.dll", "out/gpu/bbgpu.dll",
                      "scripts/../launcher.py", "out\\bbport.exe",
                      "C:/Windows/System32/a.dll", "python/site-packages/evil.py",
                      "scripts/.git/config"]:
             self.assertFalse(checker._valid_rel(path), path)
         self.assertTrue(checker._valid_rel("python/DLLs/_tkinter.pyd"))
+        self.assertTrue(checker._valid_rel("out/gpu/bbnet20.dll"))
         self.assertTrue(checker._valid_rel("out/licenses/SDL3/LICENSE.txt"))
 
 
