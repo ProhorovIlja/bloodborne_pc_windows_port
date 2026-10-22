@@ -164,7 +164,7 @@ def sessions(user) -> list:
         # session-start as newer, so Undo would restore the wrong save.
         # Keep the timestamp prefix across seconds, and use per-snapshot
         # info-file modification nanoseconds to order within the second.
-        match = re.search(r"-(\\d\\d)$", session.path.name)
+        match = re.search(r"-(\d\d)$", session.path.name)
         suffix = int(match.group(1)) if match else 1
         try:
             mtime_ns = (session.path / INFO).stat().st_mtime_ns
