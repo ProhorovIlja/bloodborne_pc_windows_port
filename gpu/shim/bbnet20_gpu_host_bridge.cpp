@@ -23,7 +23,13 @@ using EventRegister = void (*)(BbGpuEventFilter);
 using BannerSet = void (*)(const char*);
 } // namespace
 
-extern "C" void bbnet20_host_add_event_filter(BbGpuEventFilter filter) {
+#ifdef BBNET20_BRIDGE_TEST_EXPORTS
+#define BRIDGE_TEST_EXPORT __declspec(dllexport)
+#else
+#define BRIDGE_TEST_EXPORT
+#endif
+
+extern "C" BRIDGE_TEST_EXPORT void bbnet20_host_add_event_filter(BbGpuEventFilter filter) {
     if (!filter) return;
     if (const auto host = ResolveHost<EventRegister>("bbgpu_add_event_filter")) {
         host(filter);
@@ -32,7 +38,7 @@ extern "C" void bbnet20_host_add_event_filter(BbGpuEventFilter filter) {
     }
 }
 
-extern "C" void bbnet20_host_overlay_banner(const char* message) {
+extern "C" BRIDGE_TEST_EXPORT void bbnet20_host_overlay_banner(const char* message) {
     if (const auto host = ResolveHost<BannerSet>("bbgpu_overlay_banner")) {
         host(message);
     }
