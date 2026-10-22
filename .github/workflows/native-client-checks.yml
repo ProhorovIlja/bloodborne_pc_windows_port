@@ -47,6 +47,9 @@ jobs:
       - name: Safe Seamless Hunt release notices
         run: python -m unittest discover -s tests -p 'test_update_check.py' -v
 
+      - name: Read-only release history and changelog tests
+        run: python -m unittest discover -s tests -p 'test_release_center.py' -v
+
       - name: Legacy BBSC NP import routing policy (C)
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o /tmp/legacy-online-policy
