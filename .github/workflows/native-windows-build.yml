@@ -32,21 +32,28 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Install native Windows compiler and Vulkan dependencies
+      - name: Initialize MSYS2 CLANG64
         uses: msys2/setup-msys2@v2
         with:
           msystem: CLANG64
-          update: true
-          install: >-
-            git
-            patch
+          update: false
+
+      - name: Install Windows build tools with resilient mirrors
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # Prefer MSYS2's stable primary instead of its geo-redirector;
+          # the initial CI attempt failed with 'Operation too slow'.
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          packages=(
+            git patch
             mingw-w64-clang-x86_64-clang
             mingw-w64-clang-x86_64-lld
             mingw-w64-clang-x86_64-libc++
             mingw-w64-clang-x86_64-cmake
             mingw-w64-clang-x86_64-ninja
             mingw-w64-clang-x86_64-pkgconf
-            mingw-w64-clang-x86_64-python
             mingw-w64-clang-x86_64-vulkan-headers
             mingw-w64-clang-x86_64-vulkan-loader
             mingw-w64-clang-x86_64-vulkan-memory-allocator
@@ -58,6 +65,20 @@ jobs:
             mingw-w64-clang-x86_64-zydis
             mingw-w64-clang-x86_64-glslang
             mingw-w64-clang-x86_64-ffmpeg
+          )
+          for attempt in 1 2 3; do
+            if pacman --noconfirm --disable-download-timeout -Sy &&
+               pacman --noconfirm --disable-download-timeout -S --needed "${packages[@]}"; then
+              echo "CLANG64 tools installed successfully"
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "ERROR: MSYS2 package mirrors unavailable after three attempts" >&2
+              exit 1
+            fi
+            echo "MSYS2 mirror retry $attempt/3"
+            sleep 10
+          done
 
       - name: Provision pinned upstream header and archive libraries
         shell: msys2 {0}
