@@ -17,6 +17,12 @@ int main(void) {
     assert(!legacy_net_online_symbol("sceNpProfileDialogOpen"));
     assert(legacy_net_online_symbol("sceNpScoreCreateContext"));
     assert(legacy_net_online_symbol("sceNpPartyGetRoomInfo"));
+    assert(!legacy_net_scoped_nid(NULL));
+    assert(!legacy_net_scoped_nid("sceNetSocket"));
+    assert(!legacy_net_scoped_nid("short#E#F"));
+    assert(legacy_net_scoped_nid("Nlev7Lg8k3A#E#F"));
+    assert(legacy_net_scoped_nid("z123456789A"));
+    assert(!legacy_net_scoped_nid("z123456789A!E!F"));
     assert(legacy_net_online_symbol("sceNetSocket"));
     assert(legacy_net_online_symbol("sceNpMatching2JoinRoom"));
     assert(legacy_net_online_symbol("sceNpSignalingActivateConnection"));
