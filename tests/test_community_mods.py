@@ -81,6 +81,14 @@ class CommunityModTests(unittest.TestCase):
         self.assertTrue((self.data / "mods/MOAL/dvdroot_ps4/event/m00_00_00_00.emevd.dcx").is_file())
         self.assertTrue((self.data / "mods/DollRebirth/dvdroot_ps4/script/talk/m21_00_00_00.talkesdbnd.dcx").is_file())
 
+    def test_solo_only_gameplay_mods_are_skipped_in_multiplayer(self):
+        from scripts import mods
+        self.assertTrue(mods.allowed_community_mod("MOAL", False))
+        self.assertTrue(mods.allowed_community_mod("DollRebirth", False))
+        self.assertFalse(mods.allowed_community_mod("MOAL", True))
+        self.assertFalse(mods.allowed_community_mod("DollRebirth", True))
+        self.assertTrue(mods.allowed_community_mod("JumpOnL3Classic", True))
+
     def test_refuse_conflicting_lamp_features(self):
         lamp, doll = self.make_zip("moal"),self.make_zip("doll")
         (self.data/"bbport.ini").write_text("pc_enhanced_lamps=1\n")
