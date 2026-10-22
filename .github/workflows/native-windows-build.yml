@@ -167,6 +167,7 @@ jobs:
         run: |
           python tools/release/stage_seamless_hunt_dev.py --source . --output out/seamless-hunt-windows-dev.zip --revision $env:GITHUB_SHA
           python -m unittest discover -s tests -p 'test_seamless_hunt_dev_package.py' -v
+          python tools/release/verify_seamless_hunt_dev.py --zip out/seamless-hunt-windows-dev.zip
 
       - name: Upload developer Windows ZIP (not a public release)
         uses: actions/upload-artifact@v4
