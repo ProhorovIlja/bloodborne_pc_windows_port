@@ -10,7 +10,7 @@
 - The native runtime looks for **`gpu/bbnet20.dll` adjacent to `bbport.exe`**, via an absolute executable-relative path with Windows restricted DLL search. No arbitrary path supplied from an environment variable.
 - A DLL must export `bbnet_init` and `bbnet_resolve`; optional lifecycle exports are `bbnet_image_mapped`, `bbnet_image_ready`, `bbnet_start`. Initialization receives guest-safe tracked thread spawn/join/exit, game identity and mapped-memory checks. If DLL loading/ABI negotiation fails, network imports use the original offline stubs rather than terminating the game.
 - The map hook is called after game relocation and before image patches; the ready hook is called after native game patch application while code is still writable; the start hook is called after game linked-module TLS initialization and before original entry. Note that ordering relative to any future BBSC mod DLL hooks must still be verified.
-- Only network/NP/HTTP/SSL imports may be delegated. Trophy, commerce, profile, score and party dialogs remain local; ordinary video/audio/graphics remain unchanged.
+- Only network/NP/HTTP/SSL imports may be delegated. Trophy, commerce and profile-dialog APIs remain local; other NP APIs, including score and party calls, follow the upstream bbnet20 network routing policy. Ordinary video/audio/graphics remain unchanged.
 - `tests/test_legacy_online_policy.c` checks mode conflict, network import allowlist, and exact 72-byte x64 ABI struct layout. The GitHub native-client-checks workflow runs these tests on Ubuntu and Windows; the Windows **full engine** workflow is separately triggered and must actually finish successfully before calling this compiled.
 
 ## Not implemented yet (do not mark green)
