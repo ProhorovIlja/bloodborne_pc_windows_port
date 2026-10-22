@@ -3530,7 +3530,7 @@ class BloodborneLauncher(tk.Tk):
         body = ttk.Frame(dialog, padding=18)
         body.pack(fill="both", expand=True)
         ttk.Label(body, text="Updates & Changelog", style="Header.TLabel").pack(anchor="w")
-        ttk.Label(body, text=f"Installed launcher version: {PORT_VERSION}  |  Stable release channel",
+        ttk.Label(body, text=f"Installed launcher version: {PORT_VERSION}",
                   style="SubHeader.TLabel").pack(anchor="w", pady=(2, 7))
         status = tk.StringVar(value="Local changelog. Online check is optional and read-only.")
         ttk.Label(body, textvariable=status, style="SubHeader.TLabel", wraplength=675
@@ -3557,6 +3557,10 @@ class BloodborneLauncher(tk.Tk):
 
         controls = ttk.Frame(body)
         controls.pack(fill="x", pady=(12, 0))
+        channel = tk.StringVar(value="Stable")
+        ttk.Label(controls, text="Channel:", style="SubHeader.TLabel").pack(side="left", padx=(0, 5))
+        ttk.Combobox(controls, textvariable=channel, values=("Stable", "Preview"),
+                     state="readonly", width=9).pack(side="left", padx=(0, 10))
         pending = queue.Queue(maxsize=1)
         busy = {"value": False}
 
@@ -3576,7 +3580,7 @@ class BloodborneLauncher(tk.Tk):
             display(release_center.format_history(releases))
             newest = releases[0]["tag"]
             if release_center.update_check.newer(newest, PORT_VERSION):
-                status.set(f"New stable version {newest} listed. Read the notes before visiting Releases.")
+                status.set(f"New version {newest} listed in the selected channel. Verify compatibility.")
             else:
                 status.set("Published release history loaded. Current development build may differ.")
 
@@ -3586,8 +3590,9 @@ class BloodborneLauncher(tk.Tk):
             busy["value"] = True
             check_button.configure(state="disabled")
             status.set("Checking this fork's official GitHub Releases…")
+            selected_channel = "preview" if channel.get() == "Preview" else "stable"
             def worker():
-                pending.put(release_center.fetch_history(channel="stable"))
+                pending.put(release_center.fetch_history(channel=selected_channel))
             threading.Thread(target=worker, daemon=True).start()
             dialog.after(150, poll_results)
 
