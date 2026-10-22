@@ -5,6 +5,7 @@
 #include "../src/runtime_legacy_net.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <windows.h>
 
@@ -26,8 +27,10 @@ __attribute__((noreturn)) void runtime_legacy_thread_exit(void *p) {
 }
 int main(int argc,char **argv) {
     assert(argc==2);
-    assert(SetEnvironmentVariableA("BB_LEGACY_NET","1"));
-    assert(SetEnvironmentVariableA("BB_PARTY",NULL));
+    /* _putenv_s updates the UCRT environment actually read by getenv().
+     * SetEnvironmentVariableA by itself leaves UCRT's cached environ stale. */
+    assert(_putenv_s("BB_LEGACY_NET","1")==0);
+    assert(_putenv_s("BB_PARTY","")==0);
     runtime_legacy_net_configure("C:/user/game","CUSA03173","Bloodborne","1.09");
     assert(runtime_legacy_net_requested());
     if (!strcmp(argv[1],"absent")) {
@@ -36,7 +39,7 @@ int main(int argc,char **argv) {
         puts("BBSC DLL absent: offline fallback PASS"); return 0;
     }
     if (!strcmp(argv[1],"conflict")) {
-        SetEnvironmentVariableA("BB_PARTY","host");
+        assert(_putenv_s("BB_PARTY","host")==0);
         assert(!runtime_legacy_net_requested());
         assert(runtime_legacy_net_resolve("sceNetSocket")==0);
         puts("BBSC vs BBP3 conflict: party wins PASS"); return 0;
