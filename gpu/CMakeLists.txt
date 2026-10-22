@@ -468,7 +468,15 @@ endif()
 file(GLOB PARTY_NET_SOURCES CONFIGURE_DEPENDS shim/net/*.cpp)
 add_executable(party-net-test EXCLUDE_FROM_ALL ../tests/test_party_net.cpp ${PARTY_NET_SOURCES})
 target_compile_options(party-net-test PRIVATE -UNDEBUG -Wall -Wextra)
-target_include_directories(party-net-test PRIVATE shim/net ..)
+target_include_directories(party-net-test PRIVATE shim/net)
+if (WIN32)
+    # Windows has a case-insensitive repo root VERSION file, which shadows
+    # libc++ <version> when the repository root is placed in -I. Limit the
+    # project root to quoted includes ("gpu/bbnet.h"), never angle includes.
+    target_compile_options(party-net-test PRIVATE -iquote "${CMAKE_CURRENT_SOURCE_DIR}/..")
+else()
+    target_include_directories(party-net-test PRIVATE ..)
+endif()
 set_target_properties(party-net-test PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
 if (WIN32)
     target_link_libraries(party-net-test PRIVATE ws2_32 iphlpapi synchronization)
@@ -478,7 +486,15 @@ endif()
 # sceHttp, Matching2/Signaling over LocalHost. ninja -C out/gpu party-host-test
 add_executable(party-host-test EXCLUDE_FROM_ALL ../tests/test_party_host.cpp ${PARTY_NET_SOURCES})
 target_compile_options(party-host-test PRIVATE -UNDEBUG -Wall -Wextra)
-target_include_directories(party-host-test PRIVATE shim/net ..)
+target_include_directories(party-host-test PRIVATE shim/net)
+if (WIN32)
+    # Windows has a case-insensitive repo root VERSION file, which shadows
+    # libc++ <version> when the repository root is placed in -I. Limit the
+    # project root to quoted includes ("gpu/bbnet.h"), never angle includes.
+    target_compile_options(party-host-test PRIVATE -iquote "${CMAKE_CURRENT_SOURCE_DIR}/..")
+else()
+    target_include_directories(party-host-test PRIVATE ..)
+endif()
 set_target_properties(party-host-test PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
 if (WIN32)
     target_link_libraries(party-host-test PRIVATE ws2_32 iphlpapi synchronization)
