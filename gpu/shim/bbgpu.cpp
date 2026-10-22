@@ -90,6 +90,13 @@ u32 g_sdk_version;
 } // namespace
 
 namespace Core::Loader {
+// On Win64 the original CLS bbnet20.dll has its OWN strong resolver and
+// symbol table. Keep this renderer resolver weak only on Windows so linking
+// the candidate DLL cannot override CLS's separate NP/shadNet symbol map.
+// The standalone bbport.exe has no other definition and retains this one.
+#ifdef _WIN32
+__attribute__((weak))
+#endif
 void SymbolsResolver::AddSymbol(const char* nid, const char* library, const char* module, SymbolType,
                                 u64 address) {
     g_symbols.push_back({nid, library, module, address});
