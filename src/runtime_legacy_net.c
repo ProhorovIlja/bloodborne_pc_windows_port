@@ -13,6 +13,7 @@
 #include "runtime.h"
 #include "runtime_legacy_net.h"
 #include "runtime_legacy_policy.h"
+#include "runtime_legacy_host.h"
 #include "../gpu/party_env.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,25 +23,9 @@
 #include <windows.h>
 #include <wchar.h>
 
-typedef struct BbNetHost {
-    uint32_t abi;
-    const char *app0, *serial, *title, *app_ver;
-    int32_t (*thread_spawn)(void **thread,
-        void *(ABI *entry)(void *), void *argument, uint64_t stack_size, const char *name);
-    int32_t (*thread_join)(void *thread, void **result);
-    void (*thread_exit)(void *result);
-    int (*memory_is_mapped)(uintptr_t address, uint64_t length);
-} BbNetHost;
-enum { BBNET_ABI_VERSION = 2 };
-typedef int (*NetInit)(const BbNetHost *);
-typedef uintptr_t (*NetResolve)(const char *);
-typedef void (*NetImageMapped)(uint8_t *, uint64_t);
-typedef void (*NetImageReady)(uint64_t, uint64_t);
-typedef void (*NetStart)(void);
-
 static char game_folder[4096], game_serial[16], game_title[128], game_ver[16];
 static HMODULE module;
-static NetResolve network_resolve;
+static BbNetResolveFn network_resolve;
 static int tried_load;
 
 static void safe_copy(char *dst, size_t limit, const char *source) {
@@ -59,7 +44,7 @@ int runtime_legacy_net_requested(void) {
     return legacy_net_opted_in(getenv("BB_LEGACY_NET"), bb_party_enabled());
 }
 
-static NetResolve load_module(void) {
+static BbNetResolveFn load_module(void) {
     if (tried_load) return network_resolve;
     tried_load=1;
     /* An absolute executable-relative path, NOT PATH/CWD or an arbitrary env path.
@@ -83,15 +68,15 @@ static NetResolve load_module(void) {
         puts("BBSC legacy: native bbnet20.dll is not built or loadable, staying offline");
         return NULL;
     }
-    NetInit init=(NetInit)(void*)GetProcAddress(candidate,"bbnet_init");
-    NetResolve resolve=(NetResolve)(void*)GetProcAddress(candidate,"bbnet_resolve");
+    BbNetInitFn init=(BbNetInitFn)(void*)GetProcAddress(candidate,"bbnet_init");
+    BbNetResolveFn resolve=(BbNetResolveFn)(void*)GetProcAddress(candidate,"bbnet_resolve");
     if (!init || !resolve) {
         puts("BBSC legacy: module ABI functions missing, staying offline");
         FreeLibrary(candidate);
         return NULL;
     }
     const BbNetHost host={
-        .abi=BBNET_ABI_VERSION, .app0=game_folder, .serial=game_serial,
+.abi=BBNET_HOST_ABI_VERSION, .app0=game_folder, .serial=game_serial,
         .title=game_title, .app_ver=game_ver,
         .thread_spawn=runtime_legacy_thread_spawn,
         .thread_join=runtime_legacy_thread_join,
@@ -114,25 +99,25 @@ uintptr_t runtime_legacy_net_resolve(const char *scoped_nid) {
     const char *symbol=runtime_symbol(scoped_nid);
     if (!symbol) symbol=scoped_nid;
     if (!legacy_net_online_symbol(symbol)) return 0;
-    NetResolve resolve=load_module();
+    BbNetResolveFn resolve=load_module();
     return resolve ? resolve(scoped_nid) : 0;
 }
 
 void runtime_legacy_net_image_mapped(uint8_t *image, uint64_t size) {
     if (module) {
-        NetImageMapped cb=(NetImageMapped)(void*)GetProcAddress(module,"bbnet_image_mapped");
+        BbNetImageMappedFn cb=(BbNetImageMappedFn)(void*)GetProcAddress(module,"bbnet_image_mapped");
         if (cb) cb(image,size);
     }
 }
 void runtime_legacy_net_image_ready(uint64_t base, uint64_t size) {
     if (module) {
-        NetImageReady cb=(NetImageReady)(void*)GetProcAddress(module,"bbnet_image_ready");
+        BbNetImageReadyFn cb=(BbNetImageReadyFn)(void*)GetProcAddress(module,"bbnet_image_ready");
         if (cb) cb(base,size);
     }
 }
 void runtime_legacy_net_start(void) {
     if (module) {
-        NetStart cb=(NetStart)(void*)GetProcAddress(module,"bbnet_start");
+        BbNetStartFn cb=(BbNetStartFn)(void*)GetProcAddress(module,"bbnet_start");
         if (cb) cb();
     }
 }
