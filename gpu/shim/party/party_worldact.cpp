@@ -4,6 +4,7 @@
 #include "party_worldact.h"
 
 #include "party_progress.h"
+#include "party_bossfog_rules.h"
 #include "net/json.h"
 
 #include <algorithm>
@@ -398,25 +399,19 @@ bool BossGateHostOpens(const BossGate& g, bool guest_in, bool host_in, bool boss
 
 bool BossGateGuestStarts(const BossGate& g) {
     // The guest-entry events whose host first-fight event (EMEVD, flag_tool emevd + an instruction
-    // dump) has one position condition: Witch of Hemwick 12201802 (3[2] 2202805), Blood-starved
-    // Beast 12301802 (3[2] 2302805), Darkbeast Paarl 12301702 (3[3] 16 m), Vicar Amelia 12401802
-    // (3[2] 2402805, scene 24000060), Cleric Beast 12411702 (3[2] 2412805), Father Gascoigne
-    // 12411802 (3[2] 2412815, scene 24010010), Logarius 12501802 (3[2] 2502805, scene 25000020),
-    // Mergo's Wet Nurse 12601802 (3[2] 2602805, scene 26000010), Micolash 12601852 (3[3] 32 m,
-    // scene 26000060), Shadows of Yharnam 12701802 (3[2] 2702805), the One Reborn 12801802 (3[2]
-    // 2802805, scene 28000000), Amygdala 13301802 (3[2] 3302805).
-    switch (g.guest_event) {
-    case 12204891: case 12304811: case 12304731: case 12404841: case 12414731: case 12414811:
-    case 12504811: case 12604846: case 12604861: case 12704841: case 12804881: case 13304871:
-    // DLC (pard2): Ludwig 13404801 (13404811 + 13401801 both 3[2] 3402805, scene 34000020),
-    // Laurence 13404851 (13404861 + 13401851 3[2] 3402855 and goods 4014 held by the host, scene
-    // 34000010 with a player warp), Living Failures 13504851 (13501851 3[2] 3502815, no scene),
-    // the Orphan of Kos 13604801 (13604811 + 13601801 3[2] 3602805, scene 36000000).
-    case 13404801: case 13404851: case 13504851: case 13604801:
-        return g.intro_flag != 0;
-    default:
-        return false;
-    }
+    // dump) has one position condition (bossfog::FirstFights, `entry`): Witch of Hemwick 12201802
+    // (3[2] 2202805), Blood-starved Beast 12301802 (3[2] 2302805), Darkbeast Paarl 12301702 (3[3]
+    // 16 m), Vicar Amelia 12401802 (3[2] 2402805, scene 24000060), Cleric Beast 12411702 (3[2]
+    // 2412805), Father Gascoigne 12411802 (3[2] 2412815, scene 24010010), Logarius 12501802 (3[2]
+    // 2502805, scene 25000020), Mergo's Wet Nurse 12601802 (3[2] 2602805, scene 26000010), Micolash
+    // 12601852 (3[3] 32 m, scene 26000060), Shadows of Yharnam 12701802 (3[2] 2702805), the One
+    // Reborn 12801802 (3[2] 2802805, scene 28000000), Amygdala 13301802 (3[2] 3302805). DLC
+    // (pard2): Ludwig 13404801 (13404811 + 13401801 both 3[2] 3402805, scene 34000020), Living
+    // Failures 13504851 (13501851 3[2] 3502815, no scene), the Orphan of Kos 13604801 (13604811 +
+    // 13601801 3[2] 3602805, scene 36000000). Not Laurence: his first fight needs goods 4014
+    // Laurence's Skull held by the host at the altar (13404861 / 13401851 3[4] + 3[2] 3402855), an
+    // action in the room, not the walk in (`action`, like Ebrietas and Lady Maria).
+    return g.intro_flag != 0 && bossfog::GuestMayStartFirstFight(g.guest_event);
 }
 
 bool BossGateSkipFirstFight(std::int32_t event_id, int bank, int id, std::uint32_t flag) {
@@ -3255,9 +3250,15 @@ void FogWaitTick(const GameSnapshot& s) {
                 MapName(host_map).c_str());
             return;
         }
-        party::status::SetLastEvent(kBossFogWaitNotice);
-        Log("guest: at boss fog %d (event %u, %.1f m): first fight here - the host goes in first (host's first-fight "
-            "flag %u off); notice shown", g.fog_entity, g.guest_event, d, g.intro_flag);
+        // An action first fight (Laurence's skull, Ebrietas's hit, Lady Maria): what starts it.
+        const bossfog::FirstFight* ff = bossfog::FirstFightFor(g.guest_event);
+        const char* notice = ff && ff->notice ? ff->notice : kBossFogWaitNotice;
+        party::status::SetLastEvent(notice);
+        Log("guest: at boss fog %d (event %u, %.1f m): first fight here - %s (host's first-fight flag %u off); "
+            "notice shown", g.fog_entity, g.guest_event, d,
+            ff && ff->start == bossfog::FirstStart::action ? "it starts by the host's action in the room"
+                                                           : "the host goes in first",
+            g.intro_flag);
     }
 }
 } // namespace

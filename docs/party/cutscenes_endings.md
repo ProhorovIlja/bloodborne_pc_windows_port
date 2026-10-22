@@ -256,8 +256,11 @@ The choice (talk ESD `t210305.esd` = Gehrman, the only file that writes both) [d
   12404001 (else sets 12405263 OFF).
 * Arrival m34 **13401000**: if 12401000 → clear it, SpEffects 110–116, respawn point 3402958,
   start 9350.
-* m34 **13400010** マルチ閉じ込め壁: wall 3401801 + SFX while MultiplayerState 2/3 or Ludwig not
-  dead (9471) — a co-op party is fenced in the first DLC area until Ludwig dies.
+* m34 **13400010** マルチ閉じ込め壁: wall 3401801 (the door at the back of Ludwig's arena) + SFX
+  3403801 up while in multiplayer (state 2/3) AND Ludwig lives (9471 off); taken down only when the
+  session is over AND 9471 is on (0[0] [11] + 3[0] [12], then a restart). A party stays after the
+  kill, so the wall stayed (player report 2026-10-22). Party rules (`bossfog::ConfinementWalls`):
+  open world on skips [7] / [8] (no wall), and party mode always skips [11] (down at the kill).
 * Clocktower altar **13501105** (m35, needs goods 4017) is phantom-aware (section 2).
 * **DLC ownership**: common **3500/3503** (DLC削除): if **6899** (set natively, not by EMEVD) is
   OFF: delete goods 4311, clear DLC lamp/route flags, and if in m34/35/36 warp

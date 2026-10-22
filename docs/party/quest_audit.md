@@ -486,12 +486,20 @@ Out of scope here (chalice.md, bossk10): ritual chalices from bosses are global 
   - No other event ran from the host's moment there: with `BB_PARTY_EMEVD_TRACE=1` the only new
     instructions in the visit window were the first-fight event 12401802's own and common 9280
     (slot 2, `出現寡婦_消滅`), which waits on that event's flags, not on a position.
-  - DLC (`BossGateGuestStarts` now 16 gates): Ludwig (13404811 + 13401801, both 3[2] 3402805),
+  - DLC (`BossGateGuestStarts` 16 gates, 15 since 2026-10-22: Laurence left out, see below): Ludwig (13404811 + 13401801, both 3[2] 3402805),
     Laurence (13404861 + 13401851, 3[2] 3402855; the host must hold goods 4014 as in vanilla),
     the Orphan of Kos (13604811 + 13601801, 3[2] 3602805) are two-part first fights (the first part
     sets 9180 and its flag, the scene part needs that flag AND the host still in the region:
     `FirstFightSpot::chained`), the Living Failures one part (13501851, 3[2] 3502815). Spots from
     the MSB regions (origin + 0.5 m). *pard3 (2026-10-15), live, the test save owns the DLC (6899) and the Eye:* Ludwig (L1c: the guest's fog, host visit 0.1 s, scene 34000020 on both, Ludwig killed, the guest +3 Insight, Guidance given while summoned with its OK row), the Living Failures (L4: no scene, the fight started 0.1 s after the guest's fog, killed, +2 Insight), the Orphan of Kos (L5b: two-part start, scene 36000000 mirrored, killed through its second-phase entity 3600801, +5 Insight, the weapon reward given while summoned), Laurence (L3c, the host holding Laurence's Skull). A host standing in a first-fight region starts the fight itself (L3b / L5: the DLC lamps 3402953 and 3602952 stand inside Laurence's and the Orphan's regions), as in vanilla.
+  - Laurence is host-first since 2026-10-22 (player report: without the skull a guest's walk through
+    his fog was taken for the fight's start, the host's altar visit started nothing, and the guest
+    stayed shut in behind the fog until a Hunter's Mark). `bossfog::FirstFights` marks the first
+    fights started by an action in the room (`action`: Ebrietas, Laurence, Lady Maria;
+    `tools/party/bossroom_tool.py scan` classifies every first-fight event); for those a guest's
+    game skips the re-fight event's `1003[5] skip 2 if client` ([2] of 12424810 / 13404850 /
+    13504800), so its fog is off until the intro flag is on, as on the host: the room is open until
+    the fight really starts. The guest's fog notice says what starts the fight.
   - Host-first by design: Ebrietas (12421802: 3[23] damage to her by entity 10000, the HOST's own
     hit), Lady Maria (13501801 waits on 13500947, set by 13500948 when the host examines her in her
     chair, 3[1] 1650/1651), the Celestial Emissary (no first-fight event). Rom has no fog gate and
