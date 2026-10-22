@@ -516,6 +516,15 @@ def seamless_hunt_module():
     return seamless_hunt
 
 
+def patch_preflight_module():
+    """Byte-accurate, offline XML patch collision detection."""
+    scripts_dir = str(APP_DIR / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import patch_preflight
+    return patch_preflight
+
+
 def seamless_hunt_network_module():
     """Opt-in STUN and IPv6 checks; no gameplay traffic or account credentials."""
     scripts_dir = str(APP_DIR / "scripts")
@@ -3896,7 +3905,31 @@ class BloodborneLauncher(tk.Tk):
         bottom_bar = ttk.Frame(dlg, style="Card.TFrame", padding=10)
         bottom_bar.pack(fill="x", padx=10, pady=(0, 10))
 
+        def check_patch_conflicts():
+            try:
+                scanner = patch_preflight_module()
+                report = scanner.audit([PATCHES_XML], enabled_names=set(working_set))
+                result = scanner.format_report(report)
+            except Exception as exc:
+                return False, f"Patch preflight failed: {type(exc).__name__}"
+            return not report["conflicts"] and not report["warnings"], result
+
+        def show_patch_conflicts():
+            clear, result = check_patch_conflicts()
+            if clear:
+                messagebox.showinfo("XML patch preflight", result, parent=dlg)
+            else:
+                messagebox.showwarning("XML patch conflicts", result, parent=dlg)
+
         def on_save():
+            clear, report_text = check_patch_conflicts()
+            if not clear:
+                messagebox.showerror(
+                    "Resolve patch conflicts before saving",
+                    report_text + "\n\nDisable one patch in each conflicting pair. "
+                    "Seamless Hunt won't silently overwrite conflicting bytes.",
+                    parent=dlg)
+                return
             self.enabled_patches = set(working_set)
             self.sync_quick_patch_vars()
             self.save_settings()
@@ -3910,6 +3943,8 @@ class BloodborneLauncher(tk.Tk):
 
         dlg.protocol("WM_DELETE_WINDOW", on_cancel)
 
+        ttk.Button(bottom_bar, text="Check conflicts...", style="Secondary.TButton",
+                   command=show_patch_conflicts).pack(side="left", padx=(0, 8), ipady=4)
         ttk.Button(bottom_bar, text="Save & Apply", style="Action.TButton",
                    command=on_save).pack(side="right", padx=(8, 0), ipady=4)
         ttk.Button(bottom_bar, text="Cancel", style="Secondary.TButton",
