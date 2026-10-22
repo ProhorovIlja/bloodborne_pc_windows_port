@@ -565,6 +565,7 @@ FogAction HostFogAction(const BossGate& g, bool guest_starts_on, bool intro_done
 
 #include "coop_hooks.h"
 #include "party_b2.h"
+#include "party_death_rules.h"
 #include "game_state.h"
 #include "party_director.h"
 #include "party_link.h"
@@ -2855,6 +2856,53 @@ bool OnMovingLiftCar(const float p[3]) {
     return false;
 }
 
+// liftfix: the rider guard (liftrules::RiderTick): every frame while a lift car within reach plays a
+// ride, the local chr's ride bit and position; a drop through the car puts it back on the car.
+void LiftRiderTick(const GameSnapshot& s) {
+    static liftrules::RiderTrack track;
+    static int logged = 0;
+    if (!s.world_up || s.loading || !s.player) {
+        track = liftrules::RiderTrack{};
+        return;
+    }
+    float me[4], rot[4];
+    if (!LocalChrPose(me, rot)) {
+        return;
+    }
+    bool playing = false;
+    for (const Lift& l : Lifts()) {
+        ObjAnimState car;
+        float at[3];
+        if (!ReadObjAnim(l.car, &car) || !car.playing) {
+            continue;
+        }
+        for (const std::int32_t e : {l.car, l.gate_rides ? l.gate : 0}) {
+            if (e && ObjectPoint(e, 0, 0, at) && std::hypot(me[0] - at[0], me[2] - at[2]) < kLiftCarRadius) {
+                playing = true;
+            }
+        }
+    }
+    if (!playing && !track.riding) {
+        return;
+    }
+    std::uint64_t f = 0;
+    SafeRead(s.player + 0x1e1, &f, 5);
+    float put[3];
+    const liftrules::RiderStep step =
+        liftrules::RiderTick(track, playing, deathrules::RidingObject(f), Now(), me[0], me[1], me[2], put);
+    if (step != liftrules::RiderStep::through) {
+        return;
+    }
+    alignas(16) float to[4] = {put[0], put[1], put[2], 1.0f};
+    alignas(16) float r16[4] = {rot[0], rot[1], rot[2], rot[3]};
+    const bool ok = b2::LocalChrWarp(s.player, to, r16, "a drop through a lift's car: back on the car");
+    if (logged++ < 32) {
+        Log("lift ride: the local chr dropped through the moving car at (%.1f, %.1f, %.1f) (ride bit off, %.1f m under "
+            "the car); %s (%.1f, %.1f, %.1f)", double(me[0]), double(me[1]), double(me[2]), double(put[1] - 0.3f - me[1]),
+            ok ? "put back on the car at" : "NOT put back to", double(put[0]), double(put[1]), double(put[2]));
+    }
+}
+
 void LiftReplayTick(const GameSnapshot& s) {
     static std::map<std::uint32_t, bool> last;  // a replaying lift's pos flag -> its value last tick
     static std::set<std::uint32_t> held;        // pos flags the world mirror holds back (liftfix)
@@ -3271,6 +3319,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link) {
     }
     const PartyRole role = PartyDirector::Get().Role();
     LiftReplayTick(s);
+    LiftRiderTick(s);
     droproll::Tick(s, link, role == PartyRole::Host);
     if (role == PartyRole::Guest) {
         g_fog_host_map.store(b2::MemberMap(0), std::memory_order_relaxed);
