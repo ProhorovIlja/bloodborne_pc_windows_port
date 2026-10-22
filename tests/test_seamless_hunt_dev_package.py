@@ -30,6 +30,7 @@ class DeveloperKitTest(unittest.TestCase):
             "licenses/LICENSE",
             "licenses/GPL-3.0.txt",
             "out/licenses/LICENSE",
+            "CHANGELOG.md",
             "out/licenses/msys2/PACKAGES.txt",
             "out/licenses/third_party/monocypher/LICENCE.md",
             "out/SDL3.dll",
@@ -81,6 +82,8 @@ class DeveloperKitTest(unittest.TestCase):
             self.assertNotIn("out/gpu/bbgpu.dll", names)
             self.assertNotIn("out/gpu/bbnet20.dll", names)
             self.assertIn("scripts/seamless_hunt.py", names)
+            self.assertIn("CHANGELOG.md", names)
+            self.assertIn("scripts/client_integrity.py", names) if (self.root / "scripts/client_integrity.py").is_file() else None
             self.assertIn("patches/Bloodborne.xml", names)
             self.assertIn("licenses/LICENSE", names)
             self.assertIn("out/licenses/LICENSE", names)
@@ -133,6 +136,7 @@ class DeveloperKitTest(unittest.TestCase):
         self.assertEqual(status["source_commit"], SHA)
         self.assertTrue(status["portable_python"])
         self.assertFalse(status["live_coop_verified"])
+        self.assertIn("CHANGELOG.md", [x["path"] for x in json.loads(zipfile.ZipFile(path).read("MANIFEST.json"))["files"]])
 
     def test_reject_modified_file_with_stale_manifest(self):
         source = Path(self.temp.name) / "source.zip"
