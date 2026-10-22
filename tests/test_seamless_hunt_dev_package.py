@@ -57,7 +57,7 @@ class DeveloperKitTest(unittest.TestCase):
         with zipfile.ZipFile(out) as archive:
             names = set(archive.namelist())
             self.assertIn("out/bbport.exe", names)
-            self.assertIn("out/gpu/bbgpu.dll", names)
+            self.assertNotIn("out/gpu/bbgpu.dll", names)
             self.assertIn("scripts/seamless_hunt.py", names)
             self.assertIn("patches/Bloodborne.xml", names)
             self.assertIn("licenses/LICENSE", names)
