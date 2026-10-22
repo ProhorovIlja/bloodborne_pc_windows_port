@@ -9,6 +9,7 @@ Manual additional roots can be supplied when a dump is stored elsewhere.
 """
 from __future__ import annotations
 import argparse
+from collections import deque
 from dataclasses import asdict, dataclass
 import json
 import os
@@ -22,14 +23,18 @@ SAVED_FILES = ("userdata0000", "userdata0010", "backup0000", "backup0010")
 GAME_FOLDERS = ("Bloodborne", "Bloodborne GOTY", "Bloodborne PC", "BB", "CUSA03173",
                 "CUSA00900", "CUSA00207", "CUSA00208", "CUSA00299", "CUSA01363",
                 "CUSA03179", "CUSA03014", "CUSA03023")
-LIBRARY_FOLDERS = ("games", "Games", "game", "PS4", "ps4", "roms", "ROMs",
+LIBRARY_FOLDERS = ("games", "Games", "game", "PS4", "ps4", "roms", "ROMs", "Downloads", "steamapps", "common", "SteamLibrary",
                    "Bloodborne", "Bloodborne PC", "shadPS4", "shadps4",
                    "Awaken", "LanternEngine", "BBPort", "BBHost", "Yharnam Together")
 SKIP = frozenset(("windows", "program files", "program files (x86)",
                   "system volume information", "$recycle.bin", "node_modules",
-                  ".git", "shader", "cache", "logs", "temp", "tmp", "downloads"))
+                  ".git", "shader", "cache", "logs", "temp", "tmp"))
 MAX_NODES = 1500
 MAX_DEPTH = 3
+# The full scan is a bounded fallback, performed off the GUI thread. Never silently
+# claim that a shallow scan has searched every disk or every user folder.
+DEEP_MAX_NODES = 40000
+DEEP_MAX_DEPTH = 9
 MAX_USER_ROOTS = 16
 
 
@@ -159,15 +164,18 @@ def _hints(launcher_dir: Path, extra_roots: Iterable[Path]) -> list[Path]:
     return roots
 
 
-def find_games(launcher_dir: Path, extra_roots=()) -> list[Game]:
+def find_games(launcher_dir: Path, extra_roots=(), *, deep_scan=False) -> list[Game]:
     bases = _hints(launcher_dir, extra_roots)
-    # Breadth-first scan *only* known likely game library folder names,
-    # with limited depth and a strict global visit budget.
-    queue = [(p, 0) for p in bases]
+    # Fast mode follows likely game/library folders. Deep mode also follows
+    # arbitrary intermediate directory names, including nested Downloads.
+    # Both modes are bounded, read-only, and never follow junctions/symlinks.
+    node_budget = DEEP_MAX_NODES if deep_scan else MAX_NODES
+    depth_budget = DEEP_MAX_DEPTH if deep_scan else MAX_DEPTH
+    queue = deque((p, 0) for p in bases)
     visited: set[str] = set()
     games = []
-    while queue and len(visited) < MAX_NODES:
-        path, depth = queue.pop(0)
+    while queue and len(visited) < node_budget:
+        path, depth = queue.popleft()
         if not _dir(path):
             continue
         key = _canon(path)
@@ -178,13 +186,15 @@ def find_games(launcher_dir: Path, extra_roots=()) -> list[Game]:
         if candidate:
             games.append(candidate)
             continue
-        if depth >= MAX_DEPTH:
+        if depth >= depth_budget:
             continue
         for child in _children(path):
             name = child.name
+            if name.casefold() in SKIP:
+                continue
             named_game = name.upper() in GAME_FOLDERS or bool(CUSA.fullmatch(name))
             named_library = name.casefold() in {x.casefold() for x in LIBRARY_FOLDERS}
-            if named_game or named_library or (depth == 0 and name.casefold() not in SKIP):
+            if deep_scan or named_game or named_library or depth == 0:
                 queue.append((child, depth + 1))
     return sorted(games, key=lambda x: (x.status != "candidate_109", x.folder.casefold()))
 
@@ -277,13 +287,14 @@ def find_extras(launcher_dir: Path, games=(), extra_roots=()) -> list[Extra]:
     return sorted(found.values(), key=lambda x: (x.kind, x.folder.casefold()))
 
 
-def scan(launcher_dir: Path, extra_roots=()) -> dict:
-    games = find_games(launcher_dir, extra_roots)
+def scan(launcher_dir: Path, extra_roots=(), *, deep_scan=False) -> dict:
+    games = find_games(launcher_dir, extra_roots, deep_scan=deep_scan)
     return {"games": [asdict(x) for x in games],
             "saves": [asdict(x) for x in find_saves(launcher_dir, games, extra_roots)],
             "extras": [asdict(x) for x in find_extras(launcher_dir, games, extra_roots)],
             "read_only": True, "saves_migrated": False,
             "all_patch_versions_supported": False,
+            "search_mode": "deep" if deep_scan else "fast",
             "notice": "Detection != validated executable, save conversion or live online compatibility."}
 
 
