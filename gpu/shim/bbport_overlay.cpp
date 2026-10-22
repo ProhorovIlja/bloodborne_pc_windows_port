@@ -126,6 +126,9 @@ extern "C" const unsigned char bb_game_ttf_end[];
 
 extern "C" void runtime_restart(void); // bb-probe (probe.c)
 extern "C" void bbgpu_request_quit(void); // bbgpu.cpp: as the window's close button
+#if defined(_WIN32) && defined(BBGPU_BBSC_HOST_EXPORTS)
+extern "C" int runtime_legacy_net_requested(void);
+#endif
 
 namespace BbOverlay {
 
@@ -155,6 +158,18 @@ std::string toast_text;                      // present thread (imgui_mutex)
 std::mutex module_banner_mutex;
 std::string module_banner_text;
 std::atomic<bool> module_banner_active{false};
+
+// When a player disables experimental BBSC or activates the normal visy
+// transport, a previously set "joining" banner must disappear immediately,
+// not persist across the transition and imply a connection is still running.
+bool ModuleBannerWanted() {
+    if (!module_banner_active.load(std::memory_order_acquire)) return false;
+#if defined(_WIN32) && defined(BBGPU_BBSC_HOST_EXPORTS)
+    return runtime_legacy_net_requested() != 0;
+#else
+    return true;
+#endif
+}
 
 std::int64_t SteadyMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -3720,7 +3735,7 @@ bool Visible() {
            (menu_open || prompt_active || BbSettings::Get().show_fps || BbSettings::Get().show_hud || HdrPatternShown() ||
             CompileIndicatorShown() || coop::warper::Active() || ToastWanted() || AlertWanted() || NpcCaptionWanted() || PartyHudWanted() || PartyTagsWanted() ||
             PartyPingsWanted() || PartyStainWanted() ||
-            module_banner_active.load(std::memory_order_acquire));
+            ModuleBannerWanted());
 }
 
 bool MenuOpen() {
@@ -3892,8 +3907,7 @@ bool Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent, b
         }
         // In-game status from a native network module. This is an overlay
         // only: it never steals focus or consumes any keyboard/gamepad input.
-        if (module_banner_active.load(std::memory_order_acquire) &&
-            !party::hud::GameMenu()) {
+        if (ModuleBannerWanted() && !party::hud::GameMenu()) {
             std::string label;
             {
                 std::scoped_lock banner_lock{module_banner_mutex};
