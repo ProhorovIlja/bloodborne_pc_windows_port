@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from tools.interop.prepare_bbnet20_windows import BBSC_GLUE, CMAKE, EXPORT, FORMAT, GLUE, LINK_OPTS, REVISION, prepare
+from tools.interop.prepare_bbnet20_windows import BBSC_GLUE, CMAKE, EXPORT, FORMAT, GLUE, RELAY, LINK_OPTS, REVISION, prepare
 
 
 class NativeBbscPrepareTests(unittest.TestCase):
@@ -24,6 +24,8 @@ class NativeBbscPrepareTests(unittest.TestCase):
                        b'void show() { bbgpu_overlay_banner("host"); }\n'
                        b'void hide() { bbgpu_overlay_banner(nullptr); }\n',
             CMAKE: LINK_OPTS.encode(),
+            RELAY: b'#include <arpa/inet.h>\n#include <netinet/in.h>\n'
+                   b'void relay() { /* protocol unchanged */ }\n',
                  "gpu/bbnet20/vendor/shadps4/network.cpp": b"vendor",
                  "gpu/bbnet/bbnet.h": b"ABI2",
                  "gpu/third_party/httplib/httplib.h": b"HTTP",
@@ -43,7 +45,7 @@ class NativeBbscPrepareTests(unittest.TestCase):
 
     def test_stages_and_rejects_overwrite(self):
         result = prepare(self.staged, self.workspace)
-        self.assertEqual(result["files_staged"], 7)
+        self.assertEqual(result["files_staged"], 8)
         self.assertFalse(result["windows_online_dll_built"])
         self.assertIn("__declspec(dllexport)", (self.workspace / GLUE).read_text())
         self.assertIn("bbnet20_host_add_event_filter(",
@@ -55,6 +57,11 @@ class NativeBbscPrepareTests(unittest.TestCase):
         self.assertNotIn("bbgpu_overlay_banner(",
                          (self.workspace / BBSC_GLUE).read_text())
         self.assertIn("if(NOT WIN32)", (self.workspace / CMAKE).read_text())
+        relay = (self.workspace / RELAY).read_text()
+        self.assertIn("#include <winsock2.h>", relay)
+        self.assertIn("#include <ws2tcpip.h>", relay)
+        self.assertIn("#include <arpa/inet.h>", relay)
+        self.assertIn("protocol unchanged", relay)
         self.assertIn("$"+"{CMAKE_SOURCE_DIR}", (self.workspace / CMAKE).read_text())
         self.assertEqual((self.workspace / "gpu/bbnet20/vendor/shadps4/network.cpp").read_bytes(), b"vendor")
         with self.assertRaisesRegex(ValueError, "overwrite"):
@@ -102,6 +109,9 @@ class NativeBbscPrepareTests(unittest.TestCase):
         ).replace("\n", "\r\n").encode("utf-8")
         self._replace_fixture(GLUE, upstream)
         self._replace_fixture(CMAKE, (LINK_OPTS + "\r\n").encode())
+        self._replace_fixture(RELAY,
+            b"#include <arpa/inet.h>\r\n#include <netinet/in.h>\r\n"
+            b"// unchanged UDP protocol\r\n")
         prepare(self.staged, self.workspace)
         glue = (self.workspace / GLUE).read_text()
         self.assertIn("#include <windows.h>", glue)
