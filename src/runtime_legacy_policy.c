@@ -9,13 +9,21 @@ int legacy_net_bbsc_enabled(const char *env) {
 }
 int legacy_net_supported_game(const char *serial, const char *title, const char *version) {
     if (!serial || !title || !version) return 0;
-    if (strlen(serial) < 9 || strlen(serial) > 15) return 0;
-    if (strcmp(serial, "UNKNOWN") == 0) return 0;
+    /* A Bloodborne SFO region must be the exact PS4 CUSA + five digits form.
+     * Do not accept arbitrary nine-character title identifiers.
+     * Actual BBSC patch sites still get checked against the mapped 1.09 image.
+     */
+    if (strlen(serial) != 9 || strncmp(serial, "CUSA", 4) != 0) return 0;
+    for (unsigned i = 4; i != 9; ++i)
+        if (serial[i] < '0' || serial[i] > '9') return 0;
     /* Regional game identifiers differ; do not hard-code the US CUSA id.
      * Actual game content and patch-site byte verification remain mandatory.
      */
     if (strncmp(title, "Bloodborne", 10) != 0) return 0;
-    return strcmp(version, "1.09") == 0;
+    /* param.sfo uses "01.09" on retail images. Some native ports report
+     * "1.09" instead. Both denote the same patch-level. Do not accept 1.08.
+     */
+    return strcmp(version, "1.09") == 0 || strcmp(version, "01.09") == 0;
 }
 int legacy_net_online_symbol(const char *symbol) {
     static const char *prefixes[] = {"sceNet", "sceNp", "sceHttp", "sceSsl"};
