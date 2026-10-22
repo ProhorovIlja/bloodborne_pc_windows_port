@@ -123,19 +123,31 @@ uintptr_t runtime_legacy_net_resolve(const char *scoped_nid) {
 }
 
 void runtime_legacy_net_image_mapped(uint8_t *image, uint64_t size) {
-    if (module) {
+    /* The public party transport takes precedence even when the experimental
+     * DLL was already initialized earlier in this process. No BBSC callback
+     * may hook an image or start its sockets once that priority changes.
+     */
+    if (module && runtime_legacy_net_requested()) {
         BbNetImageMappedFn cb=(BbNetImageMappedFn)(void*)GetProcAddress(module,"bbnet_image_mapped");
         if (cb) cb(image,size);
     }
 }
 void runtime_legacy_net_image_ready(uint64_t base, uint64_t size) {
-    if (module) {
+    /* The public party transport takes precedence even when the experimental
+     * DLL was already initialized earlier in this process. No BBSC callback
+     * may hook an image or start its sockets once that priority changes.
+     */
+    if (module && runtime_legacy_net_requested()) {
         BbNetImageReadyFn cb=(BbNetImageReadyFn)(void*)GetProcAddress(module,"bbnet_image_ready");
         if (cb) cb(base,size);
     }
 }
 void runtime_legacy_net_start(void) {
-    if (module) {
+    /* The public party transport takes precedence even when the experimental
+     * DLL was already initialized earlier in this process. No BBSC callback
+     * may hook an image or start its sockets once that priority changes.
+     */
+    if (module && runtime_legacy_net_requested()) {
         BbNetStartFn cb=(BbNetStartFn)(void*)GetProcAddress(module,"bbnet_start");
         if (cb) cb();
     }
