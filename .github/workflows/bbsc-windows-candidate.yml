@@ -135,8 +135,9 @@ jobs:
           # independent target and does not change the normal user's package.
           cmd.exe //C "call build.bat --configure-only" || exit 1
           cmake -S gpu -B out/gpu -DBB_BBSC20_WINDOWS_CANDIDATE=ON
-          cmake --build out/gpu --target bbnet20 -- -j 2
+          cmake --build out/gpu --target bbnet20 bbport -- -j 2
           test -f out/gpu/bbnet20.dll || { echo "Real native BBSC DLL missing" >&2; exit 1; }
+          test -f out/bbport.exe || { echo "Candidate host executable missing" >&2; exit 1; }
 
       - name: Confirm DLL exports without claiming online acceptance
         shell: msys2 {0}
@@ -149,5 +150,15 @@ jobs:
               exit 1
             fi
           done
+          # Critical: the real game host MUST export both callbacks from
+          # the primary PE executable. Otherwise the plugin's own STATIC
+          # bbgpu copy would receive cinematic input and loading UI instead.
+          llvm-objdump -p out/bbport.exe > out/bbport.exports.txt
+          for symbol in bbgpu_add_event_filter bbgpu_overlay_banner; do
+            if ! grep -q -E "[[:space:]]${symbol}([[:space:]]|$)" out/bbport.exports.txt; then
+              echo "Primary game EXE missing BBSC GPU bridge export: ${symbol}" >&2
+              exit 1
+            fi
+          done
           test -f third_party/ext-wepoll/LICENSE
-          echo 'REAL bbnet20.dll compiled with wepoll and full host ABI. Live crossplay NOT verified.'
+          echo 'REAL bbnet20.dll and EXE compiled with host GPU bridge + wepoll. Live crossplay NOT verified.'
