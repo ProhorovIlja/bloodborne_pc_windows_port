@@ -1,8 +1,11 @@
 /* Offline route-policy test: no game, live server or bbnet20.dll. */
 #include "../src/runtime_legacy_policy.h"
+#include "../src/runtime_legacy_host.h"
 #include <assert.h>
 #include <stdio.h>
 int main(void) {
+    assert(BBNET_HOST_ABI_VERSION == 2);
+    assert(sizeof(BbNetHost) == 72);
     assert(!legacy_net_opted_in(NULL,0));
     assert(!legacy_net_opted_in("true",0));
     assert(legacy_net_opted_in("1",0));
