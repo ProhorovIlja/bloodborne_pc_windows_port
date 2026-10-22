@@ -37,6 +37,13 @@ def source_inventory(folder: Path) -> dict[str, dict]:
             raise ValueError(f"source inventory contains symlink: {path.relative_to(folder)}")
         if not path.is_file() or path.suffix.casefold() not in CODE_EXTENSIONS:
             continue
+        # The official directory is shadPS4's entire src/core tree. It
+        # contains many unrelated emulator components. Limit this comparison
+        # to BBSC/Bloodborne gameplay code, not Vulkan/NP/common internals.
+        base_name = path.name.casefold()
+        if not (base_name.startswith(("bbsc_", "bloodborne_")) or
+                base_name.endswith("_bbsc.h")):
+            continue
         relative = path.relative_to(folder).as_posix()
         insensitive = relative.casefold()
         if insensitive in seen:
