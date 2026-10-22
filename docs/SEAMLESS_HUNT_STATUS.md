@@ -1,5 +1,8 @@
 # Seamless Hunt native client: engineering status (2026-10-22)
 
+> **Canonical product scope and owner-ready release gates:** [SEAMLESS_HUNT_PRODUCT_CONTRACT.md](SEAMLESS_HUNT_PRODUCT_CONTRACT.md). Internal source/CI iterations are not owner-facing acceptance builds. See the contract for the complete native client, online, launcher, mods, QoL, security and performance requirements.
+
+
 One codebase: this visy-based native Windows port. Do not create other client forks or replace its existing multiplayer transport without evidence.
 
 ## Validated baseline
