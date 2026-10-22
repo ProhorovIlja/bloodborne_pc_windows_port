@@ -15,7 +15,8 @@ int main(void) {
     assert(!legacy_net_online_symbol("sceNpTrophyUnlockTrophy"));
     assert(!legacy_net_online_symbol("sceNpCommerceDialogOpen"));
     assert(!legacy_net_online_symbol("sceNpProfileDialogOpen"));
-    assert(!legacy_net_online_symbol("sceNpScoreCreateContext"));
+    assert(legacy_net_online_symbol("sceNpScoreCreateContext"));
+    assert(legacy_net_online_symbol("sceNpPartyGetRoomInfo"));
     assert(legacy_net_online_symbol("sceNetSocket"));
     assert(legacy_net_online_symbol("sceNpMatching2JoinRoom"));
     assert(legacy_net_online_symbol("sceNpSignalingActivateConnection"));
