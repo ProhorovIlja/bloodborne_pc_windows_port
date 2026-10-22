@@ -1686,6 +1686,7 @@ class BloodborneLauncher(tk.Tk):
         self.geometry(f"780x{max(760, min(need, self.winfo_screenheight() - 80))}")
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.bind("<Control-f>", lambda _event: self.show_settings_search(), add="+")
         self._ini_stamp = self.ini_stamp()
         self.bind("<FocusIn>", lambda e: self.refresh_game_settings() if e.widget is self else None, add="+")
         self.after(50, self.poll_queue)
@@ -1992,6 +1993,17 @@ class BloodborneLauncher(tk.Tk):
         ttk.Label(preset_row, text="Settings", font=("Segoe UI", 10, "bold")).pack(side="left")
         ttk.Label(preset_row, text="hover over any option for details",
                   style="SubHeader.TLabel").pack(side="left", padx=(8, 0))
+        find_btn = ttk.Button(preset_row, text="Find setting...  Ctrl+F",
+                              style="Secondary.TButton", command=self.show_settings_search)
+        find_btn.pack(side="left", padx=(8, 0))
+        Tooltip(find_btn, "Search all visible setting names without changing options. "
+                          "Use Ctrl+F from anywhere in the launcher.")
+        latency_btn = ttk.Button(preset_row, text="Low latency", style="Secondary.TButton",
+                                 command=self.set_low_latency_mode)
+        latency_btn.pack(side="right", padx=(6, 0))
+        Tooltip(latency_btn, "Set GPU frames ahead to 1 and disable frame generation (which can add input lag). "
+                             "Keeps your FPS target, graphics quality, co-op, password, mods and saves unchanged. "
+                             "A preset, not a promise of zero network latency.")
         vanilla_btn = ttk.Button(preset_row, text="Vanilla mode", style="Secondary.TButton",
                                  command=self.set_vanilla_mode)
         vanilla_btn.pack(side="right", padx=(6, 0))
@@ -3796,6 +3808,96 @@ class BloodborneLauncher(tk.Tk):
             self.res_combo.config(state="readonly")
         else:
             self.res_combo.config(state="disabled")
+
+    def show_settings_search(self):
+        """Find settings in the live UI; never index Entry values or user secrets."""
+        from scripts.settings_index import search_entries
+
+        rows = []
+        widget_types = (ttk.Label, ttk.Checkbutton, ttk.Button, ttk.Radiobutton,
+                        ttk.Labelframe, tk.Label, tk.Button, tk.Checkbutton)
+        for tab_name in self.notebook.tabs():
+            tab_widget = self.notebook.nametowidget(tab_name)
+            section = self.notebook.tab(tab_name, "text")
+            stack = [tab_widget]
+            while stack:
+                current = stack.pop()
+                stack.extend(reversed(current.winfo_children()))
+                if not isinstance(current, widget_types):
+                    continue
+                try:
+                    label = str(current.cget("text")).strip().replace("\\n", " ")
+                except tk.TclError:
+                    continue
+                if label:
+                    rows.append((section, label, tab_name, current))
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Find a setting")
+        dialog.transient(self)
+        dialog.geometry("600x405")
+        dialog.minsize(420, 260)
+        wrap = ttk.Frame(dialog, padding=15)
+        wrap.pack(fill="both", expand=True)
+        ttk.Label(wrap, text="Search settings", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        query_var = tk.StringVar()
+        entry = ttk.Entry(wrap, textvariable=query_var)
+        entry.pack(fill="x", pady=(8, 8))
+        ttk.Label(wrap, text="Select a result to open its tab. No settings are changed.",
+                  style="Hint.TLabel").pack(anchor="w", pady=(0, 6))
+        matches = []
+        result_list = tk.Listbox(wrap, activestyle="dotbox", exportselection=False,
+                                 font=("Segoe UI", 10), borderwidth=0)
+        result_list.pack(fill="both", expand=True)
+
+        def refresh(*_args):
+            matches[:] = search_entries([(tab, label) for tab, label, _, _ in rows],
+                                         query_var.get())
+            result_list.delete(0, tk.END)
+            for index in matches:
+                tab, label, _, _ = rows[index]
+                result_list.insert(tk.END, f"{tab}   >   {label}")
+            if matches:
+                result_list.selection_set(0)
+                result_list.activate(0)
+
+        def choose(_event=None):
+            picked = result_list.curselection()
+            if not picked or not matches:
+                return
+            _, _, tab_name, target = rows[matches[picked[0]]]
+            self.notebook.select(tab_name)
+            dialog.destroy()
+            self.after_idle(target.focus_set)
+
+        def entry_down(_event):
+            if matches:
+                result_list.focus_set()
+                result_list.selection_clear(0, tk.END)
+                result_list.selection_set(0)
+                return "break"
+
+        query_var.trace_add("write", refresh)
+        result_list.bind("<Double-1>", choose)
+        result_list.bind("<Return>", choose)
+        entry.bind("<Return>", choose)
+        entry.bind("<Down>", entry_down)
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        ttk.Button(wrap, text="Open selected setting", command=choose).pack(anchor="e", pady=(8, 0))
+        entry.focus_set()
+
+    def set_low_latency_mode(self):
+        """Input-latency preset only; never silently alter network or gameplay rules."""
+        ahead = next((label for label, value in FRAMES_AHEAD_CHOICES if value == "1"), None)
+        if ahead is None:
+            self.log("[PRESET] Low latency unavailable: frame queue option missing.")
+            return
+        self.frames_ahead_var.set(ahead)
+        self.frame_generation_var.set(FRAME_GENERATION_CHOICES[0][0])
+        self.save_frame_generation()
+        self.save_settings()
+        self.log("[PRESET] Low latency: 1 GPU frame ahead, frame generation off. "
+                 "Party, saves, mods and other graphics options unchanged.")
 
     def set_vanilla_mode(self):
         self.feat_upscaler.set(False)
