@@ -147,7 +147,7 @@ def _hints(launcher_dir: Path, extra_roots: Iterable[Path]) -> list[Path]:
     home = Path.home()
     roots = [base, base.parent, home / "Documents", home / "Desktop",
              home / "Downloads"]
-    for name in ("BB_GAME_DIR", "BB_MODS_DIR", "BB_PATCHES_DIR", "BB_CHEATS_DIR"):
+    for name in ("BB_GAME_DIR", "BB_DATA_DIR", "BB_MODS_DIR", "BB_PATCHES_DIR", "BB_CHEATS_DIR"):
         if os.environ.get(name):
             item = Path(os.environ[name])
             roots.append(item.parent if item.is_file() else item)
@@ -248,12 +248,14 @@ def find_saves(launcher_dir: Path, games=(), extra_roots=()) -> list[Save]:
 
 def find_extras(launcher_dir: Path, games=(), extra_roots=()) -> list[Extra]:
     base = Path(launcher_dir)
-    roots = [base, *(Path(p) for p in list(extra_roots)[:MAX_USER_ROOTS])]
+    roots = [base, base / "user", *(Path(p) for p in list(extra_roots)[:MAX_USER_ROOTS])]
     roots += [Path(x.folder) for x in games]
+    if os.environ.get("BB_DATA_DIR"):
+        roots += [Path(os.environ["BB_DATA_DIR"])]
     for hint in _hints(base, extra_roots):
         # Do not recurse into downloads or game asset trees.
         if hint.name.casefold() in ("shadps4", "bbport", "bloodborne pc", "lanternengine"):
-            roots.append(hint)
+            roots.extend([hint, hint / "user"])
     found = {}
     for root in roots:
         for kind, aliases in {
