@@ -2951,9 +2951,9 @@ class BloodborneLauncher(tk.Tk):
         server_entry.bind("<FocusOut>", lambda _event: self.save_settings())
         sec.next_row += 1
         Tooltip(server_entry, "Choose the public Seamless Hunt realm, localhost or your own server. "
-                "Used by Network doctor and account screens only until native BBSC is integrated. "
-                "Just a hostname, without protocol or port (shadNet uses TCP 31313).")
-        sh_row = ttk.Frame(sec, style="Card.TFrame")
+                "Used by Network doctor, account diagnostics and the opt-in experimental "
+                "native BBSC session. Just a hostname, without protocol or port "
+                "(shadNet TCP 31313, WebAPI 31315).")        sh_row = ttk.Frame(sec, style="Card.TFrame")
         sh_row.grid(row=sec.next_row, column=0, columnspan=2, sticky="w", pady=(0, 3))
         sec.next_row += 1
         self.seamless_hunt_test_btn = ttk.Button(sh_row, text="Network doctor",
@@ -5855,6 +5855,13 @@ class BloodborneLauncher(tk.Tk):
             self.log(f"Launch Error: {ex}")
             self.proc = None
             self.close_log_file()
+            redirect = getattr(self, "_legacy_override_file", None)
+            self._legacy_override_file = None
+            if redirect:
+                try:
+                    Path(redirect).unlink(missing_ok=True)
+                except OSError:
+                    pass
             return
 
         self.save_settings()
