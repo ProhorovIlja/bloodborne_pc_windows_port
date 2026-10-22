@@ -571,7 +571,16 @@ if (BB_BBSC20_WINDOWS_CANDIDATE)
     add_subdirectory(bbnet20 EXCLUDE_FROM_ALL)
     # Upstream's Linux source assumes its httplib headers live at a different
     # location. Keep their MIT notice and add the exact verified source tree.
-    target_include_directories(bbnet20 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib")
+    # The shadPS4 networking sources reuse the native port's smaller logging
+    # adapter, whose public header includes common/logging/classes.h from
+    # gpu/shadps4. Upstream Linux exports that include directory transitively;
+    # Windows' static bbgpu does not. Preserve the genuine logging classes.
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/shadps4/common/logging/classes.h")
+        message(FATAL_ERROR "Native logging classes required by BBSC are missing")
+    endif()
+    target_include_directories(bbnet20 PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib"
+        "${CMAKE_CURRENT_SOURCE_DIR}/shadps4")
     message(STATUS "BBSC native Win64 candidate target enabled: not release-ready, no launcher opt-in")
 endif()
 
