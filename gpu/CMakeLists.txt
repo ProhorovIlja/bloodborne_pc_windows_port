@@ -158,6 +158,12 @@ find_program(GLSLANG_COMPILER NAMES glslang glslangValidator PATHS "C:/msys64/mi
 
 set(SIRIT_USE_SYSTEM_SPIRV_HEADERS OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/sirit EXCLUDE_FROM_ALL)
+# Upstream sirit/src/stream.h invokes std::abort without <cstdlib>.
+# Keep the platform compatibility include scoped to this dependency.
+if (WIN32 AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU") AND TARGET sirit)
+    target_compile_options(sirit PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/shim/win_sirit_compat.h")
+endif()
 
 # bbport: FSR 3.1 temporal upscaling / frame generation, native Vulkan (MIT, FireBurn/FSR-Vulkan).
 set(FFX_VK_PORTABLE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
