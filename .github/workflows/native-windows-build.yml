@@ -32,8 +32,8 @@ on:
 
 # Keep the CI queue focused on the latest native Windows commit in this PR.
 concurrency:
-  group: native-windows-${{ github.head_ref || github.ref }}
-  cancel-in-progress: false
+  group: native-windows-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
