@@ -18,8 +18,26 @@ class NativeBbscPrepareTests(unittest.TestCase):
         (self.workspace / "gpu").mkdir(parents=True)
         (self.workspace / "gpu/CMakeLists.txt").write_text("project(test)")
         files = {
-            GLUE: b'#include "bbgpu.h"\n' + EXPORT.encode() + b'\n' +
-                  b'void test() { bbgpu_add_event_filter(nullptr); }\n',
+            GLUE: b'#include "bbgpu.h"\n#include <sys/mman.h>\n' +
+                  EXPORT.encode() + b'\n' +
+                  b'void test() { bbgpu_add_event_filter(nullptr); }\n'
+                  b'        psf->app_ver = host->app_ver ? host->app_ver : "";\n'
+                  b'    // BBSC finds the save it backs up and journals in shadPS4\'s folders; the port\'s are\n'
+                  b'    // <user>/savedata/<user id>/CUSA00207/SPRJ0005 (BBSC_SAVE_DIR: the folder of userdata0000..).\n'
+                  b'    if (!std::getenv("BBSC_SAVE_DIR")) {\n'
+                  b'        auto folder = id.path() / "CUSA00207" / "SPRJ0005";\n'
+                  b'        setenv("BBSC_SAVE_DIR", folder.c_str(), 0);\n'
+                  b'    }\n'
+                  b'    // BBSC writes its byte patches straight into the game\'s code\n'
+                  b'    unsigned writable = 0;\n'
+                  b'    if (FILE* maps = std::fopen("/proc/self/maps", "r")) {\n'
+                  b'        mprotect(nullptr, 0, 0);\n'
+                  b'    }\n'
+                  b'    std::printf("BBSC: seamless co-op hooks for the image");\n'
+                  b'    if (const char* probe = std::getenv("BB_BBSC_PROBE")) {\n'
+                  b'        /* linux test probe */\n'
+                  b'    }\n'
+                  b'    // The cinematic camera goes here\n',
             BBSC_GLUE: b'#include "bbgpu.h"\n'
                        b'void show() { bbgpu_overlay_banner("host"); }\n'
                        b'void hide() { bbgpu_overlay_banner(nullptr); }\n',
@@ -48,6 +66,15 @@ class NativeBbscPrepareTests(unittest.TestCase):
         self.assertEqual(result["files_staged"], 8)
         self.assertFalse(result["windows_online_dll_built"])
         self.assertIn("__declspec(dllexport)", (self.workspace / GLUE).read_text())
+        glue = (self.workspace / GLUE).read_text()
+        self.assertIn('SeamlessBbsc::ActiveSaveFolder(', glue)
+        self.assertIn('#include "../shim/bbsc_native_save_dir.h"', glue)
+        self.assertIn('std::filesystem::equivalent(active_save,', glue)
+        self.assertIn('g_host.serial ? g_host.serial : ""', glue)
+        self.assertIn('game_ver == "1.09" ? "01.09"', glue)
+        self.assertIn('native active save for retail title not found', glue)
+        self.assertIn('#else\n    // BBSC finds the save it backs up', glue)
+        self.assertIn('"CUSA00207"', glue)  # Unmodified Linux source still present.
         self.assertIn("bbnet20_host_add_event_filter(",
                       (self.workspace / GLUE).read_text())
         self.assertNotIn("bbgpu_add_event_filter(",
