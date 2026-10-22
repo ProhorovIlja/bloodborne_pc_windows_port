@@ -166,6 +166,16 @@ set(FFX_VK_PORTABLE_BUILD_PROBE OFF CACHE BOOL "" FORCE)
 set(FFX_VK_PORTABLE_BUILD_FSR3_3_1_5_SCAFFOLD ON CACHE BOOL "" FORCE)
 add_subdirectory(third_party/fsr-vulkan EXCLUDE_FROM_ALL)
 
+# The FSR 1.1.4 host library assumes MSVC's _countof macro. Keep the
+# compatibility definition private to this target instead of polluting
+# Bloodborne's game/runtime compilation or patching the vendor checkout.
+if (WIN32 AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
+    if (TARGET ffx_vulkan_fsr3_host_1_1_4)
+        target_compile_options(ffx_vulkan_fsr3_host_1_1_4 PRIVATE
+            -include "${CMAKE_CURRENT_SOURCE_DIR}/shim/win_fsr_countof_compat.h")
+    endif()
+endif()
+
 # Host shaders -> headers (same scheme as shadPS4's host_shaders/CMakeLists.txt).
 set(SHADER_SRC ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/host_shaders)
 set(SHADER_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/include)
