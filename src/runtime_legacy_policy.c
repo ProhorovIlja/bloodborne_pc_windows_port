@@ -16,3 +16,28 @@ int legacy_net_online_symbol(const char *symbol) {
         if (!strncmp(symbol,prefixes[i],strlen(prefixes[i]))) return 1;
     return 0;
 }
+
+/* PS4 NIDs are 11-character URL/base64-like hashes, optionally followed by
+ * #library#index metadata. The native network module has its own complete NID
+ * table; this avoids silently dropping new NP exports missing in import_names.inc.
+ * The DLL returns zero for any hash outside its own explicitly registered APIs.
+ */
+int legacy_net_scoped_nid(const char *scoped) {
+    if (!scoped) return 0;
+    unsigned i;
+    for (i=0;i<11;++i) {
+        const unsigned char c=(unsigned char)scoped[i];
+        if (!c || !((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+                    (c>='0'&&c<='9')||c=='+'||c=='-'||c=='_')) return 0;
+    }
+    if (!scoped[11]) return 1;
+    if (scoped[11]!='#') return 0;
+    if (!scoped[12]) return 0;
+    for (i=12;i<44;++i) {
+        const unsigned char c=(unsigned char)scoped[i];
+        if (!c) return 1;
+        if (!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||
+              (c>='0'&&c<='9')||c=='+'||c=='-'||c=='_'||c=='#')) return 0;
+    }
+    return 0;
+}
