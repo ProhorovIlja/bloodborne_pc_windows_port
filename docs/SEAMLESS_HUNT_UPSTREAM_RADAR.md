@@ -24,6 +24,19 @@
 | [Nexus Bloodborne](https://www.nexusmods.com/bloodborne) | Community mods, comments, version and changelog records, permission restrictions and conflicts. | **Curated opt-in manager**, not background installation of unreviewed content. Honor redistribution rights and user's mods. |
 | [The Update Framework](https://theupdateframework.io/) | Signed, versioned and time-limited update metadata, target hashes, freshness and rollback-attack protection. | **Security design reference** for future trustworthy installer, not a claim that TUF is already enabled. |
 
+## Source-level discoveries confirmed in this pass
+
+These are more valuable than just feature claims on README pages, because the actual entry-point files exist in the other repositories:
+
+- **Read-only Hunter parser:** [Supermedo/launcher/bbport_character.py](https://github.com/Supermedo/bloodborne_pc/blob/windows/launcher/bbport_character.py) parses actual character slot bytes for name, level, six stats, Echoes, Insight, inventory/weapons and event flags. It cross-checks that character level matches the attributes sum before showing a record, rather than guessing. Inspect constraints/test fixtures, avoid scanning a live saving file; retain original GPL-2.0-or-later notice where applicable.
+- **Cross-port saves:** [Supermedo/launcher/bbport_saves.py](https://github.com/Supermedo/bloodborne_pc/blob/windows/launcher/bbport_saves.py) detects native/Awaken, shadPS4 old/new, bbhost and Apollo PS4 export folder variants, lists up to ten character slots and imports via staging/backup. Our current launcher only **detects** saves; the safe new work is a separate, consent-driven read-only profile page first, then proven copy/rollback.
+- **Reproducible benchmark and settings comparison:** [Supermedo/launcher/bbport_benchmark.py](https://github.com/Supermedo/bloodborne_pc/blob/windows/launcher/bbport_benchmark.py) distinguishes performance, visual comparison and stability soak tests, uses recorded controller steps, isolates save and shader cache under a dedicated temporary user directory and samples frame/memory/GPU metrics. Extract benchmark harness concepts only after native compatibility and performance cost review; no hidden auto-play or writes to the user's actual save.
+- **Multiple game/runtime versions:** [BBLauncher/modules/version_dialog.cpp](https://github.com/rainmakerv3/BB_Launcher/blob/master/modules/version_dialog.cpp) implements an installed-version list, manual update search, cached version feed, optional changelog display and pre-release preferences. Seamless Hunt should distinguish the current *client* versions from installed games/regions and isolate rollback copies; don't assume shadPS4 binaries are valid native Windows engine updates.
+- **Existing Chalice editor source:** [BBLauncher/modules/ChaliceEditor.cpp](https://github.com/rainmakerv3/BB_Launcher/blob/master/modules/ChaliceEditor.cpp) reads selected save slots, lists equipped altar glyphs, searches known dungeons and creates manual backups. This complements [BB Chalices Reborn](https://github.com/LL4nc33/BB.Chalices.Reborn); neither makes arbitrary new game geometry. Evaluate hard-coded offsets, encrypted saves and licenses before allowing writes.
+- **Other mod tooling:** [BBLauncher/modules/ModManager.cpp](https://github.com/rainmakerv3/BB_Launcher/blob/master/modules/ModManager.cpp) and [ModDownloader.cpp](https://github.com/rainmakerv3/BB_Launcher/blob/master/modules/ModDownloader.cpp) exist; their dependency and data-migration behavior need a separate source audit before adapting anything.
+
+The exact baseline upstream source version, merge direction and save parser schema must be recorded in each integration PR. Existing launcher support for saves and mods should not be silently confused with completed import or editing features.
+
 ## Product features to adopt selectively
 
 ### P0 — foundation and safety
