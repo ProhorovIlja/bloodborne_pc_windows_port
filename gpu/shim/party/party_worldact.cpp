@@ -2824,17 +2824,32 @@ bool LiftBusyHere(const Lift& l, float radius) {
     if (!ReadObjAnim(l.car, &car)) {
         return false;
     }
-    return car.playing || (ObjectPoint(l.car, 0, 0, at) && LocalChrPose(me, rot) &&
-                           std::hypot(me[0] - at[0], me[2] - at[2]) < radius);
+    if (car.playing) {
+        return true;
+    }
+    if (!LocalChrPose(me, rot)) {
+        return false;
+    }
+    // liftfix: the library lift's second cage (Lift::gate_rides) carries riders too
+    for (const std::int32_t e : {l.car, l.gate_rides ? l.gate : 0}) {
+        if (e && ObjectPoint(e, 0, 0, at) && std::hypot(me[0] - at[0], me[2] - at[2]) < radius) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool OnMovingLiftCar(const float p[3]) {
     for (const Lift& l : Lifts()) {
         ObjAnimState car;
         float at[3];
-        if (ReadObjAnim(l.car, &car) && car.playing && ObjectPoint(l.car, 0, 0, at) &&
-            std::hypot(p[0] - at[0], p[2] - at[2]) < kLiftCarRadius) {
-            return true;
+        if (!ReadObjAnim(l.car, &car) || !car.playing) {
+            continue;
+        }
+        for (const std::int32_t e : {l.car, l.gate_rides ? l.gate : 0}) {
+            if (e && ObjectPoint(e, 0, 0, at) && std::hypot(p[0] - at[0], p[2] - at[2]) < kLiftCarRadius) {
+                return true;
+            }
         }
     }
     return false;
