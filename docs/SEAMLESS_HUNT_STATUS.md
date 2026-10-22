@@ -14,6 +14,14 @@ One codebase: this visy-based native Windows port. Do not create other client fo
 - Local offline build-and-test scripts for Native TCP Relay v15 and Native UDP Relay v17 completed successfully. UDP rebuilt binary matches package binary by SHA-256.
 - Exact source commit for the deployed shadNet binary remains **unverified**. Offline tests are not live multiplayer validation.
 
+## Latest native build and cross-play engineering (2026-10-22)
+
+- Normal native `bbport.exe` reached successful link in Windows CLANG64 CI. Windows party-tests initially hit an include-path collision between the repo's `VERSION` and libc++ `<version>`; their include paths were corrected. **A fully successful packed-and-unpacked Windows executable + launcher acceptance job is not yet independently verified.**
+- **Real**, pinned deadinside `bbnet20` 0.20/shadNet/BBSC source is staged with third-party `cpp-httplib` MIT license and explicit Win64 changes. The first platform adaptations handle `__declspec(dllexport)`, Linux `setenv` vs Windows `_putenv_s`, `/proc/self/maps`/POSIX `mprotect` vs bounded guest-image `VirtualQuery`/`VirtualProtect`, and disable arbitrary Linux-only memory probing on Win64.
+- Added a separate `Native BBSC Windows module candidate` workflow, gated behind OFF-by-default `BB_BBSC20_WINDOWS_CANDIDATE`, with Win64 Protobuf, OpenSSL, zlib, nlohmann-json, miniupnpc packages. It aims to **compile the real module**, unlike the existing mock-DLL load tests. Build status must be taken from live GitHub Actions, not this static status page.
+- The legacy NP resolver now forwards otherwise-unrecognized **syntactically valid 11-character PS4 NID hashes** to the real module's own explicit symbol registry. Known non-network symbols continue using the unchanged runtime. This handles mismatched/extra upstream NP import maps without catching unrelated guest service symbols.
+- This candidate is isolated from the public portable artifact, production VPS/shadNet and visy party runtime. **No live random-player connection is confirmed; no release-ready BBSC Windows DLL is certified.** No player-side testing requested.
+
 ## Engineering checkpoint (2026-10-22, BBSC NP/Windows bridge)
 
 - The **optional** native Windows legacy NP/BBSC module entrypoint is now wired through `src/runtime_services.c` and `src/probe.c` (imports, mapped image, image patches, game-start). It is **off by default** and refuses to mix with `BB_PARTY`.
