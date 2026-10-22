@@ -17,11 +17,15 @@ import os
 BBSC_ENV = {
     "BB_BBSC": "1",
     "BB_LEGACY_NET": "1",
+    # bbnet20 EmulatorSettings reads BB_ONLINE. Without this it loads but
+    # deliberately stays disconnected (upstream SHADNET-PORT.md).
+    "BB_ONLINE": "1",
+    "BB_NET_BACKEND": "shadnet",
     "SHADPS4_BLOODBORNE_SEAMLESS_COOP": "1",
     "BB_SKIP_NETWORK_CHOICE": "online",
 }
-LEGACY_KEYS = ("BB_BBSC", "BB_LEGACY_NET", "SHADPS4_BLOODBORNE_SEAMLESS_COOP",
-               "BBSC_SAVE_DIR")
+LEGACY_KEYS = ("BB_BBSC", "BB_LEGACY_NET", "BB_ONLINE", "BB_NET_BACKEND",
+               "SHADPS4_BLOODBORNE_SEAMLESS_COOP", "BBSC_SAVE_DIR")
 
 
 def clear_legacy_env(env: dict) -> None:
