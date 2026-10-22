@@ -112,6 +112,19 @@ jobs:
             -o out/wepoll-win-smoke.exe -lws2_32
           out/wepoll-win-smoke.exe
 
+      - name: Prove real PE DLL uses host EXE's input and status callbacks
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          clang++ -std=c++23 -O1 -shared -DBBNET20_BRIDGE_TEST_EXPORTS=1 \
+            gpu/shim/bbnet20_gpu_host_bridge.cpp \
+            -o out/bbnet20-gpu-bridge-test.dll
+          clang++ -std=c++23 -O1 -DBBGPU_BBSC_HOST_EXPORTS=1 \
+            tests/test_bbnet20_gpu_host_bridge_win.cpp \
+            -o out/bbnet20-gpu-bridge-host.exe
+          out/bbnet20-gpu-bridge-host.exe \
+            "$(cygpath -w "$(pwd)/out/bbnet20-gpu-bridge-test.dll")"
+
       - name: Configure actual Windows bbnet20 target
         shell: msys2 {0}
         run: |
