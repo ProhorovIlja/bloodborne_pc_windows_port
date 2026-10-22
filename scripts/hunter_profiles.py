@@ -187,6 +187,8 @@ def from_discovery(saves: Iterable[dict]) -> list[Hunter]:
         source = entry.get("source", "unknown")
         if not isinstance(folder, str) or not folder or not isinstance(source, str):
             continue
+        if source == "native:warper":
+            continue  # Isolated benchmark/warper save is not a selectable user character.
         try:
             key = str(Path(folder).resolve()).casefold()
             if key in seen:
