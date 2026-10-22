@@ -114,6 +114,15 @@ class ClientIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No installed build manifest"):
             checker.verify_installed(self.root)
 
+    def test_real_python_312_bytecode_cache_in_extracted_manifest(self):
+        self.files["python/Lib/__pycache__/abc.cpython-312.pyc"] = b"cached standard library bytecode"
+        self.files["python/Lib/tkinter/__pycache__/__init__.cpython-312.pyc"] = b"cached Tcl Tk"
+        self.write_build()
+        report = checker.verify_installed(self.root)
+        self.assertEqual(report.critical_errors, 0)
+        self.assertEqual(report.optional_changes, 0)
+        self.assertEqual(report.checked, len(self.files))
+
     def test_path_schema_is_strict(self):
         for path in ["../out/bbport.exe", "user/savedata/1/hero",
                      "mods/cheat.dll", "out/gpu/bbgpu.dll",
@@ -121,6 +130,15 @@ class ClientIntegrityTests(unittest.TestCase):
                      "C:/Windows/System32/a.dll", "python/site-packages/evil.py",
                      "scripts/.git/config"]:
             self.assertFalse(checker._valid_rel(path), path)
+        # Real native Windows Python bundle runs compileall into stdlib caches.
+        # This MUST be accepted after extraction, but only under python/Lib.
+        self.assertTrue(checker._valid_rel("python/Lib/__pycache__/abc.cpython-312.pyc"))
+        self.assertTrue(checker._valid_rel("python/Lib/tkinter/__pycache__/__init__.cpython-312.pyc"))
+        for bad in ("scripts/__pycache__/patches.cpython-312.pyc",
+                    "python/DLLs/__pycache__/fake.pyc",
+                    "python/Lib/__pycache__/secrets.txt",
+                    "python/Lib/__pycache__/../../user/evil.pyc"):
+            self.assertFalse(checker._valid_rel(bad), bad)
         self.assertTrue(checker._valid_rel("python/DLLs/_tkinter.pyd"))
         self.assertTrue(checker._valid_rel("out/gpu/bbnet20.dll"))
         self.assertTrue(checker._valid_rel("out/licenses/SDL3/LICENSE.txt"))

@@ -65,11 +65,20 @@ def _valid_rel(name: str) -> bool:
     if "\\" in name or ":" in name or name[0] == "/":
         return False
     parts = name.split("/")
-    if (parts[0] not in LEGAL_ROOTS
-            or any(p in ("", ".", "..") or p in FORBIDDEN_PARTS
-                   or p.endswith((" ", ".")) or any(ord(ch) < 32 for ch in p)
-                   for p in parts)):
+    if parts[0] not in LEGAL_ROOTS:
         return False
+    # make_python_bundle.py precompiles CPython's stdlib into these bytecode
+    # caches. They are listed and SHA-256 hashed in the ZIP's MANIFEST.json.
+    # Never permit caches in our scripts, launcher, mods, or any other tree.
+    stdlib_bytecode = (len(parts) >= 4 and parts[:2] == ["python", "Lib"]
+                      and parts[-1].endswith(".pyc"))
+    for i, part in enumerate(parts):
+        if (part in ("", ".", "..") or part.endswith((" ", "."))
+                or any(ord(ch) < 32 for ch in part)):
+            return False
+        if part in FORBIDDEN_PARTS:
+            if not (part == "__pycache__" and stdlib_bytecode and i >= 2):
+                return False
     if parts[0] == "out" and len(parts) > 2 and parts[1] != "licenses" and name != "out/gpu/bbnet20.dll":
         return False
     return True
@@ -105,7 +114,7 @@ def _read_manifest(root: Path) -> tuple[str, list[tuple[str, int, str]]]:
             raise ValueError("Invalid inventory entry")
         name, size, digest = item.get("path"), item.get("bytes"), item.get("sha256")
         if not _valid_rel(name):
-            raise ValueError("Unsafe manifest path")
+            raise ValueError(f"Unsafe manifest path: {name!r}")
         key = name.casefold()
         if key in seen:
             raise ValueError("Duplicate or case-colliding manifest path")
