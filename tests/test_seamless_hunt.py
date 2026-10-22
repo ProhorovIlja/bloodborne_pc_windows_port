@@ -77,12 +77,16 @@ class Diagnostics(unittest.TestCase):
         self.assertEqual(direct.request_args[0:2], ("HEAD", "/ss.info"))
 
     def test_aggregate_probes_expected_ports(self):
-        with mock.patch.object(sh, "probe_tcp") as tcp, mock.patch.object(sh, "probe_game_server") as game:
+        with mock.patch.object(sh, "probe_tcp") as tcp, \
+             mock.patch.object(sh, "probe_shadnet") as wire, \
+             mock.patch.object(sh, "probe_game_server") as game:
             tcp.side_effect = lambda host, name, port, timeout: sh.ServiceResult(name, port, True, 3, "reachable")
+            wire.return_value = sh.ServiceResult("shadNet", 31313, True, 3, "handshake ok")
             game.return_value = sh.ServiceResult("GameServer", 20443, True, 5, "reachable")
             rows = sh.check_services("PLAY.SeamlessHunt.COM", timeout=99)
             self.assertEqual([r.port for r in rows], [31313, 31315, 20443])
-            self.assertEqual(tcp.call_args_list[0].args, (sh.DEFAULT_HOST, "shadNet", 31313, 5.0))
+            self.assertEqual(wire.call_args.args, (sh.DEFAULT_HOST, 31313, 5.0))
+            self.assertEqual(tcp.call_args.args, (sh.DEFAULT_HOST, "Web API", 31315, 5.0))
             self.assertEqual(game.call_args.args, (sh.DEFAULT_HOST, 5.0))
             self.assertIn("shadNet 31313: OK", sh.format_results(rows))
 
