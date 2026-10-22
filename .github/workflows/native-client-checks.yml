@@ -56,6 +56,9 @@ jobs:
       - name: BBSC shadNet Login wire and safe account error handling (offline)
         run: python -m unittest discover -s tests -p 'test_shadnet_account.py' -v
 
+      - name: BBSC private-server account registration (offline)
+        run: python -m unittest discover -s tests -p 'test_shadnet_registration.py' -v
+
       - name: Seamless Hunt read-only connection contract
         run: python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
 
@@ -82,6 +85,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_seamless_hunt_network.py' -v
           python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
           python -m unittest discover -s tests -p 'test_shadnet_account.py' -v
+          python -m unittest discover -s tests -p 'test_shadnet_registration.py' -v
 
       - name: Launcher import smoke
         run: python -c "import launcher; print('Launcher module imported')"
