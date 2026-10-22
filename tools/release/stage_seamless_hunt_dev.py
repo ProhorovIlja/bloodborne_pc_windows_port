@@ -22,10 +22,10 @@ import zipfile
 
 
 # Files essential for a usable *developer* checkout: Python 3.10+ with Tk is
+# bbgpu is STATIC on Windows: it is linked into bbport.exe, NOT a bbgpu.dll.
 # still required unless a separate verified Python runtime is bundled later.
 REQUIRED = (
     "out/bbport.exe",
-    "out/gpu/bbgpu.dll",
     "launcher.py",
     "run.bat",
     "launch_gui.bat",
