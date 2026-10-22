@@ -11,6 +11,8 @@ on:
     paths:
       - .github/workflows/native-windows-build.yml
       - build.bat
+      - launcher.py
+      - scripts/**
       - gpu/**
       - src/**
       - tools/setup_windows_deps.sh
@@ -129,6 +131,12 @@ jobs:
       - name: Stage Windows runtime libraries
         shell: pwsh
         run: python scripts/stage_dlls.py
+
+      - name: Verify launcher Python and settings search before packaging
+        shell: pwsh
+        run: |
+          python -m compileall -q launcher.py scripts
+          python -m unittest discover -s tests -p 'test_settings_index.py' -v
 
       - name: Build verified developer kit (no game files)
         shell: pwsh
