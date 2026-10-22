@@ -35,40 +35,48 @@ jobs:
       - name: Install native Windows compiler and Vulkan dependencies
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: CLANG64
           update: true
           install: >-
             git
-            make
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-pkgconf
-            mingw-w64-x86_64-vulkan-headers
-            mingw-w64-x86_64-vulkan-loader
-            mingw-w64-x86_64-sdl3
-            mingw-w64-x86_64-fmt
-            mingw-w64-x86_64-boost
-            mingw-w64-x86_64-magic_enum
-            mingw-w64-x86_64-robin-map
-            mingw-w64-x86_64-vulkan-memory-allocator
-            mingw-w64-x86_64-xxhash
-            mingw-w64-x86_64-miniz
-            mingw-w64-x86_64-zydis
-            mingw-w64-x86_64-glslang
-            mingw-w64-x86_64-ffmpeg
+            patch
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-lld
+            mingw-w64-clang-x86_64-libc++
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-python
+            mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-vulkan-loader
+            mingw-w64-clang-x86_64-vulkan-memory-allocator
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-fmt
+            mingw-w64-clang-x86_64-boost
+            mingw-w64-clang-x86_64-robin-map
+            mingw-w64-clang-x86_64-xxhash
+            mingw-w64-clang-x86_64-zydis
+            mingw-w64-clang-x86_64-glslang
+            mingw-w64-clang-x86_64-ffmpeg
+
+      - name: Provision pinned upstream header and archive libraries
+        shell: msys2 {0}
+        run: bash tools/setup_windows_deps.sh
 
       - name: Build native Windows engine
-        shell: cmd
-        run: call build.bat
+        shell: msys2 {0}
+        run: |
+          export CC=clang CXX=clang++
+          export MINGW_DIR="$(cygpath -w "$MINGW_PREFIX")"
+          cmd.exe //C build.bat
 
       - name: Offline party C++ checks
-        shell: cmd
+        shell: msys2 {0}
         run: |
           cmake --build out/gpu --target party-net-test party-nat-test party-death-rules-test -- -j 2
-          out\gpu\party-net-test.exe
-          out\gpu\party-nat-test.exe
-          out\gpu\party-death-rules-test.exe
+          out/gpu/party-net-test.exe
+          out/gpu/party-nat-test.exe
+          out/gpu/party-death-rules-test.exe
 
       - name: Attach source revision and build inventory
         shell: pwsh
