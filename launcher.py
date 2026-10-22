@@ -1658,6 +1658,8 @@ class BloodborneLauncher(tk.Tk):
         self.log_fh = None
         self.hidden_count = 0
         self.log_queue = queue.Queue()
+        self.discovery_queue = queue.Queue()
+        self.discovery_busy = False
         self.settings = self.load_settings()
         try:  # the game settings of an older launcher_settings.json move to bbport.ini once
             migrate_ini_rev(bbport_ini_path())  # bbport.ini's one-time changes (rot off, 0.7.2)
@@ -1693,6 +1695,10 @@ class BloodborneLauncher(tk.Tk):
         self.log("Ready. Select your eboot.bin and press Launch Bloodborne.")
         self.after(1200, self.check_last_party_session)
         self.start_update_check()
+        # Read-only targeted discovery; runs off the UI thread and never replaces
+        # a user-chosen game path or moves a save without explicit permission.
+        if not resolve_game_dir(self.eboot_var.get().strip()):
+            self.after(800, lambda: self.discover_installs(silent=True))
 
     # ------------------------------------------------------------------ UI
     def build_style(self):
@@ -1810,6 +1816,13 @@ class BloodborneLauncher(tk.Tk):
         browse_btn = ttk.Button(select_frame, text="Browse...", style="Secondary.TButton",
                                 command=self.browse_eboot)
         browse_btn.pack(side="right")
+        find_btn = ttk.Button(select_frame, text="Auto Find", style="Secondary.TButton",
+                              command=self.discover_installs)
+        find_btn.pack(side="right", padx=(0, 8))
+        Tooltip(find_btn, "Discover installed game dumps by eboot.bin + param.sfo, "
+                          "including all known retail CUSA regions and patch versions. "
+                          "Also find other ports' saves, mods, patches and cheats. "
+                          "Read-only, bounded scan; does not change saves or install updates.")
         eboot_tip = ("The game's eboot.bin, or the folder that contains it: Bloodborne (any retail region) with "
                      "update 1.09 merged. The folder is passed to run.bat as BB_GAME_DIR.")
         Tooltip(eboot_entry, eboot_tip)
@@ -4750,6 +4763,122 @@ class BloodborneLauncher(tk.Tk):
         self.log(f"[CACHE] Shader cache deleted ({len(files)} files); it is rebuilt while playing.")
 
     # ------------------------------------------------------------- actions
+    def discover_installs(self, silent=False):
+        """Read-only scanner shared by automatic start and explicit Auto Find."""
+        if self.discovery_busy:
+            return
+        self.discovery_busy = True
+        if not silent:
+            self.log("[DISCOVERY] Scanning game libraries and known save roots (read-only)...")
+        roots = [Path(p) for p in self.settings.get("discovery_roots", [])
+                 if isinstance(p, str)][:16]
+        def job():
+            try:
+                from scripts import install_discovery
+                data = install_discovery.scan(APP_DIR, roots)
+                self.discovery_queue.put((data, bool(silent), None))
+            except Exception as error:
+                self.discovery_queue.put((None, bool(silent), str(error)))
+        threading.Thread(target=job, daemon=True, name="bloodborne-discovery").start()
+        self.after(100, self._poll_discovery)
+
+    def _poll_discovery(self):
+        try:
+            data, silent, error = self.discovery_queue.get_nowait()
+        except queue.Empty:
+            self.after(100, self._poll_discovery)
+            return
+        self.discovery_busy = False
+        if error:
+            self.log(f"[DISCOVERY] Read-only scanner unavailable: {error}")
+            if not silent:
+                messagebox.showerror("Automatic discovery", str(error), parent=self)
+            return
+        games = data["games"]
+        self.log(f"[DISCOVERY] Found {len(games)} game(s), {len(data['saves'])} save location(s), "
+                 f"{len(data['extras'])} mod/patch/cheat folder(s)")
+        if silent:
+            # No automatic conversion, no region switching, no user preference
+            # overwritten. Only a single verified-version candidate is
+            # auto-selected when no valid user selection already exists.
+            if not resolve_game_dir(self.eboot_var.get().strip()):
+                safe = [g for g in games if g["status"] == "candidate_109"]
+                if len(safe) == 1:
+                    self.eboot_var.set(str(Path(safe[0]["folder"]) / "eboot.bin"))
+                    self.log(f"[DISCOVERY] Detected game: {safe[0]['title_id']} "
+                             f"update {safe[0]['app_version']} (pre-launch hash still required)")
+            return
+        self._show_discovered_installations(data)
+
+    def _show_discovered_installations(self, data):
+        """User approval is required for multiple games. Saving the location
+        only affects launcher settings; saves/assets are always left alone."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Bloodborne installations, saves and mods")
+        dlg.geometry("780x555")
+        dlg.minsize(630, 440)
+        dlg.transient(self)
+        dlg.grab_set()
+        frame = ttk.Frame(dlg, style="Card.TFrame", padding=12)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        ttk.Label(frame, style="Section.TLabel",
+                  text="Detected games (choose one; executable verified at launch):").pack(anchor="w")
+        game_list = tk.Listbox(frame, height=6, exportselection=False)
+        game_list.pack(fill="x", pady=(6, 8))
+        for item in data["games"]:
+            game_list.insert("end", f"{item['title_id']}  {item['app_version'] or 'unknown'}  "
+                             f"[{item['status']}]  {item['folder']}")
+        if data["games"]:
+            game_list.selection_set(0)
+        ttk.Label(frame, style="Section.TLabel",
+                  text="Found saves, mods, patches, cheats (read-only; click nothing to preserve):").pack(anchor="w")
+        results = tk.Text(frame, height=12, wrap="word")
+        results.pack(fill="both", expand=True, pady=(6, 10))
+        for entry in data["saves"]:
+            results.insert("end", f"SAVE [{entry['source']}] {entry['title_id'] or 'unknown'} "
+                           f"{entry['folder']}\n  {entry['compatibility']}\n")
+        for entry in data["extras"]:
+            results.insert("end", f"{entry['kind'].upper()} ({entry['count']} item(s)): "
+                           f"{entry['folder']}\n")
+        if not data["saves"] and not data["extras"]:
+            results.insert("end", "No save or mod folders found in known locations. "
+                           "You can add a custom search folder.")
+        results.configure(state="disabled")
+        ttk.Label(frame, style="Hint.TLabel",
+                  text="Other save formats are NOT automatically converted. "
+                       "Old game updates are shown but cannot launch until their executable "
+                       "hash and patches are supported. No files are modified.",
+                  wraplength=710).pack(anchor="w",pady=(0,8))
+        buttons = ttk.Frame(frame, style="Card.TFrame")
+        buttons.pack(fill="x")
+        def choose():
+            selection = game_list.curselection()
+            if not selection:
+                messagebox.showwarning("No game selected", "Choose a game, or add a search folder.", parent=dlg)
+                return
+            candidate = data["games"][selection[0]]
+            self.eboot_var.set(str(Path(candidate["folder"]) / "eboot.bin"))
+            self.log("[DISCOVERY] Game path selected: " + candidate["folder"])
+            self.save_settings()
+            dlg.destroy()
+        def another_root():
+            folder = filedialog.askdirectory(parent=dlg,title="Additional game or port folder to search")
+            if not folder:
+                return
+            roots = list(self.settings.get("discovery_roots", []))
+            if folder not in roots:
+                roots.append(folder)
+            self.settings["discovery_roots"] = roots[-16:]
+            self.save_settings()
+            dlg.destroy()
+            self.discover_installs()
+        ttk.Button(buttons,text="Use selected game",style="Action.TButton",
+                   command=choose).pack(side="right",padx=(6,0))
+        ttk.Button(buttons,text="Scan another folder",style="Secondary.TButton",
+                   command=another_root).pack(side="right",padx=(6,0))
+        ttk.Button(buttons,text="Close",style="Secondary.TButton",
+                   command=dlg.destroy).pack(side="left")
+
     def browse_eboot(self):
         current = resolve_game_dir(self.eboot_var.get()) if self.eboot_var.get().strip() else None
         start = current or (DEFAULT_GAME if DEFAULT_GAME.exists() else Path("D:/"))
