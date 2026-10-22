@@ -64,6 +64,64 @@ def prepare(staged: Path, workspace: Path) -> dict:
         EXPORT.encode(),
         b'#ifdef _WIN32\n#define BBNET_EXPORT extern "C" __declspec(dllexport)\n'
         b'#else\n' + EXPORT.encode() + b'\n#endif')
+    # The Linux host glue uses POSIX mprotect and /proc/self/maps to keep
+    # Bloodborne's known executable image writable for runtime BBSC hooks.
+    # Win64 must inspect actual mapped executable regions before changing
+    # protection; never broaden access to unrelated host pages.
+    glue = sources[GLUE]
+    if b"#include <sys/mman.h>" in glue:
+        before = b"#include <sys/mman.h>"
+        glue = glue.replace(before, b"#ifndef _WIN32\n" + before + b"\n#endif", 1)
+        save_line = b'setenv("BBSC_SAVE_DIR", folder.c_str(), 0);'
+        if save_line not in glue:
+            raise ValueError("upstream BBSC save-path setter changed")
+        glue = glue.replace(save_line,
+            b'#ifdef _WIN32\n                const auto utf8 = folder.u8string();\n'
+            b'                _putenv_s("BBSC_SAVE_DIR", '
+            b'reinterpret_cast<const char*>(utf8.c_str()));\n'
+            b'#else\n                ' + save_line + b'\n#endif', 1)
+        linux_start = b'    unsigned writable = 0;\n    if (FILE* maps = std::fopen("/proc/self/maps", "r")) {'
+        linux_end = b'    std::printf("BBSC: seamless co-op hooks for the image'
+        if linux_start not in glue or linux_end not in glue:
+            raise ValueError("upstream BBSC writable image mapping code changed")
+        start = glue.index(linux_start)
+        end = glue.index(linux_end, start)
+        linux_block = glue[start:end]
+        windows_block = (
+            b"    unsigned writable = 0;\n#ifdef _WIN32\n"
+            b"    // Restrict this developer-only bridge to the mapped guest image.\n"
+            b"    const uintptr_t lo = static_cast<uintptr_t>(base);\n"
+            b"    const uintptr_t hi = lo + static_cast<uintptr_t>(size);\n"
+            b"    if (hi >= lo) {\n"
+            b"        for (uintptr_t cursor = lo; cursor < hi;) {\n"
+            b"            MEMORY_BASIC_INFORMATION info{};\n"
+            b"            if (!VirtualQuery(reinterpret_cast<const void*>(cursor), &info, sizeof(info))) break;\n"
+            b"            const auto region = reinterpret_cast<uintptr_t>(info.BaseAddress);\n"
+            b"            const uintptr_t region_end = region + info.RegionSize;\n"
+            b"            if (region_end <= cursor) break;\n"
+            b"            const uintptr_t from = std::max(cursor, region);\n"
+            b"            const uintptr_t to = std::min(hi, region_end);\n"
+            b"            const DWORD p = info.Protect & 0xff;\n"
+            b"            if (info.State == MEM_COMMIT && !(info.Protect & PAGE_GUARD) &&\n"
+            b"                (p == PAGE_EXECUTE || p == PAGE_EXECUTE_READ ||\n"
+            b"                 p == PAGE_EXECUTE_READWRITE || p == PAGE_EXECUTE_WRITECOPY)) {\n"
+            b"                DWORD previous = 0;\n"
+            b"                if (VirtualProtect(reinterpret_cast<void*>(from), to - from,\n"
+            b"                                   PAGE_EXECUTE_READWRITE, &previous)) ++writable;\n"
+            b"            }\n"
+            b"            cursor = region_end;\n"
+            b"        }\n"
+            b"    }\n#else\n"
+        )
+        glue = glue[:start] + windows_block + linux_block + b"#endif\n" + glue[end:]
+        probe_start = b'    if (const char* probe = std::getenv("BB_BBSC_PROBE")) {'
+        probe_end = b'    // The cinematic camera '
+        if probe_start not in glue or probe_end not in glue:
+            raise ValueError("upstream Linux-only BBSC memory probe changed")
+        start = glue.index(probe_start)
+        end = glue.index(probe_end, start)
+        glue = glue[:start] + b"#ifndef _WIN32\n" + glue[start:end] + b"#endif\n" + glue[end:]
+        sources[GLUE] = glue
     sources[CMAKE] = sources[CMAKE].replace(
         LINK_OPTS.encode(),
         b'if(NOT WIN32)\n    ' + LINK_OPTS.encode() + b'\nelse()\n'
