@@ -80,6 +80,12 @@ Mandatory **internal release gates** before inviting the owner to test:
 
 **Internal iteration is allowed and necessary** in GitHub. It must not create a pile of owner-facing mini-release ZIPs. A limitation discovered late should remain an openly tracked blocker; no pretending the full feature set is complete.
 
+## 5a. Pinned legacy-online upstream and future localization
+
+- **Priority reuse target:** deadinside28/bloodborne_pc release 0.6 commit `8185b88d80573fa300595d5c54450183b4109935` includes `gpu/bbnet20` and `docs/BBSC.md`: shadPS4 v0.20 network, NP/Matching2/signaling, game hooks, summon paths and relay. This is a **native Linux module**, **not a Windows DLL**, and the author's 2026-10-16 account explicitly says a second-player BBSC session was untested on the new module. Never call it verified Windows crossplay.
+- `tools/interop/stage_bbnet20.py` stages and fingerprints those **exact** upstream sources in CI, rejects dirty trees, unexpected commits and symlinks, retains license/provenance. Actual Windows-specific port and safe integration behind a disabled flag remain to be implemented and compiled. Keep original visy party multiplayer intact.
+- Full launcher and custom BBSC item/mod text translation is deferred until **after feature freeze**. See [LOCALIZATION_AFTER_FEATURE_FREEZE.md](LOCALIZATION_AFTER_FEATURE_FREEZE.md): official European Bloodborne has 14 screen languages including Russian; upstream Linux bbport documents 21 possible game text languages across region resources. English launcher default, Russian first, region-aware game/mod translations and fallback only at the later localization phase.
+
 ## 6. Current grounded state (2026-10-22)
 
 - `feature/seamless-hunt`, draft PR #1, native-client-checks CI succeeded; full native Windows C++ build and cross-client game interoperability **not yet confirmed**.
