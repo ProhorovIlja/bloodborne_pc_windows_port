@@ -1,3 +1,4 @@
+- Completed the upstream visy VRAM-GC integration after an actual Windows compile failure: imported the missing `BbStats` GC counters and the VMA-based `Instance::GetDeviceBlockSlack()` declaration/implementation. Added cross-file contract tests to prevent a policy-only partial merge.
 - Integrated visy upstream's native Vulkan texture-GC policy with bounded VRAM budget and per-frame eviction quotas, preserving Windows Clang compatibility. GPU impact awaits device tests.
 - Integrated the latest visy native Hunter editor export into Hunter Hub: read-only game save, separate editor copy, exact region/user/slot guards, and manifest path validation. Cross-port saves and editor import remain disabled pending real save acceptance.\n# Seamless Hunt PC — Changelog
 

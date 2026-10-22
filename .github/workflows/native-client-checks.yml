@@ -61,6 +61,9 @@ jobs:
           cc -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o /tmp/legacy-online-policy
           /tmp/legacy-online-policy
 
+      - name: Full Vulkan GC source dependencies before Windows build
+        run: python -m unittest discover -s tests -p 'test_gpu_gc_integration.py' -v
+
       - name: Upstream GPU VRAM collector quotas and pressure thresholds (C++)
         run: |
           c++ -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. tests/test_gc_policy.cpp -o /tmp/bb-gc-policy-test
