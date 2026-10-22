@@ -4,8 +4,8 @@ Usage:
   python tools/release/stage_seamless_hunt_dev.py --source . \
       --output out/seamless-hunt-windows-dev.zip --revision <git-sha>
 
-This is a *developer kit*, not a production auto-updater or standalone installer.
-Use tools/release/make_python_bundle.py to bundle Tk/Python before a public release.
+This is a *developer kit* with a self-contained CPython+Tk runtime, NOT an
+approved full-BBSC production release or a production auto-updater.
 
 Security: strict allowlist, rejects all symlinks, no savedata, config secrets,
 game assets, user folders, logs or third-party executable downloads.
@@ -21,14 +21,18 @@ import re
 import zipfile
 
 
-# Files essential for a usable *developer* checkout: Python 3.10+ with Tk is
-# bbgpu is STATIC on Windows: it is linked into bbport.exe, NOT a bbgpu.dll.
-# still required unless a separate verified Python runtime is bundled later.
+# A Windows portable archive that requires no separately installed Python.
+# bbgpu is STATIC on Windows and is linked into bbport.exe, NOT a bbgpu.dll.
 REQUIRED = (
     "out/bbport.exe",
     "launcher.py",
     "run.bat",
     "launch_gui.bat",
+    "python/python.exe",
+    "python/pythonw.exe",
+    "python/python312.dll",
+    "python/LICENSE.txt",
+    "python/LICENSE-tcltk.txt",
 )
 
 OPTIONAL = (
@@ -53,9 +57,9 @@ It contains NO Bloodborne game files and NO save data or account credentials.
 Only use your own Bloodborne v1.09 game dump. The native runtime executes
 the game's x86-64 code and translates graphics into Vulkan.
 
-This is not yet a production-ready standalone release:
+This is not yet a production-ready BBSC release:
 - Windows 10/11 x64, supported CPU, Vulkan graphics drivers are required.
-- Python 3.10+ with tkinter may be required by launch_gui.bat/run.bat.
+- Double-click launch_gui.bat. Python 3.12/Tk is BUNDLED; no separate Python install.
 - Direct P2P gameplay is visy's existing implementation. BBSC/shadNet
   account check and private-server registration are short-lived launcher
   operations: they do NOT log the GAME in or provide legacy BBSC matchmaking.
@@ -103,6 +107,30 @@ def _collect(source: Path) -> dict[str, Path]:
             if "__pycache__" in obj.parts or obj.name.startswith("."):
                 continue
             out[rel] = obj
+    # CPython/Tcl/Tk is staged by the trusted release tool; a closed set of
+    # directories and root binaries prevents accidentally publishing a user's
+    # secrets from an adjacent working tree or arbitrary site-packages.
+    runtime = source / "python"
+    allowed_root = {"python.exe", "pythonw.exe", "python3.dll", "python312.dll",
+                    "vcruntime140.dll", "vcruntime140_1.dll", "LICENSE.txt",
+                    "LICENSE-tcltk.txt", "README.txt"}
+    allowed_trees = {"Lib", "DLLs", "tcl"}
+    for obj in runtime.rglob("*"):
+        if obj.is_symlink():
+            raise ValueError(f"Python bundle contains symlink: {obj}")
+        if not obj.is_file():
+            continue
+        rel = obj.relative_to(runtime)
+        if len(rel.parts) == 1:
+            if rel.name not in allowed_root:
+                raise ValueError(f"Unexpected Python root file: {rel}")
+        elif rel.parts[0] not in allowed_trees or "site-packages" in rel.parts:
+            raise ValueError(f"Unexpected Python runtime file: {rel}")
+        if obj.suffix.lower() in {".key", ".pfx", ".pem"}:
+            raise ValueError(f"Refusing credential-like file in Python bundle: {rel}")
+        out["python/" + rel.as_posix()] = obj
+    if not (runtime / "Lib" / "tkinter" / "__init__.py").is_file():
+        raise ValueError("Python bundle has no tkinter; cannot launch GUI offline")
     # Windows build links bbgpu STATIC into bbport.exe. Dependency DLLs are
     # explicitly staged beside the executable, never in out/gpu/ or below.
     # rglob() here accidentally included arbitrary nested build-tree DLLs.
@@ -138,7 +166,7 @@ def pack(source: Path, destination: Path, revision: str) -> dict:
             entries.append({"path": rel, "bytes": len(data),
                             "sha256": hashlib.sha256(data).hexdigest()})
             output.writestr(_zip_info(rel), data)
-        metadata = {"format": "seamless-hunt-native-windows-dev-v1",
+        metadata = {"format": "seamless-hunt-native-windows-dev-v2",
                     "source_commit": revision, "files": entries}
         output.writestr(_zip_info("MANIFEST.json"),
                         (json.dumps(metadata, indent=2, sort_keys=True) + "\n").encode("utf-8"))
