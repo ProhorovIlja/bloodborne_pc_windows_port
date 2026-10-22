@@ -52,6 +52,9 @@ jobs:
           cc -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o /tmp/legacy-online-policy
           /tmp/legacy-online-policy
 
+      - name: Native BBSC Win64 source adaptation safety tests
+        run: python -m unittest discover -s tests -p 'test_prepare_bbnet20_windows.py' -v
+
       - name: CLS BBSC 0.0.2 source parity analyzer (offline)
         run: python -m unittest discover -s tests -p 'test_compare_bbsc_versions.py' -v
 
@@ -109,6 +112,9 @@ jobs:
       - name: Compare CLS 0.0.2 with native BBSC gameplay hooks
         run: |
           python tools/interop/compare_bbsc_versions.py --official official-bbsc-002 --native out/interop/bbnet20 --output out/interop/bbsc-002-parity.json
+      - name: Prepare isolated native Win64 BBSC source candidate with export fixes
+        run: python tools/interop/prepare_bbnet20_windows.py --staged out/interop/bbnet20 --workspace .
+
 
 
   windows-launcher-network:
