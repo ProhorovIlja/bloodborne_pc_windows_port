@@ -3616,15 +3616,15 @@ class BloodborneLauncher(tk.Tk):
             if not dlg.winfo_exists():
                 return
             try:
-                result = result_queue.get_nowait()
+                accepted, message = result_queue.get_nowait()
             except queue.Empty:
                 dlg.after(100, poll)
                 return
             check_btn.configure(state="normal")
-            status_var.set(("Accepted: " if result.accepted else "Not accepted: ") + result.status)
+            status_var.set(("Accepted: " if accepted else "Not accepted: ") + message)
             # Never log username, password, host or raw server response.
             self.log("[BBSC ACCOUNT] One-shot authentication "
-                     + ("accepted" if result.accepted else "not accepted")
+                     + ("accepted" if accepted else "not accepted")
                      + "; game sign-in not yet implemented.")
 
         def begin():
@@ -3646,30 +3646,16 @@ class BloodborneLauncher(tk.Tk):
             status_var.set("Checking account; gameplay and Party networking are unchanged...")
             def worker():
                 try:
-                    from scripts.shadnet_account import check_account
-                except ImportError:
-                    try:
-                        scripts_dir = str(APP_DIR / "scripts")
-                        if scripts_dir not in sys.path:
-                            sys.path.insert(0, scripts_dir)
-                        from shadnet_account import check_account
-                    except ImportError:
-                        result_queue.put(type("R", (), {
-                            "accepted": False, "status": "BBSC account check module is missing"
-                        })())
-                        return
-                try:
-                    result = check_account(host, username, password)
+                    scripts_dir = str(APP_DIR / "scripts")
+                    if scripts_dir not in sys.path:
+                        sys.path.insert(0, scripts_dir)
+                    import shadnet_account
+                    outcome = shadnet_account.check_account(host, username, password)
+                    result_queue.put((outcome.accepted, outcome.status))
                 except ValueError:
-                    from shadnet_account import AuthResult
-                    result = AuthResult(False, "Invalid server name or account fields")
+                    result_queue.put((False, "Invalid server name or account fields"))
                 except Exception:
-                    from shadnet_account import AuthResult
-                    result = AuthResult(False, "Account check failed")
-                finally:
-                    # Never print/serialize the captured secret or pass it to the UI.
-                    pass
-                result_queue.put(result)
+                    result_queue.put((False, "Account check could not complete"))
             threading.Thread(target=worker, daemon=True, name="bbsc-account-check").start()
             dlg.after(100, poll)
 
