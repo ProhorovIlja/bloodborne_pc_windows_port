@@ -3591,7 +3591,7 @@ class BloodborneLauncher(tk.Tk):
                 f"Play time        {hours}h {minutes}m\n"
                 f"Deaths           {h.deaths}\n"
                 f"NG cycle marker  {h.journey} (raw)\n\n"
-                f"Save type        {h.source}\n"
+                f"Save type        {hunter_profiles.source_label(h.source)}\n"
                 f"Slot             {h.slot}\n"
                 f"Folder           {h.folder}\n\n"
                 "Equipment / last known location: not verified by this parser.\n"
@@ -3622,7 +3622,8 @@ class BloodborneLauncher(tk.Tk):
             for item in tree.get_children():
                 tree.delete(item)
             for i, h in enumerate(profiles):
-                tree.insert("", "end", iid=str(i), values=(h.name, h.level, h.source))
+                tree.insert("", "end", iid=str(i), values=(
+                    h.name, h.level, hunter_profiles.source_label(h.source)))
             if profiles:
                 tree.selection_set("0")
                 tree.focus("0")
