@@ -10,7 +10,9 @@
 #include <windows.h>
 
 /* Minimal game/runtime adapters for the native loader under test. */
-const char *runtime_symbol(const char *nid) { return nid; }
+const char *runtime_symbol(const char *nid) {
+    return !strcmp(nid, "z123456789A#E#F") ? NULL : nid;
+}
 int runtime_memory_is_mapped(uintptr_t address,uint64_t length) {
     return address == 0x1234 && length == 16;
 }
@@ -47,6 +49,8 @@ int main(int argc,char **argv) {
     if (strcmp(argv[1],"present")) return 2;
     assert(runtime_legacy_net_resolve("sceAudioOutOpen")==0);
     assert(runtime_legacy_net_resolve("sceNetSocket")==0x567890);
+    assert(runtime_legacy_net_resolve("z123456789A#E#F")==0x567891);
+    assert(runtime_legacy_net_resolve("not-a-PS4-NID")==0);
     assert(runtime_legacy_net_resolve("sceNpMatching2JoinRoom")==0);
     uint8_t scratch[32]={0};
     runtime_legacy_net_image_mapped(scratch,sizeof(scratch));
