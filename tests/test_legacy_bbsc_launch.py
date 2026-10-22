@@ -1,5 +1,6 @@
 """Offline contract for explicit native legacy BBSC launch mode, not a live online test."""
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
@@ -47,6 +48,59 @@ class NativeLegacyLaunchTests(unittest.TestCase):
             self.assertIn("world-warper", bbsc.preflight(root, party_mode="", warper=True))
             dll.unlink()
             self.assertIn("not installed", bbsc.preflight(root, party_mode=""))
+
+    def test_ephemeral_shadnet_realm_and_redirect_without_secrets(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "out").mkdir()
+            env = {"BB_SHADNET_PASSWORD": "previous secret", "BB_NET_BACKEND": "thd"}
+            bbsc.activate(env)
+            path = bbsc.configure_realm(
+                env, root, host="play.seamlesshunt.com",
+                account="Hunter_01", password="not-a-real-password")
+            try:
+                self.assertEqual(env["BB_ONLINE"], "1")
+                self.assertEqual(env["BB_SHADNET_SERVER"], "play.seamlesshunt.com:31313")
+                self.assertEqual(env["BB_SHADNET_WEBAPI"], "http://play.seamlesshunt.com:31315")
+                self.assertEqual(env["BB_SHADNET_NPID"], "Hunter_01")
+                self.assertEqual(env["BB_SHADNET_PASSWORD"], "not-a-real-password")
+                self.assertEqual(env["BB_NET_BACKEND"], "shadnet")
+                self.assertEqual(env["BB_NET_GEN"], "20")
+                self.assertEqual(env["SHADPS4_HTTP_HOST_OVERRIDES_JSON"], str(path))
+                payload = path.read_text(encoding="utf-8")
+                self.assertEqual(json.loads(payload), {
+                    "https://ss4.scej-network.jp:20443": "http://play.seamlesshunt.com"})
+                self.assertNotIn("not-a-real-password", payload)
+                self.assertNotIn("Hunter_01", payload)
+            finally:
+                path.unlink()
+
+    def test_private_realm_and_malformed_input(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "out").mkdir()
+            env = {}
+            path = bbsc.configure_realm(
+                env, root, host="private.example.org", account="Tester", password="hunterpw")
+            try:
+                self.assertEqual(env["BB_SHADNET_SERVER"], "private.example.org:31313")
+                self.assertEqual(json.loads(path.read_text()), {
+                    "https://ss4.scej-network.jp:20443": "https://private.example.org"})
+            finally:
+                path.unlink()
+            before = sorted((root / "out").iterdir())
+            for host in ["https://evil.example", "host:31313", "a..b",
+                         "../../elsewhere", "semi;colon", ""]:
+                with self.assertRaises(ValueError):
+                    bbsc.configure_realm(env, root, host=host,
+                                         account="Tester", password="hunterpw")
+            with self.assertRaises(ValueError):
+                bbsc.configure_realm(env, root, host="private.example.org",
+                                     account="user@domain", password="hunterpw")
+            with self.assertRaises(ValueError):
+                bbsc.configure_realm(env, root, host="private.example.org",
+                                     account="Tester", password="")
+            self.assertEqual(sorted((root / "out").iterdir()), before)
 
     def test_symlinked_module_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:
