@@ -1,0 +1,42 @@
+# Initial, game-file-free regression checks for the native Seamless Hunt client.
+# These checks are intentionally small: they do NOT claim that the Windows game
+# builds or that multiplayer works across two PCs. Gameplay validation is separate.
+name: Native client checks
+
+on:
+  push:
+    branches:
+      - master
+      - 'feature/**'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check Python syntax
+        run: python -m compileall -q scripts launcher.py tests
+
+      - name: Party environment and patch selection
+        run: python -m unittest discover -s tests -p 'test_party_env.py' -v
+
+      - name: Party save protection
+        run: python -m unittest discover -s tests -p 'test_party_saves.py' -v
+
+      - name: Party session recovery
+        run: python -m unittest discover -s tests -p 'test_party_session.py' -v
