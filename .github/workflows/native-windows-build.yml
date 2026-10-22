@@ -17,6 +17,18 @@ on:
       - src/**
       - tools/setup_windows_deps.sh
       - tools/release/stage_seamless_hunt_dev.py
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/native-windows-build.yml
+      - build.bat
+      - launcher.py
+      - scripts/**
+      - gpu/**
+      - src/**
+      - tools/setup_windows_deps.sh
+      - tools/release/stage_seamless_hunt_dev.py
 
 permissions:
   contents: read
