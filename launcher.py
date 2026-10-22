@@ -1697,8 +1697,7 @@ class BloodborneLauncher(tk.Tk):
         self.start_update_check()
         # Read-only targeted discovery; runs off the UI thread and never replaces
         # a user-chosen game path or moves a save without explicit permission.
-        if not resolve_game_dir(self.eboot_var.get().strip()):
-            self.after(800, lambda: self.discover_installs(silent=True))
+        self.after(800, lambda: self.discover_installs(silent=True))
 
     # ------------------------------------------------------------------ UI
     def build_style(self):
