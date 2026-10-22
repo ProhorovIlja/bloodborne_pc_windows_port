@@ -321,6 +321,14 @@ set_source_files_properties(shim/party/party_fourp.cpp PROPERTIES COMPILE_OPTION
 set_source_files_properties(shim/bbport_ribbons.cpp PROPERTIES COMPILE_OPTIONS
     "-mno-red-zone;-ffp-contract=off;-fno-fast-math")
 target_include_directories(bbgpu PRIVATE shim layer games cp shadps4 ${SHADER_INCLUDE} third_party/gcn/include third_party/half/include)
+# Header-only JIT assembler used by flatten_extended_userdata_pass.cpp.
+# Keep this Windows-specific: Linux builds have their own dependency setup.
+if (WIN32)
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xbyak/xbyak/xbyak.h")
+        message(FATAL_ERROR "xbyak missing: run tools/setup_windows_deps.sh")
+    endif()
+    target_include_directories(bbgpu PRIVATE third_party/xbyak)
+endif()
 target_compile_definitions(bbgpu PRIVATE BOOST_ASIO_STANDALONE NDEBUG)
 if (WIN32)
     target_compile_definitions(bbgpu PRIVATE VK_USE_PLATFORM_WIN32_KHR)
