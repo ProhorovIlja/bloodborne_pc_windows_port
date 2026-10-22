@@ -3619,7 +3619,8 @@ class BloodborneLauncher(tk.Tk):
             scan_btn.configure(state="normal")
             browse_btn.configure(state="normal")
             profiles[:] = result
-            tree.delete(*tree.get_children())
+            for item in tree.get_children():
+                tree.delete(item)
             for i, h in enumerate(profiles):
                 tree.insert("", "end", iid=str(i), values=(h.name, h.level, h.source))
             if profiles:
