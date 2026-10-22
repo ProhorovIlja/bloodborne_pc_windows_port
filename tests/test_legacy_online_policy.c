@@ -16,6 +16,15 @@ int main(void) {
     assert(legacy_net_bbsc_enabled("1"));
     assert(legacy_net_supported_game("CUSA03173","Bloodborne","1.09"));
     assert(legacy_net_supported_game("CUSA00207","Bloodborne","1.09"));
+    assert(legacy_net_supported_game("CUSA03173","Bloodborne","01.09"));
+    assert(legacy_net_supported_game("CUSA00900","Bloodborne","01.09"));
+    assert(legacy_net_supported_game("CUSA03023","Bloodborne","01.09"));
+    assert(!legacy_net_supported_game("CUSA03173","Bloodborne","01.08"));
+    assert(!legacy_net_supported_game("CUSA03173","Bloodborne","1.10"));
+    assert(!legacy_net_supported_game("ABCD03173","Bloodborne","01.09"));
+    assert(!legacy_net_supported_game("CUSA0317X","Bloodborne","01.09"));
+    assert(!legacy_net_supported_game("CUSA031730","Bloodborne","01.09"));
+    assert(!legacy_net_supported_game("CUSA03173","Other Game","01.09"));
     assert(!legacy_net_supported_game("CUSA03173","Bloodborne","1.08"));
     assert(!legacy_net_supported_game("CUSA03173","Other Game","1.09"));
     assert(!legacy_net_supported_game("UNKNOWN","Bloodborne","1.09"));
