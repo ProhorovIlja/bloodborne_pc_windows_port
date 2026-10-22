@@ -579,6 +579,14 @@ if (BB_BBSC20_WINDOWS_CANDIDATE)
     add_subdirectory("${BBSC_WEPOLL_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/bbsc-ext-wepoll" EXCLUDE_FROM_ALL)
     add_subdirectory(bbnet20 EXCLUDE_FROM_ALL)
     target_link_libraries(bbnet20 PRIVATE wepoll)
+    # Windows bbgpu is STATIC in bbport.exe, unlike the shared Linux GPU.
+    # Without this explicit EXE/DLL bridge the native BBSC module registers
+    # its cinematic input into a *second* private SDL filter array, while its
+    # loading banner is never drawn by the real game's Vulkan presenter.
+    # Export only the two stable C host callbacks in the candidate EXE; the
+    # candidate DLL forwards to them via its own tiny adapter.
+    target_compile_definitions(bbgpu PRIVATE BBGPU_BBSC_HOST_EXPORTS=1)
+    target_sources(bbnet20 PRIVATE shim/bbnet20_gpu_host_bridge.cpp)
     # Upstream's Linux source assumes its httplib headers live at a different
     # location. Keep their MIT notice and add the exact verified source tree.
     # The shadPS4 networking sources reuse the native port's smaller logging
