@@ -18,6 +18,11 @@ import re
 import struct
 from typing import Iterable
 
+try:
+    from . import hunter_armory
+except ImportError:
+    import hunter_armory
+
 SLOT = re.compile(r"^userdata000[0-9]$")
 FACE_TO_NAME = 34496
 NAME_SIZE = 34
@@ -57,6 +62,8 @@ class Hunter:
     folder: str
     # Build label is inferred. Never mistake it for an in-game class.
     build_guess: str
+    # Owned weapon IDs; never claim these are the equipped R1/L1 slots.
+    owned_weapon_ids: tuple[int, ...] = ()
 
     def public(self):
         return asdict(self)
@@ -133,7 +140,8 @@ def parse_slot(data: bytes, slot: str, *, source: str = "", folder: str = "") ->
                 echoes=echoes, insight=insight,
                 playtime_seconds=struct.unpack_from("<I", data, PLAYED_MS)[0] // 1000,
                 deaths=u32(DEATHS), journey=journey, source=source,
-                folder=folder, build_guess=inferred_build(stats), **stats)
+                folder=folder, build_guess=inferred_build(stats),
+                owned_weapon_ids=hunter_armory.owned_weapon_ids(data, name_at), **stats)
         except (UnicodeError, struct.error, ValueError, TypeError):
             continue
         if result is not None:
