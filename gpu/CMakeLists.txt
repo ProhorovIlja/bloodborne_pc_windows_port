@@ -590,7 +590,8 @@ if (BB_BBSC20_WINDOWS_CANDIDATE)
     # loading banner is never drawn by the real game's Vulkan presenter.
     # Export only the two stable C host callbacks in the candidate EXE; the
     # candidate DLL forwards to them via its own tiny adapter.
-    target_compile_definitions(bbgpu PRIVATE BBGPU_BBSC_HOST_EXPORTS=1)
+    target_compile_definitions(bbgpu PRIVATE BBGPU_BBSC_CANDIDATE_HOST=1)
+    target_sources(bbport PRIVATE shim/bbnet20_host_exports.cpp)
     target_sources(bbnet20 PRIVATE shim/bbnet20_gpu_host_bridge.cpp)
     # Upstream's Linux source assumes its httplib headers live at a different
     # location. Keep their MIT notice and add the exact verified source tree.
