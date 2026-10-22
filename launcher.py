@@ -2286,6 +2286,17 @@ class BloodborneLauncher(tk.Tk):
                              "patches\\Bloodborne.xml (game version 1.09). The quick patch boxes in these tabs "
                              "stay in sync (BB_PATCHES).")
 
+        community_btn = ttk.Button(sec, text="Import Jump L3 / Lamp / Rebirth ZIPs...",
+                                   style="Secondary.TButton",
+                                   command=self.open_community_mod_import)
+        community_btn.grid(row=sec.next_row, column=0, columnspan=2, sticky="w", pady=(4, 2))
+        sec.next_row += 1
+        Tooltip(community_btn,
+                "Import your own audited Bloodborne 1.09 mod ZIPs. Checks SHA-256, dependencies, "
+                "conflicting files, safe install and offline-only lamp/respec behavior. "
+                "No game files or existing mods are overwritten.")
+
+
         # 5. Input & Audio
         tab = self._tab("Input & Audio")
         sec = self._section(tab, 0, "Controller & overlay")
@@ -3978,6 +3989,60 @@ class BloodborneLauncher(tk.Tk):
         self.feat_skip_intro.set("Skip Intro" in self.enabled_patches)
         self.feat_perf_patch.set("Performance Patch (perf increase)" in self.enabled_patches)
         self.feat_no_blur.set("Disable Motion Blur (perf increase)" in self.enabled_patches)
+
+    def open_community_mod_import(self):
+        """Import user-provided community mod ZIPs, never bundled game assets.
+        The preflight must pass before any files are written, and no online
+        session, save data, or live server is modified by this action.
+        """
+        paths = filedialog.askopenfilenames(
+            parent=self,
+            title="Select your Jump L3, DollRebirth, and/or MOAL ZIPs (Ctrl+click multiple)",
+            filetypes=[("ZIP mod archives", "*.zip"), ("All files", "*.*")])
+        if not paths:
+            return
+        try:
+            from scripts import community_mods
+            base = Path(os.environ.get("BB_DATA_DIR") or APP_DIR)
+            choose_enhanced = False
+            if any("Jump" in Path(p).name for p in paths):
+                choose_enhanced = messagebox.askyesno(
+                    "Jump on L3: optional enhancements",
+                    "Install Enhanced instead of Jump only?\n\n"
+                    "Enhanced adds a jumping attack and ladder drop. Both Classic variants "
+                    "require running before L3 jumps.\n\n"
+                    "Yes: Enhanced    No: Jump only (safer default)",
+                    parent=self)
+            plan = community_mods.inspect(paths, base,
+                jump_variant="enhanced" if choose_enhanced else "jump_only")
+            summary = "\n".join(plan.mods)
+            warnings = "\n\n".join(plan.notes)
+            if not messagebox.askyesno(
+                    "Confirm safe community mod import",
+                    f"Install these verified ZIPs?\n{summary}\n\n"
+                    f"New files: {len(plan.files)}. No game files or saves overwritten.\n\n"
+                    f"{warnings}\n\n"
+                    "MOAL and DollRebirth stay offline-only until tested; "
+                    "MOAL automatically disables the native lamp-travel hook for "
+                    "solo sessions. Nothing is changed on the server.\n\nContinue?",
+                    parent=self):
+                return
+            result = community_mods.install(plan, base)
+            self.feat_mods.set(True)
+            self.save_settings()
+            self.log("[MODS] Imported checked community ZIPs: " +
+                     ", ".join(result["installed"]))
+            messagebox.showinfo("Community mods imported",
+                "Installed: " + ", ".join(result["installed"]) +
+                "\n\nRestart the game to apply. Multiplayer sessions automatically "
+                "disable MOAL and DollRebirth while compatibility remains unverified. "
+                "Jump on L3 affects gameplay and must match other players' mods.",
+                parent=self)
+        except Exception as exc:
+            self.log(f"[MODS] Import refused: {exc}")
+            messagebox.showerror("Community mod import refused",
+                                 str(exc) + "\n\nNo game or save files were modified.",
+                                 parent=self)
 
     def open_patches_dialog(self):
         dlg = tk.Toplevel(self)
