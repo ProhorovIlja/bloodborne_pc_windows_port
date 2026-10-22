@@ -31,7 +31,7 @@ using BannerSet = void (*)(const char*);
 
 extern "C" BRIDGE_TEST_EXPORT void bbnet20_host_add_event_filter(BbGpuEventFilter filter) {
     if (!filter) return;
-    if (const auto host = ResolveHost<EventRegister>("bbgpu_add_event_filter")) {
+    if (const auto host = ResolveHost<EventRegister>("bbnet20_exe_add_event_filter")) {
         host(filter);
     } else {
         std::fputs("BBSC Win64: host event filter export unavailable; cinematic disabled\n", stderr);
@@ -39,7 +39,7 @@ extern "C" BRIDGE_TEST_EXPORT void bbnet20_host_add_event_filter(BbGpuEventFilte
 }
 
 extern "C" BRIDGE_TEST_EXPORT void bbnet20_host_overlay_banner(const char* message) {
-    if (const auto host = ResolveHost<BannerSet>("bbgpu_overlay_banner")) {
+    if (const auto host = ResolveHost<BannerSet>("bbnet20_exe_overlay_banner")) {
         host(message);
     }
 }
