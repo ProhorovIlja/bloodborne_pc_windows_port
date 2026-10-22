@@ -64,6 +64,7 @@ class NativeBbscPrepareTests(unittest.TestCase):
     def test_stages_and_rejects_overwrite(self):
         result = prepare(self.staged, self.workspace)
         self.assertEqual(result["files_staged"], 8)
+        self.assertEqual(result["adapted"], [GLUE, BBSC_GLUE, RELAY, CMAKE])
         self.assertFalse(result["windows_online_dll_built"])
         self.assertIn("__declspec(dllexport)", (self.workspace / GLUE).read_text())
         glue = (self.workspace / GLUE).read_text()
