@@ -92,6 +92,16 @@ class HunterProfileTests(unittest.TestCase):
                 {"folder": str(root), "source": "duplicate"},
                 {"folder": "", "source": "unused"}])), 2)
 
+    def test_source_labels_and_isolated_benchmark_exclusion(self):
+        self.assertIn("shadPS4", hp.source_label("shadps4:new-home"))
+        self.assertIn("co-op", hp.source_label("native:party"))
+        self.assertIn("Chosen", hp.source_label("manual:folder"))
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "userdata0000").write_bytes(make_slot())
+            self.assertEqual(hp.from_discovery([
+                {"folder": str(folder), "source": "native:warper"}]), [])
+
     def test_symlink_and_modified_file_are_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
