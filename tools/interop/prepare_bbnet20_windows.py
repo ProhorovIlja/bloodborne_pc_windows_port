@@ -58,6 +58,12 @@ def prepare(staged: Path, workspace: Path) -> dict:
                 "gpu/third_party/httplib/httplib.h", "gpu/third_party/httplib/LICENSE")
     if any(x not in sources for x in expected):
         raise ValueError("pinned source or third-party MIT license missing")
+    # Git for Windows can check out upstream C++/CMake files as CRLF even
+    # though GitHub shows LF. Verify the ORIGINAL bytes against the pinned
+    # manifest first, then normalize only the two files we will transform.
+    # Never alter unmodified vendor files: their upstream hashes stay auditable.
+    for name in (GLUE, CMAKE):
+        sources[name] = sources[name].replace(b"\r\n", b"\n")
     if EXPORT.encode() not in sources[GLUE] or LINK_OPTS.encode() not in sources[CMAKE]:
         raise ValueError("upstream changed: explicitly review Windows adaptations")
     sources[GLUE] = sources[GLUE].replace(
@@ -71,7 +77,9 @@ def prepare(staged: Path, workspace: Path) -> dict:
     glue = sources[GLUE]
     if b"#include <sys/mman.h>" in glue:
         before = b"#include <sys/mman.h>"
-        glue = glue.replace(before, b"#ifndef _WIN32\n" + before + b"\n#endif", 1)
+        glue = glue.replace(before,
+            b"#ifdef _WIN32\n#include <windows.h>\n#else\n" +
+            before + b"\n#endif", 1)
         save_line = b'setenv("BBSC_SAVE_DIR", folder.c_str(), 0);'
         if save_line not in glue:
             raise ValueError("upstream BBSC save-path setter changed")
