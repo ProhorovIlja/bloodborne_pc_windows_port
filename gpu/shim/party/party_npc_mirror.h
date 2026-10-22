@@ -16,6 +16,12 @@
 // (ChrIns_SetDisable 0x18c6390, as the event does); one it turned off that the host turns on
 // again is turned on again. Nothing else is touched (an NPC the host shows and the guest does
 // not stays as it is: enabling chrs on a client is the host's events' job).
+// Only NPCs (0.7.2, lamprule): the mirror turns off nothing but the entity ids of kNpcMirrorIds
+// (party_npc_ids.inc, tools/party/ids_tool.py npc-inc: the MSB character parts that are people).
+// Before, it took every non-player, non-enemy chr the host had off, which included the lamps'
+// "warp OBJ talk CHR"s (AAB0950+n): the host's game keeps an unlit lamp's talk chr off, so a guest
+// at that lamp lost its talk (t241001 "Light lamp") and could not light it (live lamprule run 3:
+// NPC 2410951 turned off 0.1 s after the guest reached Central Yharnam's lamp, no prompt since).
 // The host's rule (System > Shared world, party_npc_mirror; BB_PARTY_NPC_MIRROR=0/1 at start). Pure parts here (unit test tests/test_party_npc_mirror.cpp).
 #pragma once
 
@@ -23,10 +29,21 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iterator>
 #include <string>
 #include <vector>
 
 namespace coop::npcmirror {
+
+#define PARTY_IDS_ARRAY(name, type, count) inline constexpr type name[count]
+#include "party_npc_ids.inc"
+#undef PARTY_IDS_ARRAY
+
+/// An NPC the mirror may turn off (kNpcMirrorIds). Never a lamp / headstone talk chr, a Dream
+/// messenger or dummy, a bullet owner or another object-like chr.
+inline bool Mirrored(std::uint32_t entity) {
+    return std::binary_search(std::begin(kNpcMirrorIds), std::end(kNpcMirrorIds), entity);
+}
 
 constexpr const char* kEventName = "npc_off";
 constexpr std::size_t kMaxIds = 128;
@@ -48,7 +65,7 @@ inline Plan PlanMirror(const std::vector<std::uint32_t>& host_off, const std::ve
     Plan p;
     for (const LocalNpc& n : local) {
         const bool off = std::find(host_off.begin(), host_off.end(), n.entity) != host_off.end();
-        if (off && n.on) p.disable.push_back(n.entity);
+        if (off && n.on && Mirrored(n.entity)) p.disable.push_back(n.entity);
         else if (!off && n.ours && !n.on) p.enable.push_back(n.entity);
     }
     return p;

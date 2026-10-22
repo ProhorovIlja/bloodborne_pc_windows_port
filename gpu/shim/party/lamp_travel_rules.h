@@ -163,6 +163,15 @@ inline std::uint32_t NearestLamp(const std::vector<Spot>& spots, std::uint32_t m
     return best;
 }
 
+/// Where the player stands for NearestLamp: its physics position when readable, else the drawn
+/// one (chr +0xC0). An in-place warp (vtbl +0x5F8: the test aids, the party's no-load placements)
+/// moves the physics position at once and the drawn one only once the player moves (lamprule run 5:
+/// at lamp 2412951 with +0xC0 still at the Great Bridge lamp 2412952, 72 m away, so "here" was
+/// 2412952 and that lamp, lit, was left out of the list).
+inline const float* StandingPos(bool physics_ok, const float physics[3], const float drawn[3]) {
+    return physics_ok ? physics : drawn;
+}
+
 /// BB_LAMP_TRAVEL: unset -> on; "0" / "off" / "false" -> off.
 inline bool SwitchOn(const char* v) {
     if (!v || !v[0]) return true;
