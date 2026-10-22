@@ -13,6 +13,7 @@ on:
       - 'src/runtime_legacy_policy.c'
       - 'src/runtime_legacy_*'
       - 'tools/interop/**'
+      - 'tests/test_bbsc_memscan_win.cpp'
       - 'tools/setup_windows_deps.sh'
       - 'build.bat'
       - 'tests/test_prepare_bbnet20_windows.py'
@@ -136,6 +137,16 @@ jobs:
             -o out/bbnet20-gpu-bridge-host.exe
           out/bbnet20-gpu-bridge-host.exe \
             "$(cygpath -w "$(pwd)/out/bbnet20-gpu-bridge-test.dll")"
+
+      - name: Compile and run real CLS BBSC memory scanner on Win64 clang
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          clang++ -std=c++23 -O1 -Wall -Wextra -I gpu/bbnet20/bbsc \
+            tests/test_bbsc_memscan_win.cpp \
+            gpu/bbnet20/bbsc/core/bbsc_memscan.cpp \
+            -o out/bbsc-memscan-win-test.exe
+          out/bbsc-memscan-win-test.exe
 
       - name: Configure actual Windows bbnet20 target
         shell: msys2 {0}
