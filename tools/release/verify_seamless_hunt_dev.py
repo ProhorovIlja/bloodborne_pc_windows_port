@@ -19,6 +19,7 @@ REQUIRED = frozenset({
     "python/LICENSE.txt", "python/LICENSE-tcltk.txt",
     "python/Lib/tkinter/__init__.py", "python/DLLs/_tkinter.pyd",
     "python/tcl/tk8.6/tk.tcl", "patches/Bloodborne.xml",
+    "out/licenses/LICENSE",
 })
 ALLOWED_TOP = frozenset({"out", "python", "scripts", "patches", "launcher",
                          "licenses", "docs", "tools", "VERSION", "LICENSE",
@@ -41,7 +42,7 @@ def _legal(path: str) -> bool:
         return False
     if parts[0] not in ALLOWED_TOP or any(x in DENIED_PARTS for x in parts):
         return False
-    if parts[0] == "out" and len(parts) > 2:
+    if parts[0] == "out" and len(parts) > 2 and parts[1] != "licenses":
         return False
     return True
 
