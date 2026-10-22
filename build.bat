@@ -44,6 +44,23 @@ if exist "C:\Program Files\CMake\bin" (
     set "PATH=C:\Program Files\CMake\bin;%PATH%"
 )
 
+rem Use GCC by default but allow the supported MSYS2 CLANG64 toolchain.
+rem BB_CC/BB_AR/BB_NM are unquoted command names or absolute executable paths.
+if not defined BB_CC (
+    where gcc.exe >nul 2>nul
+    if not errorlevel 1 set "BB_CC=gcc"
+)
+if not defined BB_CC (
+    where clang.exe >nul 2>nul
+    if not errorlevel 1 set "BB_CC=clang"
+)
+if not defined BB_CC (
+    echo Neither GCC nor Clang found. Install MSYS2 MinGW64 or CLANG64.
+    exit /b 1
+)
+if not defined BB_AR set "BB_AR=ar"
+if not defined BB_NM set "BB_NM=nm"
+
 rem Ensure Git handles long paths on Windows without failing on FidelityFX headers
 git config --local core.longpaths true >nul 2>nul
 
@@ -61,7 +78,7 @@ rem LibAtrac9 static archive: built when missing, rebuilt when it lacks the deco
 rem build.bat wrote an empty archive: OBJS was expanded when the whole if block was parsed).
 rem Plain gotos, no block: %AT9_OBJS% below must be expanded after the loop has filled it.
 if not exist "out\libatrac9.a" goto atrac9_build
-nm out\libatrac9.a 2>nul | findstr /c:"Atrac9Decode" >nul
+%BB_NM% out\libatrac9.a 2>nul | findstr /c:"Atrac9Decode" >nul
 if not errorlevel 1 goto atrac9_done
 echo out\libatrac9.a is empty or stale; rebuilding it
 del /f /q out\libatrac9.a 2>nul
@@ -70,7 +87,7 @@ echo Building LibAtrac9
 if not exist "out\atrac9" mkdir out\atrac9
 set "AT9_OBJS="
 for %%f in (third_party\LibAtrac9\C\src\*.c) do (
-    gcc -std=c99 -O2 -g -w -c "%%f" -o "out\atrac9\%%~nf.o"
+    %BB_CC% -std=c99 -O2 -g -w -c "%%f" -o "out\atrac9\%%~nf.o"
     if errorlevel 1 (
         echo Failed to compile LibAtrac9 source: %%f
         exit /b 1
@@ -81,7 +98,7 @@ if not defined AT9_OBJS (
     echo No LibAtrac9 sources in third_party\LibAtrac9\C\src. Run: git submodule update --init --recursive
     exit /b 1
 )
-ar rcs out\libatrac9.a %AT9_OBJS%
+%BB_AR% rcs out\libatrac9.a %AT9_OBJS%
 if errorlevel 1 (
     echo Failed to create out\libatrac9.a
     exit /b 1
@@ -201,7 +218,7 @@ echo Build complete: out\bbport.exe
 
 if "%~1"=="--test" (
     echo Running unit tests
-    gcc -std=c11 -O2 -g -Wall -Wextra -Werror -Isrc tests/test_win32_exception.c -o out/win32-exception-test.exe
+    %BB_CC% -std=c11 -O2 -g -Wall -Wextra -Werror -Isrc tests/test_win32_exception.c -o out/win32-exception-test.exe
     if errorlevel 1 exit /b 1
     out\win32-exception-test.exe
     if errorlevel 1 exit /b 1
@@ -212,7 +229,7 @@ if "%~1"=="--test" (
     ) else if exist "C:\msys64\mingw64\include\SDL3" (
         set "SDL3_INC=-IC:/msys64/mingw64/include"
     )
-    gcc -std=c11 -O2 -g -Wall -Wextra -Werror -I. -Isrc %SDL3_INC% tests/test_pad.c out/SDL3.dll -o out/pad-test.exe
+    %BB_CC% -std=c11 -O2 -g -Wall -Wextra -Werror -I. -Isrc %SDL3_INC% tests/test_pad.c out/SDL3.dll -o out/pad-test.exe
     if errorlevel 1 exit /b 1
     out\pad-test.exe
     if errorlevel 1 exit /b 1
@@ -221,7 +238,7 @@ if "%~1"=="--test" (
     cmake --build out/gpu --target sema-test content-test
     if errorlevel 1 exit /b 1
 
-    gcc -std=c11 -O2 -g -Wall -Wextra -Werror -Isrc tests/test_file_mods.c src/win32_compat.c -lws2_32 -o out/file-mods-test.exe
+    %BB_CC% -std=c11 -O2 -g -Wall -Wextra -Werror -Isrc tests/test_file_mods.c src/win32_compat.c -lws2_32 -o out/file-mods-test.exe
     if errorlevel 1 exit /b 1
     out\file-mods-test.exe
     if errorlevel 1 exit /b 1
