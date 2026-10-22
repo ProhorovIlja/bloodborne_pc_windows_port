@@ -545,6 +545,36 @@ if (WIN32)
 endif()
 set_target_properties(bbport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BB_OUT_DIR}")
 
+# Candidate only: build the *real* pinned native bbnet20 shadNet/NP/BBSC sources
+# as an independent Windows DLL. Kept OFF in the ordinary Windows/party build
+# until the port is complete and live CLS 0.0.2 cross-play is verified.
+# CI first calls tools/interop/stage_bbnet20.py followed by
+# tools/interop/prepare_bbnet20_windows.py with audited source fingerprints.
+option(BB_BBSC20_WINDOWS_CANDIDATE "Experimental real bbnet20 Win64 DLL compilation" OFF)
+if (BB_BBSC20_WINDOWS_CANDIDATE)
+    if (NOT WIN32)
+        message(FATAL_ERROR "BB_BBSC20_WINDOWS_CANDIDATE is specifically the Win64 port")
+    endif()
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bbnet20/bbnet_glue.cpp" OR
+        NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib/LICENSE")
+        message(FATAL_ERROR "Missing pinned, license-audited bbnet20 native sources: run tools/interop/prepare_bbnet20_windows.py")
+    endif()
+    find_package(Protobuf CONFIG REQUIRED)
+    find_package(nlohmann_json CONFIG REQUIRED)
+    find_package(OpenSSL REQUIRED)
+    find_package(ZLIB REQUIRED)
+    find_path(MINIUPNPC_INCLUDE NAMES miniupnpc.h PATH_SUFFIXES miniupnpc REQUIRED)
+    find_library(MINIUPNPC_LIBRARY NAMES miniupnpc REQUIRED)
+    if (NOT TARGET protobuf::protoc OR NOT TARGET protobuf::libprotobuf)
+        message(FATAL_ERROR "Native candidate requires a matching protoc and libprotobuf")
+    endif()
+    add_subdirectory(bbnet20 EXCLUDE_FROM_ALL)
+    # Upstream's Linux source assumes its httplib headers live at a different
+    # location. Keep their MIT notice and add the exact verified source tree.
+    target_include_directories(bbnet20 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib")
+    message(STATUS "BBSC native Win64 candidate target enabled: not release-ready, no launcher opt-in")
+endif()
+
 # Runtime unit tests (tests/test_sema.c, tests/test_content.c) for tests/test_sema.py and
 # tests/test_content.py, which run out/sema-test and out/content-test (build.sh --test builds them
 # on Linux). cmake --build out/gpu --target sema-test content-test
