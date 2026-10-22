@@ -1,5 +1,8 @@
 // bbport: SDL3 window for the Vulkan swapchain (X11 or Wayland).
 #include "bbport_headless.h"
+#include "../bbgpu.h"
+#include <array>
+#include <atomic>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -16,6 +19,24 @@
 namespace Frontend {
 
 namespace {
+
+// The real BBSC module can register SDL input observers for its cinematic
+// camera. Keep callbacks on the window thread, and never hand them a system
+// quit/window-close event. Registration is lock-free and allocates no frames.
+std::array<std::atomic<BbGpuEventFilter>, 4> game_event_filters{};
+bool FilteredByModule(const SDL_Event& event, SDL_Window* window) {
+    if (event.type == SDL_EVENT_QUIT ||
+        event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+        return false;
+    }
+    for (const auto& slot : game_event_filters) {
+        const auto filter = slot.load(std::memory_order_acquire);
+        if (filter && filter(&event, window)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // ReadMouse's bits: 0 left, 1 right, 2 middle, 3 X1, 4 X2.
 u32 MouseButtonBit(u8 button) {
@@ -75,6 +96,18 @@ SDL_DisplayID ChooseDisplay() {
 }
 
 } // namespace
+
+extern "C" void bbgpu_add_event_filter(BbGpuEventFilter filter) {
+    if (!filter) return;
+    for (auto& slot : game_event_filters) {
+        BbGpuEventFilter expected = nullptr;
+        if (slot.compare_exchange_strong(expected, filter, std::memory_order_acq_rel)) {
+            return;
+        }
+        if (expected == filter) return; // idempotent registration
+    }
+    std::fputs("GPU: module event filter capacity (4) exhausted; ignoring additional listener\n", stderr);
+}
 
 WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}, height{height_} {
     // Gamepads are sampled by runtime_pad.c; their events are pumped here with the window's.
@@ -312,6 +345,12 @@ bool WindowSDL::PollEvents() {
     }
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        // Text entry and settings overlays own their input. Gameplay modules
+        // cannot steal the user's password, dialog responses or menu keys.
+        if (!text_active && !BbOverlay::CapturesInput() &&
+            FilteredByModule(event, window)) {
+            continue;
+        }
         if (event.type == SDL_EVENT_MOUSE_MOTION) {
             last_mouse_motion_ms = SDL_GetTicks();
         }
