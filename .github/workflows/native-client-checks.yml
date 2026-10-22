@@ -53,6 +53,9 @@ jobs:
       - name: Installed-client checksum verifier and private-file isolation
         run: python -m unittest discover -s tests -p 'test_client_integrity.py' -v
 
+      - name: Experimental BBSC launch separation and DLL opt-in
+        run: python -m unittest discover -s tests -p 'test_legacy_bbsc_launch.py' -v
+
       - name: Legacy BBSC NP import routing policy (C)
         run: |
           cc -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o /tmp/legacy-online-policy
@@ -180,6 +183,9 @@ jobs:
 
       - name: Windows actual launcher UI smoke (Tk settings and diagnostics)
         run: python -m unittest discover -s tests -p 'test_launcher_ui_layout.py' -v
+
+      - name: Windows experimental legacy BBSC launch policy
+        run: python -m unittest discover -s tests -p 'test_legacy_bbsc_launch.py' -v
 
       - name: Legacy BBSC routing policy (Windows C)
         shell: pwsh
