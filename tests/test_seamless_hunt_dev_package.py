@@ -34,6 +34,9 @@ class DeveloperKitTest(unittest.TestCase):
             "out/licenses/third_party/monocypher/LICENCE.md",
             "out/SDL3.dll",
             "out/gpu/bbgpu.dll",
+            # The experimental REAL shadNet BBSC Win64 DLL is not a release:
+            # even a successful compiler/linker test must never ship it.
+            "out/gpu/bbnet20.dll",
             "launcher/example.py",
         ]:
             f = self.root / name
@@ -76,6 +79,7 @@ class DeveloperKitTest(unittest.TestCase):
             self.assertIn("python/DLLs/_tkinter.pyd", names)
             self.assertIn("python/tcl/tk8.6/tk.tcl", names)
             self.assertNotIn("out/gpu/bbgpu.dll", names)
+            self.assertNotIn("out/gpu/bbnet20.dll", names)
             self.assertIn("scripts/seamless_hunt.py", names)
             self.assertIn("patches/Bloodborne.xml", names)
             self.assertIn("licenses/LICENSE", names)
