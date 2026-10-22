@@ -14,6 +14,15 @@ One codebase: this visy-based native Windows port. Do not create other client fo
 - Local offline build-and-test scripts for Native TCP Relay v15 and Native UDP Relay v17 completed successfully. UDP rebuilt binary matches package binary by SHA-256.
 - Exact source commit for the deployed shadNet binary remains **unverified**. Offline tests are not live multiplayer validation.
 
+## Shared input/UI boundary for the REAL Windows BBSC DLL (2026-10-22)
+
+- Windows normally links `bbgpu` **STATIC** into `bbport.exe`. The pinned Linux `bbnet20` code instead expects its GPU overlay and SDL event callbacks to land in a shared libbbgpu. Linking a second copy into `bbnet20.dll` can silently register cinematic input and loading messages into the **wrong, hidden renderer state**. This is a correctness issue even if the DLL links.
+- `gpu/shim/window.cpp` now contains the real window-thread SDL3 event filter dispatch with atomic/idempotent registration. OS close, the built-in settings-menu Insert/F9/F11 and Alt+Enter, text input, menu ownership and gamepad L3/R3 menu shortcuts are protected from third-party interception.
+- `gpu/shim/bbport_overlay.cpp` now has a bounded, mutex-protected non-interactive status banner for genuine BBSC summon/join messages, rendered in the **game window** and hidden under fullscreen dialogs.
+- For experimental BBSC Windows builds only, the real EXE explicitly exports `bbgpu_add_event_filter` and `bbgpu_overlay_banner`. The source adaptation rewrites the **exact pinned** BBSC call sites to `bbnet20_host_add_event_filter` / `bbnet20_host_overlay_banner`. `gpu/shim/bbnet20_gpu_host_bridge.cpp` forwards these through `GetModuleHandleW(NULL)` / `GetProcAddress` to the primary EXE. The bridge is **excluded** from the default bbgpu source glob and standard Windows package.
+- New two-process-module Windows smoke uses a *real PE DLL and EXE* with separate symbol tables to validate that callbacks and banner state reach the primary EXE. Candidate CI also requires the real compiled `bbport.exe` to export both host callbacks, and the `bbnet20.dll` to export its five ABI functions. Offline pinned-source ABI tests verify both upstream call sites and reject unknown changes.
+- These source changes are **not** a claim of working CLS login/bells, random hosts, gameplay synchronization, crossplay or stable native multi-session, and **do not modify** production shadNet/server or save files. Latest GPU/PE bridge full Windows CI acceptance must still be checked on the final commit; earlier pass reports do not transfer to new commits.
+
 ## Real Win64 BBSC transport compile and regression milestone (2026-10-22)
 
 - **Confirmed:** experimental [native BBSC Windows module CI run 39810150080](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/39810150080) compiled **425/446** real C/C++/Protobuf objects from pinned `deadinside28` shadPS4/BBSC sources before a *specific Windows-only missing dependency*: `core/net/host_net.cpp` requires `wepoll.h`. This is no longer a conceptual ABI stub or independent native renderer; actual Windows shadNet/NP sources were compiling.
