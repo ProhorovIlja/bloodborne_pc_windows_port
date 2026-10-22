@@ -26,7 +26,7 @@ LOG_FILE = APP_DIR / "launcher.log"
 LOG_DIR = APP_DIR / "logs"
 LOG_KEEP = 20
 SETTINGS_FILE = APP_DIR / "launcher_settings.json"
-UPDATE_CACHE_FILE = APP_DIR / "launcher_update_check.json"  # scripts/update_check.py, 6 h
+UPDATE_CACHE_FILE = APP_DIR / "seamless_hunt_update_check.json"  # scripts/update_check.py, 6 h
 PATCHES_XML = APP_DIR / "patches" / "Bloodborne.xml"
 DEFAULT_GAME = Path(os.environ.get("BB_GAME_DIR", "../CUSA03173"))
 
@@ -1641,7 +1641,7 @@ def acquire_single_instance():
 class BloodborneLauncher(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"Bloodborne PC Launcher {PORT_VERSION}")
+        self.title(f"Seamless Hunt PC | Bloodborne {PORT_VERSION}")
         self.geometry("780x760")  # the Party tab is the tallest settings tab
         self.minsize(720, 680)
 
