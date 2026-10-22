@@ -4,6 +4,9 @@
 int legacy_net_opted_in(const char *env, int party_enabled) {
     return !party_enabled && env && !strcmp(env, "1");
 }
+int legacy_net_bbsc_enabled(const char *env) {
+    return env && strcmp(env, "1") == 0;
+}
 int legacy_net_supported_game(const char *serial, const char *title, const char *version) {
     if (!serial || !title || !version) return 0;
     if (strlen(serial) < 9 || strlen(serial) > 15) return 0;
