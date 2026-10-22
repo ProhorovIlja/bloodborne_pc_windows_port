@@ -4,6 +4,16 @@
 int legacy_net_opted_in(const char *env, int party_enabled) {
     return !party_enabled && env && !strcmp(env, "1");
 }
+int legacy_net_supported_game(const char *serial, const char *title, const char *version) {
+    if (!serial || !title || !version) return 0;
+    if (strlen(serial) < 9 || strlen(serial) > 15) return 0;
+    if (strcmp(serial, "UNKNOWN") == 0) return 0;
+    /* Regional game identifiers differ; do not hard-code the US CUSA id.
+     * Actual game content and patch-site byte verification remain mandatory.
+     */
+    if (strncmp(title, "Bloodborne", 10) != 0) return 0;
+    return strcmp(version, "1.09") == 0;
+}
 int legacy_net_online_symbol(const char *symbol) {
     static const char *prefixes[] = {"sceNet", "sceNp", "sceHttp", "sceSsl"};
     static const char *excluded[] = {
