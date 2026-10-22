@@ -83,9 +83,9 @@ class NativeBbscPrepareTests(unittest.TestCase):
             + '    }\n'
             + '    // The cinematic camera (other game hooks follow)\n'
             + '}\n'
-        ).replace("\\n", "\\r\\n").encode("utf-8")
+        ).replace("\n", "\r\n").encode("utf-8")
         self._replace_fixture(GLUE, upstream)
-        self._replace_fixture(CMAKE, (LINK_OPTS + "\\r\\n").encode())
+        self._replace_fixture(CMAKE, (LINK_OPTS + "\r\n").encode())
         prepare(self.staged, self.workspace)
         glue = (self.workspace / GLUE).read_text()
         self.assertIn("#include <windows.h>", glue)
@@ -94,8 +94,8 @@ class NativeBbscPrepareTests(unittest.TestCase):
         self.assertIn("_putenv_s(", glue)
         self.assertIn("#ifndef _WIN32", glue)
         self.assertIn("BBSC_SAVE_DIR", glue)
-        self.assertIn("    unsigned writable = 0;\\n#else\\n", glue)
-        self.assertIn("    unsigned writable = 0;\\n    if (FILE* maps", glue)
+        self.assertIn("    unsigned writable = 0;\n#else\n", glue)
+        self.assertIn("    unsigned writable = 0;\n    if (FILE* maps", glue)
 
     def _replace_fixture(self, name, blob):
         path = self.staged / name
