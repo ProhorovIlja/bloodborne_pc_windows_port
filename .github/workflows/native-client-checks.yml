@@ -148,7 +148,7 @@ jobs:
         shell: pwsh
         run: |
           $cc = "C:\Program Files\LLVM\bin\clang.exe"
-          & $cc -std=c11 -Wall -Wextra -Werror -Isrc -I. tests/test_legacy_bbnet20_loader_win.c src/runtime_legacy_net.c src/runtime_legacy_policy.c -o legacy-loader-smoke.exe
+          & $cc -std=c11 -Wall -Wextra -Werror -D_CRT_SECURE_NO_WARNINGS -Isrc -I. tests/test_legacy_bbnet20_loader_win.c src/runtime_legacy_net.c src/runtime_legacy_policy.c -o legacy-loader-smoke.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\legacy-loader-smoke.exe absent
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
