@@ -96,6 +96,9 @@ jobs:
       - name: Home status truthfulness contract
         run: python -m unittest discover -s tests -p 'test_launcher_home_state.py' -v
 
+      - name: Native Hunter editor export and slot isolation
+        run: python -m unittest discover -s tests -p 'test_native_editor_export.py' -v
+
       - name: Safe deterministic Windows developer package
         run: python -m unittest discover -s tests -p 'test_seamless_hunt_dev_package.py' -v
 

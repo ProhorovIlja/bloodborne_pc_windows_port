@@ -1,4 +1,4 @@
-# Seamless Hunt PC — Changelog
+- Integrated the latest visy native Hunter editor export into Hunter Hub: read-only game save, separate editor copy, exact region/user/slot guards, and manifest path validation. Cross-port saves and editor import remain disabled pending real save acceptance.\n# Seamless Hunt PC — Changelog
 
 This is the development changelog for the Seamless Hunt native Windows fork.
 **Unreleased work below is not a downloadable, stable release.**

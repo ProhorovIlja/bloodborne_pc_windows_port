@@ -3921,6 +3921,41 @@ class BloodborneLauncher(tk.Tk):
             self.save_settings()
             status.set("Pinned to Home for display ONLY. Play still uses in-game slot selection.")
 
+        def export_selected_for_editor():
+            selected = tree.selection()
+            if not selected:
+                status.set("Choose a native Hunter first.")
+                return
+            h = profiles[int(selected[0])]
+            if h.source not in ("native:pc", "native:party"):
+                messagebox.showinfo("Export Hunter",
+                    "Only this native Windows client's Hunter saves can be exported. "
+                    "Other-port saves remain read-only.", parent=dialog)
+                return
+            if self.proc is not None and self.proc.poll() is None:
+                messagebox.showwarning("Export Hunter",
+                    "Close Bloodborne before exporting a save copy.", parent=dialog)
+                return
+            directory = filedialog.askdirectory(
+                parent=dialog, title="Choose an empty editor folder outside the game save tree")
+            if not directory:
+                return
+            from scripts import save_editor
+            try:
+                result = save_editor.export_hunter_save(
+                    APP_DIR / "user",
+                    "party" if h.source == "native:party" else "solo",
+                    Path(h.folder) / h.slot, directory)
+            except (OSError, ValueError, KeyError) as exc:
+                status.set("Editor export refused: original save unchanged.")
+                messagebox.showerror("Export Hunter", str(exc), parent=dialog)
+                return
+            status.set("Editor copy created. Native Hunter save was not modified.")
+            messagebox.showinfo("Export Hunter",
+                f"Editor copy created:\n{result}\n\n"
+                "Original save unchanged. Import requires separate verification.",
+                parent=dialog)
+
         def unpin():
             self.hunter_preview_pin = None
             self.home_hunter_var.set("No preview pinned · open Hunters / Saves to pick one")
@@ -3933,9 +3968,12 @@ class BloodborneLauncher(tk.Tk):
         ttk.Button(controls, text="Clear preview",
                    style="Secondary.TButton", command=unpin).pack(
                        side="left", padx=(8, 0))
+        ttk.Button(controls, text="Export editor copy",
+                   style="Secondary.TButton", command=export_selected_for_editor).pack(
+                       side="left", padx=(8, 0))
         ttk.Button(controls, text="Close", style="Secondary.TButton",
                    command=dialog.destroy).pack(side="right")
-        ttk.Label(body, text="Preview only. Save switching/import and editable inventory require separate verification.",
+        ttk.Label(body, text="Read-only previews. Editor export makes a separate copy; import and save switching are not enabled.",
                   style="Hint.TLabel").pack(anchor="w", pady=(8, 0))
         dialog.after(80, launch_scan)
 
