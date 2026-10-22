@@ -56,8 +56,11 @@ the game's x86-64 code and translates graphics into Vulkan.
 This is not yet a production-ready standalone release:
 - Windows 10/11 x64, supported CPU, Vulkan graphics drivers are required.
 - Python 3.10+ with tkinter may be required by launch_gui.bat/run.bat.
-- Direct P2P is visy's existing implementation. Seamless Hunt account login
-  and matchmaking have NOT been integrated.
+- Direct P2P gameplay is visy's existing implementation. BBSC/shadNet
+  account check and private-server registration are short-lived launcher
+  operations: they do NOT log the GAME in or provide legacy BBSC matchmaking.
+- Choose a realm hostname in the launcher; it currently affects diagnostics
+  and account screens, not the native gameplay network stack.
 - The included Network Doctor is optional; STUN shares your public IP/port
   with the chosen STUN provider when you click the test.
 - Game compatibility, live P2P and GPU performance MUST be tested on real PCs.
