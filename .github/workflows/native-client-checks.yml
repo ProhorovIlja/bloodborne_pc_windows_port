@@ -47,6 +47,11 @@ jobs:
       - name: Safe Seamless Hunt release notices
         run: python -m unittest discover -s tests -p 'test_update_check.py' -v
 
+      - name: Legacy BBSC NP import routing policy (C)
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o /tmp/legacy-online-policy
+          /tmp/legacy-online-policy
+
       - name: Pinned BBSC native online source import integrity
         run: python -m unittest discover -s tests -p 'test_stage_bbnet20.py' -v
 
@@ -117,6 +122,14 @@ jobs:
 
       - name: Windows settings search tests (offline)
         run: python -m unittest discover -s tests -p 'test_settings_index.py' -v
+
+      - name: Legacy BBSC routing policy (Windows C)
+        shell: pwsh
+        run: |
+          & "C:\Program Files\LLVM\bin\clang.exe" -std=c11 -Wall -Wextra -Werror tests/test_legacy_online_policy.c src/runtime_legacy_policy.c -o legacy-online-policy.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\legacy-online-policy.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Launcher import smoke
         run: python -c "import launcher; print('Launcher module imported')"
