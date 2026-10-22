@@ -100,7 +100,7 @@ jobs:
           export MINGW_DIR="$(cygpath -w "$MINGW_PREFIX")"
           # Configure existing engine graph first; candidate is an optional
           # independent target and does not change the normal user's package.
-          cmd.exe //C "call build.bat" || exit 1
+          cmd.exe //C "call build.bat --configure-only" || exit 1
           cmake -S gpu -B out/gpu -DBB_BBSC20_WINDOWS_CANDIDATE=ON
           cmake --build out/gpu --target bbnet20 -- -j 2
           test -f out/gpu/bbnet20.dll || { echo "Real native BBSC DLL missing" >&2; exit 1; }
