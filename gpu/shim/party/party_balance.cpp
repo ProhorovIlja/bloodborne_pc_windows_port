@@ -696,6 +696,7 @@ Rules FromSettings() {
     r.enemy_poise = v.party_enemy_poise;
     r.friendly_fire = v.party_friendly_fire;
     r.share_lamps = v.party_share_lamps;
+    r.guests_bring_lamps = v.party_guests_bring_lamps;
     r.host_revive = v.party_host_revive;
     r.host_limbo_revive = v.party_host_limbo_revive;
     r.kill_record = v.party_kill_record;
@@ -1031,6 +1032,7 @@ void NpcMirrorTick(const GameSnapshot& s, party::PartyLink* link, bool host) {
                 const int entity = Field<int>(chr, 0x1f0, -1);
                 const u64 npc = Field<u64>(Field<u64>(chr, 0x3c8), 8);
                 if (entity < 1000000 || entity > 99999999 || (npc && Field<u8>(npc, 0x12f, 0xff) == kEnemyTeam)) continue;
+                if (!npcmirror::Mirrored(std::uint32_t(entity))) continue;  // NPCs only: never a lamp's talk chr
                 off.push_back(std::uint32_t(entity));
             }
         }
@@ -1092,6 +1094,7 @@ void Tick(const GameSnapshot& s, party::PartyLink* link, bool host) {
     const auto now = Clock::now();
     const Rules r = host ? FromSettings() : InForce();
     party::status::SetShareLamps(r.share_lamps);
+    party::status::SetHostRule(party::status::HostRule::GuestsBringLamps, r.guests_bring_lamps);
     party::status::SetHostRule(party::status::HostRule::Rot, r.rot);
     party::status::SetHostRule(party::status::HostRule::HostRevive, r.host_revive);
     party::status::SetHostRule(party::status::HostRule::HostLimboRevive, r.host_limbo_revive);
