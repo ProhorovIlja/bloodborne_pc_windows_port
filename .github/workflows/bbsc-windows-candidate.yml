@@ -14,6 +14,7 @@ on:
       - 'src/runtime_legacy_*'
       - 'tools/interop/**'
       - 'tests/test_bbsc_memscan_win.cpp'
+      - 'tests/test_native_bbsc_load_win.cpp'
       - 'tools/setup_windows_deps.sh'
       - 'build.bat'
       - 'tests/test_prepare_bbnet20_windows.py'
@@ -211,6 +212,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/stage_dlls.py --candidate-bbnet20
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Load genuine native CLS DLL and verify PE import closure after staging
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          clang++ -std=c++23 -O1 -Wall -Wextra -Werror tests/test_native_bbsc_load_win.cpp \
+            -o out/native-bbsc-load-smoke.exe
+          out/native-bbsc-load-smoke.exe
 
       - name: Package and hash-verify integrated native Windows BBSC candidate
         shell: pwsh
