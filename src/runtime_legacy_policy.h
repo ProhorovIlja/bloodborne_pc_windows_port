@@ -6,6 +6,8 @@ extern "C" {
 #endif
 /* Strict opt-in only. Explicitly reject a conflict with visy's separate party stack. */
 int legacy_net_opted_in(const char *env, int party_enabled);
+/* Both opt-ins are required for the still-unreleased native BBSC client. */
+int legacy_net_bbsc_enabled(const char *env);
 /* Only a verified Bloodborne v1.09 guest may attempt developer-only BBSC. */
 int legacy_net_supported_game(const char *serial, const char *title, const char *version);
 /* Never redirect locally-owned trophy, commerce or profile/dialog APIs. */
