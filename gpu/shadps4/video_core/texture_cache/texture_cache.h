@@ -148,8 +148,10 @@ public:
     /// bbport: whether UpdateImage has nothing to do for this image (its fast path).
     [[nodiscard]] bool IsUpToDate(ImageId image_id) const {
         const Image& image = slot_images[image_id];
-        const u32 flags = std::atomic_ref<const u32>(reinterpret_cast<const u32&>(image.flags))
-                              .load(std::memory_order_acquire);
+        // atomic_ref<T> requires a non-const T even for load() on Clang/libc++.
+        // The underlying image slot is mutable; this method only reads it.
+        u32& flag_word = const_cast<u32&>(reinterpret_cast<const u32&>(image.flags));
+        const u32 flags = std::atomic_ref<u32>(flag_word).load(std::memory_order_acquire);
         constexpr u32 Dirty = static_cast<u32>(ImageFlagBits::Dirty);
         constexpr u32 Registered = static_cast<u32>(ImageFlagBits::Registered);
         return (flags & (Dirty | Registered)) == Registered &&
