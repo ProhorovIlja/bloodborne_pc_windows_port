@@ -16,6 +16,13 @@ Selecting a character from a detected save source must not silently convert, ove
 - Added synthetic multilingual/broken-save fixtures and CI tests on Windows and Linux. CI passing is not proof a real user's native/shadPS4/Awaken save parses correctly. Actual save comparison with in-game values remains a release gate.
 - Upstream format credit: Supermedo `bbport_character.py` (GPL-2.0-or-later), Noxde. We have not redistributed a real save or copyrighted game files.
 
+## Read-only inventory milestone (2026-10-22)
+- Added `scripts/hunter_armory.py` with bounded inventory weapon ID decoding (right-hand / left-hand *owned* weapons only) and best-upgrade-level grouping. Zero/unrecognized ID entries are excluded.
+- Optional item-name lookup reads `dvdroot_ps4/msg/<language>/item.msgbnd.dcx` from the user's own game directory, bounds DCX decompression and BND4/FMG indexes, and gracefully falls back to numeric IDs when message archives are unavailable.
+- The existing Hunter dialog now scrolls weapon information and distinguishes the owned inventory from the equipped hand slots, which remain unverified. Game data is never copied into the release.
+- Synthetic FMG/BND4/DCX and malicious data tests added on Linux and Windows CI; actual retail text and save variants still require user-hardware validation.
+- The launcher also replaces the unbounded `Everything on` preset with a previewed Balanced 60 FPS starting point that does not change network, saves, gameplay mods or patches.
+
 ## Specific verified upstream read-only character/save implementations
 Supermedo's Windows branch contains [bbport_character.py](https://github.com/Supermedo/bloodborne_pc/blob/windows/launcher/bbport_character.py), a concrete read-only parser for character slot name, level, attributes, weapons, Echoes/Insight, flags/deaths and playtime. It checks the relationship between level and stat totals before reporting values. [bbport_saves.py](https://github.com/Supermedo/bloodborne_pc/blob/windows/launcher/bbport_saves.py) documents the ten character slots and differing native/Awaken, modern/legacy shadPS4, bbhost and Apollo export paths, with separate staged copies and backup logic.
 
