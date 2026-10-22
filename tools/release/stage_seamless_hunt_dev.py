@@ -133,6 +133,20 @@ def _collect(source: Path) -> dict[str, Path]:
         out["python/" + rel.as_posix()] = obj
     if not (runtime / "Lib" / "tkinter" / "__init__.py").is_file():
         raise ValueError("Python bundle has no tkinter; cannot launch GUI offline")
+    # Runtime DLL legal notices from scripts/stage_licenses.py live in
+    # out/licenses, NOT the repo's top-level licenses directory. Earlier
+    # developer ZIPs accidentally omitted these notices.
+    notices = source / "out" / "licenses"
+    if not (notices / "LICENSE").is_file():
+        raise ValueError("Staged runtime licence inventory missing: out/licenses/LICENSE")
+    for obj in notices.rglob("*"):
+        if obj.is_symlink():
+            raise ValueError(f"Symlink forbidden in staged runtime licences: {obj}")
+        if obj.is_file():
+            rel = obj.relative_to(source).as_posix()
+            if obj.name.startswith(".") or obj.suffix.lower() in {".exe", ".dll", ".key", ".pfx", ".pem"}:
+                raise ValueError(f"Unexpected file in staged runtime licences: {rel}")
+            out[rel] = obj
     # Windows build links bbgpu STATIC into bbport.exe. Dependency DLLs are
     # explicitly staged beside the executable, never in out/gpu/ or below.
     # rglob() here accidentally included arbitrary nested build-tree DLLs.
