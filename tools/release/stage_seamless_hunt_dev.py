@@ -34,14 +34,18 @@ REQUIRED = (
 OPTIONAL = (
     "out/bb-probe.exe",
     "out/bb-gpu-capabilities.exe",
-    "cfg.ini",
     "VERSION",
     "LICENSE",
     "README.md",
     "README.ru.md",
 )
-SAFE_SUFFIXES = frozenset((".py", ".bat", ".cmd", ".xml", ".ico", ".png", ".md",
-                           ".txt", ".toml", ".json"))
+DIRECTORY_SUFFIXES = {
+    "scripts": frozenset((".py",)),
+    "patches": frozenset((".xml", ".json")),
+    "launcher": frozenset((".py", ".ico", ".png")),
+    "licenses": frozenset((".txt", ".md")),
+}
+LICENSE_BASENAMES = frozenset(("license", "copying", "notice", "patents"))
 DOC = """Seamless Hunt PC - NATIVE WINDOWS DEVELOPER BUILD
 
 This artifact is built from the fork's commit described in MANIFEST.json.
@@ -87,7 +91,10 @@ def _collect(source: Path) -> dict[str, Path]:
         if not folder.is_dir():
             continue
         for obj in folder.rglob("*"):
-            if not obj.is_file() or obj.is_symlink() or obj.suffix.lower() not in SAFE_SUFFIXES:
+            if not obj.is_file() or obj.is_symlink():
+                continue
+            if (obj.suffix.lower() not in DIRECTORY_SUFFIXES[directory]
+                    and not (directory == "licenses" and obj.name.lower() in LICENSE_BASENAMES)):
                 continue
             rel = obj.relative_to(source).as_posix()
             if "__pycache__" in obj.parts or obj.name.startswith("."):
