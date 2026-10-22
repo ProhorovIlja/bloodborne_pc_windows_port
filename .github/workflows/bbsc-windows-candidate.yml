@@ -38,6 +38,15 @@ jobs:
           ref: 8185b88d80573fa300595d5c54450183b4109935
           path: upstream-bbnet20
           persist-credentials: false
+      # The vendored shadPS4 Windows socket backend uses wepoll for scalable
+      # epoll-compatible wakeups. Pin the exact upstream shadPS4 fork, and
+      # compile its real C implementation; never substitute a no-op header.
+      - uses: actions/checkout@v4
+        with:
+          repository: shadps4-emu/ext-wepoll
+          ref: d3bb81035304a0dc6a5ca48ebf0f8cee1fe269e4
+          path: third_party/ext-wepoll
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -51,6 +60,8 @@ jobs:
           python tools/interop/prepare_bbnet20_windows.py --staged out/interop/bbnet20 --workspace .
           if (-not (Test-Path 'gpu/bbnet20/bbnet_glue.cpp')) { throw "No real BBSC source" }
           if (-not (Test-Path 'gpu/third_party/httplib/LICENSE')) { throw "Missing MIT license" }
+          if (-not (Test-Path 'third_party/ext-wepoll/LICENSE')) { throw "Pinned wepoll license missing" }
+          if (-not (Test-Path 'third_party/ext-wepoll/wepoll.c')) { throw "Pinned wepoll source missing" }
 
       - uses: msys2/setup-msys2@v2
         with:
