@@ -41,8 +41,8 @@ class ParityTests(unittest.TestCase):
             for name in COMPONENTS:
                 (a / OFFICIAL / name).write_bytes(b"old")
                 (b / NATIVE / name).write_bytes(b"old")
-            (a / OFFICIAL / "new" / "game_event.inc").write_bytes(b"original")
-            (b / NATIVE / "new" / "game_event.inc").write_bytes(b"changed script")
+            (a / OFFICIAL / "new" / "bbsc_game_event.inc").write_bytes(b"original")
+            (b / NATIVE / "new" / "bbsc_game_event.inc").write_bytes(b"changed script")
             (a / OFFICIAL / "bbsc_legacy_only.cpp").write_bytes(b"legacy")
             (b / NATIVE / "bbsc_native_only.cpp").write_bytes(b"native")
             (a / OFFICIAL / "save_data.json").write_text('{"secret":"do not report"}')
