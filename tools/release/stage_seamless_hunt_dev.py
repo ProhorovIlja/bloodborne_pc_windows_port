@@ -39,6 +39,7 @@ OPTIONAL = (
     "out/bb-probe.exe",
     "out/bb-gpu-capabilities.exe",
     "VERSION",
+    "CHANGELOG.md",
     "LICENSE",
     "README.md",
     "README.ru.md",
