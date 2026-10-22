@@ -52,9 +52,9 @@ class DiscoveryTests(unittest.TestCase):
         fake = self.add_game(self.base/"Games"/"CUSA04321", "CUSA04321")
         result = discovery.scan(self.launcher, [self.base/"Games", self.base/"games"])
         paths = {x["folder"]: x for x in result["games"]}
-        self.assertEqual(paths[str(a)]["status"], "candidate_109")
-        self.assertEqual(paths[str(b)]["status"], "unsupported_patch")
-        self.assertEqual(paths[str(fake)]["status"], "unverified_region")
+        self.assertEqual(paths[str(a.resolve())]["status"], "candidate_109")
+        self.assertEqual(paths[str(b.resolve())]["status"], "unsupported_patch")
+        self.assertEqual(paths[str(fake.resolve())]["status"], "unverified_region")
         self.assertTrue(result["read_only"])
         self.assertFalse(result["all_patch_versions_supported"])
         self.assertTrue((a/"eboot.bin").is_file())
@@ -71,7 +71,7 @@ class DiscoveryTests(unittest.TestCase):
     def test_sfo_missing_is_uncertain_not_a_verified_game(self):
         found = self.add_game(self.base/"CUSA00900", "CUSA00900", sfo=False)
         x = discovery.scan(self.launcher,[self.base])
-        self.assertEqual(x["games"][0]["folder"],str(found))
+        self.assertEqual(x["games"][0]["folder"],str(found.resolve()))
         self.assertEqual(x["games"][0]["status"],"unverified")
         self.assertEqual(x["games"][0]["title_id"],"CUSA00900")
 
