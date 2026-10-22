@@ -17,7 +17,7 @@ All checks are initiated manually and done in a background thread. The regular v
 
 ## Site link
 
-**Account website** opens `https://seamlesshunt.com` in the default browser. It does not transmit credentials to the launcher. Signing in directly to this native client is a separate later milestone requiring a verified HTTPS auth contract with the current site, encrypted token storage and a real session API.
+**Account website** opens `https://install.seamlesshunt.com` in the default browser. It does not transmit credentials to the launcher. Signing in directly to this native client is a separate later milestone requiring a verified HTTPS auth contract with the current site, encrypted token storage and a real session API.
 
 ## Development
 
@@ -43,3 +43,12 @@ The `Native Windows engine build` workflow is a separate developer CI job under 
 - Add a versioned discovery/invite service contract with access controls, no public secret leaks and expiry.
 - Preserve visy's encrypted BBP3 direct P2P, then test optional server-side relay **only when direct fails**.
 - Full Windows render/gameplay check and two-PC real Internet test; cross-client shadPS4/BBSC interoperability requires protocol bridging, not merely the same server address.
+
+## GitHub release channel isolation
+
+The launcher update notifier (`scripts/update_check.py`) now only checks
+`ProhorovIlja/bloodborne_pc_windows_port`. Its clickable update links are restricted to
+the same repository's HTTPS release pages; a stale visy cache cannot point to visy releases.
+This is **notification only**: it never downloads or replaces game binaries. The UI cache is
+`seamless_hunt_update_check.json`, independent from the old visy cache. Until this fork
+publishes a non-prerelease GitHub release, no update alert is expected.
