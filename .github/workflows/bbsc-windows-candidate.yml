@@ -193,3 +193,43 @@ jobs:
           done
           test -f third_party/ext-wepoll/LICENSE
           echo 'REAL bbnet20.dll and EXE compiled with host GPU bridge + wepoll. Live crossplay NOT verified.'
+
+      - name: Register CLANG64 runtime for DLL dependency staging
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          printf 'MINGW_BIN=%s\n' "$(cygpath -w "$MINGW_PREFIX/bin")" >> "$GITHUB_ENV"
+          printf 'MSYS2_ROOT=%s\n' "$(cygpath -w /)" >> "$GITHUB_ENV"
+          printf 'MSYSTEM=CLANG64\n' >> "$GITHUB_ENV"
+
+      - name: Bundle launcher Python and native BBSC runtime DLL closure
+        shell: pwsh
+        run: |
+          python tools/release/make_python_bundle.py --src "$env:pythonLocation" --out python
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\python\python.exe -I -B -c "import tkinter, ssl, json; print('Native BBSC candidate Tcl/Tk import OK')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/stage_dlls.py --candidate-bbnet20
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package and hash-verify integrated native Windows BBSC candidate
+        shell: pwsh
+        run: |
+          python tools/release/stage_seamless_hunt_dev.py --source . --output out/seamless-hunt-native-bbsc-candidate.zip --revision $env:GITHUB_SHA --include-native-bbsc-candidate
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/release/verify_seamless_hunt_dev.py --zip out/seamless-hunt-native-bbsc-candidate.zip --require-native-bbsc-candidate
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Smoke-test combined portable EXE plus genuine CLS DLL
+        shell: pwsh
+        run: |
+          & .\tools\release\smoke_portable_windows.ps1 -Archive out/seamless-hunt-native-bbsc-candidate.zip -RequireNativeBbsc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload integrated native BBSC development candidate (NOT game-tested)
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-native-bbsc-candidate
+          path: out/seamless-hunt-native-bbsc-candidate.zip
+          if-no-files-found: error
+          retention-days: 7
