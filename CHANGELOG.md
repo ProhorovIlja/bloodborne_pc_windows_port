@@ -11,6 +11,8 @@ For actual shipped release notes, consult this fork's
 - Investigated and staged an opt-in candidate native Win64 BBSC/NP adapter and pinned third-party inputs.
 - Added Windows compiler/runtime compatibility and CI checks while retaining the existing native party transport.
 - Prepared separate legacy BBSC module candidate builds. **Gameplay crossplay with ordinary CLS BBSC clients has not been demonstrated.**
+- Fixed native BBSC retail version validation for `1.09` and `01.09`; the Windows source adapter now binds saves to the actual game-region title and native user 1, not an assumed `CUSA00207` path.
+- First-time hunters without a created `SPRJ0005` folder now have a deterministic read-only future save location. Existing path components must not be files, symlinks or Windows junctions; optional `BBSC_SAVE_DIR` overrides must match that same native save, not another port. Offline Linux/Windows fixtures cover these safety rules. This is **not a tested multiplayer release**.
 
 ### Launcher and user safety
 - Added read-only Bloodborne region/version, save-location, installed-mod and patch-directory discovery.
@@ -33,7 +35,7 @@ For actual shipped release notes, consult this fork's
 
 ### Known limitations
 - No certified two-way legacy BBSC player connection from this native Windows client.
-- The full redesigned launcher, read-only save parser, full Save Editor and Chalice Workshop are not yet implemented.
+- The first read-only save parser and compact launcher are implemented but still need validation against real multi-port saves and on-device UI review; the full Save Editor and Chalice Workshop are not implemented.
 - The updater can **check and display release information**, but cannot securely download/install software yet.
 - Production Seamless Hunt VPS and user saves are not modified by this development branch.
 
