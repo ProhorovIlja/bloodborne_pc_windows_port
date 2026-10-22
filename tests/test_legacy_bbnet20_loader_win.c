@@ -32,8 +32,11 @@ int main(int argc,char **argv) {
     /* _putenv_s updates the UCRT environment actually read by getenv().
      * SetEnvironmentVariableA by itself leaves UCRT's cached environ stale. */
     assert(_putenv_s("BB_LEGACY_NET","1")==0);
+    assert(_putenv_s("BB_BBSC","")==0);
     assert(_putenv_s("BB_PARTY","")==0);
     runtime_legacy_net_configure("C:/user/game","CUSA03173","Bloodborne","1.09");
+    assert(!runtime_legacy_net_requested());  /* only the developer module switch isn't enough */
+    assert(_putenv_s("BB_BBSC","1")==0);
     assert(runtime_legacy_net_requested());
     if (!strcmp(argv[1],"absent")) {
         assert(runtime_legacy_net_resolve("sceNetSocket")==0);
