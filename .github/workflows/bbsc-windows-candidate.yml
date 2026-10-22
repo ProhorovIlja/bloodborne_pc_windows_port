@@ -120,5 +120,12 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          llvm-objdump -p out/gpu/bbnet20.dll | grep -E 'bbnet_(init|resolve|image_ready|start)' >/dev/null
-          echo 'REAL bbnet20.dll compiled. Game login, bell and crossplay NOT verified.'
+          llvm-objdump -p out/gpu/bbnet20.dll > out/gpu/bbnet20.exports.txt
+          for symbol in bbnet_init bbnet_resolve bbnet_image_mapped bbnet_image_ready bbnet_start; do
+            if ! grep -q -E "[[:space:]]${symbol}([[:space:]]|$)" out/gpu/bbnet20.exports.txt; then
+              echo "Native module exported API missing: ${symbol}" >&2
+              exit 1
+            fi
+          done
+          test -f third_party/ext-wepoll/LICENSE
+          echo 'REAL bbnet20.dll compiled with wepoll and full host ABI. Live crossplay NOT verified.'
