@@ -54,7 +54,7 @@ class DiscoveryTests(unittest.TestCase):
         paths = {x["folder"]: x for x in result["games"]}
         self.assertEqual(paths[str(a)]["status"], "candidate_109")
         self.assertEqual(paths[str(b)]["status"], "unsupported_patch")
-        self.assertNotIn(str(fake), paths)
+        self.assertEqual(paths[str(fake)]["status"], "unverified_region")
         self.assertTrue(result["read_only"])
         self.assertFalse(result["all_patch_versions_supported"])
         self.assertTrue((a/"eboot.bin").is_file())
