@@ -59,6 +59,15 @@ class DiscoveryTests(unittest.TestCase):
         self.assertFalse(result["all_patch_versions_supported"])
         self.assertTrue((a/"eboot.bin").is_file())
 
+    def test_unknown_regional_sfo_is_visible_but_not_treated_as_109_supported(self):
+        folder = self.add_game(self.base/"Games"/"CUSA04222", "CUSA04222")
+        # The SFO's title explicitly says Bloodborne, but the engine has no
+        # verified executable hash/hook addresses for this region.
+        result = discovery.scan(self.launcher, [self.base/"Games"])
+        self.assertTrue(any(x["folder"] == str(folder.resolve()) and
+                            x["status"] == "unverified_region"
+                            for x in result["games"]))
+
     def test_sfo_missing_is_uncertain_not_a_verified_game(self):
         found = self.add_game(self.base/"CUSA00900", "CUSA00900", sfo=False)
         x = discovery.scan(self.launcher,[self.base])
@@ -67,7 +76,8 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(x["games"][0]["title_id"],"CUSA00900")
 
     def test_does_not_confuse_random_eboot_with_bloodborne(self):
-        self.add_game(self.base/"Games"/"Wrong", "CUSA04222")
+        odd = self.add_game(self.base/"Games"/"Wrong", "CUSA04222")
+        (odd/"sce_sys"/"param.sfo").write_bytes(fake_sfo("CUSA04222","01.09").replace(b"Bloodborne",b"Other Game"))
         out = discovery.scan(self.launcher,[self.base/"Games"])
         self.assertFalse(out["games"])
 
@@ -83,8 +93,9 @@ class DiscoveryTests(unittest.TestCase):
             s = discovery.find_saves(self.launcher, extra_roots=[self.base/"shadPS4"])
         found = {v.folder: v for v in s}
         for p in (new, old, party):
-            self.assertIn(str(p),found)
-            self.assertIn("CUSA",found[str(p)].title_id)
+            canonical = str(p.resolve())
+            self.assertIn(canonical,found)
+            self.assertIn("CUSA",found[canonical].title_id)
         self.assertTrue(all("Detected only" in item.compatibility for item in s))
         self.assertEqual((new/"userdata0000").read_bytes(),b"user-save-private-data")
 
@@ -109,7 +120,10 @@ class DiscoveryTests(unittest.TestCase):
         except (OSError, NotImplementedError):
             self.skipTest("symlink creation unavailable")
         found = discovery.find_games(self.launcher,[link.parent])
-        self.assertFalse(found)
+        # The legitimate target may be located independently via the
+        # explicit parent hint, but NEVER follow or return the symlink alias.
+        self.assertTrue(all(Path(x.folder).resolve() != link.absolute() for x in found))
+        self.assertFalse(discovery._dir(link))
 
 
 if __name__ == "__main__":
