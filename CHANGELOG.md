@@ -17,6 +17,7 @@ For actual shipped release notes, consult this fork's
 - Added Network Doctor and protocol-aware *diagnostic* Seamless Hunt checks. These do not log the game into multiplayer.
 - Improved patch collision preflight, game file verification, backup safety and developer packaging boundaries.
 - Added a read-only Release Center: bundled changelog, release notes from this fork's GitHub feed and manual checks. This is **not an auto-installer**.
+- Added read-only Hunter/Saves browser to the existing launcher. Validated decrypted character slots can display name, level, stats, Echoes, Insight, playtime and save provenance; unknown fields remain unspecified. No slot selection or import is performed.
 
 ### Research and planned work, not shipped features
 - Unified launcher and in-game settings UX, Hunter Hub character overview, optional save/chalice tools.
