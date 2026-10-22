@@ -47,7 +47,7 @@ def _legal(path: str) -> bool:
     return True
 
 
-def verify(path: Path) -> dict:
+def verify(path: Path, *, require_native_bbsc: bool = False) -> dict:
     if not path.is_file():
         raise ValueError("missing Windows package")
     with zipfile.ZipFile(path) as archive:
@@ -59,7 +59,9 @@ def verify(path: Path) -> dict:
         total = 0
         for info in members:
             name = info.filename
-            if not _legal(name):
+            # The ONLY nested output allowed in the experimental candidate
+            # is the genuine separately compiled native CLS bbnet20 DLL.
+            if not _legal(name) and name != "out/gpu/bbnet20.dll":
                 raise ValueError(f"unsafe package path: {name!r}")
             low = name.casefold()
             if low in names_casefold:
@@ -75,12 +77,17 @@ def verify(path: Path) -> dict:
             if total > MAX_CONTENT_BYTES:
                 raise ValueError("package exceeds decompressed content limit")
             by_name[name] = info
+        has_candidate = "out/gpu/bbnet20.dll" in by_name
+        if has_candidate != require_native_bbsc:
+            raise ValueError("Native BBSC candidate inclusion does not match requested package mode")
         if not REQUIRED <= by_name.keys():
             raise ValueError(f"missing runtime entrypoints: {sorted(REQUIRED - by_name.keys())}")
         try:
             manifest = json.loads(archive.read("MANIFEST.json"))
         except (ValueError, KeyError) as exc:
             raise ValueError("invalid manifest") from exc
+        if manifest.get("native_bbsc_candidate_included", False) is not require_native_bbsc:
+            raise ValueError("Native BBSC candidate manifest flag does not match package mode")
         if manifest.get("format") != "seamless-hunt-native-windows-dev-v2":
             raise ValueError("unsupported package schema; Python runtime required")
         revision = manifest.get("source_commit")
@@ -116,15 +123,18 @@ def verify(path: Path) -> dict:
             raise ValueError("package contains unlisted files")
         return {"source_commit": revision, "files_verified": len(records),
                 "uncompressed_bytes": total, "portable_python": True,
-                "game_files_included": False, "live_coop_verified": False}
+                "game_files_included": False, "live_coop_verified": False,
+                "native_bbsc_candidate_included": has_candidate}
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--zip", type=Path, required=True)
+    p.add_argument("--require-native-bbsc-candidate", action="store_true")
     args = p.parse_args()
     try:
-        print(json.dumps(verify(args.zip), sort_keys=True))
+        print(json.dumps(verify(args.zip,
+              require_native_bbsc=args.require_native_bbsc_candidate), sort_keys=True))
     except (OSError, ValueError, zipfile.BadZipFile) as ex:
         p.error(str(ex))
     return 0
