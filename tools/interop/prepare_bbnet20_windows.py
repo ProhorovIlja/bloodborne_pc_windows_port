@@ -16,6 +16,7 @@ REVISION = "8185b88d80573fa300595d5c54450183b4109935"
 FORMAT = "seamless-hunt-bbnet20-source-v1"
 ROOTS = ("gpu/bbnet20/", "gpu/bbnet/bbnet.h", "gpu/third_party/httplib/")
 GLUE = "gpu/bbnet20/bbnet_glue.cpp"
+BBSC_GLUE = "gpu/bbnet20/bbsc/bbsc_glue.cpp"
 CMAKE = "gpu/bbnet20/CMakeLists.txt"
 EXPORT = '#define BBNET_EXPORT extern "C" __attribute__((visibility("default")))'
 LINK_OPTS = "target_link_options(bbnet20 PRIVATE -Wl,-Bsymbolic -Wl,--exclude-libs,ALL)"
@@ -54,15 +55,15 @@ def prepare(staged: Path, workspace: Path) -> dict:
         if name in sources:
             raise ValueError("duplicate inventory entry")
         sources[name] = data
-    expected = (GLUE, CMAKE, "gpu/bbnet/bbnet.h",
+    expected = (GLUE, BBSC_GLUE, CMAKE, "gpu/bbnet/bbnet.h",
                 "gpu/third_party/httplib/httplib.h", "gpu/third_party/httplib/LICENSE")
     if any(x not in sources for x in expected):
         raise ValueError("pinned source or third-party MIT license missing")
     # Git for Windows can check out upstream C++/CMake files as CRLF even
     # though GitHub shows LF. Verify the ORIGINAL bytes against the pinned
-    # manifest first, then normalize only the two files we will transform.
+    # manifest first, then normalize only the three files we will transform.
     # Never alter unmodified vendor files: their upstream hashes stay auditable.
-    for name in (GLUE, CMAKE):
+    for name in (GLUE, BBSC_GLUE, CMAKE):
         sources[name] = sources[name].replace(b"\r\n", b"\n")
     if EXPORT.encode() not in sources[GLUE] or LINK_OPTS.encode() not in sources[CMAKE]:
         raise ValueError("upstream changed: explicitly review Windows adaptations")
@@ -130,6 +131,27 @@ def prepare(staged: Path, workspace: Path) -> dict:
         end = glue.index(probe_end, start)
         glue = glue[:start] + b"#ifndef _WIN32\n" + glue[start:end] + b"#endif\n" + glue[end:]
         sources[GLUE] = glue
+    # Critical Windows static-vs-shared distinction: the Linux bbnet20 module
+    # shares a libbbgpu with its host. The Windows engine instead links bbgpu
+    # STATIC into bbport.exe. Directly linking the plugin to another copy of
+    # bbgpu would make the cinematic camera register into the WRONG SDL
+    # window, and its loading status would be invisible in the real renderer.
+    # Rewire exactly two genuine upstream call sites to host-EXE forwarders.
+    # These forwarders use explicit GetProcAddress on the primary process,
+    # with no changes to the gameplay packets, memory or the P2P protocol.
+    video_include = b'#include "bbgpu.h"'
+    video_func = b"bbgpu_add_event_filter("
+    dialog_func = b"bbgpu_overlay_banner("
+    if (glue.count(video_include) != 1 or glue.count(video_func) != 1 or
+        sources[BBSC_GLUE].count(video_include) != 1 or
+        sources[BBSC_GLUE].count(dialog_func) != 2):
+        raise ValueError("Upstream BBSC-to-GPU integration changed; review required")
+    glue = glue.replace(video_include,
+        video_include + b'\nextern "C" void bbnet20_host_add_event_filter(BbGpuEventFilter);', 1)
+    sources[GLUE] = glue.replace(video_func, b"bbnet20_host_add_event_filter(", 1)
+    dialog = sources[BBSC_GLUE].replace(video_include,
+        video_include + b'\nextern "C" void bbnet20_host_overlay_banner(const char*);', 1)
+    sources[BBSC_GLUE] = dialog.replace(dialog_func, b"bbnet20_host_overlay_banner(")
     sources[CMAKE] = sources[CMAKE].replace(
         LINK_OPTS.encode(),
         b'if(NOT WIN32)\n    ' + LINK_OPTS.encode() + b'\nelse()\n'
