@@ -17,6 +17,7 @@ FORMAT = "seamless-hunt-bbnet20-source-v1"
 ROOTS = ("gpu/bbnet20/", "gpu/bbnet/bbnet.h", "gpu/third_party/httplib/")
 GLUE = "gpu/bbnet20/bbnet_glue.cpp"
 BBSC_GLUE = "gpu/bbnet20/bbsc/bbsc_glue.cpp"
+RELAY = "gpu/bbnet20/vendor/shadps4/core/net/p2p_relay.cpp"
 CMAKE = "gpu/bbnet20/CMakeLists.txt"
 EXPORT = '#define BBNET_EXPORT extern "C" __attribute__((visibility("default")))'
 LINK_OPTS = "target_link_options(bbnet20 PRIVATE -Wl,-Bsymbolic -Wl,--exclude-libs,ALL)"
@@ -55,15 +56,15 @@ def prepare(staged: Path, workspace: Path) -> dict:
         if name in sources:
             raise ValueError("duplicate inventory entry")
         sources[name] = data
-    expected = (GLUE, BBSC_GLUE, CMAKE, "gpu/bbnet/bbnet.h",
+    expected = (GLUE, BBSC_GLUE, RELAY, CMAKE, "gpu/bbnet/bbnet.h",
                 "gpu/third_party/httplib/httplib.h", "gpu/third_party/httplib/LICENSE")
     if any(x not in sources for x in expected):
         raise ValueError("pinned source or third-party MIT license missing")
     # Git for Windows can check out upstream C++/CMake files as CRLF even
     # though GitHub shows LF. Verify the ORIGINAL bytes against the pinned
-    # manifest first, then normalize only the three files we will transform.
+    # manifest first, then normalize only the four files we will transform.
     # Never alter unmodified vendor files: their upstream hashes stay auditable.
-    for name in (GLUE, BBSC_GLUE, CMAKE):
+    for name in (GLUE, BBSC_GLUE, RELAY, CMAKE):
         sources[name] = sources[name].replace(b"\r\n", b"\n")
     if EXPORT.encode() not in sources[GLUE] or LINK_OPTS.encode() not in sources[CMAKE]:
         raise ValueError("upstream changed: explicitly review Windows adaptations")
@@ -152,6 +153,18 @@ def prepare(staged: Path, workspace: Path) -> dict:
     dialog = sources[BBSC_GLUE].replace(video_include,
         video_include + b'\nextern "C" void bbnet20_host_overlay_banner(const char*);', 1)
     sources[BBSC_GLUE] = dialog.replace(dialog_func, b"bbnet20_host_overlay_banner(")
+    # The shadPS4 P2P relay reuses POSIX address-conversion headers on Linux.
+    # WinSock2 already provides identical byte-order and IPv4 layout APIs
+    # (inet_pton, htons, ntohs, sockaddr_in). Never touch its packet framing
+    # or relay protocol; only replace these two compile-time includes.
+    posix_includes = b"#include <arpa/inet.h>\n#include <netinet/in.h>"
+    if sources[RELAY].count(posix_includes) != 1:
+        raise ValueError("Upstream P2P relay platform includes changed; review required")
+    sources[RELAY] = sources[RELAY].replace(posix_includes,
+        b"#ifdef _WIN32\n"
+        b"#ifndef WIN32_LEAN_AND_MEAN\n#define WIN32_LEAN_AND_MEAN\n#endif\n"
+        b"#include <winsock2.h>\n#include <ws2tcpip.h>\n"
+        b"#else\n" + posix_includes + b"\n#endif", 1)
     sources[CMAKE] = sources[CMAKE].replace(
         LINK_OPTS.encode(),
         b'if(NOT WIN32)\n    ' + LINK_OPTS.encode() + b'\nelse()\n'
