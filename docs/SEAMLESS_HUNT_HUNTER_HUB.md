@@ -10,6 +10,12 @@ Autodiscover native, shadPS4, BBPort and isolated party saves without moving or 
 A build label (Skill / Quality / Arcane etc.) is a documented heuristic, not a value explicitly present in the save. Allow user-written build nicknames as separate launcher metadata, not save changes. Optional portrait uses an opt-in locally cached *in-game screenshot*; a saved appearance value is not itself a 3D render.
 Selecting a character from a detected save source must not silently convert, overwrite or activate an incompatible format. Verify IDs, hashes, regions and game-not-running state. Do not distribute or collect user saves.
 
+## First native Hunter Hub code milestone (2026-10-22)
+- Added `scripts/hunter_profiles.py`: bounded, read-only parser for deciphered `userdata0000..0009` with level/stat checksum, file-size/mtime validation, UTF-16 names and conservative build labels. On unrecognized data, no fake profile is shown.
+- Added `Hunters / Saves` launcher dialog that uses existing safe discovery or manual folder selection. It displays *validated* character stats and sources; no active game slot switching or save editor yet.
+- Added synthetic multilingual/broken-save fixtures and CI tests on Windows and Linux. CI passing is not proof a real user's native/shadPS4/Awaken save parses correctly. Actual save comparison with in-game values remains a release gate.
+- Upstream format credit: Supermedo `bbport_character.py` (GPL-2.0-or-later), Noxde. We have not redistributed a real save or copyrighted game files.
+
 ## Specific verified upstream read-only character/save implementations
 Supermedo's Windows branch contains [bbport_character.py](https://github.com/Supermedo/bloodborne_pc/blob/windows/launcher/bbport_character.py), a concrete read-only parser for character slot name, level, attributes, weapons, Echoes/Insight, flags/deaths and playtime. It checks the relationship between level and stat totals before reporting values. [bbport_saves.py](https://github.com/Supermedo/bloodborne_pc/blob/windows/launcher/bbport_saves.py) documents the ten character slots and differing native/Awaken, modern/legacy shadPS4, bbhost and Apollo export paths, with separate staged copies and backup logic.
 
