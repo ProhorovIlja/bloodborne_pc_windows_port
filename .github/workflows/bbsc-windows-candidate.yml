@@ -1,0 +1,113 @@
+# Experimental bbnet20 Windows port. Compiles the REAL upstream source against
+# our native Windows renderer/runtime. Never uploads an untested DLL to users.
+name: Native BBSC Windows module candidate
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/bbsc-windows-candidate.yml'
+      - 'gpu/CMakeLists.txt'
+      - 'src/runtime_legacy_*'
+      - 'tools/interop/**'
+      - 'tools/setup_windows_deps.sh'
+      - 'build.bat'
+      - 'tests/test_prepare_bbnet20_windows.py'
+
+concurrency:
+  group: bbsc-windows-candidate-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+jobs:
+  native-bbsc-candidate:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      BB_BUILD_JOBS: '2'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: deadinside28/bloodborne_pc
+          ref: 8185b88d80573fa300595d5c54450183b4109935
+          path: upstream-bbnet20
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run Windows source adaptation regression tests
+        shell: pwsh
+        run: python -m unittest discover -s tests -p 'test_prepare_bbnet20_windows.py' -v
+      - name: Stage and adapt genuine pinned shadNet/BBSC native module
+        shell: pwsh
+        run: |
+          python tools/interop/stage_bbnet20.py --from-checkout upstream-bbnet20 --output out/interop/bbnet20
+          python tools/interop/prepare_bbnet20_windows.py --staged out/interop/bbnet20 --workspace .
+          if (-not (Test-Path 'gpu/bbnet20/bbnet_glue.cpp')) { throw "No real BBSC source" }
+          if (-not (Test-Path 'gpu/third_party/httplib/LICENSE')) { throw "Missing MIT license" }
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - name: Install Clang and actual bbnet20 protocol dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          packages=(
+            git patch
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld
+            mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-vulkan-loader
+            mingw-w64-clang-x86_64-vulkan-memory-allocator
+            mingw-w64-clang-x86_64-sdl3 mingw-w64-clang-x86_64-fmt
+            mingw-w64-clang-x86_64-boost mingw-w64-clang-x86_64-robin-map
+            mingw-w64-clang-x86_64-xxhash mingw-w64-clang-x86_64-zydis
+            mingw-w64-clang-x86_64-glslang mingw-w64-clang-x86_64-ffmpeg
+            mingw-w64-clang-x86_64-protobuf
+            mingw-w64-clang-x86_64-nlohmann-json
+            mingw-w64-clang-x86_64-openssl
+            mingw-w64-clang-x86_64-zlib
+            mingw-w64-clang-x86_64-miniupnpc
+          )
+          for attempt in 1 2 3; do
+            if pacman --noconfirm --disable-download-timeout -Sy &&
+               pacman --noconfirm --disable-download-timeout -S --needed "${packages[@]}"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep 8
+          done
+
+      - name: Pin native renderer-only dependencies
+        shell: msys2 {0}
+        run: bash tools/setup_windows_deps.sh
+
+      - name: Configure actual Windows bbnet20 target
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export CC=clang CXX=clang++
+          export MINGW_DIR="$(cygpath -w "$MINGW_PREFIX")"
+          # Configure existing engine graph first; candidate is an optional
+          # independent target and does not change the normal user's package.
+          cmd.exe //C "call build.bat" || exit 1
+          cmake -S gpu -B out/gpu -DBB_BBSC20_WINDOWS_CANDIDATE=ON
+          cmake --build out/gpu --target bbnet20 -- -j 2
+          test -f out/gpu/bbnet20.dll || { echo "Real native BBSC DLL missing" >&2; exit 1; }
+
+      - name: Confirm DLL exports without claiming online acceptance
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          llvm-objdump -p out/gpu/bbnet20.dll | grep -E 'bbnet_(init|resolve|image_ready|start)' >/dev/null
+          echo 'REAL bbnet20.dll compiled. Game login, bell and crossplay NOT verified.'
