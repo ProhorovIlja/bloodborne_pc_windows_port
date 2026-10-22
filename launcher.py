@@ -2037,6 +2037,9 @@ class BloodborneLauncher(tk.Tk):
         self.seamless_hunt_status_var = tk.StringVar(value="Optional server connectivity check; game P2P is unchanged.")
         self.seamless_hunt_test_running = False
         self.seamless_hunt_result_queue = queue.Queue()
+        # Experimental legacy CLS BBSC is re-confirmed EVERY launcher session.
+        # Deliberately not restored from launcher_settings.json.
+        self.legacy_bbsc_var = tk.BooleanVar(value=False)
         # Party rules & sync dialog (PARTY_SWITCHES, start mode, guest Insight, backups)
         self.party_switch_vars = {key: tk.BooleanVar(value=bool(self.settings.get(key, default)))
                                   for key, _, default in PARTY_SWITCHES}
@@ -2723,7 +2726,11 @@ class BloodborneLauncher(tk.Tk):
             self.home_client_var.set(launcher_home_state.client_label(
                 (APP_DIR / "out" / "bbport.exe").is_file(), RUN_BAT.is_file()))
             mode = self.party_mode() if hasattr(self, "party_mode_var") else ""
-            self.home_party_var.set(launcher_home_state.party_label(mode))
+            if getattr(self, "legacy_bbsc_var", None) is not None and self.legacy_bbsc_var.get():
+                self.home_party_var.set(
+                    "EXPERIMENTAL legacy BBSC selected · native Party must be OFF · online unverified")
+            else:
+                self.home_party_var.set(launcher_home_state.party_label(mode))
         except (OSError, ValueError, tk.TclError):
             self.home_game_var.set("Game information unavailable · verify before Play")
 
@@ -2980,6 +2987,16 @@ class BloodborneLauncher(tk.Tk):
         self.seamless_hunt_status_lbl.grid(row=sec.next_row, column=0, columnspan=2,
                                           sticky="w", pady=(0, 5))
         sec.next_row += 1
+        legacy_cb = self._check(
+            sec, "Experimental: CLS BBSC bells (native DLL)", self.legacy_bbsc_var,
+            "For native Win64 developer testing ONLY. Requires a separately built "
+            "out/gpu/bbnet20.dll, normal Party mode OFF, and a compatible 1.09 "
+            "game image. This is NOT yet proven compatible with CLS BBSC 0.0.2 "
+            "players and does NOT reuse the native Party transport. "
+            "Enabled only for this launcher session, with launch confirmation.",
+            command=self.refresh_home_state)
+        Tooltip(legacy_cb, "Not a regular release feature. No automatic downloads, "
+                "account sign-in, server changes or game save selection.")
         port_tip = ("UDP/TCP port of the party on this PC (1024-65535). The host's friends connect to it; "
                     "forward it in your router if UPnP cannot open it. Default: 9307 (BB_PARTY_PORT).")
         port_lbl = ttk.Label(sec, text="Port:", style="Card.TLabel")
@@ -5707,6 +5724,30 @@ class BloodborneLauncher(tk.Tk):
                 env.pop(key, None)
             else:
                 env[key] = value
+        # Do not inadvertently inherit experimental BBSC switches from the
+        # user's shell during ordinary native Party, Solo or world-warper runs.
+        from scripts import legacy_bbsc_launch
+        legacy_bbsc_launch.clear_legacy_env(env)
+        if self.legacy_bbsc_var.get():
+            problem = legacy_bbsc_launch.preflight(
+                APP_DIR, party_mode=self.party_mode(), warper=warper)
+            if problem:
+                self.log("[LEGACY BBSC] Not started: " + problem)
+                messagebox.showerror("Native CLS BBSC (experimental)", problem, parent=self)
+                return
+            if not messagebox.askyesno(
+                "Experimental legacy BBSC",
+                "Enable the unverified legacy CLS BBSC adapter for THIS launch?\n\n"
+                "• Uses native bbport.exe and separately built bbnet20.dll\n"
+                "• Not the existing native Party co-op protocol\n"
+                "• Real account login / bell matchmaking not certified\n"
+                "• May crash or alter normal game saves if upstream BBSC hooks fail\n"
+                "• Use a COPY of your hunter saves for this experiment\n\n"
+                "Do not use this mode for ordinary gameplay until tested.",
+                parent=self):
+                self.log("[LEGACY BBSC] Experimental start cancelled.")
+                return
+            legacy_bbsc_launch.activate(env)
         env["BB_GAME_DIR"] = str(game_dir)
         if warper:
             warper_env(env, warper_paths())
@@ -5754,6 +5795,9 @@ class BloodborneLauncher(tk.Tk):
         self.log(f"FPS: {self.fps_var.get()} | Res: {res_choice} | Mods: {env['BB_MODS_ENABLED']}")
         self.log(features_str)
         self.log(f"XML Patches ({len(active_patches)} active): {', '.join(active_patches) if active_patches else 'None'}")
+        if env.get("BB_BBSC") == "1":
+            self.log("[LEGACY BBSC] Experimental Win64 bbnet20.dll requested; "
+                     "NOT certified CLS 0.0.2 gameplay compatibility.")
         if warper:
             self.log(f"World warper: building the shader cache on a copy of the save ({env['BB_USER_DIR']}); "
                      f"progress file {env['BB_WORLD_WARPER_STATE']}")
