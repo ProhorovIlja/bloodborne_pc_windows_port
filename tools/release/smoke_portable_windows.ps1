@@ -47,6 +47,10 @@ assert Path('out/bbport.exe').is_file()
 print('Portable launcher imports from extracted folder: OK')
 '@
         if ($LASTEXITCODE -ne 0) { throw 'Portable launcher import failed' }
+        # A real extracted ZIP must contain the manifest and exactly the
+        # runtime binaries hashed at packaging time. Never scan user saves.
+        & $py -I -B scripts/client_integrity.py --client-dir .
+        if ($LASTEXITCODE -ne 0) { throw 'Extracted Windows package integrity mismatch' }
         $pathText = & cmd.exe /D /C ('call "' + $gui + '" --print-python')
         if ($LASTEXITCODE -ne 0) { throw 'Double-click launcher entrypoint failed' }
         if ((($pathText | Out-String).Trim()) -notmatch [regex]::Escape('python\pythonw.exe')) {
