@@ -103,9 +103,11 @@ def _collect(source: Path) -> dict[str, Path]:
             if "__pycache__" in obj.parts or obj.name.startswith("."):
                 continue
             out[rel] = obj
-    # Only the build's DLLs: do not collect arbitrary files from out/ or user/.
+    # Windows build links bbgpu STATIC into bbport.exe. Dependency DLLs are
+    # explicitly staged beside the executable, never in out/gpu/ or below.
+    # rglob() here accidentally included arbitrary nested build-tree DLLs.
     folder = source / "out"
-    for obj in folder.rglob("*.dll"):
+    for obj in folder.glob("*.dll"):
         if obj.is_file() and not obj.is_symlink():
             out[obj.relative_to(source).as_posix()] = obj
     return out
