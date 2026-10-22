@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import webbrowser
 import tkinter as tk
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -513,6 +514,15 @@ def seamless_hunt_module():
         sys.path.insert(0, scripts_dir)
     import seamless_hunt
     return seamless_hunt
+
+
+def seamless_hunt_network_module():
+    """Opt-in STUN and IPv6 checks; no gameplay traffic or account credentials."""
+    scripts_dir = str(APP_DIR / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import seamless_hunt_network
+    return seamless_hunt_network
 
 
 PARTY_RENDEZVOUS_TIP = (
@@ -2668,13 +2678,20 @@ class BloodborneLauncher(tk.Tk):
         sh_row = ttk.Frame(sec, style="Card.TFrame")
         sh_row.grid(row=sec.next_row, column=0, columnspan=2, sticky="w", pady=(0, 3))
         sec.next_row += 1
-        self.seamless_hunt_test_btn = ttk.Button(sh_row, text="Check Seamless Hunt",
+        self.seamless_hunt_test_btn = ttk.Button(sh_row, text="Network doctor",
                                                 style="Secondary.TButton", command=self.check_seamless_hunt)
         self.seamless_hunt_test_btn.pack(side="left")
         Tooltip(self.seamless_hunt_test_btn,
-                "Checks read-only TCP connectivity to Seamless Hunt shadNet and Web API, plus "
-                "HEAD /ss.info on its GameServer. Does not send a password, log in, join a session "
-                "or change the game's existing direct P2P connection.")
+                "Optional checks: Seamless Hunt TCP services, game-server status, UDP STUN mapping "
+                "and local IPv6 routing. STUN reveals your IP to your chosen STUN provider. "
+                "No passwords or party codes are transmitted, and the game P2P is unchanged. "
+                "This does not establish that other hunters can join you.")
+        sh_site_btn = ttk.Button(sh_row, text="Account website",
+                                 style="Secondary.TButton",
+                                 command=lambda: webbrowser.open("https://seamlesshunt.com"))
+        sh_site_btn.pack(side="left", padx=(6, 0))
+        Tooltip(sh_site_btn, "Open the official Seamless Hunt website in your browser "
+                             "to register or manage your account. Launcher sign-in is not implemented yet.")
         self.seamless_hunt_status_lbl = ttk.Label(
             sec, textvariable=self.seamless_hunt_status_var, style="Hint.TLabel",
             wraplength=330, justify="left")
@@ -3548,16 +3565,19 @@ class BloodborneLauncher(tk.Tk):
             return
         self.seamless_hunt_test_running = True
         self.seamless_hunt_test_btn.configure(state="disabled")
-        self.seamless_hunt_status_var.set("Checking Seamless Hunt services...")
+        stun_address = self.party_stun_var.get()
+        self.seamless_hunt_status_var.set("Checking Seamless Hunt TCP, UDP/STUN and IPv6...")
         def worker():
             try:
                 sh = seamless_hunt_module()
-                results = sh.check_services()
-                message = sh.format_results(results)
+                net = seamless_hunt_network_module()
+                services = sh.check_services()
+                routes = net.check_routes(stun_address)
+                message = sh.format_results(services) + "; " + net.format_routes(routes)
             except Exception:
-                message = "Connection check could not complete (see server diagnostics)."
+                message = "Network diagnostic did not complete; game networking is unchanged."
             self.seamless_hunt_result_queue.put(message)
-        threading.Thread(target=worker, name="sh-readonly-check", daemon=True).start()
+        threading.Thread(target=worker, name="sh-network-doctor", daemon=True).start()
         self.after(100, self.poll_seamless_hunt)
 
     def poll_seamless_hunt(self):
@@ -3570,7 +3590,8 @@ class BloodborneLauncher(tk.Tk):
         self.seamless_hunt_test_btn.configure(state="normal")
         self.seamless_hunt_status_var.set(message)
         self.log("[SEAMLESS HUNT] " + message)
-        self.log("[SEAMLESS HUNT] Connectivity only; native P2P and matchmaking are unchanged.")
+        self.log("[SEAMLESS HUNT] TCP, outbound UDP and IPv6 routing diagnostics only. "
+                 "Successful checks do not prove NAT traversal; P2P and matchmaking remain unchanged.")
 
     def run_party_local_test(self):
         if self.party_test_running:
