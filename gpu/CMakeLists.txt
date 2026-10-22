@@ -568,7 +568,17 @@ if (BB_BBSC20_WINDOWS_CANDIDATE)
     if (NOT TARGET protobuf::protoc OR NOT TARGET protobuf::libprotobuf)
         message(FATAL_ERROR "Native candidate requires a matching protoc and libprotobuf")
     endif()
+    # shadPS4's Windows host_net.cpp uses <wepoll.h> and its epoll_* API.
+    # Require the exact pinned BSD-licensed C implementation, not a shim.
+    set(BBSC_WEPOLL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ext-wepoll")
+    if (NOT EXISTS "${BBSC_WEPOLL_ROOT}/wepoll.c" OR
+        NOT EXISTS "${BBSC_WEPOLL_ROOT}/wepoll.h" OR
+        NOT EXISTS "${BBSC_WEPOLL_ROOT}/LICENSE")
+        message(FATAL_ERROR "Missing licensed, pinned shadPS4 ext-wepoll sources")
+    endif()
+    add_subdirectory("${BBSC_WEPOLL_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/bbsc-ext-wepoll" EXCLUDE_FROM_ALL)
     add_subdirectory(bbnet20 EXCLUDE_FROM_ALL)
+    target_link_libraries(bbnet20 PRIVATE wepoll)
     # Upstream's Linux source assumes its httplib headers live at a different
     # location. Keep their MIT notice and add the exact verified source tree.
     # The shadPS4 networking sources reuse the native port's smaller logging
