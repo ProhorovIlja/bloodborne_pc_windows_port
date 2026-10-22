@@ -29,6 +29,24 @@ bool FilteredByModule(const SDL_Event& event, SDL_Window* window) {
         event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
         return false;
     }
+    // Modules may handle cinematic F1 and game inputs, but they never prevent
+    // opening the settings menu, taking an issue marker, showing the HUD or
+    // toggling fullscreen. Protect key-up as well as key-down to avoid a stuck
+    // key in the local input mapper.
+    if ((event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) &&
+        (event.key.key == SDLK_INSERT || event.key.key == SDLK_F9 ||
+         event.key.key == SDLK_F11 ||
+         ((event.key.mod & SDL_KMOD_ALT) &&
+          (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)))) {
+        return false;
+    }
+    // The native overlay can be opened with L3+R3 on a controller.
+    if ((event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
+         event.type == SDL_EVENT_GAMEPAD_BUTTON_UP) &&
+        (event.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK ||
+         event.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK)) {
+        return false;
+    }
     for (const auto& slot : game_event_filters) {
         const auto filter = slot.load(std::memory_order_acquire);
         if (filter && filter(&event, window)) {
