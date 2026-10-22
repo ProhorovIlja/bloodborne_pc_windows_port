@@ -41,6 +41,9 @@ jobs:
       - name: Party session recovery
         run: python -m unittest discover -s tests -p 'test_party_session.py' -v
 
+      - name: XML patch collision preflight (offline)
+        run: python -m unittest discover -s tests -p 'test_patch_preflight.py' -v
+
       - name: Safe Seamless Hunt release notices
         run: python -m unittest discover -s tests -p 'test_update_check.py' -v
 
