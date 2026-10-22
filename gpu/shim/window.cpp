@@ -19,7 +19,7 @@
 // A module that registered a callback before the player switched to visy or
 // turned BBSC off must not continue intercepting input afterward. Read this
 // once per SDL poll batch, not once per mouse-motion event.
-#if defined(_WIN32) && defined(BBGPU_BBSC_HOST_EXPORTS)
+#if defined(_WIN32) && defined(BBGPU_BBSC_CANDIDATE_HOST)
 extern "C" int runtime_legacy_net_requested(void);
 #endif
 
@@ -372,7 +372,7 @@ bool WindowSDL::PollEvents() {
     // Once user opts out (or visy owns the session), already-registered BBSC
     // callbacks are dormant, even if the DLL stays loaded until process exit.
     bool module_input_allowed = true;
-#if defined(_WIN32) && defined(BBGPU_BBSC_HOST_EXPORTS)
+#if defined(_WIN32) && defined(BBGPU_BBSC_CANDIDATE_HOST)
     module_input_allowed = runtime_legacy_net_requested() != 0;
 #endif
     SDL_Event event;
