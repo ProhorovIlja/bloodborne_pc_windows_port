@@ -85,12 +85,20 @@ void bbgpu_request_quit(void);
  * A NULL registration does nothing; this API does not load a network module.
  */
 typedef int (*BbGpuEventFilter)(const void *sdl_event, void *sdl_window);
-void bbgpu_add_event_filter(BbGpuEventFilter filter);
+/* Explicit PE exports only in the isolated BBSC-Windows CI candidate.
+ * The normal standalone client does not expose module host callbacks.
+ */
+#if defined(_WIN32) && defined(BBGPU_BBSC_HOST_EXPORTS)
+# define BBGPU_BBSC_HOST_API __declspec(dllexport)
+#else
+# define BBGPU_BBSC_HOST_API
+#endif
+BBGPU_BBSC_HOST_API void bbgpu_add_event_filter(BbGpuEventFilter filter);
 /* Async-safe read-only status line from shadPS4/BBSC game modules.
  * NULL clears it; the native presenter owns the drawing and input remains
  * completely unaffected. A module is not loaded merely by declaring this.
  */
-void bbgpu_overlay_banner(const char *message);
+BBGPU_BBSC_HOST_API void bbgpu_overlay_banner(const char *message);
 /* 0 while the game window is in the background and BB_MUTE_UNFOCUSED is not 0: audio is muted. */
 int bbgpu_audio_audible(void);
 /* Patches the loaded image before the game runs (image still writable): libGnm entry hooks. */
