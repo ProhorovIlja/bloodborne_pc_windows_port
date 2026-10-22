@@ -2296,6 +2296,16 @@ class BloodborneLauncher(tk.Tk):
                 "conflicting files, safe install and offline-only lamp/respec behavior. "
                 "No game files or existing mods are overwritten.")
 
+        manage_mods_btn = ttk.Button(sec, text="Manage installed mods...",
+                                     style="Secondary.TButton",
+                                     command=self.open_community_mod_manager)
+        manage_mods_btn.grid(row=sec.next_row, column=0, columnspan=2,
+                             sticky="w", pady=(2, 2))
+        sec.next_row += 1
+        Tooltip(manage_mods_btn, "Enable or disable individual loose-file mods without "
+                                "touching Bloodborne's files or changing their load order. "
+                                "MOAL and DollRebirth are kept out of unverified multiplayer.")
+
 
         # 5. Input & Audio
         tab = self._tab("Input & Audio")
@@ -3989,6 +3999,63 @@ class BloodborneLauncher(tk.Tk):
         self.feat_skip_intro.set("Skip Intro" in self.enabled_patches)
         self.feat_perf_patch.set("Performance Patch (perf increase)" in self.enabled_patches)
         self.feat_no_blur.set("Disable Motion Blur (perf increase)" in self.enabled_patches)
+
+    def open_community_mod_manager(self):
+        """Individual on/off switches for the existing native mods.json overlay."""
+        try:
+            from scripts import community_mods
+            base = Path(os.environ.get("BB_DATA_DIR") or APP_DIR)
+            choices = community_mods.installed_mods(base)
+        except Exception as exc:
+            messagebox.showerror("Mod manager", str(exc), parent=self)
+            return
+        if not choices:
+            messagebox.showinfo("Mod manager",
+                "No loose-file mods installed. Choose 'Import Jump L3 / Lamp / Rebirth ZIPs' "
+                "to add your own audited community ZIPs.", parent=self)
+            return
+        dlg = tk.Toplevel(self)
+        dlg.title("Manage community mods")
+        dlg.geometry("560x455")
+        dlg.minsize(450, 360)
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.configure(bg="#1a1a1a")
+        top = ttk.Frame(dlg,style="Card.TFrame",padding=12)
+        top.pack(fill="both",expand=True,padx=12,pady=(12,7))
+        ttk.Label(top,text="Select the mods to enable after the next game restart:",
+                  style="Section.TLabel",wraplength=500).pack(anchor="w",pady=(0,8))
+        listbox = tk.Listbox(top,selectmode=tk.MULTIPLE,exportselection=False,
+                             height=min(max(len(choices),6),14))
+        listbox.pack(fill="both",expand=True)
+        for index,(name,enabled) in enumerate(choices):
+            suffix = "  [solo only until tested]" if name.casefold() in ("moal","dollrebirth") else ""
+            listbox.insert("end",name+suffix)
+            if enabled:
+                listbox.selection_set(index)
+        ttk.Label(top,style="Card.TLabel",wraplength=500,
+                  text="Gameplay mods must match your party members. MOAL and DollRebirth "
+                       "are automatically excluded from multiplayer. Changing a mod here "
+                       "does not edit saves, game files or the active session.").pack(anchor="w",pady=(8,0))
+        bar = ttk.Frame(dlg,style="Card.TFrame",padding=10)
+        bar.pack(fill="x",padx=12,pady=(0,12))
+        def save():
+            enabled = [name for i,(name,_) in enumerate(choices)
+                       if i in listbox.curselection()]
+            try:
+                community_mods.save_mod_selection(base,enabled)
+                self.feat_mods.set(True)
+                self.save_settings()
+            except Exception as exc:
+                messagebox.showerror("Mod selection refused",str(exc),parent=dlg)
+                return
+            self.log("[MODS] Active after restart: " + ", ".join(enabled))
+            dlg.destroy()
+        ttk.Button(bar,text="Save mod selection",style="Action.TButton",
+                   command=save).pack(side="right",padx=(8,0))
+        ttk.Button(bar,text="Cancel",style="Secondary.TButton",
+                   command=dlg.destroy).pack(side="right")
+        dlg.protocol("WM_DELETE_WINDOW",dlg.destroy)
 
     def open_community_mod_import(self):
         """Import user-provided community mod ZIPs, never bundled game assets.
