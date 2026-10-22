@@ -12,6 +12,11 @@ from pathlib import Path
 import shutil
 import tempfile
 
+try:
+    from .bbsc_win32_memscan import SOURCE as MEMSCAN, adapt_win32_memscan
+except ImportError:  # direct script invocation from tools/interop/
+    from bbsc_win32_memscan import SOURCE as MEMSCAN, adapt_win32_memscan
+
 REVISION = "8185b88d80573fa300595d5c54450183b4109935"
 FORMAT = "seamless-hunt-bbnet20-source-v1"
 ROOTS = ("gpu/bbnet20/", "gpu/bbnet/bbnet.h", "gpu/third_party/httplib/")
@@ -56,15 +61,15 @@ def prepare(staged: Path, workspace: Path) -> dict:
         if name in sources:
             raise ValueError("duplicate inventory entry")
         sources[name] = data
-    expected = (GLUE, BBSC_GLUE, RELAY, CMAKE, "gpu/bbnet/bbnet.h",
+    expected = (GLUE, BBSC_GLUE, RELAY, CMAKE, MEMSCAN, "gpu/bbnet/bbnet.h",
                 "gpu/third_party/httplib/httplib.h", "gpu/third_party/httplib/LICENSE")
     if any(x not in sources for x in expected):
         raise ValueError("pinned source or third-party MIT license missing")
     # Git for Windows can check out upstream C++/CMake files as CRLF even
     # though GitHub shows LF. Verify the ORIGINAL bytes against the pinned
-    # manifest first, then normalize only the four files we will transform.
+    # manifest first, then normalize only the five files we will transform.
     # Never alter unmodified vendor files: their upstream hashes stay auditable.
-    for name in (GLUE, BBSC_GLUE, RELAY, CMAKE):
+    for name in (GLUE, BBSC_GLUE, RELAY, CMAKE, MEMSCAN):
         sources[name] = sources[name].replace(b"\r\n", b"\n")
     if EXPORT.encode() not in sources[GLUE] or LINK_OPTS.encode() not in sources[CMAKE]:
         raise ValueError("upstream changed: explicitly review Windows adaptations")
@@ -207,6 +212,10 @@ def prepare(staged: Path, workspace: Path) -> dict:
     dialog = sources[BBSC_GLUE].replace(video_include,
         video_include + b'\nextern "C" void bbnet20_host_overlay_banner(const char*);', 1)
     sources[BBSC_GLUE] = dialog.replace(dialog_func, b"bbnet20_host_overlay_banner(")
+    # The real CLS memory scanner uses MSVC __try SEH, which cannot compile
+    # with Win64 clang++ (GNU ABI). Keep upstream FindInMemory and use the
+    # Win32 kernel safe-copy API like Linux's process_vm_readv snapshot.
+    sources[MEMSCAN] = adapt_win32_memscan(sources[MEMSCAN])
     # The shadPS4 P2P relay reuses POSIX address-conversion headers on Linux.
     # WinSock2 already provides identical byte-order and IPv4 layout APIs
     # (inet_pton, htons, ntohs, sockaddr_in). Never touch its packet framing
@@ -261,7 +270,7 @@ def prepare(staged: Path, workspace: Path) -> dict:
                     dest.unlink()
             raise
     return {"source_revision": REVISION, "files_staged": len(sources),
-            "adapted": [GLUE, BBSC_GLUE, RELAY, CMAKE], "windows_online_dll_built": False}
+            "adapted": [GLUE, BBSC_GLUE, RELAY, CMAKE, MEMSCAN], "windows_online_dll_built": False}
 
 
 def main() -> int:
