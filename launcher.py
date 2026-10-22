@@ -5388,8 +5388,12 @@ class BloodborneLauncher(tk.Tk):
     def discover_installs(self, silent=False):
         """Read-only scanner shared by automatic start and explicit Auto Find."""
         if self.discovery_busy:
+            # A click on Auto Find during startup discovery must never be lost.
+            if not silent:
+                self.discovery_show_when_ready = True
             return
         self.discovery_busy = True
+        self.discovery_show_when_ready = False
         if not silent:
             self.log("[DISCOVERY] Scanning game libraries and known save roots (read-only)...")
         configured = self.settings.get("discovery_roots", [])
@@ -5397,7 +5401,11 @@ class BloodborneLauncher(tk.Tk):
         def job():
             try:
                 from scripts import install_discovery
-                data = install_discovery.scan(APP_DIR, roots)
+                data = install_discovery.scan(APP_DIR, roots, deep_scan=not silent)
+                if silent and not data["games"]:
+                    # The fast startup pass misses arbitrary names/deep installs.
+                    # Fall back to a bounded full-library scan without blocking Tk.
+                    data = install_discovery.scan(APP_DIR, roots, deep_scan=True)
                 self.discovery_queue.put((data, bool(silent), None))
             except Exception as error:
                 self.discovery_queue.put((None, bool(silent), str(error)))
@@ -5411,6 +5419,9 @@ class BloodborneLauncher(tk.Tk):
             self.after(100, self._poll_discovery)
             return
         self.discovery_busy = False
+        if getattr(self, "discovery_show_when_ready", False):
+            silent = False
+        self.discovery_show_when_ready = False
         if error:
             self.log(f"[DISCOVERY] Read-only scanner unavailable: {error}")
             if not silent:
@@ -5427,8 +5438,18 @@ class BloodborneLauncher(tk.Tk):
                 safe = [g for g in games if g["status"] == "candidate_109"]
                 if len(safe) == 1:
                     self.eboot_var.set(str(Path(safe[0]["folder"]) / "eboot.bin"))
+                    self.save_settings()
                     self.log(f"[DISCOVERY] Detected game: {safe[0]['title_id']} "
                              f"update {safe[0]['app_version']} (pre-launch hash still required)")
+                elif safe:
+                    self.home_game_var.set(
+                        f"{len(safe)} Bloodborne installations detected. Click Auto Find to choose.")
+                elif games:
+                    self.home_game_var.set(
+                        f"{len(games)} Bloodborne installations found, but none verified for 1.09. Click Auto Find.")
+                else:
+                    self.home_game_var.set(
+                        "Game not found in bounded disk scan. Click Browse or add a search folder.")
             return
         self._show_discovered_installations(data)
 
