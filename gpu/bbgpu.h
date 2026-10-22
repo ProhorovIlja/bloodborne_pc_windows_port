@@ -78,6 +78,14 @@ int bbgpu_test_key(const char *sdl_key_name);
 /* Quits the game as the window's close button does (overlay / System menu "Quit the game",
  * upstream 0.51 #74 #116): the party says goodbye, the process ends. Any thread. */
 void bbgpu_request_quit(void);
+/* Optional game-module SDL event observer (ported from deadinside28/bbport).
+ * Called only on the window thread, before gameplay input, and only while
+ * no text entry or game settings overlay owns it. Nonzero consumes the event.
+ * OS quit/window close requests are never intercepted. Up to four listeners.
+ * A NULL registration does nothing; this API does not load a network module.
+ */
+typedef int (*BbGpuEventFilter)(const void *sdl_event, void *sdl_window);
+void bbgpu_add_event_filter(BbGpuEventFilter filter);
 /* 0 while the game window is in the background and BB_MUTE_UNFOCUSED is not 0: audio is muted. */
 int bbgpu_audio_audible(void);
 /* Patches the loaded image before the game runs (image still writable): libGnm entry hooks. */
