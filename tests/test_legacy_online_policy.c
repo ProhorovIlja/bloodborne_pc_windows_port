@@ -10,6 +10,12 @@ int main(void) {
     assert(!legacy_net_opted_in("true",0));
     assert(legacy_net_opted_in("1",0));
     assert(!legacy_net_opted_in("1",1));
+    assert(legacy_net_supported_game("CUSA03173","Bloodborne","1.09"));
+    assert(legacy_net_supported_game("CUSA00207","Bloodborne","1.09"));
+    assert(!legacy_net_supported_game("CUSA03173","Bloodborne","1.08"));
+    assert(!legacy_net_supported_game("CUSA03173","Other Game","1.09"));
+    assert(!legacy_net_supported_game("UNKNOWN","Bloodborne","1.09"));
+    assert(!legacy_net_supported_game(NULL,"Bloodborne","1.09"));
     assert(!legacy_net_online_symbol(NULL));
     assert(!legacy_net_online_symbol("sceAudioOutOpen"));
     assert(!legacy_net_online_symbol("sceNpTrophyUnlockTrophy"));
