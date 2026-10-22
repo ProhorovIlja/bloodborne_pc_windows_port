@@ -8,6 +8,9 @@ extern "C" {
 int legacy_net_opted_in(const char *env, int party_enabled);
 /* Never redirect locally-owned trophy, commerce or profile/dialog APIs. */
 int legacy_net_online_symbol(const char *symbol);
+/* A previously unknown, syntactically valid PS4 NID can still be resolved by
+ * the pinned network DLL. Unknown human-readable names are never forwarded. */
+int legacy_net_scoped_nid(const char *scoped);
 #ifdef __cplusplus
 }
 #endif
