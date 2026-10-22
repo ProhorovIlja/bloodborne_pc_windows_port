@@ -7,8 +7,7 @@ int legacy_net_opted_in(const char *env, int party_enabled) {
 int legacy_net_online_symbol(const char *symbol) {
     static const char *prefixes[] = {"sceNet", "sceNp", "sceHttp", "sceSsl"};
     static const char *excluded[] = {
-        "sceNpTrophy", "sceNpCommerce", "sceNpProfileDialog",
-        "sceNpScore", "sceNpSns", "sceNpParty"
+        "sceNpTrophy", "sceNpCommerce", "sceNpProfileDialog"
     };
     if (!symbol) return 0;
     for (unsigned i=0; i<sizeof(excluded)/sizeof(excluded[0]); ++i)
