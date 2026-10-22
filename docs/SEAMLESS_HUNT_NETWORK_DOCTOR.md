@@ -17,7 +17,7 @@ All checks are initiated manually and done in a background thread. The regular v
 
 ## Site link
 
-**Account website** opens `https://install.seamlesshunt.com` in the default browser. It does not transmit credentials to the launcher. Signing in directly to this native client is a separate later milestone requiring a verified HTTPS auth contract with the current site, encrypted token storage and a real session API.
+**Account website** opens `https://seamlesshunt.com` in the default browser. It does not transmit credentials to the launcher. Signing in directly to this native client is a separate later milestone requiring a verified HTTPS auth contract with the current site, encrypted token storage and a real session API.
 
 ## Development
 
