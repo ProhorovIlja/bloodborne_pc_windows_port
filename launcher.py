@@ -2701,6 +2701,11 @@ class BloodborneLauncher(tk.Tk):
         Tooltip(account_btn, "Opt-in login to a trusted shadNet server, then immediately disconnect. "
                 "This verifies the username/password, NOT game login or bell matchmaking. "
                 "Upstream shadNet does not encrypt TCP credentials.")
+        private_btn = ttk.Button(sh_row, text="Private account...", style="Secondary.TButton",
+                                 command=lambda: self.open_bbsc_account_check(register_private=True))
+        private_btn.pack(side="left", padx=(6, 0))
+        Tooltip(private_btn, "Create an account on your own shadNet/BBSC server using its "
+                "registration secret key. The public Seamless Hunt realm uses its website.")
         sh_site_btn = ttk.Button(sh_row, text="Account website",
                                  style="Secondary.TButton",
                                  command=lambda: webbrowser.open("https://seamlesshunt.com"))
@@ -3574,42 +3579,58 @@ class BloodborneLauncher(tk.Tk):
             return self.copy_solo_save_to_party(ask=False)
         return True
 
-    def open_bbsc_account_check(self):
-        """Opt-in BBSC wire login. Ephemeral credentials only, no save/logging."""
+    def open_bbsc_account_check(self, register_private=False):
+        """Opt-in BBSC Login or private-host Create. Credentials stay in RAM only."""
         dlg = tk.Toplevel(self)
-        dlg.title("Seamless Hunt | Check shadNet account")
-        dlg.geometry("550x360")
-        dlg.minsize(510, 340)
+        dlg.title("Seamless Hunt | " + ("Private account registration" if register_private
+                                      else "Check shadNet account"))
+        dlg.geometry("550x450" if register_private else "550x360")
+        dlg.minsize(510, 420 if register_private else 340)
         dlg.transient(self)
         dlg.grab_set()
 
         body = ttk.Frame(dlg, padding=18)
         body.pack(fill="both", expand=True)
-        server_var = tk.StringVar(value="play.seamlesshunt.com")
+        server_var = tk.StringVar(value="127.0.0.1" if register_private
+                                  else "play.seamlesshunt.com")
         name_var = tk.StringVar()
         pass_var = tk.StringVar()
+        email_var = tk.StringVar()
+        key_var = tk.StringVar()
         status_var = tk.StringVar(value="Ready. Does not sign the game in.")
-        for row, (label, variable, is_password) in enumerate([
+        fields = [
             ("Server (hostname):", server_var, False),
             ("BBSC Online ID:", name_var, False),
             ("Password:", pass_var, True),
-        ]):
+        ]
+        if register_private:
+            fields.extend([
+                ("Email:", email_var, False),
+                ("Registration key:", key_var, True),
+            ])
+        for row, (label, variable, is_password) in enumerate(fields):
             ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", pady=6)
             entry = ttk.Entry(body, textvariable=variable, width=37,
                               show="*" if is_password else "")
             entry.grid(row=row, column=1, sticky="ew", padx=(8, 0), pady=6)
         body.columnconfigure(1, weight=1)
+        rr = len(fields)
         ttk.Label(body, text="Security: shadNet 31313 uses unencrypted TCP. "
                   "Only enter credentials for a server you trust. "
-                  "Password is cleared after submitting and never saved or logged.",
+                  "Password and registration key are cleared after submitting; "
+                  "neither is saved or logged.",
                   wraplength=480, justify="left").grid(
-                      row=3, column=0, columnspan=2, sticky="w", pady=(12, 8))
-        ttk.Label(body, text="This is a separate login verification, not game matchmaking. "
-                  "Close your game first; simultaneous sign-in can cause 'already logged in'.",
-                  wraplength=480, justify="left").grid(
-                      row=4, column=0, columnspan=2, sticky="w", pady=(2, 8))
+                      row=rr, column=0, columnspan=2, sticky="w", pady=(12, 8))
+        note = ("Private BBSC/shadNet servers have their own account database. "
+                "The public Seamless Hunt realm requires registration on its website."
+                if register_private else
+                "This checks credentials, NOT game matchmaking. "
+                "Close your game first or the account may be already logged in.")
+        ttk.Label(body, text=note, wraplength=480, justify="left").grid(
+            row=rr + 1, column=0, columnspan=2, sticky="w", pady=(2, 8))
         ttk.Label(body, textvariable=status_var, wraplength=480,
-                  justify="left").grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 8))
+                  justify="left").grid(row=rr + 2, column=0, columnspan=2,
+                                       sticky="w", pady=(8, 8))
         result_queue = queue.Queue(maxsize=1)
 
         def poll():
@@ -3622,45 +3643,55 @@ class BloodborneLauncher(tk.Tk):
                 return
             check_btn.configure(state="normal")
             status_var.set(("Accepted: " if accepted else "Not accepted: ") + message)
-            # Never log username, password, host or raw server response.
-            self.log("[BBSC ACCOUNT] One-shot authentication "
-                     + ("accepted" if accepted else "not accepted")
+            # Only sanitized status, never credentials, server or user ID.
+            self.log("[BBSC ACCOUNT] " + ("Registration" if register_private else "Login")
+                     + (" accepted" if accepted else " not accepted")
                      + "; game sign-in not yet implemented.")
 
         def begin():
             host = server_var.get().strip()
             username = name_var.get().strip()
             password = pass_var.get()
-            pass_var.set("")  # input widget no longer holds the secret
+            email = email_var.get().strip() if register_private else ""
+            registration_key = key_var.get() if register_private else ""
+            pass_var.set("")
+            key_var.set("")
             if not password:
                 status_var.set("Enter the password.")
                 return
             if not messagebox.askyesno(
-                    "BBSC account test sends an unencrypted password",
+                    "BBSC account operation sends plaintext credentials",
                     "The published shadNet protocol sends passwords over plain TCP, "
-                    "without TLS. Continue only if you trust this server?\n\n"
-                    "The diagnostic disconnects after checking and does not log the password.",
+                    "without TLS. Continue only if you trust this server?\\n\\n"
+                    "Your credentials are never saved or logged by this launcher.",
                     parent=dlg):
                 return
             check_btn.configure(state="disabled")
-            status_var.set("Checking account; gameplay and Party networking are unchanged...")
+            status_var.set("Contacting server; gameplay and Party networking are unchanged...")
             def worker():
                 try:
                     scripts_dir = str(APP_DIR / "scripts")
                     if scripts_dir not in sys.path:
                         sys.path.insert(0, scripts_dir)
                     import shadnet_account
-                    outcome = shadnet_account.check_account(host, username, password)
+                    if register_private:
+                        outcome = shadnet_account.register_on_private_server(
+                            host, username, password, email, registration_key)
+                    else:
+                        outcome = shadnet_account.check_account(host, username, password)
                     result_queue.put((outcome.accepted, outcome.status))
                 except ValueError:
                     result_queue.put((False, "Invalid server name or account fields"))
                 except Exception:
-                    result_queue.put((False, "Account check could not complete"))
-            threading.Thread(target=worker, daemon=True, name="bbsc-account-check").start()
+                    result_queue.put((False, "Account operation could not complete"))
+            threading.Thread(target=worker, daemon=True,
+                             name="bbsc-registration" if register_private
+                                  else "bbsc-account-check").start()
             dlg.after(100, poll)
 
-        check_btn = ttk.Button(body, text="Check login once", command=begin)
-        check_btn.grid(row=6, column=1, sticky="e", pady=(8, 0))
+        check_btn = ttk.Button(body, text="Create private account" if register_private
+                               else "Check login once", command=begin)
+        check_btn.grid(row=rr + 3, column=1, sticky="e", pady=(8, 0))
 
     def check_seamless_hunt(self):
         """Opt-in read-only probe; keep socket operations off Tk's UI thread."""
