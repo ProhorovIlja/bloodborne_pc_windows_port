@@ -57,7 +57,7 @@ int main(int argc,char **argv) {
     typedef unsigned (*Status)(void);
     Status status=(Status)(void*)GetProcAddress(dll,"bbnet_mock_status");
     assert(status && status()==15);
-    SetEnvironmentVariableA("BB_PARTY","host");
+    assert(_putenv_s("BB_PARTY","host")==0);
     assert(!runtime_legacy_net_requested());
     assert(runtime_legacy_net_resolve("sceNetSocket")==0);
     puts("BBSC DLL host ABI, callbacks, image hooks, and party isolation PASS");
