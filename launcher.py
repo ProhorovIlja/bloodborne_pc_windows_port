@@ -1962,6 +1962,8 @@ class BloodborneLauncher(tk.Tk):
         self.party_lan_code_var = tk.StringVar(value=_lan)
         self.party_status_var = tk.StringVar()
         self.party_test_running = False
+        self.seamless_hunt_host_var = tk.StringVar(value=str(
+            self.settings.get("seamless_hunt_host", "play.seamlesshunt.com") or "play.seamlesshunt.com"))
         self.seamless_hunt_status_var = tk.StringVar(value="Optional server connectivity check; game P2P is unchanged.")
         self.seamless_hunt_test_running = False
         self.seamless_hunt_result_queue = queue.Queue()
@@ -2684,6 +2686,15 @@ class BloodborneLauncher(tk.Tk):
                                          "log below. Needs a built game (out\\bbport.exe).")
 
         sec = self._section(tab, 1, "Connection")
+        server_label = ttk.Label(sec, text="BBSC realm host:", style="Card.TLabel")
+        server_label.grid(row=sec.next_row, column=0, sticky="w", pady=(2, 5))
+        server_entry = ttk.Entry(sec, textvariable=self.seamless_hunt_host_var, width=29)
+        server_entry.grid(row=sec.next_row, column=1, sticky="w", pady=(2, 5))
+        server_entry.bind("<FocusOut>", lambda _event: self.save_settings())
+        sec.next_row += 1
+        Tooltip(server_entry, "Choose the public Seamless Hunt realm, localhost or your own server. "
+                "Used by Network doctor and account screens only until native BBSC is integrated. "
+                "Just a hostname, without protocol or port (shadNet uses TCP 31313).")
         sh_row = ttk.Frame(sec, style="Card.TFrame")
         sh_row.grid(row=sec.next_row, column=0, columnspan=2, sticky="w", pady=(0, 3))
         sec.next_row += 1
@@ -3591,8 +3602,11 @@ class BloodborneLauncher(tk.Tk):
 
         body = ttk.Frame(dlg, padding=18)
         body.pack(fill="both", expand=True)
-        server_var = tk.StringVar(value="127.0.0.1" if register_private
-                                  else "play.seamlesshunt.com")
+        chosen_host = self.seamless_hunt_host_var.get().strip()
+        server_var = tk.StringVar(value=(
+            "127.0.0.1" if register_private and chosen_host == "play.seamlesshunt.com"
+            else (chosen_host or "127.0.0.1") if register_private
+            else (chosen_host or "play.seamlesshunt.com")))
         name_var = tk.StringVar()
         pass_var = tk.StringVar()
         email_var = tk.StringVar()
@@ -3700,12 +3714,14 @@ class BloodborneLauncher(tk.Tk):
         self.seamless_hunt_test_running = True
         self.seamless_hunt_test_btn.configure(state="disabled")
         stun_address = self.party_stun_var.get()
-        self.seamless_hunt_status_var.set("Checking Seamless Hunt TCP, UDP/STUN and IPv6...")
+        host = self.seamless_hunt_host_var.get().strip()
+        self.save_settings()
+        self.seamless_hunt_status_var.set("Checking BBSC realm TCP, UDP/STUN and IPv6...")
         def worker():
             try:
                 sh = seamless_hunt_module()
                 net = seamless_hunt_network_module()
-                services = sh.check_services()
+                services = sh.check_services(host)
                 routes = net.check_routes(stun_address)
                 message = sh.format_results(services) + "; " + net.format_routes(routes)
             except Exception:
@@ -4276,6 +4292,7 @@ class BloodborneLauncher(tk.Tk):
             "party_ipv6": self.party_ipv6.get(),
             "party_public_addr": self.party_public_var.get().strip(),
             "party_stun": self.party_stun_var.get().strip(),
+            "seamless_hunt_host": self.seamless_hunt_host_var.get().strip(),
             "party_password": self.party_password_var.get(),
             "party_code": self.party_code_var.get().strip(),
             "party_start": dict(PARTY_START_CHOICES).get(self.party_start_var.get(), PARTY_START_CHOICES[0][1]),
