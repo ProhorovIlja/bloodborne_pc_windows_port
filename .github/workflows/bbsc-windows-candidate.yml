@@ -15,6 +15,8 @@ on:
       - 'tools/interop/**'
       - 'tests/test_bbsc_memscan_win.cpp'
       - 'tests/test_native_bbsc_load_win.cpp'
+      - 'tests/test_bbsc_guest_hooks_win.cpp'
+      - 'gpu/shim/bbport_guest_code_hooks*'
       - 'tools/setup_windows_deps.sh'
       - 'build.bat'
       - 'tests/test_prepare_bbnet20_windows.py'
@@ -148,6 +150,18 @@ jobs:
             gpu/bbnet20/bbsc/core/bbsc_memscan.cpp \
             -o out/bbsc-memscan-win-test.exe
           out/bbsc-memscan-win-test.exe
+
+      - name: Real Windows native CLS BBSC guest hook trampoline test
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          clang++ -std=c++23 -O1 -UNDEBUG -Wall -Wextra -Werror \
+            -I gpu/shim -I gpu/shadps4 -I gpu/third_party/xbyak \
+            tests/test_bbsc_guest_hooks_win.cpp \
+            gpu/shim/bbport_guest_code_hooks_win.cpp \
+            gpu/shadps4/common/decoder.cpp \
+            -lZydis -o out/bbsc-guest-hooks-win-test.exe
+          out/bbsc-guest-hooks-win-test.exe
 
       - name: Configure actual Windows bbnet20 target
         shell: msys2 {0}

@@ -598,6 +598,13 @@ if (BB_BBSC20_WINDOWS_CANDIDATE)
     target_compile_definitions(bbgpu PRIVATE BBGPU_BBSC_CANDIDATE_HOST=1)
     target_sources(bbport PRIVATE shim/bbnet20_host_exports.cpp)
     target_sources(bbnet20 PRIVATE shim/bbnet20_gpu_host_bridge.cpp)
+    # Real upstream CLS guest byte-checked JIT hooks, Win32 memory manager.
+    # Not a fake hook: callbacks run in the native game's SysV guest threads.
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/shim/bbport_guest_code_hooks.h")
+        message(FATAL_ERROR "Native Windows guest hook API missing")
+    endif()
+    target_sources(bbnet20 PRIVATE shim/bbport_guest_code_hooks_win.cpp)
+    target_include_directories(bbnet20 PRIVATE third_party/xbyak)
     # Upstream's Linux source assumes its httplib headers live at a different
     # location. Keep their MIT notice and add the exact verified source tree.
     # The shadPS4 networking sources reuse the native port's smaller logging
