@@ -81,5 +81,20 @@ inline fs::path ActiveSaveFolder(const fs::path& native_user_root,
         return {};
     return game;
 }
+// An optional, explicit BBSC_SAVE_DIR must resolve to the same folder as
+// the native game's own SaveData root. Accept an identical as-yet-uncreated
+// path on a brand-new character, but NEVER an override into another port.
+inline bool MatchesActiveSaveFolder(const fs::path& active,
+                                    const fs::path& configured) {
+    if (active.empty() || configured.empty()) return false;
+    std::error_code error;
+    if (fs::equivalent(active, configured, error)) return true;
+    if (error && error != std::errc::no_such_file_or_directory)
+        return false;
+    std::error_code active_error, configured_error;
+    const auto left = fs::absolute(active, active_error).lexically_normal();
+    const auto right = fs::absolute(configured, configured_error).lexically_normal();
+    return !active_error && !configured_error && !left.empty() && left == right;
+}
 } // namespace SeamlessBbsc
 #endif
