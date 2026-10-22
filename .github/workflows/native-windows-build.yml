@@ -10,6 +10,11 @@ on:
       - feature/seamless-hunt
     paths:
       - .github/workflows/native-windows-build.yml
+      - build.bat
+      - gpu/**
+      - src/**
+      - tools/setup_windows_deps.sh
+      - tools/release/stage_seamless_hunt_dev.py
 
 permissions:
   contents: read
@@ -116,16 +121,25 @@ jobs:
           Get-ChildItem out -File -Recurse | Select-Object FullName, Length |
             Out-File -FilePath "$dir/SEAMLESSHUNT-FILE-INVENTORY.txt"
 
-      - name: Upload developer binaries, no game assets
+      - name: Configure Python 3.12 for staging
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Stage Windows runtime libraries
+        shell: pwsh
+        run: python scripts/stage_dlls.py
+
+      - name: Build verified developer kit (no game files)
+        shell: pwsh
+        run: |
+          python tools/release/stage_seamless_hunt_dev.py --source . --output out/seamless-hunt-windows-dev.zip --revision $env:GITHUB_SHA
+          python -m unittest discover -s tests -p 'test_seamless_hunt_dev_package.py' -v
+
+      - name: Upload developer Windows ZIP (not a public release)
         uses: actions/upload-artifact@v4
         with:
           name: seamless-hunt-native-windows-dev
-          path: |
-            out/bbport.exe
-            out/bb-probe.exe
-            out/*.dll
-            out/gpu/bbgpu.dll
-            out/SEAMLESSHUNT-BUILD-REVISION.txt
-            out/SEAMLESSHUNT-FILE-INVENTORY.txt
+          path: out/seamless-hunt-windows-dev.zip
           if-no-files-found: error
           retention-days: 7
