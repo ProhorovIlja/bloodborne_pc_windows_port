@@ -1,7 +1,8 @@
 # Smoke-test the *extracted* Windows developer ZIP, not the build checkout.
 # The path contains spaces and Cyrillic deliberately: the user's game folder may too.
 param(
-    [Parameter(Mandatory=$true)][string]$Archive
+    [Parameter(Mandatory=$true)][string]$Archive,
+    [switch]$RequireNativeBbsc
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -18,6 +19,10 @@ try {
     $engine = Join-Path $target 'out\bbport.exe'
     if (-not (Test-Path $py) -or -not (Test-Path $gui) -or -not (Test-Path $engine)) {
         throw 'Portable ZIP is missing a required executable'
+    }
+    $candidateDll = Join-Path $target 'out\gpu\bbnet20.dll'
+    if ((Test-Path $candidateDll) -ne [bool]$RequireNativeBbsc) {
+        throw 'Extracted BBSC DLL presence does not match intended package type'
     }
     if (Test-Path (Join-Path $target 'user')) {
         throw 'Portable ZIP unexpectedly includes private user data'
