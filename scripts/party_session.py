@@ -158,9 +158,20 @@ def sessions(user) -> list:
     out = [Session(p, _read_info(p / INFO)) for p in base.iterdir()
            if p.is_dir() and not p.name.endswith(".partial") and (p / INFO).is_file()]
 
-    def key(s):
-        m = re.search(r"-(\d\d)$", s.path.name)
-        return (s.path.name[:15], int(m.group(1)) if m else 1)
+    def key(session):
+        # Snapshots can be created in the SAME SECOND (session-start then
+        # before-undo). Sorting names alphabetically used to treat the
+        # session-start as newer, so Undo would restore the wrong save.
+        # Keep the timestamp prefix across seconds, and use per-snapshot
+        # info-file modification nanoseconds to order within the second.
+        match = re.search(r"-(\\d\\d)$", session.path.name)
+        suffix = int(match.group(1)) if match else 1
+        try:
+            mtime_ns = (session.path / INFO).stat().st_mtime_ns
+        except OSError:
+            mtime_ns = 0
+        return (session.path.name[:15], mtime_ns, suffix,
+                1 if session.kind == "before-undo" else 0)
     return sorted(out, key=key, reverse=True)
 
 
