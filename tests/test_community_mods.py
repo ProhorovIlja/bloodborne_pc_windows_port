@@ -89,6 +89,34 @@ class CommunityModTests(unittest.TestCase):
         self.assertFalse(mods.allowed_community_mod("DollRebirth", True))
         self.assertTrue(mods.allowed_community_mod("JumpOnL3Classic", True))
 
+    def test_manage_individual_mods_keeps_order_and_dependencies(self):
+        doll = self.make_zip("doll")
+        lamp = self.make_zip("moal")
+        cm.install(cm.inspect([doll,lamp],self.data),self.data)
+        (self.data/"mods.json").write_text(json.dumps(
+            {"order":["DollRebirth","MOAL"],"disabled":[],"custom":"preserve"}))
+        self.assertEqual(
+            dict(cm.installed_mods(self.data)),
+            {"DollRebirth":True,"MOAL":True})
+        with self.assertRaisesRegex(ValueError,"DollRebirth enabled"):
+            cm.save_mod_selection(self.data,["MOAL"])
+        changed = cm.save_mod_selection(self.data,["DollRebirth"])
+        self.assertIn("MOAL",changed["disabled"])
+        config = json.loads((self.data/"mods.json").read_text())
+        self.assertEqual(config["order"],["DollRebirth","MOAL"])
+        self.assertEqual(config["custom"],"preserve")
+        self.assertEqual(dict(cm.installed_mods(self.data))["MOAL"],False)
+        cm.save_mod_selection(self.data,["DollRebirth","MOAL"])
+        self.assertTrue(dict(cm.installed_mods(self.data))["MOAL"])
+
+    def test_manage_doll_requires_active_code_patch(self):
+        doll = self.make_zip("doll")
+        cm.install(cm.inspect([doll],self.data),self.data)
+        (self.data/"patches.json").write_text(json.dumps({
+            "disabled":["DollRebirth.xml/Doll Rebirth (respec)"]}))
+        with self.assertRaisesRegex(ValueError,"Enable the Doll Rebirth XML patch"):
+            cm.save_mod_selection(self.data,["DollRebirth"])
+
     def test_refuse_conflicting_lamp_features(self):
         lamp, doll = self.make_zip("moal"),self.make_zip("doll")
         (self.data/"bbport.ini").write_text("pc_enhanced_lamps=1\n")
