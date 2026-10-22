@@ -24,7 +24,9 @@ EXPORT int bbnet_init(const BbNetHost *host) {
 }
 EXPORT uintptr_t bbnet_resolve(const char *scoped) {
     if (!scoped || !(flags & 1)) return 0;
-    return strcmp(scoped,"sceNetSocket") ? 0 : (uintptr_t)0x567890;
+    if (!strcmp(scoped, "sceNetSocket")) return (uintptr_t)0x567890;
+    if (!strcmp(scoped, "z123456789A#E#F")) return (uintptr_t)0x567891;
+    return 0;
 }
 EXPORT void bbnet_image_mapped(uint8_t *p,uint64_t n) {
     if (p && n == 32) flags |= 2;
