@@ -210,9 +210,9 @@ def _walk_save_groups(root: Path, source: str):
         if depth >= 5 or len(seen) > 650:
             continue
         for child in children:
-            if child.name.lower() in ("savedata", "savedata_party", "world_warper",
-                                     "home", "user", "1000", "1", "sprj0005") or
-               CUSA.fullmatch(child.name) or child.name.isdigit() or depth == 0:
+            if (child.name.lower() in ("savedata", "savedata_party", "world_warper",
+                                      "home", "user", "1000", "1", "sprj0005")
+                or CUSA.fullmatch(child.name) or child.name.isdigit() or depth == 0):
                 candidates.append((child, depth+1))
     return out
 
