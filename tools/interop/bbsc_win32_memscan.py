@@ -17,7 +17,7 @@ START = b"#ifdef _WIN32\n// One region."
 END = b"#endif\n\n} // namespace"
 
 WINDOWS_SCANNER = r'''#ifdef _WIN32
-// The Windows clang64 build has no MSVC SEH (__try/__except).
+// Windows clang64 cannot compile MSVC structured exception handling.
 // Snapshot committed pages through the OS instead of dereferencing guest
 // memory. ReadProcessMemory fails cleanly when protection changes concurrently.
 // Chunk overlap preserves signatures straddling a 1 MiB scan boundary.
