@@ -14,6 +14,15 @@ One codebase: this visy-based native Windows port. Do not create other client fo
 - Local offline build-and-test scripts for Native TCP Relay v15 and Native UDP Relay v17 completed successfully. UDP rebuilt binary matches package binary by SHA-256.
 - Exact source commit for the deployed shadNet binary remains **unverified**. Offline tests are not live multiplayer validation.
 
+## Confirmed build milestone and safe integration gates (2026-10-22)
+
+- **Verified:** GitHub Actions [Native Windows engine build run 39796354787](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/39796354787) completed **successfully** for source commit `77d71b7c18a275d16324e1f639bd9a4d11e220e7`. It built `bbport.exe`, passed the Windows party C++ checks, staged the portable Python 3.12/Tcl/Tk launcher, verified the release ZIP and successfully smoke-tested the **extracted** launcher in a Unicode path. It uploaded `seamless-hunt-native-windows-dev` (~171 MB archived artifact). This is the first independently confirmed *whole-toolchain* Windows build, **not** a game/crossplay proof.
+- The next changes are not certified until their own full CI completes. Local simulator/unit tests and an old successful artifact must not be silently counted as live random-player compatibility.
+- Source comparison includes original CLS BBSC 0.0.2, the native deadinside `bbnet20` module, and user-provided private Windows/server snapshots. The native module differs in four of five BBSC gameplay files from CLS 0.0.2: do not transplant or enable old scene/death/relay behavior without conflict checks.
+- Real `bbnet20` candidate Windows CMake compiled dependencies and progressed to genuine vendored NP sources; found a missing shadPS4 logging-classes include path (fixed in `gpu/CMakeLists.txt`), and an upstream checkout line-ending mismatch in Windows game-memory adaptation (fixed with CRLF regression tests). **No native BBSC Windows DLL has yet been certified or placed into an owner-facing archive.**
+- Runtime now requires **both** developer `BB_LEGACY_NET=1` and `BB_BBSC=1`, a valid Bloodborne 1.09 identity, and **no** visy party session before a real module can be loaded. Unrelated title, older Bloodborne version, missing DLL, and partial opt-in do not touch the working P2P route. `tests/test_seamless_hunt_dev_package.py` also asserts that even a freshly compiled, unverified `out/gpu/bbnet20.dll` is excluded from the portable package.
+- Live Fornex, shadNet, GameServer, the account website, real player saves and the `master` branch remain untouched by these CI/source changes. Previously confirmed production service hashes are private and stay out of the public repo.
+
 ## Latest native build and cross-play engineering (2026-10-22)
 
 - Normal native `bbport.exe` reached successful link in Windows CLANG64 CI. Windows party-tests initially hit an include-path collision between the repo's `VERSION` and libc++ `<version>`; their include paths were corrected. **A fully successful packed-and-unpacked Windows executable + launcher acceptance job is not yet independently verified.**
