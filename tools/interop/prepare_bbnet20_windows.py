@@ -96,7 +96,7 @@ def prepare(staged: Path, workspace: Path) -> dict:
         end = glue.index(linux_end, start)
         linux_block = glue[start:end]
         windows_block = (
-            b"    unsigned writable = 0;\n#ifdef _WIN32\n"
+            b"#ifdef _WIN32\n    unsigned writable = 0;\n"
             b"    // Restrict this developer-only bridge to the mapped guest image.\n"
             b"    const uintptr_t lo = static_cast<uintptr_t>(base);\n"
             b"    const uintptr_t hi = lo + static_cast<uintptr_t>(size);\n"
