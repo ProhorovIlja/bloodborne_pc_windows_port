@@ -140,7 +140,9 @@ class CommunityModTests(unittest.TestCase):
                 with zipfile.ZipFile(archive,"w") as z:
                     z.writestr(evil,b"bad")
                 cm.KNOWN[hashlib.sha256(archive.read_bytes()).hexdigest()]=("jump","jump")
-                with self.assertRaisesRegex(ValueError,"Unsafe"):
+                # zipfile.ZipInfo normalizes backslashes to slashes on Windows,
+                # where the resulting entry is still rejected as an alien layout.
+                with self.assertRaisesRegex(ValueError,"Unsafe|unexpected mod file set"):
                     cm.inspect([archive],self.data)
 
 
