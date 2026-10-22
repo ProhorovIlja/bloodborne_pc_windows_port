@@ -22,7 +22,11 @@ clone_exact() {
 
 clone_exact magic_enum https://github.com/Neargye/magic_enum.git e046b69a3736d314fad813e159b1c192eaef92cd
 clone_exact miniz https://github.com/richgel999/miniz.git 2948eebafc5b9f1c69bebed80333e403a09bd62d
+# The shader SRT generator needs xbyak, a header-only assembly emitter.
+# Pin the same submodule revision as shadPS4 main (2026-10-22).
+clone_exact xbyak https://github.com/herumi/xbyak.git 44a72f369268f7d552650891b296693e91db86bb
 
 test -f gpu/third_party/magic_enum/include/magic_enum/magic_enum.hpp
 test -f gpu/third_party/miniz/CMakeLists.txt
+test -f gpu/third_party/xbyak/xbyak/xbyak.h
 echo "Windows-only upstream build dependencies ready."
