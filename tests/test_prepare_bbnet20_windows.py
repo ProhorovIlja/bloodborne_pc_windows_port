@@ -121,7 +121,14 @@ class NativeBbscPrepareTests(unittest.TestCase):
             + '#include <sys/mman.h>\n'
             + EXPORT + '\n'
             + 'void patch(unsigned long long base, unsigned long long size) {\n'
-            + '  setenv("BBSC_SAVE_DIR", folder.c_str(), 0);\n'
+            + '        psf->app_ver = host->app_ver ? host->app_ver : "";\n'
+            + '    // BBSC finds the save it backs up and journals in shadPS4\'s folders; the port\'s are\n'
+            + '    // <user>/savedata/<user id>/CUSA00207/SPRJ0005 (BBSC_SAVE_DIR).\n'
+            + '    if (!std::getenv("BBSC_SAVE_DIR")) {\n'
+            + '        auto folder = id.path() / "CUSA00207" / "SPRJ0005";\n'
+            + '        setenv("BBSC_SAVE_DIR", folder.c_str(), 0);\n'
+            + '    }\n'
+            + '    // BBSC writes its byte patches straight into the game\'s code\n'
             + '    unsigned writable = 0;\n'
             + '    if (FILE* maps = std::fopen("/proc/self/maps", "r")) {\n'
             + '      /* POSIX-only range loop */\n'
@@ -145,6 +152,9 @@ class NativeBbscPrepareTests(unittest.TestCase):
         self.assertIn("VirtualQuery(", glue)
         self.assertIn("VirtualProtect(", glue)
         self.assertIn("_putenv_s(", glue)
+        self.assertIn("SeamlessBbsc::ActiveSaveFolder", glue)
+        self.assertIn('game_ver == "1.09" ? "01.09"', glue)
+        self.assertIn('CUSA03173 (byte-verified)', glue)
         self.assertIn("#ifndef _WIN32", glue)
         self.assertIn("BBSC_SAVE_DIR", glue)
         self.assertEqual(glue.count("    unsigned writable = 0;"), 2)
