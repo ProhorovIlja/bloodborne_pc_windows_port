@@ -67,6 +67,15 @@ int main(int argc,char **argv) {
     assert(_putenv_s("BB_PARTY","host")==0);
     assert(!runtime_legacy_net_requested());
     assert(runtime_legacy_net_resolve("sceNetSocket")==0);
+    runtime_legacy_net_image_mapped(scratch,sizeof(scratch));
+    runtime_legacy_net_image_ready(0x1234,sizeof(scratch));
+    runtime_legacy_net_start();
+    assert(status()==15);  /* existing callbacks do not run after visy takes over */
+    assert(_putenv_s("BB_PARTY","")==0);
+    assert(_putenv_s("BB_BBSC","")==0);
+    assert(!runtime_legacy_net_requested());
+    runtime_legacy_net_start();
+    assert(status()==15);  /* feature opt-out immediately blocks callbacks too */
     puts("BBSC DLL host ABI, callbacks, image hooks, and party isolation PASS");
     return 0;
 }
