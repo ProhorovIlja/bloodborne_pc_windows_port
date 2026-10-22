@@ -17,6 +17,13 @@
 #include <string_view>
 #include <system_error>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 namespace SeamlessBbsc {
 namespace fs = std::filesystem;
 
@@ -30,7 +37,24 @@ inline bool ValidRetailSerial(std::string_view id) {
 inline bool OrdinaryDirectory(const fs::path& path) {
     std::error_code error;
     const auto state = fs::symlink_status(path, error);
-    return !error && fs::is_directory(state) && !fs::is_symlink(state);
+    if (error || !fs::is_directory(state) || fs::is_symlink(state)) return false;
+#ifdef _WIN32
+    // Filesystem directory junctions can be reparse points even when
+    // symlink_status does not classify them as ordinary symlinks.
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES ||
+        (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+#endif
+    return true;
+}
+
+inline bool OrdinaryDirectoryOrMissing(const fs::path& path) {
+    std::error_code error;
+    const auto state = fs::symlink_status(path, error);
+    if (error == std::errc::no_such_file_or_directory) return true;
+    if (error) return false;
+    if (state.type() == fs::file_type::not_found) return true;
+    return OrdinaryDirectory(path);
 }
 
 inline fs::path ActiveSaveFolder(const fs::path& native_user_root,
@@ -43,12 +67,17 @@ inline fs::path ActiveSaveFolder(const fs::path& native_user_root,
     const fs::path title = active_user / std::string(retail_serial);
     const fs::path game = title / "SPRJ0005";
 
-    // Never follow a symlinked user root, 1/ user, title or SPRJ0005 to a
-    // different save tree. The active game save folder is expected to have
-    // been created/adopted by runtime_savedata_configure first.
-    if (!OrdinaryDirectory(root) || !OrdinaryDirectory(savedata) ||
-        !OrdinaryDirectory(active_user) || !OrdinaryDirectory(title) ||
-        !OrdinaryDirectory(game))
+    // The runtime can start a NEW character before any of these directories
+    // exist. Return only the native runtime's exact deterministic destination;
+    // never scan other users/regions or import from an arbitrary save tree.
+    // Existing components must be directories, not files, links or junctions.
+    // Missing components are fine: the GAME's SaveData implementation owns
+    // directory creation later. Do not mkdir or write from this resolver.
+    if (!OrdinaryDirectory(root) ||
+        !OrdinaryDirectoryOrMissing(savedata) ||
+        !OrdinaryDirectoryOrMissing(active_user) ||
+        !OrdinaryDirectoryOrMissing(title) ||
+        !OrdinaryDirectoryOrMissing(game))
         return {};
     return game;
 }
