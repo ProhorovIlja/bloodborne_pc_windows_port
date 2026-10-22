@@ -62,6 +62,23 @@ class Hunter:
         return asdict(self)
 
 
+def source_label(source: str) -> str:
+    """Player-facing source; stored source identifiers remain unchanged."""
+    if not isinstance(source, str):
+        return "Unknown save source"
+    if source.startswith("native:party"):
+        return "Native PC · co-op save"
+    if source.startswith("native:"):
+        return "Native PC"
+    if source.startswith("shadps4:") or source.startswith("shadps4-or-"):
+        return "shadPS4 / legacy save"
+    if source.startswith("native-or-shadps4:"):
+        return "Portable PC / shadPS4"
+    if source.startswith("manual:"):
+        return "Chosen save folder"
+    return "Other detected save source"
+
+
 def inferred_build(stats: dict[str, int]) -> str:
     """Conservative, cosmetic heuristic; not a game-file field or a respec."""
     combat = {k: stats[k] for k in ("strength", "skill", "bloodtinge", "arcane")}
