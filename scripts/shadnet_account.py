@@ -160,6 +160,83 @@ def _login_result_payload(payload: bytes) -> AuthResult:
     return AuthResult(True, "Login accepted (diagnostic connection closed)", 0, user_id)
 
 
+REGISTRATION_ERRORS = {
+    0: "Account created on this server",
+    3: "Invalid registration name, password or email",
+    4: "Too many requests; try again later",
+    10: "Account creation rejected",
+    11: "Online ID already exists on this server",
+    12: "Email provider is not accepted",
+    13: "Email already exists on this server",
+    23: "Wrong or missing server registration key",
+    24: "Server database error",
+}
+
+
+def make_registration_request(username: str, password: str, email: str,
+                              registration_key: str) -> bytes:
+    """BBSC/shadNet RegistrationRequest (Create = 2). No local key storage."""
+    # Validate username and password via the same policy as Login.
+    make_login_request(username, password)
+    if not isinstance(email, str) or not 3 <= len(email) <= 254 or "@" not in email:
+        raise ValueError("Enter an email address for registration")
+    if any(ord(c) < 32 for c in email):
+        raise ValueError("Invalid email")
+    if not isinstance(registration_key, str) or len(registration_key.encode("utf-8")) > 256:
+        raise ValueError("Invalid registration key")
+    pb = (_string_field(1, username) + _string_field(2, password)
+          + _string_field(4, email))
+    if registration_key:
+        pb += _string_field(5, registration_key)
+    body = struct.pack("<I", len(pb)) + pb
+    return struct.pack("<BHIQ", 0, 2, HEADER_BYTES + len(body), 1) + body
+
+
+def register_on_private_server(host: str, username: str, password: str,
+                               email: str, registration_key: str, *,
+                               port: int = DEFAULT_PORT, timeout: float = 4.0) -> AuthResult:
+    """Create account on a *private/self-hosted* BBSC shadNet server.
+
+    The Seamless Hunt public server uses its website instead. No keys,
+    usernames or passwords are persisted; don't run on untrusted servers.
+    """
+    from seamless_hunt import validate_host
+    host = validate_host(host)
+    if host in ("play.seamlesshunt.com", "seamlesshunt.com"):
+        return AuthResult(False, "Use seamlesshunt.com to register a public-realm account")
+    if not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("Invalid shadNet port")
+    if not 0.5 <= timeout <= 10.0:
+        raise ValueError("Timeout must be between 0.5 and 10 seconds")
+    packet = make_registration_request(username, password, email, registration_key)
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as conn:
+            conn.settimeout(timeout)
+            kind, _, _, greeting = _frame(conn, limit=4096)
+            if kind != 3:
+                raise ShadNetProtocolError("server sent no shadNet greeting")
+            parse_greeting(struct.pack("<BHIQ", kind, 0, HEADER_BYTES + len(greeting), 0),
+                           greeting)
+            conn.sendall(packet)
+            for _ in range(8):
+                kind, cmd, req_id, payload = _frame(conn)
+                if kind == 1 and cmd == 2 and req_id == 1:
+                    if not payload:
+                        raise ShadNetProtocolError("empty Create reply")
+                    error = payload[0]
+                    return AuthResult(error == 0, REGISTRATION_ERRORS.get(
+                        error, f"Account creation refused (code {error})"), error)
+            raise ShadNetProtocolError("no matching Create reply")
+    except (socket.timeout, TimeoutError):
+        return AuthResult(False, "Server timed out")
+    except socket.gaierror:
+        return AuthResult(False, "Server DNS lookup failed")
+    except (OSError, ConnectionError):
+        return AuthResult(False, "Cannot connect or the server closed the connection")
+    except ShadNetProtocolError:
+        return AuthResult(False, "Unexpected shadNet response or protocol mismatch")
+
+
 def check_account(host: str, username: str, password: str,
                   *, port: int = DEFAULT_PORT, timeout: float = 4.0) -> AuthResult:
     """Connect, auth once, close. Does NOT retain credentials or WebAPI tokens."""
