@@ -70,7 +70,7 @@ def _valid_rel(name: str) -> bool:
                    or p.endswith((" ", ".")) or any(ord(ch) < 32 for ch in p)
                    for p in parts)):
         return False
-    if parts[0] == "out" and len(parts) > 2 and parts[1] != "licenses":
+    if parts[0] == "out" and len(parts) > 2 and parts[1] != "licenses" and name != "out/gpu/bbnet20.dll":
         return False
     return True
 
