@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from tools.interop.prepare_bbnet20_windows import BBSC_GLUE, CMAKE, EXPORT, FORMAT, GLUE, RELAY, LINK_OPTS, REVISION, prepare
+from tools.interop.prepare_bbnet20_windows import BBSC_GLUE, CMAKE, EXPORT, FORMAT, GLUE, RELAY, LINK_OPTS, REVISION, MEMSCAN, prepare
+from tools.interop.bbsc_win32_memscan import CALL_START, adapt_win32_memscan
 
 
 class NativeBbscPrepareTests(unittest.TestCase):
@@ -41,6 +42,13 @@ class NativeBbscPrepareTests(unittest.TestCase):
             BBSC_GLUE: b'#include "bbgpu.h"\n'
                        b'void show() { bbgpu_overlay_banner("host"); }\n'
                        b'void hide() { bbgpu_overlay_banner(nullptr); }\n',
+            MEMSCAN: (
+                b'#include <windows.h>\n'
+                b'#ifdef _WIN32\n// One region. Synthetic upstream test.\n'
+                b'void SearchRegion() { __try { std::memchr(0, 0, 0); '
+                b'std::memcmp(0, 0, 0); } __except (EXCEPTION_EXECUTE_HANDLER) {} }\n'
+                b'#endif\n\n} // namespace\n' +
+                CALL_START + b'\n'),
             CMAKE: LINK_OPTS.encode(),
             RELAY: b'#include <arpa/inet.h>\n#include <netinet/in.h>\n'
                    b'void relay() { /* protocol unchanged */ }\n',
@@ -63,8 +71,8 @@ class NativeBbscPrepareTests(unittest.TestCase):
 
     def test_stages_and_rejects_overwrite(self):
         result = prepare(self.staged, self.workspace)
-        self.assertEqual(result["files_staged"], 8)
-        self.assertEqual(result["adapted"], [GLUE, BBSC_GLUE, RELAY, CMAKE])
+        self.assertEqual(result["files_staged"], 9)
+        self.assertEqual(result["adapted"], [GLUE, BBSC_GLUE, RELAY, CMAKE, MEMSCAN])
         self.assertFalse(result["windows_online_dll_built"])
         self.assertIn("__declspec(dllexport)", (self.workspace / GLUE).read_text())
         glue = (self.workspace / GLUE).read_text()
@@ -86,6 +94,12 @@ class NativeBbscPrepareTests(unittest.TestCase):
                          (self.workspace / BBSC_GLUE).read_text())
         self.assertIn("if(NOT WIN32)", (self.workspace / CMAKE).read_text())
         relay = (self.workspace / RELAY).read_text()
+        memscan = (self.workspace / MEMSCAN).read_text()
+        self.assertIn("ReadProcessMemory(GetCurrentProcess()", memscan)
+        self.assertIn("const auto from = std::max(start, lo);", memscan)
+        self.assertIn("const auto to = std::min(end, hi);", memscan)
+        self.assertNotIn("__except", memscan)
+        self.assertNotIn("__try", memscan)
         self.assertIn("#include <winsock2.h>", relay)
         self.assertIn("#include <ws2tcpip.h>", relay)
         self.assertIn("#include <arpa/inet.h>", relay)
@@ -170,6 +184,13 @@ class NativeBbscPrepareTests(unittest.TestCase):
         record["size"] = len(blob)
         record["sha256"] = hashlib.sha256(blob).hexdigest()
         self.save()
+
+    def test_reject_unreviewed_upstream_memory_scanner(self):
+        with self.assertRaisesRegex(ValueError, "layout changed"):
+            adapt_win32_memscan(b"unreviewed")
+        self._replace_fixture(MEMSCAN, b"changed memory scanner version")
+        with self.assertRaisesRegex(ValueError, "layout changed"):
+            prepare(self.staged, self.workspace)
 
     def test_reject_source_traversal(self):
         self.manifest["files"].append({
