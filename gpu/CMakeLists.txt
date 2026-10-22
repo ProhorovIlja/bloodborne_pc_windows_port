@@ -174,6 +174,10 @@ if (WIN32 AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
         target_compile_options(ffx_vulkan_fsr3_host_1_1_4 PRIVATE
             -include "${CMAKE_CURRENT_SOURCE_DIR}/shim/win_fsr_countof_compat.h")
     endif()
+    if (TARGET ffx_vulkan_fsr3_vk_backend_1_1_4)
+        target_compile_options(ffx_vulkan_fsr3_vk_backend_1_1_4 PRIVATE
+            -include "${CMAKE_CURRENT_SOURCE_DIR}/shim/win_fsr_countof_compat.h")
+    endif()
 endif()
 
 # Host shaders -> headers (same scheme as shadPS4's host_shaders/CMakeLists.txt).
