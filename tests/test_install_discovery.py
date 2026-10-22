@@ -127,6 +127,33 @@ class DiscoveryTests(unittest.TestCase):
         kinds={p["kind"] for p in results["extras"]}
         self.assertEqual(kinds,{"mods","patches","cheats"})
 
+    def test_fast_scan_follows_nested_downloads(self):
+        game = self.add_game(
+            self.base / "Downloads" / "Downloads" / "CUSA03173", "CUSA03173")
+        found = discovery.find_games(self.launcher, [self.base])
+        self.assertIn(str(game.resolve()), [g.folder for g in found])
+
+    def test_deep_scan_finds_arbitrary_multilevel_path_with_unicode(self):
+        game = self.add_game(
+            self.base / "Downloads" / "Downloads" / "Мои игры" /
+            "Bloodborne Custom 1.09" / "some-other-folder" / "CUSA03173",
+            "CUSA03173")
+        fast = discovery.scan(self.launcher, [self.base])
+        self.assertNotIn(str(game.resolve()), [g["folder"] for g in fast["games"]])
+        deep = discovery.scan(self.launcher, [self.base], deep_scan=True)
+        self.assertEqual(deep["search_mode"], "deep")
+        self.assertIn(str(game.resolve()), [g["folder"] for g in deep["games"]])
+        self.assertEqual(deep["games"][0]["status"], "candidate_109")
+
+    def test_deep_scan_remains_read_only(self):
+        game = self.add_game(
+            self.base / "Anything" / "Nested" / "Release Stuff" / "CUSA03173",
+            "CUSA03173")
+        original = (game / "eboot.bin").read_bytes()
+        found = discovery.find_games(self.launcher, [self.base], deep_scan=True)
+        self.assertEqual([g.folder for g in found], [str(game.resolve())])
+        self.assertEqual((game / "eboot.bin").read_bytes(), original)
+
     def test_symlinked_game_is_not_followed(self):
         real = self.add_game(self.base/"Outside"/"CUSA03173","CUSA03173")
         link = self.base/"Games"/"CUSA03173"
