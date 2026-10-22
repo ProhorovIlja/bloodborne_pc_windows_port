@@ -126,7 +126,7 @@ extern "C" const unsigned char bb_game_ttf_end[];
 
 extern "C" void runtime_restart(void); // bb-probe (probe.c)
 extern "C" void bbgpu_request_quit(void); // bbgpu.cpp: as the window's close button
-#if defined(_WIN32) && defined(BBGPU_BBSC_HOST_EXPORTS)
+#if defined(_WIN32) && defined(BBGPU_BBSC_CANDIDATE_HOST)
 extern "C" int runtime_legacy_net_requested(void);
 #endif
 
@@ -164,7 +164,7 @@ std::atomic<bool> module_banner_active{false};
 // not persist across the transition and imply a connection is still running.
 bool ModuleBannerWanted() {
     if (!module_banner_active.load(std::memory_order_acquire)) return false;
-#if defined(_WIN32) && defined(BBGPU_BBSC_HOST_EXPORTS)
+#if defined(_WIN32) && defined(BBGPU_BBSC_CANDIDATE_HOST)
     return runtime_legacy_net_requested() != 0;
 #else
     return true;
