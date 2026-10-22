@@ -44,6 +44,9 @@ jobs:
       - name: Safe Seamless Hunt release notices
         run: python -m unittest discover -s tests -p 'test_update_check.py' -v
 
+      - name: Safe deterministic Windows developer package
+        run: python -m unittest discover -s tests -p 'test_seamless_hunt_dev_package.py' -v
+
       - name: Seamless Hunt read-only connection contract
         run: python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
 
