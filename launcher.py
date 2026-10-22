@@ -2026,19 +2026,17 @@ class BloodborneLauncher(tk.Tk):
         vanilla_btn = ttk.Button(preset_row, text="Vanilla mode", style="Secondary.TButton",
                                  command=self.set_vanilla_mode)
         vanilla_btn.pack(side="right", padx=(6, 0))
-        everything_btn = ttk.Button(preset_row, text="Everything on", style="Secondary.TButton",
-                                    command=self.set_everything_on)
-        everything_btn.pack(side="right")
+        balanced_btn = ttk.Button(preset_row, text="Balanced 60", style="Secondary.TButton",
+                                  command=self.set_recommended_mode)
+        balanced_btn.pack(side="right")
         Tooltip(vanilla_btn, "Preset: turns the port's optional features off (upscaler, object motion, overlay, "
                              "FPS patch, mods, resolution scaling, tracing, watchdog, draw prep workers, async "
                              "shaders, GPL, performance HUD, mouse & keyboard controls, party mode), sets "
                              "30 FPS, anisotropic filtering Off and disables all XML patches. Saved "
                              "immediately.")
-        Tooltip(everything_btn, "Preset: turns the features back on (including async shaders and GPL; not Debug tracing), sets "
-                                "Uncap FPS and 16x anisotropic filtering, and enables the recommended patches "
-                                "(Skip Intro, Performance Patch, Disable Motion Blur). The performance HUD, "
-                                "mouse & keyboard controls and the Party tab are preferences and stay as "
-                                "they are. Saved immediately.")
+        Tooltip(balanced_btn, "Previewed 60 FPS starting point: normal GPU frame queue, shader precompile "
+                              "and tracing off. Does not touch your mods, gameplay patches, party "
+                              "configuration, resolution, HDR, saves or input.")
 
         # ---- settings notebook
         self.notebook = ttk.Notebook(main)
@@ -4233,32 +4231,28 @@ class BloodborneLauncher(tk.Tk):
         self.save_game_settings()
         self.log("Preset applied: Vanilla mode (all optional features off, FPS preset=30 native, BB_ANISO=0, all patches off, party off).")
 
-    def set_everything_on(self):
-        self.feat_upscaler.set(True)
-        self.feat_object_motion.set(True)
-        self.feat_overlay.set(True)
-        self.feat_fps_patch.set(True)
-        self.feat_frame_hooks.set(True)
-        self.feat_mods.set(True)
-        self.feat_res_scaling.set(True)
-        self.feat_watchdog.set(True)
-        self.feat_draw_prep.set(True)
-        self.feat_game_menu.set(True)
-        self.feat_skip_network_choice.set(True)
-        self.feat_async_shaders.set(True)
-        self.feat_gpl.set(True)
-        self.feat_compile_indicator.set(True)
+    def set_recommended_mode(self):
+        """Conservative 60 FPS starting point, never a hidden "everything on" toggle."""
+        if not messagebox.askyesno(
+                "Balanced 60 FPS",
+                "Apply the following changes?\n\n"
+                "• Target: 60 FPS (subject to PC capability and enabled game hooks)\n"
+                "• GPU frames ahead: 2 (normal)\n"
+                "• Precompile known shaders: on\n"
+                "• Heavy debug tracing: off\n\n"
+                "Your mods, gameplay patches, HDR, render resolution, controls, "
+                "network/party settings and saves remain unchanged.",
+                parent=self):
+            return
+        self.fps_var.set("60")
+        self.frames_ahead_var.set(next(
+            (label for label, value in FRAMES_AHEAD_CHOICES if value == "2"),
+            FRAMES_AHEAD_CHOICES[0][0]))
         self.feat_shader_precompile.set(True)
-        self.fps_var.set("uncap")
-        self.aniso_var.set("16x")
-        self.enabled_patches = {"Skip Intro", "Performance Patch (perf increase)", "Disable Motion Blur (perf increase)"}
-        self.sync_quick_patch_vars()
-        self.update_aniso_desc()
-        self.update_res_scaling_state()
-        self.update_upscaler_state()
+        self.feat_tracing.set(False)
         self.save_settings()
-        self.save_game_settings()
-        self.log("Preset applied: Everything on (restored all defaults and recommended patches).")
+        self.log("[PRESET] Balanced 60: 60 FPS target, 2 frames ahead, known shaders "
+                 "precompiled, debug tracing off. Mods, patches, party and saves unchanged.")
 
     def on_quick_patch_toggle(self):
         if self.feat_skip_intro.get():
