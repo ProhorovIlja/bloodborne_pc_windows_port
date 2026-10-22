@@ -60,6 +60,60 @@ Gameplay milestones must cover two directions against **unmodified official CLS 
 
 **Dedupe rule:** audit each candidate by actual code, version and license; if already present upstream, don't re-add it. Preserve copyright/credits and do not distribute retail game content. Features requiring incompatible architectural rewrites or unsupported hardware stay opt-in/experimental and must not secretly compromise base stability.
 
+## 3a. Final gameplay extras and patch catalogue policy (2026-10-22)
+
+**Priority order:** the native Windows executable, stable interoperable BBSC gameplay/account/online,
+quality launcher/onboarding, GPU/performance and resource-efficient server come first. Optional
+mod/cheat content never blocks the core release and is not counted as successful networking.
+
+**One catalog, no competing hooks:** combine the community GoldHEN/shadPS4 XML patch
+inventory, port-native gameplay/effect toggles and third-party optional cheats in one searchable
+launcher UI, with explicit categories (core fixes, QoL, gameplay, accessibility, experimental,
+offline cheats), provenance, licensed content, known compatible CUSA 1.09 hashes, conflicts,
+startup-only vs live toggles, saved profiles and rollback. A patch is enabled only when its
+original byte sites and dependencies are verified against the actual user game executable.
+Exclude duplicate writes, incompatible FPS/hook/renderer edits, obsolete fixes superseded by
+native code, and known crash/save/online hazards. External XML remains supported but NEVER
+blindly promoted into the built-in always-on defaults.
+
+**DollRebirth/MOAL:** expose the Doll respec *XML patch* in the optional patch catalogue
+with default OFF, version/byte-site validation and a dependency check for the DollRebirth
+talk assets. The lamp-service mod MOAL remains optional and solo-only until tested.
+Our existing native direct-lamp travel and MOAL's lamp talk replacement cannot both own
+the same script/menu. The current archive importer does not authorize bundling original
+game/mod assets in public releases. Respec state changes need user confirmation, pre-use save
+backup, and no unverified PvP or mixed-client network operations.
+
+**Separate jump from run/dodge:** the native input remapper already exposes Circle and L3 as
+different PS4 actions. An independently working Jump-on-L3 gameplay script should be offered
+as an easy built-in input/gameplay preset with default compatibility checked, reversible switch,
+and gamepad/keyboard rebinding. The uploaded Classic v2.1 modifies `c0000.hks` and must not
+be merged simultaneously with any other mod rewriting that file. The Nexus mod's newer v2.8
+also offers a Modern version and additional bug fixes; investigate source/license and
+verify against the 1.09 original before adopting or redistributing anything. Never publish
+Sony/From game files embedded in a full rewritten script unless redistribution rights permit
+it; prefer legitimate source patches/deltas against the user's own copy.
+
+**Optional manual New Game Plus after an ending:** research the two independent existing
+solutions, Bloodborne Enhanced's `Prevent Auto New Game Plus` (speak to Doll to begin next
+cycle) and Stake of Marika's explicit New Journey menu after an ending. The original game
+automatically begins NG+ after the ending. Our upstream visy party code already has
+*guest choice to accept an ending*, but this does not delay NG+ for the host.
+Implement an explicit opt-in `Auto NG+ / Ask / Manual` preference only after game-event/flag
+audit, avoiding an irreversible partially committed save. At every ending, prevent the
+transition safely *after* the story/ending event and achievements, preserve all current
+world state and key items until user confirmation, offer the Doll or another unambiguous
+in-game UI to start the new cycle, preserve the chosen ending, and make NG-cycle advancement
+exactly once per owned save. Cover Yharnam Sunrise, Honoring Wishes, Childhood's Beginning,
+Gehrman/Moon Presence, DLC progress, save/load/restart, death/rejoin and any host/guest
+decision separately. Do NOT ship untested save-state hooks just to display the option.
+
+**Network safety:** cosmetic/local client settings need not match; gameplay scripts, XML
+patches, cheats and NG-cycle transitions participate in the existing party compatibility
+hash/version checks. Unsupported mods are solo-only; cheats altering stats or enemy/world
+state never silently affect strangers/official CLS players, server matchmaking or saves.
+Leave experimental features disabled if their interactions with unmodified BBSC are unknown.
+
 ## 4. Server contract and resource efficiency
 
 Preserve `play.seamlesshunt.com` existing public shadNet/GameServer accounts, registration, matchmaking, room isolation, relays and ordinary players. Any server work needs protocol/capability versioning, backward compatibility, backups/rollback and staging. Optimize true measured CPU/RAM/disk/network bottlenecks: rate limits, connection cleanup, efficient lookups, native fast paths if measured, log rotation and safe caching. Avoid per-user maintenance commands or production restarts for client experiments. Never deploy a candidate shadNet source just because a file name resembles the production SHA.
