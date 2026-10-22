@@ -151,3 +151,17 @@
 - Current work: [source baseline](SEAMLESS_HUNT_STATUS.md), [connectivity](SEAMLESS_HUNT_CONNECTIVITY.md), [Nightwatch audit](NIGHTWATCH_COOP_EVALUATION.md).
 
 **Правило:** одно пользовательское приложение и один user-owned repo; внешний проект = источник проверяемого изменения, а не дополнительный продукт, который пользователь должен поддерживать.
+
+## 10. Фактическое сравнение Git tree (по blob SHA)
+
+Исследование от 22 октября: получены полные рекурсивные Git tree для исходников visy, Nightwatch, Supermedo и deadinside28. Сравнение — по *совпадающим относительным путям* (`engine/` у Nightwatch отброшен), только `gpu/`, `src/`, `scripts/`, `launcher/`, `tests/`, `tools/`, с исключением большинства vendored / docs / third_party путей. Это **не** полноценный semantic diff, а карта объёма для дальнейшего review:
+
+| Сопоставление к visy | Совпадающих путей | Побайтово одинаковых Git blobs | Отличающихся blobs | Только в сравниваемом дереве |
+|---|---:|---:|---:|---:|
+| Nightwatch (`engine/`) | 447 | 317 | 130 | 233 |
+| Supermedo (`windows`) | 131 | 40 | 91 | 212 |
+| deadinside28 | 181 | 74 | 107 | 624 |
+
+**Следствие:** Nightwatch уже содержит много идентичного visy-кода, но его собственное окружение, `gpu/bbnet/`, WPF launcher и Awaken-правки требуют отдельного port/diff. Более 600 эксклюзивных файлов deadinside — не 600 доказанных улучшений: часть просто не совпадает структурой каталога и платформой. Сырые количества не являются метрикой качества. У LanternEngine публичный Git tree не содержит сборочного дерева полного движка, а содержит `engine/bbhost-changes.patch` к DarkIzuku, поэтому автоматическое сравнение по одинаковым путям не информативно.
+
+Критически важные точки сравнения: `gpu/shim/bbgpu.cpp`, `gpu/shim/bbport_copy.cpp`, `gpu/shim/bbport_frame_state.h`, `gpu/shim/bbport_guest_hooks.cpp`, `gpu/shim/bbport_settings.cpp`, Network `gpu/bbnet`. Для патчей нужно сверить upstream commit и область владения frame hooks, а не только хеш.
