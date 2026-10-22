@@ -47,6 +47,9 @@ jobs:
       - name: Safe deterministic Windows developer package
         run: python -m unittest discover -s tests -p 'test_seamless_hunt_dev_package.py' -v
 
+      - name: Real shadNet wire greeting protocol (offline)
+        run: python -m unittest discover -s tests -p 'test_bbsc_shadnet_wire.py' -v
+
       - name: Seamless Hunt read-only connection contract
         run: python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
 
