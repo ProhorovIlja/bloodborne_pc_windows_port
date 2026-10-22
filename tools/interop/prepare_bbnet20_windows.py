@@ -82,14 +82,69 @@ def prepare(staged: Path, workspace: Path) -> dict:
         glue = glue.replace(before,
             b"#ifdef _WIN32\n#include <windows.h>\n#else\n" +
             before + b"\n#endif", 1)
-        save_line = b'setenv("BBSC_SAVE_DIR", folder.c_str(), 0);'
-        if save_line not in glue:
-            raise ValueError("upstream BBSC save-path setter changed")
-        glue = glue.replace(save_line,
-            b'#ifdef _WIN32\n                const auto utf8 = folder.u8string();\n'
-            b'                _putenv_s("BBSC_SAVE_DIR", '
-            b'reinterpret_cast<const char*>(utf8.c_str()));\n'
-            b'#else\n                ' + save_line + b'\n#endif', 1)
+        # The upstream Linux BBSC port guesses CUSA00207, regardless of the
+        # current Bloodborne region or actual native save user. That can back
+        # up or attribute another character's state to this session.
+        # Replace ONLY the Windows branch; keep Linux's original byte-for-byte.
+        save_start = b'    // BBSC finds the save it backs up and journals in shadPS4\'s folders; the port\'s are\n'
+        save_end = b'    // BBSC writes its byte patches straight into the game\'s code'
+        if glue.count(save_start) != 1 or glue.count(save_end) != 1:
+            raise ValueError("upstream BBSC save discovery changed")
+        start = glue.index(save_start)
+        end = glue.index(save_end, start)
+        original_discovery = glue[start:end]
+        if (original_discovery.count(b'"CUSA00207"') != 1
+                or original_discovery.count(b'setenv("BBSC_SAVE_DIR"') != 1):
+            raise ValueError("unreviewed upstream save lookup")
+        win_discovery = (
+            b'#ifdef _WIN32\n'
+            b'    // The BBSC patch code internally checks the canonical CUSA03173\n'
+            b'    // site set. Its save path must instead use the ACTUAL game SFO ID.\n'
+            b'    const char* user_root = std::getenv("BB_GPU_USER_DIR");\n'
+            b'    const auto active_save = SeamlessBbsc::ActiveSaveFolder(\n'
+            b'        std::filesystem::path(user_root && *user_root ? user_root : "user"),\n'
+            b'        g_host.serial ? g_host.serial : "");\n'
+            b'    if (active_save.empty()) {\n'
+            b'        std::puts("BBSC: native active save for retail title not found; "\n'
+            b'                  "seamless patches disabled to protect other-port saves");\n'
+            b'        return;\n'
+            b'    }\n'
+            b'    if (const char* specified = std::getenv("BBSC_SAVE_DIR");\n'
+            b'        specified && *specified) {\n'
+            b'        std::error_code error;\n'
+            b'        if (!std::filesystem::equivalent(active_save,\n'
+            b'                std::filesystem::path(specified), error) || error) {\n'
+            b'            std::puts("BBSC: explicit save override is NOT the native active "\n'
+            b'                      "save; seamless patches disabled");\n'
+            b'            return;\n'
+            b'        }\n'
+            b'    } else {\n'
+            b'        const auto utf8 = active_save.u8string();\n'
+            b'        if (_putenv_s("BBSC_SAVE_DIR",\n'
+            b'              reinterpret_cast<const char*>(utf8.c_str())) != 0) {\n'
+            b'            std::puts("BBSC: cannot bind native save folder; patches disabled");\n'
+            b'            return;\n'
+            b'        }\n'
+            b'    }\n'
+            b'    std::printf("BBSC: native active save bound to retail title %s; "\n'
+            b'                "canonical hook map CUSA03173 (byte-verified)\\n",\n'
+            b'                g_host.serial ? g_host.serial : "?");\n'
+            b'#else\n' + original_discovery + b'#endif\n'
+        )
+        glue = glue[:start] + win_discovery + glue[end:]
+        windows_inc = b'#ifdef _WIN32\n#include <windows.h>\n'
+        if glue.count(windows_inc) != 1:
+            raise ValueError("native Win64 include point moved")
+        glue = glue.replace(windows_inc,
+            windows_inc + b'#include "../shim/bbsc_native_save_dir.h"\n', 1)
+        version_line = b'        psf->app_ver = host->app_ver ? host->app_ver : "";'
+        if glue.count(version_line) != 1:
+            raise ValueError("upstream app_version assignment changed")
+        glue = glue.replace(version_line,
+            b'        // Retail SFO often writes 01.09; the native runtime may expose 1.09.\n'
+            b'        // The upstream BBSC hook checks exact 01.09; normalize ONLY here.\n'
+            b'        const std::string_view game_ver = host->app_ver ? host->app_ver : "";\n'
+            b'        psf->app_ver = game_ver == "1.09" ? "01.09" : std::string(game_ver);', 1)
         linux_start = b'    unsigned writable = 0;\n    if (FILE* maps = std::fopen("/proc/self/maps", "r")) {'
         linux_end = b'    std::printf("BBSC: seamless co-op hooks for the image'
         if linux_start not in glue or linux_end not in glue:
