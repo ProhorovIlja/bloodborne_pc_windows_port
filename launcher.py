@@ -1662,6 +1662,8 @@ class BloodborneLauncher(tk.Tk):
         self.discovery_queue = queue.Queue()
         self.discovery_busy = False
         self.settings = self.load_settings()
+        from scripts import hunter_preview
+        self.hunter_preview_pin = hunter_preview.validate_pin(self.settings.get("hunter_preview"))
         try:  # the game settings of an older launcher_settings.json move to bbport.ini once
             migrate_ini_rev(bbport_ini_path())  # bbport.ini's one-time changes (rot off, 0.7.2)
             moved = migrate_settings_to_ini(self.settings, bbport_ini_path())
@@ -1701,6 +1703,7 @@ class BloodborneLauncher(tk.Tk):
         # Read-only targeted discovery; runs off the UI thread and never replaces
         # a user-chosen game path or moves a save without explicit permission.
         self.after(800, lambda: self.discover_installs(silent=True))
+        self.after(300, self.refresh_pinned_hunter)
 
     # ------------------------------------------------------------------ UI
     def build_style(self):
@@ -1854,7 +1857,10 @@ class BloodborneLauncher(tk.Tk):
         self.home_game_var = tk.StringVar(value="Checking selected game...")
         self.home_client_var = tk.StringVar(value="Checking native client files...")
         self.home_party_var = tk.StringVar(value="Checking play mode...")
-        for label, variable in (("GAME", self.home_game_var),
+        self.home_hunter_var = tk.StringVar(
+            value="No preview pinned · open Hunters / Saves to pick one")
+        for label, variable in (("HUNTER", self.home_hunter_var),
+                                ("GAME", self.home_game_var),
                                 ("CLIENT", self.home_client_var),
                                 ("PLAY MODE", self.home_party_var)):
             line = ttk.Frame(overview, style="Hub.TFrame")
@@ -2675,6 +2681,35 @@ class BloodborneLauncher(tk.Tk):
             self.diagnostics_log_frame.pack(fill="both", expand=True, pady=(2, 0))
             self.diagnostics_open = True
             self.diagnostics_button.configure(text="Hide diagnostics  ▾")
+
+    def refresh_pinned_hunter(self):
+        """Re-open the chosen save READ-ONLY; never trust stale cached stats."""
+        pin = self.hunter_preview_pin
+        if not pin:
+            self.home_hunter_var.set("No preview pinned · open Hunters / Saves to pick one")
+            return
+        from scripts import hunter_preview
+        self.home_hunter_var.set("Checking pinned Hunter's save (read-only)…")
+        results = queue.Queue(maxsize=1)
+
+        def worker():
+            results.put(hunter_preview.preview(pin))
+        threading.Thread(target=worker, daemon=True, name="hunter-preview-read").start()
+
+        def poll(remaining=80):
+            if remaining <= 0 or not self.winfo_exists():
+                if self.winfo_exists() and self.hunter_preview_pin == pin:
+                    self.home_hunter_var.set("Preview unavailable · scan Hunters / Saves again")
+                return
+            if self.hunter_preview_pin != pin:
+                return
+            try:
+                hunter = results.get_nowait()
+            except queue.Empty:
+                self.after(100, lambda: poll(remaining - 1))
+                return
+            self.home_hunter_var.set(hunter_preview.label(hunter))
+        self.after(100, poll)
 
     def refresh_home_state(self):
         """Do not claim readiness, validated saves, online authentication or crossplay."""
@@ -3852,6 +3887,34 @@ class BloodborneLauncher(tk.Tk):
         browse_btn = ttk.Button(controls, text="Browse Save Folder",
                                 style="Secondary.TButton", command=browse_save)
         browse_btn.pack(side="left", padx=(8, 0))
+        def pin_selected():
+            selected = tree.selection()
+            if not selected:
+                status.set("Choose a validated Hunter before pinning its preview.")
+                return
+            h = profiles[int(selected[0])]
+            from scripts import hunter_preview
+            try:
+                self.hunter_preview_pin = hunter_preview.pin_from_hunter(h)
+            except ValueError:
+                status.set("This character cannot be pinned; unsupported slot.")
+                return
+            self.home_hunter_var.set(hunter_preview.label(h))
+            self.save_settings()
+            status.set("Pinned to Home for display ONLY. Play still uses in-game slot selection.")
+
+        def unpin():
+            self.hunter_preview_pin = None
+            self.home_hunter_var.set("No preview pinned · open Hunters / Saves to pick one")
+            self.save_settings()
+            status.set("Home preview cleared; no game save was changed.")
+
+        ttk.Button(controls, text="Pin preview to Home",
+                   style="Secondary.TButton", command=pin_selected).pack(
+                       side="left", padx=(8, 0))
+        ttk.Button(controls, text="Clear preview",
+                   style="Secondary.TButton", command=unpin).pack(
+                       side="left", padx=(8, 0))
         ttk.Button(controls, text="Close", style="Secondary.TButton",
                    command=dialog.destroy).pack(side="right")
         ttk.Label(body, text="Preview only. Save switching/import and editable inventory require separate verification.",
@@ -4982,6 +5045,8 @@ class BloodborneLauncher(tk.Tk):
             "party_log_areas": [key for key, var in self.party_log_area_vars.items() if var.get()],
             "auto_support_bundle": self.auto_support_bundle.get(),
             "check_updates": self.check_updates.get(),
+            # Local UI pointer only: never changes the game's own selected slot.
+            "hunter_preview": self.hunter_preview_pin,
             **{key: self.party_switch_vars[key].get() for key, _, _ in PARTY_SWITCHES},
         }
 
