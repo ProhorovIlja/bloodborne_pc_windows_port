@@ -2953,7 +2953,8 @@ class BloodborneLauncher(tk.Tk):
         Tooltip(server_entry, "Choose the public Seamless Hunt realm, localhost or your own server. "
                 "Used by Network doctor, account diagnostics and the opt-in experimental "
                 "native BBSC session. Just a hostname, without protocol or port "
-                "(shadNet TCP 31313, WebAPI 31315).")        sh_row = ttk.Frame(sec, style="Card.TFrame")
+                "(shadNet TCP 31313, WebAPI 31315).")
+        sh_row = ttk.Frame(sec, style="Card.TFrame")
         sh_row.grid(row=sec.next_row, column=0, columnspan=2, sticky="w", pady=(0, 3))
         sec.next_row += 1
         self.seamless_hunt_test_btn = ttk.Button(sh_row, text="Network doctor",
