@@ -40,3 +40,6 @@ jobs:
 
       - name: Party session recovery
         run: python -m unittest discover -s tests -p 'test_party_session.py' -v
+
+      - name: Seamless Hunt read-only connection contract
+        run: python -m unittest discover -s tests -p 'test_seamless_hunt.py' -v
