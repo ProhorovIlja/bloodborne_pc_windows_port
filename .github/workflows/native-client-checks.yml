@@ -144,5 +144,21 @@ jobs:
           .\legacy-online-policy.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Windows native BBSC DLL load, ABI, and offline fallback smoke
+        shell: pwsh
+        run: |
+          $cc = "C:\Program Files\LLVM\bin\clang.exe"
+          & $cc -std=c11 -Wall -Wextra -Werror -Isrc -I. tests/test_legacy_bbnet20_loader_win.c src/runtime_legacy_net.c src/runtime_legacy_policy.c -o legacy-loader-smoke.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\legacy-loader-smoke.exe absent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\legacy-loader-smoke.exe conflict
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $cc -std=c11 -Wall -Wextra -Werror -shared -Isrc tests/test_legacy_bbnet20_mock.c -o gpu/bbnet20.dll
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\legacy-loader-smoke.exe present
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item -Force gpu/bbnet20.dll, legacy-loader-smoke.exe
+
       - name: Launcher import smoke
         run: python -c "import launcher; print('Launcher module imported')"
