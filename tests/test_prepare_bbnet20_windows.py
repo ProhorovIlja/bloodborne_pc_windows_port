@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from tools.interop.prepare_bbnet20_windows import CMAKE, EXPORT, FORMAT, GLUE, LINK_OPTS, REVISION, prepare
+from tools.interop.prepare_bbnet20_windows import BBSC_GLUE, CMAKE, EXPORT, FORMAT, GLUE, LINK_OPTS, REVISION, prepare
 
 
 class NativeBbscPrepareTests(unittest.TestCase):
@@ -17,7 +17,13 @@ class NativeBbscPrepareTests(unittest.TestCase):
         self.workspace = root / "windows"
         (self.workspace / "gpu").mkdir(parents=True)
         (self.workspace / "gpu/CMakeLists.txt").write_text("project(test)")
-        files = {GLUE: EXPORT.encode(), CMAKE: LINK_OPTS.encode(),
+        files = {
+            GLUE: b'#include "bbgpu.h"\n' + EXPORT.encode() + b'\n' +
+                  b'void test() { bbgpu_add_event_filter(nullptr); }\n',
+            BBSC_GLUE: b'#include "bbgpu.h"\n'
+                       b'void show() { bbgpu_overlay_banner("host"); }\n'
+                       b'void hide() { bbgpu_overlay_banner(nullptr); }\n',
+            CMAKE: LINK_OPTS.encode(),
                  "gpu/bbnet20/vendor/shadps4/network.cpp": b"vendor",
                  "gpu/bbnet/bbnet.h": b"ABI2",
                  "gpu/third_party/httplib/httplib.h": b"HTTP",
@@ -37,9 +43,17 @@ class NativeBbscPrepareTests(unittest.TestCase):
 
     def test_stages_and_rejects_overwrite(self):
         result = prepare(self.staged, self.workspace)
-        self.assertEqual(result["files_staged"], 6)
+        self.assertEqual(result["files_staged"], 7)
         self.assertFalse(result["windows_online_dll_built"])
         self.assertIn("__declspec(dllexport)", (self.workspace / GLUE).read_text())
+        self.assertIn("bbnet20_host_add_event_filter(",
+                      (self.workspace / GLUE).read_text())
+        self.assertNotIn("bbgpu_add_event_filter(",
+                         (self.workspace / GLUE).read_text())
+        self.assertEqual((self.workspace / BBSC_GLUE).read_text().count(
+            "bbnet20_host_overlay_banner("), 3)
+        self.assertNotIn("bbgpu_overlay_banner(",
+                         (self.workspace / BBSC_GLUE).read_text())
         self.assertIn("if(NOT WIN32)", (self.workspace / CMAKE).read_text())
         self.assertIn("$"+"{CMAKE_SOURCE_DIR}", (self.workspace / CMAKE).read_text())
         self.assertEqual((self.workspace / "gpu/bbnet20/vendor/shadps4/network.cpp").read_bytes(), b"vendor")
@@ -69,7 +83,8 @@ class NativeBbscPrepareTests(unittest.TestCase):
         # Verify the original pinned bytes, then normalize only the adapted
         # glue and CMake, preserving everything else from upstream.
         upstream = (
-            '#include <sys/mman.h>\n'
+            '#include "bbgpu.h"\n'
+            + '#include <sys/mman.h>\n'
             + EXPORT + '\n'
             + 'void patch(unsigned long long base, unsigned long long size) {\n'
             + '  setenv("BBSC_SAVE_DIR", folder.c_str(), 0);\n'
@@ -82,6 +97,7 @@ class NativeBbscPrepareTests(unittest.TestCase):
             + '      /* POSIX-only address probe */\n'
             + '    }\n'
             + '    // The cinematic camera (other game hooks follow)\n'
+            + '    bbgpu_add_event_filter(nullptr);\n'
             + '}\n'
         ).replace("\n", "\r\n").encode("utf-8")
         self._replace_fixture(GLUE, upstream)
