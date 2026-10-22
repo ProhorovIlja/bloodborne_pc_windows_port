@@ -82,6 +82,39 @@ def probe_tcp(host: str, name: str, port: int, timeout: float = 1.5) -> ServiceR
         return ServiceResult(name, port, False, None, _short_error(exc))
 
 
+def _recv_exact(conn: socket.socket, size: int) -> bytes:
+    data = bytearray()
+    while len(data) < size:
+        block = conn.recv(size - len(data))
+        if not block:
+            raise ConnectionError("shadNet disconnected before greeting completed")
+        data.extend(block)
+    return bytes(data)
+
+
+def probe_shadnet(host: str, port: int = 31313, timeout: float = 1.5) -> ServiceResult:
+    """Validate protocol v1 ServerInfo. Send no account info or game traffic."""
+    from bbsc_shadnet_wire import (HEADER_BYTES, ShadNetProtocolError,
+                                   parse_header, parse_greeting)
+    start = time.monotonic()
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as conn:
+            conn.settimeout(timeout)
+            header = _recv_exact(conn, HEADER_BYTES)
+            _, _, total, _ = parse_header(header)
+            payload = _recv_exact(conn, total - HEADER_BYTES)
+            greeting = parse_greeting(header, payload)
+            return ServiceResult("shadNet", port, True,
+                                 round((time.monotonic() - start) * 1000),
+                                 f"shadNet protocol v{greeting.version} greeting OK; "
+                                 "account and BBSC gameplay not verified")
+    except ShadNetProtocolError:
+        return ServiceResult("shadNet", port, False, None,
+                             "unexpected shadNet greeting or protocol version")
+    except (OSError, TimeoutError, ConnectionError) as exc:
+        return ServiceResult("shadNet", port, False, None, _short_error(exc))
+
+
 def probe_game_server(host: str, timeout: float = 1.5) -> ServiceResult:
     """HEAD is handled without a response body by the deployed game's /ss.info route."""
     start = time.monotonic()
@@ -104,7 +137,8 @@ def check_services(host: str = DEFAULT_HOST, timeout: float = 1.5) -> list[Servi
     """Opt-in check only; never run automatically or send credentials."""
     host = validate_host(host)
     timeout = min(5.0, max(0.2, float(timeout)))
-    result = [probe_tcp(host, name, port, timeout) for name, port in TCP_SERVICES]
+    result = [probe_shadnet(host, 31313, timeout),
+              probe_tcp(host, "Web API", 31315, timeout)]
     result.append(probe_game_server(host, timeout))
     return result
 
