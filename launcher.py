@@ -3921,6 +3921,72 @@ class BloodborneLauncher(tk.Tk):
                   style="Hint.TLabel").pack(anchor="w", pady=(8, 0))
         dialog.after(80, launch_scan)
 
+    def show_client_integrity(self):
+        """Hash packaged runtime files on a worker; no downloads or modifications."""
+        from scripts import client_integrity
+        dialog = tk.Toplevel(self)
+        dialog.title("Seamless Hunt PC | Verify Client Installation")
+        dialog.geometry("690x465")
+        dialog.minsize(500, 340)
+        dialog.transient(self)
+        frame = ttk.Frame(dialog, padding=16)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Verify installed client files",
+                  style="Header.TLabel").pack(anchor="w")
+        ttk.Label(frame, text="Only original client files in MANIFEST.json are checked. "
+                  "Game dumps, saves, mods, passwords and settings are never scanned.",
+                  style="SubHeader.TLabel", wraplength=620).pack(anchor="w", pady=(4, 9))
+        status = tk.StringVar(value="Checking local files against the bundled build manifest…")
+        ttk.Label(frame, textvariable=status,
+                  style="SubHeader.TLabel", wraplength=620).pack(anchor="w", pady=(0, 9))
+        holder = ttk.Frame(frame)
+        holder.pack(fill="both", expand=True)
+        info = tk.Text(holder, wrap="word", bg="#202023", fg="#e0d9ce",
+                       insertbackground="#e0d9ce", relief="flat", padx=12, pady=10,
+                       font=("Consolas", 9))
+        scroll = ttk.Scrollbar(holder, orient="vertical", command=info.yview)
+        info.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        info.pack(side="left", fill="both", expand=True)
+        info.insert("1.0", "Working from the locally packaged MANIFEST.json.\n"
+                    "This is damage detection, NOT a cryptographic publisher signature.")
+        info.configure(state="disabled")
+        ttk.Button(frame, text="Close", style="Secondary.TButton",
+                   command=dialog.destroy).pack(anchor="e", pady=(9, 0))
+
+        pending = queue.Queue(maxsize=1)
+        def worker():
+            try:
+                report = client_integrity.verify_installed(APP_DIR)
+                pending.put((report, None))
+            except (OSError, ValueError) as exc:
+                pending.put((None, str(exc)))
+        threading.Thread(target=worker, daemon=True,
+                         name="bloodborne-client-integrity").start()
+
+        def poll():
+            if not dialog.winfo_exists():
+                return
+            try:
+                report, error = pending.get_nowait()
+            except queue.Empty:
+                dialog.after(120, poll)
+                return
+            if error:
+                status.set("Cannot verify this installation")
+                text = (f"{error}\n\nOnly packaged Windows development builds include a "
+                        "matching MANIFEST.json. No files were changed.")
+            else:
+                status.set(
+                    f"{report.checked} files checked · {report.critical_errors} core issues · "
+                    f"{report.optional_changes} optional differences")
+                text = client_integrity.summary(report)
+            info.configure(state="normal")
+            info.delete("1.0", "end")
+            info.insert("1.0", text)
+            info.configure(state="disabled")
+        dialog.after(120, poll)
+
     def show_release_center(self):
         """Read-only changelog and manual release check; never installs software."""
         from scripts import release_center
@@ -4008,6 +4074,8 @@ class BloodborneLauncher(tk.Tk):
         ttk.Button(controls, text="Official Releases", style="Secondary.TButton",
                    command=lambda: webbrowser.open(release_center.RELEASES_PAGE)
                    ).pack(side="left", padx=(7, 0))
+        ttk.Button(controls, text="Verify client files", style="Secondary.TButton",
+                   command=self.show_client_integrity).pack(side="left", padx=(7, 0))
         ttk.Button(controls, text="Close", style="Secondary.TButton",
                    command=dialog.destroy).pack(side="right")
         ttk.Label(body, text="No auto-install yet: signed packages, rollback and user-data isolation are required.",
