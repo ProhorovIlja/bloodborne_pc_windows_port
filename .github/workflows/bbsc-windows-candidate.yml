@@ -8,6 +8,9 @@ on:
     paths:
       - '.github/workflows/bbsc-windows-candidate.yml'
       - 'gpu/CMakeLists.txt'
+      - 'gpu/shim/bbsc_native_save_dir.h'
+      - 'tests/test_bbsc_native_save_dir.cpp'
+      - 'src/runtime_legacy_policy.c'
       - 'src/runtime_legacy_*'
       - 'tools/interop/**'
       - 'tools/setup_windows_deps.sh'
@@ -15,8 +18,8 @@ on:
       - 'tests/test_prepare_bbnet20_windows.py'
 
 concurrency:
-  group: bbsc-windows-candidate-${{ github.head_ref || github.ref }}
-  cancel-in-progress: false
+  group: bbsc-windows-candidate-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 
