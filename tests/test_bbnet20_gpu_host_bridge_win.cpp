@@ -23,6 +23,16 @@ extern "C" void bbgpu_overlay_banner(const char* text) {
         std::snprintf(banner, sizeof(banner), "%s", text);
     }
 }
+/* These test-only exports emulate the two unique wrappers in the REAL
+ * bbport.exe. The test DLL has NO copies of the renderer's callback state. */
+extern "C" __declspec(dllexport)
+void bbnet20_exe_add_event_filter(BbGpuEventFilter callback) {
+    bbgpu_add_event_filter(callback);
+}
+extern "C" __declspec(dllexport)
+void bbnet20_exe_overlay_banner(const char* message) {
+    bbgpu_overlay_banner(message);
+}
 static int ConsumeEvent(const void* event, void* window) {
     return event == reinterpret_cast<const void*>(0x1234) && window == nullptr;
 }
@@ -31,8 +41,8 @@ int main(int argc, char** argv) {
     assert(argc == 2 && argv[1][0]);
     HMODULE self = GetModuleHandleW(nullptr);
     assert(self);
-    assert(GetProcAddress(self, "bbgpu_add_event_filter"));
-    assert(GetProcAddress(self, "bbgpu_overlay_banner"));
+    assert(GetProcAddress(self, "bbnet20_exe_add_event_filter"));
+    assert(GetProcAddress(self, "bbnet20_exe_overlay_banner"));
     HMODULE plugin = LoadLibraryA(argv[1]);
     if (!plugin) {
         std::printf("LoadLibrary failed %lu\n", GetLastError());
