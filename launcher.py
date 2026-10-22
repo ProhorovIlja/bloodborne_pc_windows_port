@@ -506,6 +506,15 @@ def party_session_module():
     return party_session
 
 
+def seamless_hunt_module():
+    """Read-only Seamless Hunt diagnostics. No account login or P2P protocol changes."""
+    scripts_dir = str(APP_DIR / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import seamless_hunt
+    return seamless_hunt
+
+
 PARTY_RENDEZVOUS_TIP = (
     "When a direct connection fails, your address is posted on the public BitTorrent DHT under a key only "
     "your party can compute, so the host finds you and punches through both routers without a guest code. "
@@ -1934,6 +1943,9 @@ class BloodborneLauncher(tk.Tk):
         self.party_lan_code_var = tk.StringVar(value=_lan)
         self.party_status_var = tk.StringVar()
         self.party_test_running = False
+        self.seamless_hunt_status_var = tk.StringVar(value="Optional server connectivity check; game P2P is unchanged.")
+        self.seamless_hunt_test_running = False
+        self.seamless_hunt_result_queue = queue.Queue()
         # Party rules & sync dialog (PARTY_SWITCHES, start mode, guest Insight, backups)
         self.party_switch_vars = {key: tk.BooleanVar(value=bool(self.settings.get(key, default)))
                                   for key, _, default in PARTY_SWITCHES}
@@ -2653,6 +2665,22 @@ class BloodborneLauncher(tk.Tk):
                                          "log below. Needs a built game (out\\bbport.exe).")
 
         sec = self._section(tab, 1, "Connection")
+        sh_row = ttk.Frame(sec, style="Card.TFrame")
+        sh_row.grid(row=sec.next_row, column=0, columnspan=2, sticky="w", pady=(0, 3))
+        sec.next_row += 1
+        self.seamless_hunt_test_btn = ttk.Button(sh_row, text="Check Seamless Hunt",
+                                                style="Secondary.TButton", command=self.check_seamless_hunt)
+        self.seamless_hunt_test_btn.pack(side="left")
+        Tooltip(self.seamless_hunt_test_btn,
+                "Checks read-only TCP connectivity to Seamless Hunt shadNet and Web API, plus "
+                "HEAD /ss.info on its GameServer. Does not send a password, log in, join a session "
+                "or change the game's existing direct P2P connection.")
+        self.seamless_hunt_status_lbl = ttk.Label(
+            sec, textvariable=self.seamless_hunt_status_var, style="Hint.TLabel",
+            wraplength=330, justify="left")
+        self.seamless_hunt_status_lbl.grid(row=sec.next_row, column=0, columnspan=2,
+                                          sticky="w", pady=(0, 5))
+        sec.next_row += 1
         port_tip = ("UDP/TCP port of the party on this PC (1024-65535). The host's friends connect to it; "
                     "forward it in your router if UPnP cannot open it. Default: 9307 (BB_PARTY_PORT).")
         port_lbl = ttk.Label(sec, text="Port:", style="Card.TLabel")
@@ -3513,6 +3541,36 @@ class BloodborneLauncher(tk.Tk):
         if answer:
             return self.copy_solo_save_to_party(ask=False)
         return True
+
+    def check_seamless_hunt(self):
+        """Opt-in read-only probe; keep socket operations off Tk's UI thread."""
+        if self.seamless_hunt_test_running:
+            return
+        self.seamless_hunt_test_running = True
+        self.seamless_hunt_test_btn.configure(state="disabled")
+        self.seamless_hunt_status_var.set("Checking Seamless Hunt services...")
+        def worker():
+            try:
+                sh = seamless_hunt_module()
+                results = sh.check_services()
+                message = sh.format_results(results)
+            except Exception:
+                message = "Connection check could not complete (see server diagnostics)."
+            self.seamless_hunt_result_queue.put(message)
+        threading.Thread(target=worker, name="sh-readonly-check", daemon=True).start()
+        self.after(100, self.poll_seamless_hunt)
+
+    def poll_seamless_hunt(self):
+        try:
+            message = self.seamless_hunt_result_queue.get_nowait()
+        except queue.Empty:
+            self.after(100, self.poll_seamless_hunt)
+            return
+        self.seamless_hunt_test_running = False
+        self.seamless_hunt_test_btn.configure(state="normal")
+        self.seamless_hunt_status_var.set(message)
+        self.log("[SEAMLESS HUNT] " + message)
+        self.log("[SEAMLESS HUNT] Connectivity only; native P2P and matchmaking are unchanged.")
 
     def run_party_local_test(self):
         if self.party_test_running:
