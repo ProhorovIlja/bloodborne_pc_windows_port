@@ -2688,7 +2688,7 @@ class BloodborneLauncher(tk.Tk):
                 "This does not establish that other hunters can join you.")
         sh_site_btn = ttk.Button(sh_row, text="Account website",
                                  style="Secondary.TButton",
-                                 command=lambda: webbrowser.open("https://seamlesshunt.com"))
+                                 command=lambda: webbrowser.open("https://install.seamlesshunt.com"))
         sh_site_btn.pack(side="left", padx=(6, 0))
         Tooltip(sh_site_btn, "Open the official Seamless Hunt website in your browser "
                              "to register or manage your account. Launcher sign-in is not implemented yet.")
