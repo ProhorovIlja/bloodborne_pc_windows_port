@@ -45,6 +45,9 @@ int main() {
     }
 
     assert(ActiveSaveFolder(native, "CUSA03173") == eu);
+    assert(SeamlessBbsc::MatchesActiveSaveFolder(eu, eu));
+    assert(!SeamlessBbsc::MatchesActiveSaveFolder(eu, us_region));
+    assert(!SeamlessBbsc::MatchesActiveSaveFolder(eu, other_user));
     assert(ActiveSaveFolder(native, "CUSA00207") == us_region);
     // A NEW character can start before the game's first savedata mount. Bind
     // the future native destination, but never the existing party/other region.
@@ -62,6 +65,10 @@ int main() {
     const auto first_save = first_root / "savedata" / "1" / "CUSA03173" / "SPRJ0005";
     assert(ActiveSaveFolder(first_root, "CUSA03173") == first_save);
     assert(!fs::exists(first_root / "savedata")); // No side effects.
+    assert(SeamlessBbsc::MatchesActiveSaveFolder(first_save, first_save));
+    assert(!SeamlessBbsc::MatchesActiveSaveFolder(
+        first_save, first_root / "savedata_party" / "1" / "CUSA03173" / "SPRJ0005"));
+    assert(!fs::exists(first_root / "savedata")); // Explicit matching is also read-only.
     // Files, not folders, must refuse the lookup (also before first save).
     const auto bad_region = us / "CUSA01363";
     std::ofstream(bad_region) << "NOT A SAVE DIRECTORY";
