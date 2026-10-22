@@ -3,7 +3,10 @@
 // a guest's game takes from the host after a load, and when a guest's boss fog counts as walked
 // through. Pure logic, no game access (unit test: tests/test_party_bossfog_rules.cpp); the game side
 // is party_b2.cpp (the overlay guard: SaveOverlay / RestoreZeroedOverlay) and party_worldact.cpp
-// (the guest's fog report, GuestTick).
+// (the guest's fog report, GuestTick). Also: how each boss's first fight really starts (FirstFights:
+// a guest's fog starts only a walk-in one; an action one keeps its room open, party_phantom
+// BossRoomRules) and every co-op wall of the game (ConfinementWalls), both from an EMEVD scan
+// (tools/party/bossroom_tool.py).
 //
 // The boss fog events (every map EMEVD, flag_tool emevd): a boss's state lives in its map's T1 zone 4
 // group, 1AAB4xxx - the host-entered flag 1AAB4800 that the boss's start event (`ボスが動き出す`)
@@ -23,6 +26,7 @@
 // the host opened the fight and the boss attacked the party at the lamp.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace coop::bossfog {
@@ -64,6 +68,143 @@ inline bool StaleFogFlag(bool seen_out, bool in, bool handled) {
 /// The guest's report of a walk-through: a flag seen 0 this stay that reads 1 now, not yet reported.
 inline bool FogWalkedThrough(bool seen_out, bool in, bool handled) {
     return in && !handled && seen_out;
+}
+
+// ---- How a boss's first fight really starts (Laurence, player report 2026-10-22) -----------------
+// The first-fight event behind each fog gate's intro condition (BossGate::intro_flag), every map
+// EMEVD (tools/party/bossroom_tool.py scan). `entry`: it waits only on the host's position (a 3[2]
+// region / 3[3] distance next to flag and chr-type checks) - the host walking in starts it, so a
+// guest's walk through the fog may stand in for it (the host's chr visits the spot, P5 / D10).
+// `action`: it waits on something the host does inside the room - Laurence (13404861 / 13401851:
+// goods 4014 Laurence's Skull held, 3[4], in the altar region 3402855), Ebrietas (12421802: the
+// host's own hit, 3[23] attacker 10000), Lady Maria (13501801 waits on 13500947, set when the host
+// examines her, 13500948). Until then the room is open: the host's re-fight event disables the fog
+// until the first fight has run (1003[101] intro -> label 0, else 2005[3](fog, 0), a wait on the
+// intro flag, 2005[3](fog, 1)), but its `1003[5] skip 2 if client` keeps the fog up in a guest's
+// game. What went wrong: Laurence counted as a guest-startable first fight, so a guest's fog had
+// its prompt; going through it was taken for the fight's start (the host's chr visited the altar
+// without the skull: nothing started) and left the guest shut in behind the fog until a Hunter's
+// Mark. The Nightmare Grand Cathedral's lamp 3402953 also stands inside that room: a guest that
+// arrived with the host there stood behind a closed fog too.
+// Now an action first fight is never started from the fog, and a guest's game skips that client
+// skip (`client_skip_index`): the room is open to it as to the host until the fight really starts
+// (the intro flag on), then the fog comes up in its game as in the host's.
+enum class FirstStart : std::uint8_t {
+    none,    ///< no first-fight event behind the gate (the Celestial Emissary): the fog starts it
+    entry,   ///< the host walking in (position only): a guest's walk through the fog may start it
+    action,  ///< something the host does inside the room: never from the fog
+};
+struct FirstFight {
+    std::uint32_t guest_event;            ///< BossGate::guest_event
+    FirstStart start;
+    std::int32_t refight_event = 0;       ///< action: the host's re-fight entry event (the fog's on / off)
+    std::int32_t client_skip_index = -1;  ///< action: its `1003[5] skip 2 if client` instruction
+    const char* notice = nullptr;         ///< action: the guest's notice at the fog before the fight
+};
+inline const FirstFight* FirstFights(std::size_t* n) {
+    static const FirstFight rows[] = {
+        {12204891, FirstStart::entry},  // Witch of Hemwick 12201802, region 2202805
+        {12304811, FirstStart::entry},  // Blood-starved Beast 12301802, region 2302805
+        {12304731, FirstStart::entry},  // Darkbeast Paarl 12301702, 16 m of 2300810
+        {12404841, FirstStart::entry},  // Vicar Amelia 12401802, region 2402805
+        {12414731, FirstStart::entry},  // Cleric Beast 12411702, region 2412805
+        {12414811, FirstStart::entry},  // Father Gascoigne 12411802, region 2412815
+        {12424811, FirstStart::action, 12424810, 2, "Ebrietas: the fight starts with the host's first hit on her"},
+        {12424711, FirstStart::none},   // the Celestial Emissary: no first-fight event
+        {12504811, FirstStart::entry},  // Martyr Logarius 12501802, region 2502805
+        {12604846, FirstStart::entry},  // Mergo's Wet Nurse 12601802, region 2602805
+        {12604861, FirstStart::entry},  // Micolash 12601852, 32 m of 2600850
+        {12704841, FirstStart::entry},  // Shadows of Yharnam 12701802, region 2702805
+        {12804881, FirstStart::entry},  // the One Reborn 12801802, region 2802805
+        {13304871, FirstStart::entry},  // Amygdala 13301802, region 3302805
+        {13404801, FirstStart::entry},  // Ludwig 13404811 + 13401801, region 3402805
+        {13404851, FirstStart::action, 13404850, 2,
+         "Laurence: the fight starts when the host brings Laurence's Skull to the altar"},
+        {13504801, FirstStart::action, 13504800, 2, "Lady Maria: the fight starts when the host goes up to her"},
+        {13504851, FirstStart::entry},  // the Living Failures 13501851, region 3502815
+        {13604801, FirstStart::entry},  // the Orphan of Kos 13604811 + 13601801, region 3602805
+    };
+    *n = sizeof rows / sizeof rows[0];
+    return rows;
+}
+inline const FirstFight* FirstFightFor(std::uint32_t guest_event) {
+    std::size_t n = 0;
+    const FirstFight* rows = FirstFights(&n);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (rows[i].guest_event == guest_event) {
+            return &rows[i];
+        }
+    }
+    return nullptr;
+}
+/// A guest's walk through this gate's fog may start the boss's FIRST fight (P5): an `entry` one only.
+inline bool GuestMayStartFirstFight(std::uint32_t guest_event) {
+    const FirstFight* f = FirstFightFor(guest_event);
+    return f && f->start == FirstStart::entry;
+}
+/// Guest (a client): skip this instruction, so the room of an action first fight stays open in its
+/// game until the fight starts, as in the host's.
+inline bool GuestRoomOpenSkip(std::int32_t event, std::int32_t bank, std::int32_t id, std::int32_t index) {
+    std::size_t n = 0;
+    const FirstFight* rows = FirstFights(&n);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (rows[i].start == FirstStart::action && rows[i].refight_event == event && bank == 1003 && id == 5 &&
+            rows[i].client_skip_index == index) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ---- Multiplayer confinement walls (Ludwig's back door, player report 2026-10-22) ----------------
+// Every event that puts up a wall object (2005[3](obj, 1), its SFX 2006[2]) right after a wait on
+// the multiplayer state (3[6]), every EMEVD file (tools/party/bossroom_tool.py scan; the summon
+// sign events that only make an SFX are no walls): common 7600 (the co-op area walls), its Chalice
+// copy m29 12907600, and m34 13400010 `聖堂街D_マルチ閉じ込め壁` - wall 3401801 (MSB `霧壁_ボス0_1`)
+// at the door at the back of Ludwig's arena, the way on into the DLC. 13400010 puts it up while in
+// multiplayer and Ludwig lives (9471 off) and takes it down only when the session is over AND 9471
+// is on (its group 1: 0[0] "not in multiplayer" [11] + 3[0] 9471 on [12], then a restart whose
+// first wait needs 9471 off). Vanilla ends the co-op at a boss kill; a party stays, so the wall
+// stood after Ludwig's death on the host and the guest until the guest left or the game was
+// restarted (the player's log: 13400010 ended only when the guest left). Open world on (bbport.ini
+// party_open_world, the default): no wall goes up (the wall and SFX instructions are skipped, as
+// for 7600). Always in party mode: the "not in multiplayer" condition `alone_index` is skipped, so
+// the wall goes at its progress flag with the open world off too.
+struct ConfinementWall {
+    std::int32_t event;
+    std::int32_t on_index;     ///< 2005[3](wall, 1)
+    std::int32_t sfx_index;    ///< 2006[2](wall SFX)
+    std::int32_t alone_index;  ///< 0[0] "not in multiplayer" next to `until_flag` (-1: none)
+    std::uint32_t until_flag;  ///< the wall is down for good once this is on (0: none)
+};
+inline const ConfinementWall* ConfinementWalls(std::size_t* n) {
+    static const ConfinementWall rows[] = {
+        {7600, 6, 7, -1, 0},          // common マルチ閉じ込め壁_XX (args: wall, SFX)
+        {12907600, 6, 7, -1, 0},      // m29: the Chalice Dungeons' copy
+        {13400010, 7, 8, 11, 9471},   // m34: wall 3401801 / SFX 3403801 behind Ludwig, until he is dead
+    };
+    *n = sizeof rows / sizeof rows[0];
+    return rows;
+}
+/// Skip this instruction? `open_world`: the party's open world (no co-op walls) is on.
+inline bool ConfinementWallSkip(std::int32_t event, std::int32_t bank, std::int32_t id, std::int32_t index,
+                                bool open_world) {
+    std::size_t n = 0;
+    const ConfinementWall* rows = ConfinementWalls(&n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const ConfinementWall& w = rows[i];
+        if (w.event != event) {
+            continue;
+        }
+        if (open_world && ((bank == 2005 && id == 3 && index == w.on_index) ||
+                           (bank == 2006 && id == 2 && index == w.sfx_index))) {
+            return true;
+        }
+        if (w.alone_index >= 0 && bank == 0 && id == 0 && index == w.alone_index) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace coop::bossfog
