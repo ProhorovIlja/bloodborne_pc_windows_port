@@ -29,6 +29,9 @@ class DeveloperKitTest(unittest.TestCase):
             "patches/redzone.json",
             "licenses/LICENSE",
             "licenses/GPL-3.0.txt",
+            "out/licenses/LICENSE",
+            "out/licenses/msys2/PACKAGES.txt",
+            "out/licenses/third_party/monocypher/LICENCE.md",
             "out/SDL3.dll",
             "out/gpu/bbgpu.dll",
             "launcher/example.py",
@@ -76,6 +79,8 @@ class DeveloperKitTest(unittest.TestCase):
             self.assertIn("scripts/seamless_hunt.py", names)
             self.assertIn("patches/Bloodborne.xml", names)
             self.assertIn("licenses/LICENSE", names)
+            self.assertIn("out/licenses/LICENSE", names)
+            self.assertIn("out/licenses/msys2/PACKAGES.txt", names)
             self.assertIn("README-DEVELOPER-BUILD.txt", names)
             self.assertIn("MANIFEST.json", names)
             for denied in (
