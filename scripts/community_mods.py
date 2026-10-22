@@ -127,6 +127,19 @@ def _inspect_archive(path: Path, jump_variant: str):
     return kind, name, files
 
 
+def _check_active_paths(base: Path):
+    """Do not report success for mods in a directory that run.bat won't read."""
+    overrides = {"BB_MODS_DIR": base / "mods",
+                 "BB_MODS_CONFIG": base / "mods.json",
+                 "BB_PATCHES_DIR": base / "patches",
+                 "BB_PATCHES_CONFIG": base / "patches.json"}
+    for var, expected in overrides.items():
+        actual = os.environ.get(var)
+        if actual and Path(actual).resolve() != expected.resolve():
+            raise ValueError(f"{var} points outside the managed launcher data directory. "
+                             "Use the regular mod folder or restore the default setting")
+
+
 def _settings(path: Path):
     if not path.is_file():
         return {}
@@ -152,6 +165,7 @@ def _enabled_mod_files(mod_root: Path, config: Path):
 
 def inspect(paths, data_dir: Path, jump_variant="jump_only"):
     base = Path(data_dir).resolve()
+    _check_active_paths(base)
     archive_paths = [Path(p).resolve(strict=True) for p in paths]
     if not archive_paths:
         raise ValueError("Choose a Jump on L3, DollRebirth or MOAL ZIP")
@@ -213,6 +227,7 @@ def inspect(paths, data_dir: Path, jump_variant="jump_only"):
 def install(plan: Plan, data_dir: Path):
     """All-or-rollback install: only new files, never overwrite existing mods/patches."""
     base = Path(data_dir).resolve()
+    _check_active_paths(base)
     base.mkdir(parents=True, exist_ok=True)
     roots = sorted({"/".join(f.output.split("/")[:2]) for f in plan.files})
     # Root for XML files is patches/DollRebirth.xml, not the whole patches directory.
@@ -255,6 +270,7 @@ def installed_mods(data_dir: Path):
     """Installed mod names and enabled state from the existing bbport mods.json."""
     from scripts import mods
     base = Path(data_dir).resolve()
+    _check_active_paths(base)
     available = mods.discover(base / "mods")
     active = set(mods.selected(base / "mods", base / "mods.json"))
     return [(name, name in active) for name in available]
@@ -264,6 +280,7 @@ def save_mod_selection(data_dir: Path, enabled_names):
     """Atomically store individual mod switches without touching load order/saves."""
     from scripts import mods
     base = Path(data_dir).resolve()
+    _check_active_paths(base)
     available = mods.discover(base / "mods")
     requested = set(enabled_names)
     if not requested.issubset(available):
