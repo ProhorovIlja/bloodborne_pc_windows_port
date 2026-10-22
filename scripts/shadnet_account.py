@@ -203,7 +203,7 @@ def register_on_private_server(host: str, username: str, password: str,
     from seamless_hunt import validate_host
     host = validate_host(host)
     if host in ("play.seamlesshunt.com", "seamlesshunt.com"):
-        return AuthResult(False, "Use seamlesshunt.com to register a public-realm account")
+        return AuthResult(False, "Use the seamlesshunt.com website to register a public-realm account")
     if not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError("Invalid shadNet port")
     if not 0.5 <= timeout <= 10.0:
