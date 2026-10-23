@@ -24,6 +24,7 @@ DIGESTS = {
 }
 OVERLAY = "bbport/gpu/shim/bbport_overlay.cpp"
 MAP3D = "bbport/gpu/shim/bbport_map_3d.cpp"
+TEXTURE_GC = "bbport/gpu/shadps4/video_core/texture_cache/texture_cache.cpp"
 NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 COOP = "bbport/launcher/bbport_coop.py"
 LAUNCHER = "bbport/launcher/bbport_launcher_win.py"
@@ -141,6 +142,15 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     output[MAP3D]=v16_module.transform(source[MAP3D]).encode("utf-8")
     if len(output)!=len(dest)+11:
         raise ValueError("V16 3D map native source is missing")
+    # V17: only guard active texture attachments against eviction.
+    # Stale depth reclamation remains opt-in for explicit GPU tests.
+    v17_dir=Path(__file__).resolve().parent.parent/"gc-safety-v17"
+    v17_module=types.ModuleType("sh_gc_safety_patch")
+    v17_script=v17_dir/"patch_texture_gc.py"
+    exec(compile(v17_script.read_text("utf-8"),str(v17_script),"exec"),v17_module.__dict__)
+    output[TEXTURE_GC]=v17_module.transform(source[TEXTURE_GC]).encode("utf-8")
+    if len(output)!=len(dest)+12:
+        raise ValueError("V17 texture GC native source is missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -151,7 +161,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V10 direct channel guard","V11 optional last-hunt title reconnect",
                    "V13 down-only Follow/Free spectator camera",
                    "V14 confirmed quit and opt-in long-session performance diagnostics",
-                   "V16 defensive Vulkan map allocation, descriptor and input guards"],
+                   "V16 defensive Vulkan map allocation, descriptor and input guards",
+                   "V17 active GPU resource GC protection (opt-in stale depth)"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
@@ -173,7 +184,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8=types.ModuleType("sh_v8")
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # All source anchors and input hashes are checked before writing anything.
