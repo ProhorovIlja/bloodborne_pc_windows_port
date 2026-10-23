@@ -1,0 +1,28 @@
+name: Yharnam dedicated PoC offline checks
+
+on:
+  push:
+    branches:
+      - feature/yharnam-dedicated-server-poc
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-kit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check staging and launcher source syntax
+        run: |
+          python -m py_compile tools/yharnam_poc/*.py tests/test_yharnam_poc.py
+          bash -n tools/yharnam_poc/build_linux.sh
+      - name: Verify isolated ports, source pinning and reversible client override
+        run: python -m unittest discover -s tests -p 'test_yharnam_poc.py' -v
+
+# This workflow does not fetch Bloodborne assets, build Windows client binaries,
+# deploy to Fornex or prove that any multiplayer gameplay works.
