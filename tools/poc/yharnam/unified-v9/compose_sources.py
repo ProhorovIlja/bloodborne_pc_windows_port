@@ -23,6 +23,7 @@ DIGESTS = {
     "direct": "e2818139c1001cd61ab10c4e6aef70c67b131be00ea1f7fb0fb3aefef1985559",
 }
 OVERLAY = "bbport/gpu/shim/bbport_overlay.cpp"
+MAP3D = "bbport/gpu/shim/bbport_map_3d.cpp"
 NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 COOP = "bbport/launcher/bbport_coop.py"
 LAUNCHER = "bbport/launcher/bbport_launcher_win.py"
@@ -131,6 +132,15 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         output[name]=contents.encode("utf-8")
     if len(output)!=len(dest)+10:
         raise ValueError("V14 quit/perf generated header is missing")
+    # V16: fix 3D map GPU buffer and descriptor ownership only. No changes
+    # to gameplay textures, overlay menus, network or the production server.
+    v16_dir=Path(__file__).resolve().parent.parent/"map-safety-v16"
+    v16_module=types.ModuleType("sh_map_safety_patch")
+    v16_script=v16_dir/"patch_map.py"
+    exec(compile(v16_script.read_text("utf-8"),str(v16_script),"exec"),v16_module.__dict__)
+    output[MAP3D]=v16_module.transform(source[MAP3D]).encode("utf-8")
+    if len(output)!=len(dest)+11:
+        raise ValueError("V16 3D map native source is missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -140,7 +150,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V7 native P2P hooks (dormant)","V8 Github update channel",
                    "V10 direct channel guard","V11 optional last-hunt title reconnect",
                    "V13 down-only Follow/Free spectator camera",
-                   "V14 confirmed quit and opt-in long-session performance diagnostics"],
+                   "V14 confirmed quit and opt-in long-session performance diagnostics",
+                   "V16 defensive Vulkan map allocation, descriptor and input guards"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
@@ -162,7 +173,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8=types.ModuleType("sh_v8")
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # All source anchors and input hashes are checked before writing anything.
