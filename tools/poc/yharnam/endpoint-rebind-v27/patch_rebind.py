@@ -90,7 +90,7 @@ int ChangedAccountOnSameEndpoint() {
   CHECK(SentTo(result, Kaniel).size() == 1);
   result = hub.Receive(Kaniel, HelloFrom("Eileen"), 50);
   CHECK(result.gone.isEmpty() && result.retired_online_ids.isEmpty());
-  std::cout << "server link changed account: virtual routes retired\n";
+  std::cout << "server link changed account: virtual routes retired\\n";
   return 0;
 }
 
