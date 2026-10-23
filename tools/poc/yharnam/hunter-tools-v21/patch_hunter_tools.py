@@ -35,10 +35,12 @@ void Menu() {''',
 void HunterToolsTab() {
     if (!bbcoop_offline_character_edit_allowed()) {
         BbSaveEditor::SetEditorUnlocked(false);
-        Note(T("Hunter Tools are unavailable while co-op mode is enabled. "
-               "Disconnect and launch the offline mode first.",
-               "Инструменты охотника недоступны при включённом кооперативе. "
-               "Отключитесь и запустите игру в офлайн-режиме."),
+        Note(T("Hunter Tools are locked in co-op. Previously enabled startup cheats "
+               "can remain active until you restart the game. Disable them offline "
+               "and restart before joining others.",
+               "Инструменты заблокированы в кооперативе. Ранее включённые читы "
+               "могут работать до перезапуска. Отключите их офлайн и "
+               "перезапустите игру перед подключением к другим."),
              Dim());
         return;
     }
