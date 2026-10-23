@@ -23,6 +23,8 @@ sys.path.insert(0, str(HERE.parent/"map-range-v20"))
 from test_patch_map_range import SOURCE as MAP_RANGE_FIXTURE
 sys.path.insert(0, str(HERE.parent/"hunter-tools-v21"))
 from test_patch_hunter_tools import EDITOR as SAVE_EDITOR_FIXTURE, HEADER as SAVE_HEADER_FIXTURE
+sys.path.insert(0, str(HERE.parent/"server-trust-v22"))
+from test_patch_server_trust import B as SERVER_BOARDS_FIXTURE, W as SERVER_WORLD_FIXTURE, H as SERVER_HEADER_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -42,6 +44,9 @@ def originals():
         compose.MAPART: MAP_DATA_FIXTURE,
         compose.SAVE_EDITOR: SAVE_EDITOR_FIXTURE,
         compose.SAVE_EDITOR_H: '#include <vector>\n' + SAVE_HEADER_FIXTURE,
+        compose.SERVER_BOARDS: SERVER_BOARDS_FIXTURE,
+        compose.SERVER_WORLD: SERVER_WORLD_FIXTURE,
+        compose.SERVER_WORLD_H: SERVER_HEADER_FIXTURE,
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
         "server/coop/team_lobby.cpp": "    switch (request.action()) {\n    case Action::CREATE: {\n        team.set_leader(member);\n        bbcoop::TeamMember& m = *team.add_members();\n",
         "emulator/src/core/bloodborne_re_internal.h": "void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id);\n",
@@ -138,7 +143,7 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+11)  # V21 adds Hunter Tools policy header
+        self.assertEqual(len(result),len(source)+12)  # V22 adds one server-side validation header
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
@@ -167,6 +172,11 @@ class AllPatches(unittest.TestCase):
                       result['bbport/gpu/bbcoop/coop.cpp'])
         self.assertIn(b'players >= 0 && players <= 1',
                       result['bbport/gpu/bbcoop/coop.cpp'])
+        self.assertIn(b'SH-SERVER-TRUST-V22',result[compose.SERVER_WORLD])
+        self.assertIn(b'SafeReviveHits(',result[compose.SERVER_WORLD])
+        self.assertIn(b'AddReviveDamage',result[compose.SERVER_BOARDS])
+        self.assertIn(b'rejected_vitals = 0',result[compose.SERVER_WORLD_H])
+        self.assertIn(b'SafeVitalValues',result['server/src/sh_session_guard.hpp'])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
         self.assertIn(b'std::jthread worker;',result[compose.MAPCHARTS])
         self.assertIn(b'class Budget',result['bbport/gpu/shim/sh_map_cache.hpp'])
@@ -190,6 +200,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V19 bounded compressed map/mesh decoding", " ".join(manifest["applied"]))
         self.assertIn("V20 bounded and exact game archive", " ".join(manifest["applied"]))
         self.assertIn("V21 offline-only unlocked Hunter Tools", " ".join(manifest["applied"]))
+        self.assertIn("V22 server ingress vitals bounds", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -232,6 +243,12 @@ class AllPatches(unittest.TestCase):
         source[compose.SAVE_EDITOR]=source[compose.SAVE_EDITOR].replace(
             "void SetEchoes(std::int32_t echoes) {", "void SetEchoes(int echoes) {")
         with self.assertRaisesRegex(ValueError,"echoes"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v22_invalid_server_ingress_anchor_refused(self):
+        source=originals()
+        source[compose.SERVER_WORLD]=source[compose.SERVER_WORLD].replace(
+            "case bbcoop::Envelope::kVitals: {", "case bbcoop::Envelope::kVitals3: {")
+        with self.assertRaisesRegex(ValueError,"vitals ingress"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
