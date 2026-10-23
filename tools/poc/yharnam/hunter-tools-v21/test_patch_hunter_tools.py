@@ -64,7 +64,7 @@ class Tests(unittest.TestCase):
         impl=coop_impl('extern "C" int bbcoop_lobby_view(bbcoop_lobby* lobby) {')
         self.assertIn('int bbcoop_offline_character_edit_allowed(void);',header)
         for term in ['Coop::TeamModeOn()', 'Coop::InPartySession()',
-                     'Coop::SessionMembers() <= 1','Coop::SessionPlayers() <= 1']:
+                     'Coop::SessionMembers() <= 1','players >= 0 && players <= 1']:
             self.assertIn(term,impl)
         with self.assertRaisesRegex(ValueError,'coop runtime bridge'):
             coop_impl('unrecognized legacy server build')
