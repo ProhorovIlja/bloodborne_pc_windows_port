@@ -1,0 +1,116 @@
+# Read-only CI entrypoint on the DEFAULT branch so Actions / Run workflow appears.
+# Feature-branch commits made through automation may not emit a push-triggered run.
+# This job never deploys Fornex, publishes releases or alters live client data.
+name: Seamless Hunt V9 native source integration
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-v9-source-gate
+  cancel-in-progress: false
+jobs:
+  source-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Seamless Hunt developer branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/yharnam-dedicated-server-poc
+          persist-credentials: false
+      - name: Provision C++ and protobuf for local source validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build libssl-dev protobuf-compiler unzip
+      - name: Test native P2P adapter using real local UDP sockets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v7
+          unzip -q tools/poc/yharnam/pinned-archives/SH-YT-NATIVE-DIRECT-P2P-V7-20261023.zip -d /tmp/shyt-v7
+          cmake -S /tmp/shyt-v7 -B /tmp/shyt-v7-build -G Ninja -DBUILD_TESTING=ON
+          cmake --build /tmp/shyt-v7-build --parallel 2
+          ctest --test-dir /tmp/shyt-v7-build --output-on-failure
+          (cd /tmp/shyt-v7 && python3 -m unittest -v test_patch)
+      - name: Test in-game scale and matchmaking policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v3
+          unzip -q tools/poc/yharnam/pinned-archives/SH-YT-INGAME-UI-P2P-V3-20261023.zip -d /tmp/shyt-v3
+          cmake -S /tmp/shyt-v3 -B /tmp/shyt-v3-build -G Ninja -DBUILD_TESTING=ON
+          cmake --build /tmp/shyt-v3-build --parallel 2
+          ctest --test-dir /tmp/shyt-v3-build --output-on-failure
+          (cd /tmp/shyt-v3 && python3 -m unittest -v test_ui_patch)
+      - name: Verify V5 source transform against fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v5
+          unzip -q tools/poc/yharnam/pinned-archives/SH-YT-NATIVE-DBNO-ENDTOEND-V5-20261023.zip -d /tmp/shyt-v5
+          (cd /tmp/shyt-v5 && python3 -m unittest -v test_native_dbno_patch)
+      - name: Fetch exact Yharnam Together upstream revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q /tmp/shyt-pinned-upstream
+          git -C /tmp/shyt-pinned-upstream remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C /tmp/shyt-pinned-upstream sparse-checkout init --cone
+          git -C /tmp/shyt-pinned-upstream sparse-checkout set \
+            server/coop server/src \
+            emulator/src/core \
+            bbport/gpu/shim bbport/gpu/bbcoop bbport/launcher
+          git -C /tmp/shyt-pinned-upstream fetch --no-tags --depth 1 origin 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          git -C /tmp/shyt-pinned-upstream checkout -q --detach FETCH_HEAD
+          test "$(git -C /tmp/shyt-pinned-upstream rev-parse HEAD)" = 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+      - name: Compose V3 + V5 + V7 + V8 into ONE matched source override
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/poc/yharnam/unified-v9/compose_sources.py
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream /tmp/shyt-pinned-upstream \
+            --repo "$PWD" \
+            --out /tmp/shyt-v9-source
+          test -z "$(git -C /tmp/shyt-pinned-upstream status --porcelain)"
+          python3 -m py_compile /tmp/shyt-v9-source/bbport/launcher/bbport_coop.py
+          python3 -m py_compile /tmp/shyt-v9-source/bbport/launcher/bbport_launcher_win.py
+          grep -Fq "PROTOCOL_CURRENT = 8" /tmp/shyt-v9-source/server/coop/coop.proto
+          grep -Fq 'sh-scale-plus' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
+          grep -Fq '"sh-dbno"' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
+          grep -Fq 'native_direct.TryGame' /tmp/shyt-v9-source/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq "1429375055/releases" /tmp/shyt-v9-source/bbport/launcher/bbport_coop.py
+      - name: Check protocol-8 schema generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v9-protobuf
+          protoc -I /tmp/shyt-v9-source/server/coop \
+            --cpp_out=/tmp/shyt-v9-protobuf \
+            /tmp/shyt-v9-source/server/coop/coop.proto
+          test -s /tmp/shyt-v9-protobuf/coop.pb.h
+      - name: Verify safe manifest and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,pathlib
+          root=pathlib.Path('/tmp/shyt-v9-source')
+          m=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          assert m['upstream_pin']=='77e350743a7cb4524cfcc1782fb6e3af64e25b15'
+          assert m['public_release_ready'] is False
+          assert 'NOT ENABLED' in m['direct_udp']
+          for name,digest in m['sha256'].items():
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest, name
+          print('V9_SOURCE_SHA256_PASS',len(m['sha256']))
+          PY
+      - name: Upload reproducible matched-source candidate (NOT public game)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SeamlessHunt-V9-Matched-Source-Only
+          path: /tmp/shyt-v9-source/
+          retention-days: 14
+          if-no-files-found: error
