@@ -26,12 +26,16 @@ def release_notes(releases):
             continue
 def fetch_newest_release(timeout=15):
     return newest_release(fetch_releases(timeout))
+def download_update(release):
+    if digest.hexdigest() != want:
+        return None
 """
         changed=p.patch_coop(source)
         self.assertIn("repositories/1429375055/releases",changed)
         self.assertEqual(changed.count("startswith(SH_RELEASE_PREFIX)"),2)
         self.assertIn("sh_compatibility_release(newest_release(",changed)
         self.assertIn("meta.get('server_deployed')",changed)
+        self.assertIn("channel_manifest",changed)
         with self.assertRaises(ValueError):p.patch_coop(changed)
     def test_launcher_updates_are_separate(self):
         source="import sys\np=('bbport-launcher-coop' if COOP_TEST else 'bbport-launcher')\ndef fetch_update_release(beta=False):\n    pass\n"
