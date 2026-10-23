@@ -73,6 +73,15 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         with zipfile.ZipFile(archive) as z:
             output[path]=z.read(member)
     if len(output)!=len(dest)+4: raise ValueError("missing header outputs")
+    # V10: patch V7 adapter in BOTH directions. Never deliver map/owner-sensitive
+    # gameplay channels directly, even if a pairwise MAC is otherwise valid.
+    v10_dir=Path(__file__).resolve().parent.parent/"direct-channel-v10"
+    v10_guard=types.ModuleType("sh_direct_channel_guard")
+    v10_py=v10_dir/"guard_adapter.py"
+    exec(compile(v10_py.read_text("utf-8"),str(v10_py),"exec"),v10_guard.__dict__)
+    adapter_path="emulator/src/core/libraries/network/native_shlk_adapter.hpp"
+    output[adapter_path]=v10_guard.patch_adapter(output[adapter_path].decode("utf-8")).encode("utf-8")
+    output["emulator/src/core/libraries/network/native_direct_filter.hpp"]=(v10_dir/"native_direct_filter.hpp").read_bytes()
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
