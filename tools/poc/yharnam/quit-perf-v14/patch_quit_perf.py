@@ -23,6 +23,7 @@ def transform(text,perf_header=None,perf_overlay=None):
         // Available both at the title screen and while playing. Respect text input.
         if(down && !event.key.repeat && !prompt_active && event.key.key==SDLK_F9){
             ShPerformance::enabled=!ShPerformance::enabled;
+            if(ShPerformance::enabled) ShPerformance::history.Clear();
             return true;
         }
         if(down && !event.key.repeat && !prompt_active && event.key.key==SDLK_F10){
