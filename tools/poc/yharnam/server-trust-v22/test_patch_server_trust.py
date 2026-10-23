@@ -22,7 +22,7 @@ class TestServerTrust(unittest.TestCase):
         self.assertIn('SafeReviveHits(',x)
         self.assertIn('SafeWireText(hello.party(), 512)',x)
         self.assertIn('SafeWireText(hello.member(), 96)',x)
-        self.assertIn('SafeWireText(hello.name(), 192)',x)
+        self.assertIn('SafeOptionalWireText(hello.name(), 192)',x)
     def test_damage_cannot_overflow(self):
         x=boards(B);self.assertIn('AddReviveDamage(damage, hit.damage())',x)
         self.assertNotIn('damage += hit.damage()',x)
