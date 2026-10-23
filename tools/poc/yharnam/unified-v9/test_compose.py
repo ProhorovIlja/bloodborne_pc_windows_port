@@ -17,6 +17,8 @@ sys.path.insert(0, str(HERE.parent/"gc-safety-v17"))
 from test_patch_texture_gc import SOURCE as GC_FIXTURE
 sys.path.insert(0, str(HERE.parent/"map-cache-v18"))
 from test_patch_chart_cache import SOURCE as CHART_CACHE_FIXTURE
+sys.path.insert(0, str(HERE.parent/"map-data-v19"))
+from test_patch_map_data import SOURCE as MAP_DATA_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -32,6 +34,7 @@ def originals():
         compose.MAP3D: MAP_FIXTURE,
         compose.TEXTURE_GC: GC_FIXTURE,
         compose.MAPCHARTS: CHART_CACHE_FIXTURE,
+        compose.MAPART: MAP_DATA_FIXTURE,
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
         "server/coop/team_lobby.cpp": "    switch (request.action()) {\n    case Action::CREATE: {\n        team.set_leader(member);\n        bbcoop::TeamMember& m = *team.add_members();\n",
         "emulator/src/core/bloodborne_re_internal.h": "void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id);\n",
@@ -138,6 +141,8 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SH-MAP-CACHE-V18',result[compose.MAPCHARTS])
         self.assertIn(b'std::jthread worker;',result[compose.MAPCHARTS])
         self.assertIn(b'class Budget',result['bbport/gpu/shim/sh_map_cache.hpp'])
+        self.assertIn(b'SH-MAP-DATA-V19',result[compose.MAPART])
+        self.assertIn(b'MaxFloorCells',result[compose.MAPART])
         self.assertIn(b'vmaDestroyBuffer(allocator, out.buffer, out.allocation);',result[compose.MAP3D])
         self.assertIn(b'SeamlessHunt::Spectate::State',result['bbport/gpu/shim/spectator_policy.hpp'])
         for path,needle in [
@@ -153,6 +158,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V16 defensive Vulkan map allocation", " ".join(manifest["applied"]))
         self.assertIn("V17 active GPU resource GC protection", " ".join(manifest["applied"]))
         self.assertIn("V18 bounded CPU map cache", " ".join(manifest["applied"]))
+        self.assertIn("V19 bounded compressed map/mesh decoding", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -177,6 +183,12 @@ class AllPatches(unittest.TestCase):
         source[compose.MAPCHARTS]=source[compose.MAPCHARTS].replace(
             "std::condition_variable wake;", "std::condition_variable wakeX;")
         with self.assertRaisesRegex(ValueError,"stop-aware condition"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v19_invalid_cache_parser_anchor_refused(self):
+        source=originals()
+        source[compose.MAPART]=source[compose.MAPART].replace(
+            'raw_size > (1u << 31)', 'raw_size > 100000000')
+        with self.assertRaisesRegex(ValueError,"mesh decompression bound"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
