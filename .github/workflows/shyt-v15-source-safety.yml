@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V19
+name: Seamless Hunt native source integrity V14–V20
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -9,6 +9,7 @@ on:
       - tools/poc/yharnam/gc-safety-v17/**
       - tools/poc/yharnam/map-cache-v18/**
       - tools/poc/yharnam/map-data-v19/**
+      - tools/poc/yharnam/map-range-v20/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -19,6 +20,7 @@ on:
       - tools/poc/yharnam/gc-safety-v17/**
       - tools/poc/yharnam/map-cache-v18/**
       - tools/poc/yharnam/map-data-v19/**
+      - tools/poc/yharnam/map-range-v20/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -49,6 +51,14 @@ jobs:
           ctest --test-dir /tmp/shyt-v18-cache --output-on-failure
       - name: Test V19 persisted map/mesh decompression bounds
         run: python -m unittest discover -s tools/poc/yharnam/map-data-v19 -p 'test_*.py' -v
+      - name: Test V20 safe game archive read patch
+        run: python -m unittest discover -s tools/poc/yharnam/map-range-v20 -p 'test_patch_*.py' -v
+      - name: Build and test V20 bounded game file reader
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/map-range-v20 -B /tmp/shyt-v20-range -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v20-range --parallel 2
+          ctest --test-dir /tmp/shyt-v20-range --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -66,6 +76,9 @@ jobs:
           curl -fsSL --retry 3 "${BASE}/shim/bbport_map_charts.cpp" -o /tmp/sh-charts-original.cpp
           python tools/poc/yharnam/map-cache-v18/patch_chart_cache.py /tmp/sh-charts-original.cpp /tmp/sh-charts-patched.cpp
           grep -Fq "SH-MAP-CACHE-V18" /tmp/sh-charts-patched.cpp
+          python tools/poc/yharnam/map-range-v20/patch_map_range.py /tmp/sh-charts-patched.cpp /tmp/sh-charts-v20.cpp
+          grep -Fq "SH-MAP-RANGE-V20" /tmp/sh-charts-v20.cpp
+          grep -Fq "SH-MAP-CACHE-V18" /tmp/sh-charts-v20.cpp
           curl -fsSL --retry 3 "${BASE}/shim/bbport_map_art.cpp" -o /tmp/sh-map-data-original.cpp
           python tools/poc/yharnam/map-data-v19/patch_map_data.py /tmp/sh-map-data-original.cpp /tmp/sh-map-data-patched.cpp
           grep -Fq "SH-MAP-DATA-V19" /tmp/sh-map-data-patched.cpp
