@@ -10,11 +10,12 @@ struct Sample {
  unsigned map_id=0;
  float frame_ms=0;
  std::uint64_t process_bytes=0,image_bytes=0,live_images=0,gpu_bytes=0,gc_freed=0;
+ std::uint64_t gc_used_bytes=0,gc_trigger_bytes=0,gc_critical_bytes=0,gc_kept=0;
 };
 struct Trend {
  bool comparable=false,slowdown=false,process_growth=false,gpu_growth=false;
  float frame_percent=0;
- std::int64_t rss_mib_delta=0,gpu_mib_delta=0;
+ std::int64_t rss_mib_delta=0,gpu_mib_delta=0,gc_used_mib_delta=0;
 };
 class Watch {
 public:
@@ -57,6 +58,8 @@ public:
                        static_cast<std::int64_t>(first.process_bytes/1048576);
   result.gpu_mib_delta=static_cast<std::int64_t>(last.gpu_bytes/1048576)-
                        static_cast<std::int64_t>(first.gpu_bytes/1048576);
+  result.gc_used_mib_delta=static_cast<std::int64_t>(last.gc_used_bytes/1048576)-
+                           static_cast<std::int64_t>(first.gc_used_bytes/1048576);
   result.process_growth=result.rss_mib_delta>256;
   result.gpu_growth=result.gpu_mib_delta>256;
   return result;
