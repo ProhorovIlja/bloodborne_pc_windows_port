@@ -4,6 +4,7 @@ from pathlib import Path
 LINK="server/src/server_link.cpp"
 LINK_H="server/src/server_link.h"
 LINK_SERVER="server/src/link_server.cpp"
+TEST="server/tests/test_server_link.cpp"
 HEADER="server/src/sh_endpoint_rebind.hpp"
 HERE=Path(__file__).resolve().parent
 def one(s,old,new,name):
@@ -65,10 +66,48 @@ def transform_server(s):
     for (const auto& linked : result.linked) {''',
         'matchmaking address cleanup')
 
+def transform_test(s):
+    if "SH-ENDPOINT-REBIND-V27" in s:raise ValueError("V27 already applied to Qt tests")
+    s=one(s,'''int Relays() {''',
+'''// SH-ENDPOINT-REBIND-V27: a same-address account change must unlink its
+// previous virtual endpoint and notify the old team before admitting new ID.
+int ChangedAccountOnSameEndpoint() {
+  Hub hub;
+  auto result = hub.Receive(Kaniel, HelloFrom("Kaniel"), 0);
+  CHECK(DecodeWelcome(SentTo(result, Kaniel).value(0))->accepted);
+  result = hub.Receive(Ada, HelloFrom("Ada"), 10);
+  CHECK(DecodeWelcome(SentTo(result, Ada).value(0))->accepted);
+  result = hub.Receive(Kaniel, HelloFrom("Eileen"), 20);
+  CHECK(DecodeWelcome(SentTo(result, Kaniel).value(0))->accepted);
+  CHECK(result.gone.size() == 1 && result.gone[0] == Kaniel);
+  CHECK(result.retired_online_ids.size() == 1 &&
+        result.retired_online_ids[0] == "Kaniel");
+  CHECK(hub.Members() == 2 && hub.VirtualOf(Kaniel) == VirtualEndpointOf("Eileen"));
+  // In the old source the stale by_virtual entry would reach Eileen here.
+  result = hub.Receive(Ada, Encode(Data{VirtualEndpointOf("Kaniel"), GameFrame}), 30);
+  CHECK(SentTo(result, Kaniel).isEmpty());
+  result = hub.Receive(Ada, Encode(Data{VirtualEndpointOf("Eileen"), GameFrame}), 40);
+  CHECK(SentTo(result, Kaniel).size() == 1);
+  result = hub.Receive(Kaniel, HelloFrom("Eileen"), 50);
+  CHECK(result.gone.isEmpty() && result.retired_online_ids.isEmpty());
+  std::cout << "server link changed account: virtual routes retired\n";
+  return 0;
+}
+
+int Relays() {''',
+        'Qt identity-switch test')
+    s=one(s,
+        '''  if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||''',
+        '''  if (Contracts() != 0 || HelloAndBuilds() != 0 ||
+      ChangedAccountOnSameEndpoint() != 0 || Relays() != 0 ||''',
+        'Qt test runner')
+    return s
+
 def transform_all(sources):
     return {LINK: transform(sources[LINK]),
             LINK_H: transform_header(sources[LINK_H]),
             LINK_SERVER: transform_server(sources[LINK_SERVER]),
+            TEST: transform_test(sources[TEST]),
             HEADER: (HERE/'sh_endpoint_rebind.hpp').read_text('utf8')}
 
 if __name__=='__main__':
