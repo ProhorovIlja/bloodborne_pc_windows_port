@@ -6,6 +6,7 @@ UI='''        const auto& effect = BbSettings::Effects[e];
 } // namespace Ui
 
 void Menu() {
+    const char* title = T("Settings", "Настройки");
 static const char* tab_en[] = {"Display", "Upscaler", "Game effects", "Controls", "Advanced", "Save"};
 "Дополнительно", "Сохранение"};
     default: SaveTab(); break;
@@ -44,6 +45,7 @@ class Tests(unittest.TestCase):
         result=overlay(UI)
         self.assertIn('if (std::string_view(effect.key).starts_with("cheat_")) continue;',result)
         self.assertIn('HunterToolsTab();',result)
+        self.assertIn('state.tab == 5',result)
         self.assertIn('SaveTab();',result)
         self.assertIn('Unlock for this session',result)
         self.assertIn('bbcoop_offline_character_edit_allowed()',result)
