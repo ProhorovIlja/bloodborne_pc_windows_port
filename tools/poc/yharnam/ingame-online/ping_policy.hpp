@@ -51,11 +51,15 @@ inline PingDecision MatchPing(const PingSamples& s,const PingFilter& filter,
         result.measured_ms=relay;result.path=PingPath::RelayOnly;
     }else if(direct){
         result.measured_ms=direct;result.path=PingPath::DirectOnly;
-    }else if(filter.allow_relay_fallback&&relay){
+    }else if(filter.path==PingPath::Any&&filter.allow_relay_fallback&&relay){
+        // A DirectOnly filter must never silently qualify a relay path.
         result.measured_ms=relay;result.path=PingPath::RelayOnly;
     }
     if(!result.measured_ms){
-        result.matches=!filter.maximum_ms && !filter.require_measured;
+        // Strict transport choice implies a verified measurement, even without
+        // an explicit millisecond cutoff.
+        result.matches=filter.path==PingPath::Any &&
+                       !filter.maximum_ms && !filter.require_measured;
         return result;
     }
     result.quality=QualityFor(*result.measured_ms);
