@@ -16,11 +16,10 @@ data=json.load(open(sys.argv[1],encoding='utf-8'))
 expected={
  'schema':1, 'release_tag':'shyt-v'+sys.argv[2],
  'client_protocol':8, 'server_protocol':8, 'link_protocol':2,
- 'server_host':'199.195.193.131','server_sha256':sys.argv[3],
- 'release_ready':True, 'server_deployed':True
+ 'server_host':'199.195.193.131','server_sha256':sys.argv[3]
 }
 for key,value in expected.items():
-    if data.get(key)!=value: raise SystemExit('REFUSED: release manifest '+key+' not valid')
+    if data.get(key)!=value: raise SystemExit('REFUSED: staging manifest '+key+' not valid')
 PY
 [[ "$(sha256sum "$BINARY" | cut -d' ' -f1)" == "$EXPECTED" ]] || { echo 'binary digest mismatch'; exit 1; }
 TARGET="/srv/sh-yt-releases/$VERSION"
@@ -31,3 +30,4 @@ install -m 0640 -o shytpoc -g shytpoc "$MANIFEST" "$TARGET/seamless-hunt-release
 echo "STAGED ONLY: $TARGET"
 echo 'Existing Yharnam server, CLS and firewall unchanged.'
 echo 'Do not activate until isolated server startup and game-client compatibility tests pass.'
+echo 'Prepare the publish-ready manifest only AFTER a successful activation and verified rollback rehearsal.'
