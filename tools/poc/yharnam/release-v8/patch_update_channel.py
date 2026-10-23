@@ -38,6 +38,9 @@ def patch_coop(s):
     s=once(s,"\ndef fetch_newest_release(timeout=15):",COMPAT+"\ndef fetch_newest_release(timeout=15):","compatibility validator")
     s=once(s,"    return newest_release(fetch_releases(timeout))",
            "    return sh_compatibility_release(newest_release(fetch_releases(timeout)),timeout)","guard update")
+    s=once(s,"    if digest.hexdigest() != want:",
+           "    if digest.hexdigest() != want or digest.hexdigest() != release.get('channel_manifest', {}).get('installer_sha256'):",
+           "manifest SHA-256 download check")
     ast.parse(s);return s
 def patch_launcher(s):
     s=once(s,"('bbport-launcher-coop' if COOP_TEST else 'bbport-launcher')",
