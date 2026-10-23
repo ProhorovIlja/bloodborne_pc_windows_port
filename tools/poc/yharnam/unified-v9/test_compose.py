@@ -25,15 +25,30 @@ def originals():
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
         "server/coop/team_lobby.cpp": "    switch (request.action()) {\n    case Action::CREATE: {\n        team.set_leader(member);\n        bbcoop::TeamMember& m = *team.add_members();\n",
         "emulator/src/core/bloodborne_re_internal.h": "void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id);\n",
-        "emulator/src/core/bloodborne_server_world.cpp": "std::string TeamLobbyMember() {\nvoid TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id) {\n",
+        "emulator/src/core/bloodborne_server_world.cpp": """#include "core/bloodborne_team.h"
+TeamGate team_gate;
+        if (decision.step == TeamGate::Step::Hold) {
+            return true;
+        }
+void TeamChoose(TeamGate::Choice choice) {
+    std::scoped_lock lock{team_mutex};
+void TeamBackAtTitle() {
+    if (!team_switch) {
+    if (lobby_playing || team_gate.Holding()) {
+        team_gate.Reset();
+std::optional<bbcoop::LobbyState> TeamLobbyState() {
+std::string TeamLobbyMember() {
+void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id) {
+""",
         "emulator/src/core/bloodborne_party_death.cpp": "void TickPartyDeath() {\n    if (!party_death_hook_installed) {\n",
         "bbport/gpu/bbcoop.h": "    bbcoop_lobby_world worlds[BBCOOP_LOBBY_WORLDS];\n} bbcoop_lobby;\nvoid bbcoop_lobby_request(int action, const char *id);\n",
-        "bbport/gpu/bbcoop/coop.cpp": "        lobby->started = team.started();\nextern \"C\" void bbcoop_lobby_request(int action, const char* id) {\n",
+        "bbport/gpu/bbcoop/coop.cpp": "        lobby->started = team.started();\nextern \"C\" int bbcoop_lobby_view(bbcoop_lobby* lobby) {\nextern \"C\" void bbcoop_lobby_request(int action, const char* id) {\n",
         compose.OVERLAY: "\n".join([
             '#include "bbport_settings.h"',v3.OLD_SUBTITLE,
             'status = std::to_string(lobby.member_count) + T(" of 4", " из 4");',
             v3.OLD_HEADER,v3.OLD_CARD,
             '    if (lobby.leader) {\n        ImGui::PushFont(MenuArt::Font(), 19.0f);\n        const ImVec2 remove_size(S(170.0f), S(38.0f));',
+            '        bbcoop_team_choose(lobby.in_team ? BBCOOP_TEAM_GO_START : BBCOOP_TEAM_GO_ALONE);',
         ]),
         compose.NETWORK: "\n".join([v7.INSERT_INCLUDE,v7.INSERT_SEND,v7.INSERT_RECEIVE,
                                     v7.INSERT_TICK,v7.INSERT_FIELD,v7.INSERT_RESET]),
@@ -69,9 +84,12 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+5)
+        self.assertEqual(len(result),len(source)+6)
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
+        self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
+        self.assertIn(b'ShResumeMode()',result['emulator/src/core/bloodborne_server_world.cpp'])
+        self.assertIn(b'SeamlessHunt::Resume::Mode',result['emulator/src/core/last_session_policy.hpp'])
         for path,needle in [
             ("server/coop/coop.proto",b"PROTOCOL_CURRENT = 8"),
             ("server/coop/team_lobby.cpp",b"SET_DBNO"),
