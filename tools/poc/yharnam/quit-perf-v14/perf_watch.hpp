@@ -19,9 +19,19 @@ struct Trend {
 class Watch {
 public:
  static constexpr unsigned Capacity=36;
+ // Only compare a continuous set of samples collected in the same map.
+ // A suspended session must not borrow a stale performance baseline.
+ static constexpr std::int64_t MaxSampleGapMs=90000;
+ void Clear(){size_=0;next_=0;}
  bool Add(Sample s){
   if(s.timestamp_ms<0||!std::isfinite(s.frame_ms)||s.frame_ms<=0||s.frame_ms>500)return false;
-  if(size_&&s.timestamp_ms<Latest().timestamp_ms+10000)return false;
+  if(size_){
+   const auto& previous=Latest();
+   if(s.timestamp_ms<previous.timestamp_ms+10000)return false;
+   if(s.map_id!=previous.map_id ||
+      s.timestamp_ms-previous.timestamp_ms>MaxSampleGapMs)
+       Clear();
+  }
   samples_[next_]=s; next_=(next_+1)%Capacity;size_=std::min(size_+1,Capacity);return true;
  }
  const Sample& Latest() const{return samples_[(next_+Capacity-1)%Capacity];}
