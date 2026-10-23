@@ -91,6 +91,7 @@ void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id)
             '} // namespace Ui',
             '',
             'void Menu() {',
+            '    const char* title = T("Settings", "Настройки");',
             'static const char* tab_en[] = {"Display", "Upscaler", "Game effects", "Controls", "Advanced", "Save"};',
             '"Дополнительно", "Сохранение"};',
             '    default: SaveTab(); break;',
