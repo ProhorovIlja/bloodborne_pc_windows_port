@@ -27,7 +27,7 @@ constexpr bool Matches(std::string_view transport_id,
     }
     return true;
 }
-inline bool Admit(bool strict, bool sign_in_configured,
+constexpr bool Admit(bool strict, bool sign_in_configured,
                   std::string_view transport_id,
                   std::string_view claimed_member) noexcept {
     return !strict || (sign_in_configured && Matches(transport_id,claimed_member));
