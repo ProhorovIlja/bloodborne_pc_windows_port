@@ -83,6 +83,7 @@ jobs:
           python tools/poc/yharnam/gc-safety-v17/patch_texture_gc.py /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
           grep -Fq "SH-MAP-V16" /tmp/sh-map-patched.cpp
           grep -Fq "SH-GC-V17" /tmp/sh-gc-patched.cpp
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_overlay.cpp" -o /tmp/sh-overlay-original.cpp
           curl -fsSL --retry 3 "${BASE}/shim/bbport_save_editor.cpp" -o /tmp/sh-editor-original.cpp
           curl -fsSL --retry 3 "${BASE}/shim/bbport_save_editor.h" -o /tmp/sh-editor-original.h
           python - <<'PY'
@@ -93,9 +94,12 @@ jobs:
           mod=importlib.util.module_from_spec(spec)
           spec.loader.exec_module(mod)
           originals={mod.EDITOR:Path('/tmp/sh-editor-original.cpp').read_text('utf-8'),
-                     mod.HEADER:Path('/tmp/sh-editor-original.h').read_text('utf-8')}
+                     mod.HEADER:Path('/tmp/sh-editor-original.h').read_text('utf-8'),
+                     mod.OVERLAY:Path('/tmp/sh-overlay-original.cpp').read_text('utf-8')}
           for path,text in originals.items():
-              out=(mod.editor(text) if path==mod.EDITOR else mod.editor_header(text))
+              out=(mod.editor(text) if path==mod.EDITOR else
+                   mod.editor_header(text) if path==mod.HEADER else
+                   mod.overlay(text))
               assert 'SH-HUNTER-TOOLS-V21' in out
           PY
           curl -fsSL --retry 3 "${BASE}/shim/bbport_map_charts.cpp" -o /tmp/sh-charts-original.cpp
