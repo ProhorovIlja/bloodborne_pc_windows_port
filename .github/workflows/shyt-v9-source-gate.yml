@@ -25,6 +25,14 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq cmake ninja-build libssl-dev protobuf-compiler unzip
+      - name: Validate Quit to Desktop shortcut and bounded long-session diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/quit-perf-v14 -p test_patch.py -v
+          cmake -S tools/poc/yharnam/quit-perf-v14 -B /tmp/shyt-v14-perf -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build /tmp/shyt-v14-perf --parallel 2
+          ctest --test-dir /tmp/shyt-v14-perf --output-on-failure
       - name: Verify native downed spectator policy and camera C hook
         shell: bash
         run: |
@@ -116,6 +124,10 @@ jobs:
           grep -Fq 'sh-scale-plus' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq '"sh-dbno"' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq 'native_direct.TryGame' /tmp/shyt-v9-source/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'sh-quit-desktop' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
+          grep -Fq 'SDLK_F10' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
+          grep -Fq 'ShPerformance::Draw' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
+          grep -Fq 'class Watch' /tmp/shyt-v9-source/bbport/gpu/shim/sh_perf_watch.hpp
           grep -Fq 'runtime_camhook_spectator' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq 'sh_spectator_frame(camera)' /tmp/shyt-v9-source/bbport/src/runtime_camhook.c
           grep -Fq 'spectator_policy.hpp' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
