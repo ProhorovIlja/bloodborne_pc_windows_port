@@ -26,6 +26,8 @@ struct Rules {
     Scaling scaling=Scaling::PartyBalanced;
     RoutePreference route=RoutePreference::DirectP2P;
     bool invasions_enabled=false;
+    // Down But Not Out: lobby-authoritative, host controlled (default preserves YT behavior).
+    bool dbno_enabled=true;
     // A passworded room is always immune to random invasions and Quick Play.
     bool password_protected=false;
     unsigned total_slots=4; // hard-capped to 4 until 5 slots verified in native gameplay
@@ -34,9 +36,12 @@ struct Rules {
 };
 struct Room {
     std::string id, game_build;
+    std::string title, region="any";
     Rules rules;
     std::vector<Party> defenders, invaders;
     bool open=true;
+    bool started=false;
+    std::uint64_t rules_revision=1;
 };
 struct Admission {
     Reject reject=Reject::None;
@@ -84,6 +89,37 @@ inline Admission CanJoin(const Room& r, const Party& group, Mode mode,
     })) return {Reject::LevelMismatch};
     return {Reject::None,cap-Players(r)-reserved-static_cast<unsigned>(group.members.size())};
 }
+// The same filter structure is consumed by the in-game browser and Quick Play.
+// Optional booleans: nullopt = Any, false = Off, true = On.
+// A passworded/private room NEVER appears in public search.
+struct RoomFilters {
+    std::optional<bool> dbno, invasions;
+    std::optional<Scaling> scaling;
+    std::optional<RoutePreference> route;
+    std::string region="any";
+    unsigned min_free_slots=1;
+    bool hide_full=true;
+    bool include_started=false;
+};
+struct RoomView {
+    std::string id,title,region;
+    unsigned players=0, reserved=0, max_players=0, free_slots=0;
+    bool dbno_enabled=false, invasions_enabled=false, started=false, joinable=false;
+    Scaling scaling=Scaling::PartyBalanced;
+    RoutePreference route=RoutePreference::DirectP2P;
+    std::uint64_t rules_revision=0;
+    Reject reason=Reject::None;
+};
+inline bool MatchesFilters(const Room& r, const RoomFilters& f) {
+    if(!r.open || r.rules.visibility!=Visibility::Public || r.rules.password_protected)return false;
+    if(r.started && !f.include_started)return false;
+    if(f.dbno && r.rules.dbno_enabled!=*f.dbno)return false;
+    if(f.invasions && r.rules.invasions_enabled!=*f.invasions)return false;
+    if(f.scaling && r.rules.scaling!=*f.scaling)return false;
+    if(f.route && r.rules.route!=*f.route)return false;
+    if(!f.region.empty() && f.region!="any" && r.region!="any" && r.region!=f.region)return false;
+    return true;
+}
 // Atomic reservation/commit for team-vs-team matchmaking. Authenticate the caller at the HTTP/API boundary.
 class Matchmaker {
 public:
@@ -99,15 +135,77 @@ public:
         std::scoped_lock lock(mu_);
         return rooms_.emplace(r.id,std::move(r)).second;
     }
-    std::optional<std::string> QuickPlay(const Party& p,Mode m,std::string_view build,Time now) {
+    std::optional<std::string> QuickPlay(const Party& p,Mode m,std::string_view build,Time now,
+        const RoomFilters& filters={}) {
         std::scoped_lock lock(mu_);
         Expire(now);
         for(const auto& [id,r]:rooms_) {
-            if(r.rules.visibility!=Visibility::Public || r.rules.password_protected) continue;
+            if(!MatchesFilters(r,filters)) continue;
             const auto [n,inv]=Reserved(id);
+            const unsigned free=r.rules.total_slots>Players(r)+n ? r.rules.total_slots-Players(r)-n:0;
+            if(free<filters.min_free_slots || (filters.hide_full&&free==0))continue;
             if(CanJoin(r,p,m,build,false,n,inv,certified_)) return id;
         }
         return std::nullopt;
+    }
+    // Public browser, using exactly the same privacy and mechanics filters as Quick Play.
+    std::vector<RoomView> Browse(const Party& p,Mode m,std::string_view build,Time now,
+                                 const RoomFilters& filters={}) {
+        std::scoped_lock lock(mu_);
+        Expire(now);
+        std::vector<RoomView> out;
+        for(const auto& [id,r]:rooms_) {
+            if(!MatchesFilters(r,filters) || r.game_build!=build)continue;
+            const auto [reserved,inv]=Reserved(id);
+            const unsigned cap=std::min(r.rules.total_slots,certified_?5u:4u);
+            const unsigned free=Players(r)+reserved>=cap?0:cap-Players(r)-reserved;
+            if((filters.hide_full&&free==0) || free<filters.min_free_slots)continue;
+            const Admission admit=CanJoin(r,p,m,build,false,reserved,inv,certified_);
+            // When 'show full' is selected, display a disabled room, not an invalid match.
+            if(!admit && !(admit.reject==Reject::Full&&!filters.hide_full))continue;
+            out.push_back(RoomView{id,r.title,r.region,Players(r),reserved,cap,free,
+                r.rules.dbno_enabled,r.rules.invasions_enabled,r.started,
+                static_cast<bool>(admit),r.rules.scaling,r.rules.route,r.rules_revision,
+                admit.reject});
+        }
+        std::stable_sort(out.begin(),out.end(),[](const RoomView& a,const RoomView& b) {
+            if(a.joinable!=b.joinable)return a.joinable>b.joinable;
+            if(a.players!=b.players)return a.players>b.players;
+            return a.id<b.id;
+        });
+        return out;
+    }
+    // Only a server-authenticated room host may call this. Never accept a claimed
+    // host_id directly from an unauthenticated HTTP request.
+    bool Configure(const std::string& room_id,const std::string& authenticated_host,
+                   const Rules& next,std::uint64_t expected_revision) {
+        std::scoped_lock lock(mu_);
+        auto it=rooms_.find(room_id);
+        if(it==rooms_.end() || it->second.started || it->second.defenders.empty() ||
+           it->second.defenders.front().members.empty() ||
+           authenticated_host!=it->second.defenders.front().members.front().id ||
+           expected_revision!=it->second.rules_revision)return false;
+        if(next.total_slots<Players(it->second) || next.total_slots>(certified_?5u:4u) ||
+           next.invasion_slots>next.total_slots || next.level_tolerance<0 ||
+           next.level_tolerance>544)return false;
+        it->second.rules=next;
+        ++it->second.rules_revision;
+        // Pending Quick Play tickets were admitted under old rules; invalidate them.
+        for(auto ticket=tickets_.begin();ticket!=tickets_.end();) {
+            if(ticket->second.room_id==room_id)ticket=tickets_.erase(ticket);
+            else ++ticket;
+        }
+        return true;
+    }
+    bool StartHunt(const std::string& room_id,const std::string& authenticated_host) {
+        std::scoped_lock lock(mu_);
+        auto it=rooms_.find(room_id);
+        if(it==rooms_.end()||it->second.defenders.empty()||
+           it->second.defenders.front().members.empty()||
+           authenticated_host!=it->second.defenders.front().members.front().id||it->second.started)return false;
+        it->second.started=true;
+        ++it->second.rules_revision;
+        return true;
     }
     std::optional<Ticket> Reserve(std::string room_id,Party party,Mode mode,std::string_view build,
         bool server_authorized_private,Time now,std::chrono::seconds ttl=std::chrono::seconds{20}) {
