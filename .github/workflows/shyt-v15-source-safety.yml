@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V25
+name: Seamless Hunt native source integrity V14–V26
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -15,6 +15,7 @@ on:
       - tools/poc/yharnam/pvp-privacy-v23/**
       - tools/poc/yharnam/stream-bounds-v24/**
       - tools/poc/yharnam/member-identity-v25/**
+      - tools/poc/yharnam/ingress-quota-v26/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -31,6 +32,7 @@ on:
       - tools/poc/yharnam/pvp-privacy-v23/**
       - tools/poc/yharnam/stream-bounds-v24/**
       - tools/poc/yharnam/member-identity-v25/**
+      - tools/poc/yharnam/ingress-quota-v26/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -107,6 +109,14 @@ jobs:
           cmake -S tools/poc/yharnam/member-identity-v25 -B /tmp/shyt-v25-id -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v25-id --parallel 2
           ctest --test-dir /tmp/shyt-v25-id --output-on-failure
+      - name: V26 pre-protobuf per-peer quota regression
+        run: python -m unittest discover -s tools/poc/yharnam/ingress-quota-v26 -p 'test_*.py' -v
+      - name: Compile and test V26 message-and-byte token budget
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/ingress-quota-v26 -B /tmp/shyt-v26-quota -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v26-quota --parallel 2
+          ctest --test-dir /tmp/shyt-v26-quota --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -181,6 +191,13 @@ jobs:
           m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
           base=Path('/tmp/sh-v25-server-link.cpp').read_text('utf-8')
           assert 'strict identity mode requires authenticated sign-in' in m.patch_link(base)
+          qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
+          spec=importlib.util.spec_from_file_location('v26',qs)
+          q=importlib.util.module_from_spec(spec); spec.loader.exec_module(q)
+          pinned=Path('/tmp/sh-world-v22.cpp').read_text('utf-8')
+          assert 'ingress.Accept(message.size(), now_ms)' in q.world(pinned)
+          h=Path('/tmp/sh-world-v22.h').read_text('utf-8')
+          assert 'Ingress::Budget ingress' in q.world_h(h)
           PY
           grep -Fq "SH_GC_RECLAIM_DEPTH" /tmp/sh-gc-patched.cpp
           ! cmp -s /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
