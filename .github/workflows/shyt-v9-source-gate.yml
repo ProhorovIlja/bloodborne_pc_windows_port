@@ -25,6 +25,17 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq cmake ninja-build libssl-dev protobuf-compiler unzip
+      - name: Verify native UI QoL filter presets and player resume policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S tools/poc/yharnam/quality-v12 -B /tmp/shyt-v12-quality -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build /tmp/shyt-v12-quality --parallel 2
+          ctest --test-dir /tmp/shyt-v12-quality --output-on-failure
+          cmake -S tools/poc/yharnam/last-session-v11 -B /tmp/shyt-v11-resume -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build /tmp/shyt-v11-resume --parallel 2
+          ctest --test-dir /tmp/shyt-v11-resume --output-on-failure
+          python3 -m py_compile tools/poc/yharnam/last-session-v11/patch_native_resume.py
       - name: Test V9 patch ordering, archive pinning and atomic failure
         shell: bash
         run: python3 -m unittest discover -s tools/poc/yharnam/unified-v9 -p test_compose.py -v
@@ -97,6 +108,9 @@ jobs:
           grep -Fq 'sh-scale-plus' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq '"sh-dbno"' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq 'native_direct.TryGame' /tmp/shyt-v9-source/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'sh-resume-mode' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
+          grep -Fq 'TeamReconnectMode' /tmp/shyt-v9-source/emulator/src/core/bloodborne_server_world.cpp
+          grep -Fq 'SeamlessHunt::Resume::Mode' /tmp/shyt-v9-source/emulator/src/core/last_session_policy.hpp
           grep -Fq 'DirectSafeGameFrame' /tmp/shyt-v9-source/emulator/src/core/libraries/network/native_shlk_adapter.hpp
           grep -Fq 'IsStaticallyDirectSafe' /tmp/shyt-v9-source/emulator/src/core/libraries/network/native_direct_filter.hpp
           grep -Fq "1429375055/releases" /tmp/shyt-v9-source/bbport/launcher/bbport_coop.py
