@@ -13,10 +13,12 @@ def transform(source: str) -> str:
     anchor = '''        const auto image_id = slot_images.GetSlotId(image);
         constexpr auto CpuWritten = ImageFlagBits::MaybeCpuDirty | ImageFlagBits::CpuDirty;'''
     replacement = '''        const auto image_id = slot_images.GetSlotId(image);
-        // SH-GC-V17: never evict an actively bound attachment, presented surface or
-        // live scene proxy. This guard precedes even emergency memory reclamation.
+        // SH-GC-V17: protect only currently bound attachments and presentation.
+        // IMPORTANT: scene_proxy remains true even after SceneTargets::SetSize()
+        // clears its entries; protecting it here would pin old area textures in
+        // VRAM indefinitely. The original GC age and writeback policy applies.
         if (image.binding.is_bound || image.binding.is_target ||
-            image.usage.vo_surface || image.scene_proxy) {
+            image.usage.vo_surface) {
             image_lru_cache.Touch(image, gc_tick);
             return false;
         }
