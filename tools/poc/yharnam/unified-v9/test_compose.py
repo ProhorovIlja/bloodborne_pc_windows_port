@@ -27,6 +27,8 @@ sys.path.insert(0, str(HERE.parent/"server-trust-v22"))
 from test_patch_server_trust import B as SERVER_BOARDS_FIXTURE, W as SERVER_WORLD_FIXTURE, H as SERVER_HEADER_FIXTURE
 sys.path.insert(0, str(HERE.parent/"stream-bounds-v24"))
 from test_patch_stream import SOURCE as STREAM_FIXTURE
+sys.path.insert(0, str(HERE.parent/"member-identity-v25"))
+from test_patch_identity import LINK as LINK_ID_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -47,9 +49,12 @@ def originals():
         compose.SAVE_EDITOR: SAVE_EDITOR_FIXTURE,
         compose.SAVE_EDITOR_H: '#include <vector>\n' + SAVE_HEADER_FIXTURE,
         compose.SERVER_BOARDS: SERVER_BOARDS_FIXTURE,
-        compose.SERVER_WORLD: SERVER_WORLD_FIXTURE,
+        compose.SERVER_WORLD: SERVER_WORLD_FIXTURE + (
+            '    // The same run saying hello again (a guest whose game took the session host\'s role: phase 7).\n'
+            '    const bool arrived = member.lobby.empty();\n'),
         compose.SERVER_WORLD_H: SERVER_HEADER_FIXTURE,
         compose.COOP_STREAM: STREAM_FIXTURE,
+        compose.SERVER_LINK_CPP: LINK_ID_FIXTURE,
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
         "server/coop/team_lobby.cpp": "    switch (request.action()) {\n    case Action::CREATE: {\n        team.set_leader(member);\n        bbcoop::TeamMember& m = *team.add_members();\n",
         "emulator/src/core/bloodborne_re_internal.h": "void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id);\n",
@@ -146,7 +151,7 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+13)  # V24 adds one bounded-stream header
+        self.assertEqual(len(result),len(source)+14)  # V25 adds identity-binding header
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
@@ -183,6 +188,10 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SH-STREAM-BOUNDS-V24',result[compose.COOP_STREAM])
         self.assertIn(b'partial.Push(',result[compose.COOP_STREAM])
         self.assertIn(b'MaxMessageBytes',result['server/coop/sh_message_bounds.hpp'])
+        self.assertIn(b'SH-MEMBER-ID-V25',result[compose.SERVER_WORLD])
+        self.assertIn(b'Identity::Matches(',result[compose.SERVER_WORLD])
+        self.assertIn(b'StrictMode() && !sign_in',result[compose.SERVER_LINK_CPP])
+        self.assertIn(b'constexpr bool Matches',result['server/src/sh_member_identity.hpp'])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
         self.assertIn(b'std::jthread worker;',result[compose.MAPCHARTS])
         self.assertIn(b'class Budget',result['bbport/gpu/shim/sh_map_cache.hpp'])
@@ -208,6 +217,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V21 offline-only unlocked Hunter Tools", " ".join(manifest["applied"]))
         self.assertIn("V22 server ingress vitals bounds", " ".join(manifest["applied"]))
         self.assertIn("V24 bounded co-op protobuf reassembly", " ".join(manifest["applied"]))
+        self.assertIn("V25 opt-in signed-in identity binding", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -262,6 +272,12 @@ class AllPatches(unittest.TestCase):
         source[compose.COOP_STREAM]=source[compose.COOP_STREAM].replace(
             "partial.insert(partial.end()", "partial.insert(partial.begin()")
         with self.assertRaisesRegex(ValueError,"bounded reassembly"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v25_mismatched_server_link_source_rejected(self):
+        source=originals()
+        source[compose.SERVER_LINK_CPP]=source[compose.SERVER_LINK_CPP].replace(
+            'if (refusal.isEmpty() && sign_in && !sign_in', 'if (refusal.isEmpty() && !sign_in')
+        with self.assertRaisesRegex(ValueError,"strict auth prerequisite"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
