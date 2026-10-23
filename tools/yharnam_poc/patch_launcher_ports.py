@@ -10,7 +10,7 @@ from pathlib import Path
 
 PIN='77e350743a7cb4524cfcc1782fb6e3af64e25b15'
 SOURCE_LINE='SHADNET_PORT, WEBAPI_PORT, MATCHING_PORT, BACKEND_PORT = 31313, 31315, 31314, 20443'
-PATCH_LINE='SHADNET_PORT, WEBAPI_PORT, MATCHING_PORT, BACKEND_PORT = (\\n'
+PATCH_LINE='SHADNET_PORT, WEBAPI_PORT, MATCHING_PORT, BACKEND_PORT = (\n'
 PROD=(31313,31315,31314,20443)
 PATCH='''# Seamless Hunt isolated dedicated-server PoC. Default (no environment overrides)
 # remains EXACTLY upstream behavior; never activate in a production package.
@@ -39,7 +39,7 @@ def patch_content(source):
         return source,False
     if source.count(SOURCE_LINE)!=1:
         raise ValueError('Unexpected upstream launcher revision: port line not uniquely found')
-    if '\\nimport os\\n' not in source and not source.startswith('import os\\n'):
+    if '\nimport os\n' not in source and not source.startswith('import os\n'):
         raise ValueError('Missing expected os import in upstream launcher')
     return source.replace(SOURCE_LINE,PATCH,1),True
 
