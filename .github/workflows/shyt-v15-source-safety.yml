@@ -1,0 +1,36 @@
+name: Seamless Hunt V14 telemetry and V15 patch safety
+on:
+  push:
+    branches: [feature/yharnam-dedicated-server-poc]
+    paths:
+      - tools/poc/yharnam/quit-perf-v14/**
+      - tools/poc/yharnam/patch-safety-v15/**
+      - .github/workflows/shyt-v15-source-safety.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/quit-perf-v14/**
+      - tools/poc/yharnam/patch-safety-v15/**
+      - .github/workflows/shyt-v15-source-safety.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test byte-accurate XML conflict gate
+        run: python -m unittest discover -s tools/poc/yharnam/patch-safety-v15 -p 'test_*.py' -v
+      - name: Test pinned V14 patch anchor transformation
+        run: python -m unittest discover -s tools/poc/yharnam/quit-perf-v14 -p 'test_patch.py' -v
+      - name: Configure bounded C++ performance watch tests
+        run: cmake -S tools/poc/yharnam/quit-perf-v14 -B /tmp/shyt-v14-check -DCMAKE_BUILD_TYPE=Release
+      - name: Compile performance monitor unit tests
+        run: cmake --build /tmp/shyt-v14-check --parallel 2
+      - name: Run C++ diagnostics tests
+        run: ctest --test-dir /tmp/shyt-v14-check --output-on-failure
+# Source and unit-test gate only. Full Windows game and Fornex staging require separate approval/testing.
