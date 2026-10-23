@@ -28,6 +28,14 @@ jobs:
       - name: Test V9 patch ordering, archive pinning and atomic failure
         shell: bash
         run: python3 -m unittest discover -s tools/poc/yharnam/unified-v9 -p test_compose.py -v
+      - name: Validate safe-channel direct routing, malformed frames and archived adapter anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/direct-channel-v10 -p test_guard_adapter.py -v
+          cmake -S tools/poc/yharnam/direct-channel-v10 -B /tmp/shyt-v10-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build /tmp/shyt-v10-build --parallel 2
+          ctest --test-dir /tmp/shyt-v10-build --output-on-failure
       - name: Test native P2P adapter using real local UDP sockets
         shell: bash
         run: |
@@ -85,6 +93,8 @@ jobs:
           grep -Fq 'sh-scale-plus' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq '"sh-dbno"' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq 'native_direct.TryGame' /tmp/shyt-v9-source/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'DirectSafeGameFrame' /tmp/shyt-v9-source/emulator/src/core/libraries/network/native_shlk_adapter.hpp
+          grep -Fq 'IsStaticallyDirectSafe' /tmp/shyt-v9-source/emulator/src/core/libraries/network/native_direct_filter.hpp
           grep -Fq "1429375055/releases" /tmp/shyt-v9-source/bbport/launcher/bbport_coop.py
       - name: Check protocol-8 schema generation
         shell: bash
