@@ -31,6 +31,8 @@ sys.path.insert(0, str(HERE.parent/"member-identity-v25"))
 from test_patch_identity import LINK as LINK_ID_FIXTURE
 sys.path.insert(0, str(HERE.parent/"ingress-quota-v26"))
 from test_patch_ingress_quota import W as QUOTA_WORLD_FIXTURE, H as QUOTA_HEADER_FIXTURE
+sys.path.insert(0, str(HERE.parent/"endpoint-rebind-v27"))
+from test_patch_rebind import SOURCE as LINK_REBIND_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -58,7 +60,10 @@ def originals():
             '        if (const auto envelope = DecodeEnvelope(message)) {\n'),
         compose.SERVER_WORLD_H: '#include "bloodborne_party_boards.h"\n' + SERVER_HEADER_FIXTURE,
         compose.COOP_STREAM: STREAM_FIXTURE,
-        compose.SERVER_LINK_CPP: LINK_ID_FIXTURE,
+        compose.SERVER_LINK_CPP: LINK_ID_FIXTURE +
+            '''    const bool again = members.contains(from.Key());
+    Link& link = members[from.Key()];
+''',
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
         "server/coop/team_lobby.cpp": "    switch (request.action()) {\n    case Action::CREATE: {\n        team.set_leader(member);\n        bbcoop::TeamMember& m = *team.add_members();\n",
         "emulator/src/core/bloodborne_re_internal.h": "void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id);\n",
@@ -155,7 +160,7 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+15)  # V26 adds pre-decode admission budget header
+        self.assertEqual(len(result),len(source)+16)  # V27 adds endpoint rebind guard header
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
@@ -200,6 +205,9 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'ingress.Accept(',result[compose.SERVER_WORLD])
         self.assertIn(b'Ingress::Budget ingress',result[compose.SERVER_WORLD_H])
         self.assertIn(b'BurstMessages',result['server/src/sh_ingress_quota.hpp'])
+        self.assertIn(b'SH-ENDPOINT-REBIND-V27',result[compose.SERVER_LINK_CPP])
+        self.assertIn(b'LinkRebind::MustRetire',result[compose.SERVER_LINK_CPP])
+        self.assertIn(b'constexpr bool MustRetire',result['server/src/sh_endpoint_rebind.hpp'])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
         self.assertIn(b'std::jthread worker;',result[compose.MAPCHARTS])
         self.assertIn(b'class Budget',result['bbport/gpu/shim/sh_map_cache.hpp'])
@@ -227,6 +235,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V24 bounded co-op protobuf reassembly", " ".join(manifest["applied"]))
         self.assertIn("V25 opt-in signed-in identity binding", " ".join(manifest["applied"]))
         self.assertIn("V26 opt-in co-op ingress quotas", " ".join(manifest["applied"]))
+        self.assertIn("V27 stale virtual-address cleanup", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -293,6 +302,12 @@ class AllPatches(unittest.TestCase):
         source[compose.SERVER_WORLD]=source[compose.SERVER_WORLD].replace(
             "DecodeEnvelope(message)", "DecodeEnvelope(raw)")
         with self.assertRaisesRegex(ValueError,"pre-decode budget"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v27_old_network_identity_cleanup_anchor_refused(self):
+        source=originals()
+        source[compose.SERVER_LINK_CPP]=source[compose.SERVER_LINK_CPP].replace(
+            "members.contains(from.Key())", "members.find(from.Key())")
+        with self.assertRaisesRegex(ValueError,"identity-rebind cleanup"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
