@@ -73,7 +73,7 @@ def transform(source: str) -> str:
         std::size_t(chart->width) > chart->rgba.size() / 4 / std::size_t(chart->height) ||
         std::size_t(chart->storeys.width) >
             chart->storeys.roof.size() / std::size_t(chart->storeys.height)) {
-        std::printf("Map 3D: invalid chart dimensions for %s\n", BbMapArt::MapNameOf(map).c_str());
+        std::printf("Map 3D: invalid chart dimensions for %s\\n", BbMapArt::MapNameOf(map).c_str());
         return;
     }
     Mesh made;
