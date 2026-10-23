@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V22
+name: Seamless Hunt native source integrity V14–V23
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -12,6 +12,7 @@ on:
       - tools/poc/yharnam/map-range-v20/**
       - tools/poc/yharnam/hunter-tools-v21/**
       - tools/poc/yharnam/server-trust-v22/**
+      - tools/poc/yharnam/pvp-privacy-v23/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -25,6 +26,7 @@ on:
       - tools/poc/yharnam/map-range-v20/**
       - tools/poc/yharnam/hunter-tools-v21/**
       - tools/poc/yharnam/server-trust-v22/**
+      - tools/poc/yharnam/pvp-privacy-v23/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -79,6 +81,12 @@ jobs:
           cmake -S tools/poc/yharnam/server-trust-v22 -B /tmp/shyt-v22-server -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v22-server --parallel 2
           ctest --test-dir /tmp/shyt-v22-server --output-on-failure
+      - name: Compile and test V23 PvP visibility privacy policy (dormant)
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/pvp-privacy-v23 -B /tmp/shyt-v23-privacy -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v23-privacy --parallel 2
+          ctest --test-dir /tmp/shyt-v23-privacy --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
