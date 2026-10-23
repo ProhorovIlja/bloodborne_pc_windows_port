@@ -33,3 +33,16 @@ Never flush all pipelines/textures on a timer or force close during a game. Keep
 
 Developer code: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/tree/feature/yharnam-dedicated-server-poc/tools/poc/yharnam/quit-perf-v14
 Source-gate CI: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/workflows/shyt-v9-source-gate.yml
+## Root-cause leads from current Supermedo native Windows releases (verified 2026-10-24)
+
+Official Supermedo v1.9.1 (2026-10-17) documents FPS drops after deaths/area loads; v1.9.2 (2026-10-18) fixes a genuine FSR 3.1 frame-generation VRAM leak; v1.9.3 (2026-10-21) reduces staging memory and reverts 1.9 GPU layer to earlier stable GPU logic. Latest official changelog lists v1.9.4 on 2026-10-21. Sources: https://bbport.de/changelog/ and https://github.com/Supermedo/bloodborne_pc/releases .
+
+We compared latest `Supermedo/bloodborne_pc` windows branch against pinned `lKaniel/bloodborne-server@77e3507` for:
+- `gpu/shadps4/video_core/renderer_vulkan/vk_frame_generation.cpp` (different implementation, not a safe one-file copy)
+- `gpu/shadps4/video_core/renderer_vulkan/vk_presenter.cpp`
+- `gpu/shadps4/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp`
+- `gpu/shadps4/video_core/texture_cache/texture_cache.cpp`
+
+Pinned Yharnam code uses `ffxVkPortableFrameGenerationContextDestroy` while the current Windows branch uses `ffxVkFsr3_3_1_6FrameGenerationContextDestroy`, and the presenter/cache implementations differ considerably. A blind replace would likely break co-op and/or graphics. Next task is transplanting *semantic fixes* into our pinned native path with targeted source diff, compatibility tests and long-session benchmark. **Do not claim fixes are already incorporated into V14**. Immediate A/B check on the current build: toggle FSR3 frame generation off while keeping the same map/scene, and compare VRAM/frametime over time; it is a diagnostic, not a final workaround.
+
+The relevant pinned Yharnam staging pool already has a 30-second idle timeout and 512 MiB default keep budget (comments in `vk_staging_buffer_pool.cpp`), whereas current Supermedo release reports a changed staging retention policy. Do not change its constants without measuring burst stalls vs footprint.
