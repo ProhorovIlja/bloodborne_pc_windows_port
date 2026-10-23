@@ -37,6 +37,21 @@ jobs:
         run: python -m unittest discover -s tools/poc/yharnam/gc-safety-v17 -p 'test_*.py' -v
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
+      - name: Patch actual pinned upstream 3D map and texture cache sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIN=77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          BASE="https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/bbport/gpu"
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_map_3d.cpp" -o /tmp/sh-map-original.cpp
+          curl -fsSL --retry 3 "${BASE}/shadps4/video_core/texture_cache/texture_cache.cpp" -o /tmp/sh-gc-original.cpp
+          python tools/poc/yharnam/map-safety-v16/patch_map.py /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
+          python tools/poc/yharnam/gc-safety-v17/patch_texture_gc.py /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
+          grep -Fq "SH-MAP-V16" /tmp/sh-map-patched.cpp
+          grep -Fq "SH-GC-V17" /tmp/sh-gc-patched.cpp
+          grep -Fq "SH_GC_RECLAIM_DEPTH" /tmp/sh-gc-patched.cpp
+          ! cmp -s /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
+          ! cmp -s /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
       - name: Test pinned V14 patch anchor transformation
         run: python -m unittest discover -s tools/poc/yharnam/quit-perf-v14 -p 'test_patch.py' -v
       - name: Configure bounded C++ performance watch tests
