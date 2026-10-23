@@ -2,6 +2,8 @@
 """V27 fail-closed patch for stale virtual endpoint after same-socket account change."""
 from pathlib import Path
 LINK="server/src/server_link.cpp"
+LINK_H="server/src/server_link.h"
+LINK_SERVER="server/src/link_server.cpp"
 HEADER="server/src/sh_endpoint_rebind.hpp"
 HERE=Path(__file__).resolve().parent
 def one(s,old,new,name):
@@ -28,6 +30,7 @@ def transform(s):
         TellOthers(prior, MemberState::Gone, 0, result);
         Unlink(from.Key()); // also erases by_virtual + in-flight pair routes
         result.gone.append(prior.endpoint); // clears the old co-op world
+        result.retired_online_ids.append(prior.online_id); // clear matchmaking too
         result.log.append(QStringLiteral("server link: account switch at %1: retired %2")
                               .arg(from.Text(), QString::fromUtf8(prior.online_id)));
     }
@@ -35,6 +38,39 @@ def transform(s):
     Link& link = members[from.Key()];''',
           'identity-rebind cleanup')
     return s
+
+def transform_header(s):
+    if "SH-ENDPOINT-REBIND-V27" in s:raise ValueError("V27 already applied to Hub header")
+    return one(s,
+        '''        QList<Endpoint> gone; // links forgotten''',
+        '''        QList<Endpoint> gone; // links forgotten
+        // SH-ENDPOINT-REBIND-V27: old ID on same socket after switching accounts.
+        QList<QByteArray> retired_online_ids;''',
+        'Hub::Result retired account identities')
+
+def transform_server(s):
+    if "SH-ENDPOINT-REBIND-V27" in s:raise ValueError("V27 already applied to link server")
+    return one(s,
+        '''    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from
+    // its hello.
+    for (const auto& linked : result.linked) {''',
+        '''    // SH-ENDPOINT-REBIND-V27: remove old matchmaking virtual endpoints
+    // BEFORE registering new IDs. Ordinary same-account reconnects are untouched.
+    for (const QByteArray& retired : result.retired_online_ids) {
+        QWriteLocker lk(&m_shared->matching.udpLock);
+        m_shared->matching.udpExt.remove(QString::fromUtf8(retired));
+    }
+    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from
+    // its hello.
+    for (const auto& linked : result.linked) {''',
+        'matchmaking address cleanup')
+
+def transform_all(sources):
+    return {LINK: transform(sources[LINK]),
+            LINK_H: transform_header(sources[LINK_H]),
+            LINK_SERVER: transform_server(sources[LINK_SERVER]),
+            HEADER: (HERE/'sh_endpoint_rebind.hpp').read_text('utf8')}
+
 if __name__=='__main__':
     import argparse
     p=argparse.ArgumentParser(description=__doc__)
