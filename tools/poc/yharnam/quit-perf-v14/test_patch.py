@@ -19,6 +19,7 @@ class Tests(unittest.TestCase):
   out=transform(self.fixture());s=out[PATH]
   assert 'SDLK_F9' in s and 'SDLK_F10' in s
   assert 'sh-quit-desktop' in s and 'ShPerformance::Draw' in s
+  assert 'ShPerformance::history.Clear()' in s
  def test_changed_anchor_fails(self):
   with self.assertRaises(ValueError):transform(self.fixture().replace("FpsCounter();","Fake();"))
  def test_double_patch_fails(self):
