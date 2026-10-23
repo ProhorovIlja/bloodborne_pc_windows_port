@@ -34,7 +34,7 @@ def world_h(s):
 def world(s):
     if "SH-SERVER-TRUST-V22" in s: raise ValueError("V22 already applied to service")
     s=one(s,'#include "bloodborne_world.h"',
-          '#include "bloodborne_world.h"\n#include "sh_session_guard.hpp" // SH-SERVER-TRUST-V22',
+          '#include "bloodborne_world.h"\n#include <array>\n#include "sh_session_guard.hpp" // SH-SERVER-TRUST-V22',
           'include')
     needle='''    case bbcoop::Envelope::kVitals: {
         if (const bbcoop::Vitals& vitals = envelope.vitals();
