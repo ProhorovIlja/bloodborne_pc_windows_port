@@ -93,6 +93,10 @@ void Menu() {''',"separate Hunter Tools page")
 def editor_header(s):
     if "SH-HUNTER-TOOLS-V21" in s: raise ValueError("V21 editor header already applied")
     s=one(s,
+      '''#include <vector>''',
+      '''#include <vector>
+#include "sh_hunter_tools_policy.hpp"''',"policy include")
+    s=one(s,
       '''void SetEchoes(std::int32_t echoes);''',
       '''// SH-HUNTER-TOOLS-V21: local offline save-editor gate; not host security.
 bool CanEdit();
@@ -104,12 +108,8 @@ void SetEchoes(std::int32_t echoes);''',"header API")
         level += attributes[i] - now.attributes[i];
     }
     return level < 1 ? 1 : level;''',
-      '''    // Intermediate math uses int64: corrupted saves must not overflow signed int.
-    std::int64_t level = now.level;
-    for (int i = 0; i < AttributeCount; ++i) {
-        level += std::int64_t(attributes[i]) - now.attributes[i];
-    }
-    return static_cast<std::int32_t>(level < 1 ? 1 : level > 544 ? 544 : level);''',"stats level arithmetic")
+      '''    return SeamlessHunt::HunterTools::LevelAfter(now.level, now.attributes,
+                                                   attributes, AttributeCount);''',"stats level arithmetic")
     return s
 
 def editor(s):
@@ -137,10 +137,12 @@ bool CanEdit() {
         editor_unlocked.store(false);
         return false;
     }
-    return editor_unlocked.load() && InWorld();
+    return SeamlessHunt::HunterTools::AllowLocalEdit(
+        InWorld(), false, editor_unlocked.load());
 }
 void SetEditorUnlocked(bool enabled) {
-    editor_unlocked.store(enabled && !TeamModeActive() && InWorld());
+    editor_unlocked.store(SeamlessHunt::HunterTools::AllowLocalEdit(
+        InWorld(), TeamModeActive(), enabled));
 }''',"public guard API")
     # Both at queue time and when executing (a connection can start between frames).
     for name,old,new in [
