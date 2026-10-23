@@ -222,8 +222,14 @@ def coop_impl(s):
 // never allow this untrusted client to edit its local character through the UI.
 extern "C" int bbcoop_offline_character_edit_allowed(void) {
     namespace Coop = Core::Bloodborne::Coop;
+    // Online without a group is not a gameplay session. Lock once grouped,
+    // or if a legacy party session or other players are present.
+    const auto lobby = Coop::TeamLobbyState();
+    const bool in_group = lobby && lobby->has_team();
+    bool in_hunt = false;
+    (void)Coop::TeamPlaying(&in_hunt);
     const auto players = Coop::SessionPlayers();
-    return !Coop::TeamModeOn() && !Coop::InPartySession() &&
+    return !in_group && !in_hunt && !Coop::InPartySession() &&
            Coop::SessionMembers() <= 1 && players >= 0 && players <= 1;
 }
 
