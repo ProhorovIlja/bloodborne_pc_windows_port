@@ -166,7 +166,7 @@ void SetEditorUnlocked(bool enabled) {
         ("attributes",'''void SetAttributes(const std::int32_t attributes[AttributeCount]) {
     std::array<std::int32_t, AttributeCount> wanted;''',
          '''void SetAttributes(const std::int32_t attributes[AttributeCount]) {
-    if (!CanEdit()) return;
+    if (!CanEdit() || !attributes) return;
     std::array<std::int32_t, AttributeCount> wanted;'''),
         ("attributes job",'''    Queue([wanted] {
         const auto now = Read();''',
@@ -176,7 +176,9 @@ void SetEditorUnlocked(bool enabled) {
         ("items",'''void GiveItem(std::uint32_t category, std::uint32_t id, std::int32_t quantity) {
     Queue([category, id, quantity] {''',
          '''void GiveItem(std::uint32_t category, std::uint32_t id, std::int32_t quantity) {
-    if (!CanEdit()) return;
+    // Invalid editor requests must not reach the game's inventory routine.
+    if (!CanEdit() || quantity < 1 || quantity > 99 ||
+        (category != GoodsCategory && category != WeaponCategory && category != ArmorCategory)) return;
     Queue([category, id, quantity] {
         if (!CanEdit()) return;'''),
         ("jobs",'''    if (!InWorld()) {
