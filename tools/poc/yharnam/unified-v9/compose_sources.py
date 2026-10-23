@@ -34,6 +34,8 @@ SERVER_WORLD = "server/src/bloodborne_world.cpp"
 SERVER_WORLD_H = "server/src/bloodborne_world.h"
 COOP_STREAM = "server/coop/coop_stream.h"
 SERVER_LINK_CPP = "server/src/server_link.cpp"
+SERVER_LINK_H = "server/src/server_link.h"
+LINK_SERVER_CPP = "server/src/link_server.cpp"
 NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 COOP = "bbport/launcher/bbport_coop.py"
 LAUNCHER = "bbport/launcher/bbport_launcher_win.py"
@@ -262,8 +264,10 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v27_module=types.ModuleType("sh_endpoint_rebind_patch")
     v27_script=v27_dir/"patch_rebind.py"
     exec(compile(v27_script.read_text("utf-8"),str(v27_script),"exec"),v27_module.__dict__)
-    output[SERVER_LINK_CPP]=v27_module.transform(output[SERVER_LINK_CPP].decode("utf-8")).encode("utf-8")
-    output[v27_module.HEADER]=(v27_dir/"sh_endpoint_rebind.hpp").read_bytes()
+    v27_paths=(v27_module.LINK,v27_module.LINK_H,v27_module.LINK_SERVER)
+    v27_sources={p:output[p].decode("utf-8") for p in v27_paths}
+    for name, contents in v27_module.transform_all(v27_sources).items():
+        output[name]=contents.encode("utf-8")
     if len(output)!=len(dest)+24:
         raise ValueError("V27 endpoint rebind policy header missing")
     for path in output:
@@ -308,7 +312,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8=types.ModuleType("sh_v8")
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # All source anchors and input hashes are checked before writing anything.
