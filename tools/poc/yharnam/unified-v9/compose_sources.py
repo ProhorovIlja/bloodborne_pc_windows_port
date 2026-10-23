@@ -256,6 +256,16 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         output[name]=contents.encode("utf-8")
     if len(output)!=len(dest)+23:
         raise ValueError("V26 pre-protobuf rate-limiting header missing")
+    # V27: a same-endpoint account switch must retire stale virtual-address
+    # routes and notify the old game session before registering the new ID.
+    v27_dir=Path(__file__).resolve().parent.parent/"endpoint-rebind-v27"
+    v27_module=types.ModuleType("sh_endpoint_rebind_patch")
+    v27_script=v27_dir/"patch_rebind.py"
+    exec(compile(v27_script.read_text("utf-8"),str(v27_script),"exec"),v27_module.__dict__)
+    output[SERVER_LINK_CPP]=v27_module.transform(output[SERVER_LINK_CPP].decode("utf-8")).encode("utf-8")
+    output[v27_module.HEADER]=(v27_dir/"sh_endpoint_rebind.hpp").read_bytes()
+    if len(output)!=len(dest)+24:
+        raise ValueError("V27 endpoint rebind policy header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -275,7 +285,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V22 server ingress vitals bounds, saturating revive totals and sparse audit",
                    "V24 bounded co-op protobuf reassembly (8 MiB per peer)",
                    "V25 opt-in signed-in identity binding (legacy compatible)",
-                   "V26 opt-in co-op ingress quotas (pre-protobuf)"],
+                   "V26 opt-in co-op ingress quotas (pre-protobuf)",
+                   "V27 stale virtual-address cleanup on changed transport identity"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
