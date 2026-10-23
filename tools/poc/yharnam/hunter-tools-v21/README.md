@@ -11,23 +11,23 @@ The old **Save** settings page mixed character mutation into general settings, w
 
 The general Game effects tab now excludes `cheat_*` options. Normal graphics and gameplay tweaks remain in their previous location, with all save editor features retained.
 
-Hunter Tools starts locked every game launch and when the image is reset, and needs an explicit **Unlock for this session** while a character is loaded. The unlock is never persisted. Online or lobby play blocks the tools.
+Hunter Tools starts locked every game launch and when the image is reset, and needs an explicit **Unlock for this session** while a character is loaded. The unlock is never persisted. Merely being signed in to an online service outside a group does **not** block local tools. Joining a team, playing a hunt or starting a legacy multiplayer session locks the editor and discards pending local mutation jobs.
 
 The in-game `BbSaveEditor` functions are guarded **at enqueue and dispatch time**. A reconnect between clicks and execution discards pending mutations. Stat retries also re-check permission. Invalid item categories and quantities outside 1–99, and null attributes arrays, are rejected before calling the game. The integer calculation of changed character level now uses int64 and clamps the final level to Bloodborne's 1–544 range. That prevents signed integer overflow from damaged character data.
 
 ## Online/co-op detection
 
 A native C bridge `bbcoop_offline_character_edit_allowed()` checks all of:
-- `!Coop::TeamModeOn()`
-- `!Coop::InPartySession()`
+- No Team Lobby membership (`TeamLobbyState()->has_team()` is false)
+- No ongoing Team Hunt or legacy session (`!TeamPlaying(in_hunt)` and `!InPartySession()`)
 - `Coop::SessionMembers() <= 1`
 - `Coop::SessionPlayers() <= 1`
 
-This covers normal Team Lobby and many legacy/ordinary co-op sessions, and fails closed while Team Mode is enabled, even during connection. These are local client checks, **not real anti-cheat or authorization by a server**.
+This covers normal team membership/hunts and many legacy co-op sessions. A signed-in user **outside** any group may still use offline-style tools locally. Invasion needs separate server-side role/session enforcement. These are local client checks, **not real anti-cheat or authorization by a server**.
 
 ## Why no fake "Host allows cheats" switch?
 
-Offline save editing directly modifies the character's local memory. The host cannot reliably stop a user who modifies their binary or bypasses a client guard. A trustworthy host permission feature requires an agreed protocol, host-signed party rules, compatibility negotiation, enforceable server-owned actions, and a default deny for mismatched peers. Character stat changes and game patch cheats are not safely enforceable by simply adding a checkbox to the lobby. V21 deliberately avoids such a misleading switch.
+Private out-of-group save editing directly modifies the character's local memory. The host cannot reliably stop a user who modifies their binary or bypasses a client guard. A trustworthy host permission feature requires an agreed protocol, host-signed party rules, compatibility negotiation, enforceable server-owned actions, and a default deny for mismatched peers. Character stat changes and game patch cheats are not safely enforceable by simply adding a checkbox to the lobby. V21 deliberately avoids such a misleading switch.
 
 **Caution:** a game patch cheat already enabled at process startup may remain active until game restart; moving its setting in the UI is not a live patch revert. Before returning to public sessions, restart with the cheats disabled. Private-lobby permission may be an option in a future dedicated protocol, but not with unauthenticated legacy clients.
 
