@@ -25,6 +25,14 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq cmake ninja-build libssl-dev protobuf-compiler unzip
+      - name: Verify native downed spectator policy and camera C hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S tools/poc/yharnam/spectator-v13 -B /tmp/shyt-v13-test -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build /tmp/shyt-v13-test --parallel 2
+          ctest --test-dir /tmp/shyt-v13-test --output-on-failure
+          python3 -m py_compile tools/poc/yharnam/spectator-v13/patch_spectator.py
       - name: Verify native UI QoL filter presets and player resume policy
         shell: bash
         run: |
@@ -88,7 +96,7 @@ jobs:
           git -C /tmp/shyt-pinned-upstream sparse-checkout set \
             server/coop server/src \
             emulator/src/core \
-            bbport/gpu/shim bbport/gpu/bbcoop bbport/launcher
+            bbport/gpu/shim bbport/gpu/bbcoop bbport/launcher bbport/src
           git -C /tmp/shyt-pinned-upstream fetch --no-tags --depth 1 origin 77e350743a7cb4524cfcc1782fb6e3af64e25b15
           git -C /tmp/shyt-pinned-upstream checkout -q --detach FETCH_HEAD
           test "$(git -C /tmp/shyt-pinned-upstream rev-parse HEAD)" = 77e350743a7cb4524cfcc1782fb6e3af64e25b15
@@ -108,6 +116,9 @@ jobs:
           grep -Fq 'sh-scale-plus' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq '"sh-dbno"' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq 'native_direct.TryGame' /tmp/shyt-v9-source/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'runtime_camhook_spectator' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
+          grep -Fq 'sh_spectator_frame(camera)' /tmp/shyt-v9-source/bbport/src/runtime_camhook.c
+          grep -Fq 'spectator_policy.hpp' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq 'sh-resume-mode' /tmp/shyt-v9-source/bbport/gpu/shim/bbport_overlay.cpp
           grep -Fq 'TeamReconnectMode' /tmp/shyt-v9-source/emulator/src/core/bloodborne_server_world.cpp
           grep -Fq 'SeamlessHunt::Resume::Mode' /tmp/shyt-v9-source/emulator/src/core/last_session_policy.hpp
