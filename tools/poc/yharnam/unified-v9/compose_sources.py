@@ -244,6 +244,18 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         output[name]=contents.encode("utf-8")
     if len(output)!=len(dest)+22:
         raise ValueError("V25 authenticated member identity header missing")
+    # V26: per-connection admission of complete co-op messages before
+    # protobuf deserialization; strict rooms only, old PvE unchanged.
+    v26_dir=Path(__file__).resolve().parent.parent/"ingress-quota-v26"
+    v26_module=types.ModuleType("sh_ingress_quota_patch")
+    v26_script=v26_dir/"patch_ingress_quota.py"
+    exec(compile(v26_script.read_text("utf-8"),str(v26_script),"exec"),v26_module.__dict__)
+    v26_sources={v26_module.WORLD:output[SERVER_WORLD].decode("utf-8"),
+                 v26_module.WORLD_H:output[SERVER_WORLD_H].decode("utf-8")}
+    for name, contents in v26_module.transform(v26_sources).items():
+        output[name]=contents.encode("utf-8")
+    if len(output)!=len(dest)+23:
+        raise ValueError("V26 pre-protobuf rate-limiting header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -262,7 +274,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V21 offline-only unlocked Hunter Tools and separate gameplay cheats",
                    "V22 server ingress vitals bounds, saturating revive totals and sparse audit",
                    "V24 bounded co-op protobuf reassembly (8 MiB per peer)",
-                   "V25 opt-in signed-in identity binding (legacy compatible)"],
+                   "V25 opt-in signed-in identity binding (legacy compatible)",
+                   "V26 opt-in co-op ingress quotas (pre-protobuf)"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
