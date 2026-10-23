@@ -26,6 +26,8 @@ struct Rules {
     Scaling scaling=Scaling::PartyBalanced;
     RoutePreference route=RoutePreference::DirectP2P;
     bool invasions_enabled=false;
+    // A passworded room is always immune to random invasions and Quick Play.
+    bool password_protected=false;
     unsigned total_slots=4; // hard-capped to 4 until 5 slots verified in native gameplay
     unsigned invasion_slots=0;
     int level_tolerance=40;
@@ -60,7 +62,11 @@ inline Admission CanJoin(const Room& r, const Party& group, Mode mode,
     if(!r.open) return {Reject::Closed};
     if(!UniqueMembers(group) || r.defenders.empty() || !UniqueMembers(r.defenders.front())) return {Reject::InvalidGroup};
     if(build!=r.game_build || build.empty()) return {Reject::MismatchedBuild};
-    if(r.rules.visibility==Visibility::Private && !server_authorized_private) return {Reject::Private};
+    if((r.rules.visibility==Visibility::Private || r.rules.password_protected) &&
+       !server_authorized_private) return {Reject::Private};
+    // Invading a password-protected/private room is forbidden even with a valid invitation.
+    if(mode==Mode::Invasion && (r.rules.visibility==Visibility::Private || r.rules.password_protected))
+        return {Reject::Private};
     for(const auto& side:{&r.defenders,&r.invaders})
         for(const auto& p:*side) {
             if(p.id==group.id) return {Reject::DuplicatePlayer};
@@ -97,7 +103,7 @@ public:
         std::scoped_lock lock(mu_);
         Expire(now);
         for(const auto& [id,r]:rooms_) {
-            if(r.rules.visibility!=Visibility::Public) continue;
+            if(r.rules.visibility!=Visibility::Public || r.rules.password_protected) continue;
             const auto [n,inv]=Reserved(id);
             if(CanJoin(r,p,m,build,false,n,inv,certified_)) return id;
         }
