@@ -29,6 +29,9 @@ MAPCHARTS = "bbport/gpu/shim/bbport_map_charts.cpp"
 MAPART = "bbport/gpu/shim/bbport_map_art.cpp"
 SAVE_EDITOR = "bbport/gpu/shim/bbport_save_editor.cpp"
 SAVE_EDITOR_H = "bbport/gpu/shim/bbport_save_editor.h"
+SERVER_BOARDS = "server/src/bloodborne_party_boards.cpp"
+SERVER_WORLD = "server/src/bloodborne_world.cpp"
+SERVER_WORLD_H = "server/src/bloodborne_world.h"
 NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 COOP = "bbport/launcher/bbport_coop.py"
 LAUNCHER = "bbport/launcher/bbport_launcher_win.py"
@@ -204,6 +207,18 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     output["bbport/gpu/shim/sh_hunter_tools_policy.hpp"]=(v21_dir/"sh_hunter_tools_policy.hpp").read_bytes()
     if len(output)!=len(dest)+19:
         raise ValueError("V21 Hunter Tools editor/UI/policy outputs are missing")
+    # V22: apply to the composed server source. No production daemon is deployed
+    # or reconfigured by this source-only step. Cheap per-message sanity checks.
+    v22_dir=Path(__file__).resolve().parent.parent/"server-trust-v22"
+    v22_module=types.ModuleType("sh_server_trust_patch")
+    v22_script=v22_dir/"patch_server_trust.py"
+    exec(compile(v22_script.read_text("utf-8"),str(v22_script),"exec"),v22_module.__dict__)
+    v22_paths=(v22_module.BOARDS,v22_module.WORLD,v22_module.WORLD_H)
+    v22_sources={name:output[name].decode("utf-8") for name in v22_paths}
+    for name, contents in v22_module.transform(v22_sources).items():
+        output[name]=contents.encode("utf-8")
+    if len(output)!=len(dest)+20:
+        raise ValueError("V22 dedicated co-op server sanity header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -219,7 +234,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V18 bounded CPU map cache and stop-aware map worker",
                    "V19 bounded compressed map/mesh decoding and safe archive spans",
                    "V20 bounded and exact game archive range I/O",
-                   "V21 offline-only unlocked Hunter Tools and separate gameplay cheats"],
+                   "V21 offline-only unlocked Hunter Tools and separate gameplay cheats",
+                   "V22 server ingress vitals bounds, saturating revive totals and sparse audit"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
@@ -241,7 +257,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8=types.ModuleType("sh_v8")
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # All source anchors and input hashes are checked before writing anything.
