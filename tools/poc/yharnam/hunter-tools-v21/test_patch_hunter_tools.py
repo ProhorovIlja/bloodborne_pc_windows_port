@@ -1,0 +1,73 @@
+import unittest
+from patch_hunter_tools import overlay,editor,editor_header
+
+UI='''        const auto& effect = BbSettings::Effects[e];
+        const char* hint =
+} // namespace Ui
+
+void Menu() {
+static const char* tab_en[] = {"Display", "Upscaler", "Game effects", "Controls", "Advanced", "Save"};
+"Дополнительно", "Сохранение"};
+    default: SaveTab(); break;
+'''
+HEADER='''    std::int32_t level = now.level;
+    for (int i = 0; i < AttributeCount; ++i) {
+        level += attributes[i] - now.attributes[i];
+    }
+    return level < 1 ? 1 : level;
+void SetEchoes(std::int32_t echoes);'''
+EDITOR='''#include <cstdio>
+u64 image_base = 0;
+void SetImage(unsigned char* image) {
+    image_base = reinterpret_cast<u64>(image);
+}
+void SetEchoes(std::int32_t echoes) {
+    Queue([echoes] {
+void SetInsight(std::int32_t insight) {
+    Queue([insight] {
+void CommitStats(std::array<std::int32_t, AttributeCount> wanted, std::int32_t hp_max_before,
+                 std::int32_t vitality_before, int tries) {
+    const auto now = Read();
+void SetAttributes(const std::int32_t attributes[AttributeCount]) {
+    std::array<std::int32_t, AttributeCount> wanted;
+    Queue([wanted] {
+        const auto now = Read();
+void GiveItem(std::uint32_t category, std::uint32_t id, std::int32_t quantity) {
+    Queue([category, id, quantity] {
+    if (!InWorld()) {
+        return; // dropped: the character is not there (title screen, loading)
+    }
+    for (auto& job : jobs) {
+'''
+class Tests(unittest.TestCase):
+    def test_cheats_no_longer_mixed_with_graphics(self):
+        result=overlay(UI)
+        self.assertIn('if (std::string_view(effect.key).starts_with("cheat_")) continue;',result)
+        self.assertIn('HunterToolsTab();',result)
+        self.assertIn('SaveTab();',result)
+        self.assertIn('Unlock for this session',result)
+        self.assertIn('bbcoop_lobby_view(&lobby)',result)
+    def test_backend_lock_at_enqueue_and_dispatch(self):
+        s=editor(EDITOR)
+        self.assertIn('editor_unlocked.store(false)',s)
+        self.assertIn('TeamModeActive()',s)
+        self.assertIn('!InWorld() || !CanEdit()',s)
+        self.assertGreaterEqual(s.count('if (!CanEdit()) return;'),7)
+    def test_level_overflow_guard(self):
+        s=editor_header(HEADER)
+        self.assertIn('std::int64_t level',s)
+        self.assertIn('level > 544 ? 544',s)
+    def test_drift_fails_closed(self):
+        with self.assertRaisesRegex(ValueError,"menu routing"):
+            overlay(UI.replace('default: SaveTab();','default: FakeTab();'))
+        with self.assertRaisesRegex(ValueError,"stats level arithmetic"):
+            editor_header(HEADER.replace('level += attributes[i]', 'level -= attributes[i]'))
+    def test_double_apply_rejected(self):
+        with self.assertRaisesRegex(ValueError,"already applied"):
+            overlay(overlay(UI))
+        with self.assertRaisesRegex(ValueError,"already applied"):
+            editor(editor(EDITOR))
+        with self.assertRaisesRegex(ValueError,"already applied"):
+            editor_header(editor_header(HEADER))
+
+if __name__=='__main__': unittest.main()
