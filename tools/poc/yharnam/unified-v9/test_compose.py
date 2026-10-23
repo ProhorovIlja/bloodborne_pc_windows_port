@@ -165,6 +165,8 @@ class AllPatches(unittest.TestCase):
                       result['bbport/gpu/bbcoop.h'])
         self.assertIn(b'Coop::SessionMembers() <= 1',
                       result['bbport/gpu/bbcoop/coop.cpp'])
+        self.assertIn(b'players >= 0 && players <= 1',
+                      result['bbport/gpu/bbcoop/coop.cpp'])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
         self.assertIn(b'std::jthread worker;',result[compose.MAPCHARTS])
         self.assertIn(b'class Budget',result['bbport/gpu/shim/sh_map_cache.hpp'])
