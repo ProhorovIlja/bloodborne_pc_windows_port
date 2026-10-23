@@ -79,6 +79,23 @@ def world(s):
             vitals.map() != 0 && (vitals.vital() == 1 || vitals.vital() == 2) &&
             vitals.has_at()) { // up or down where it stands'''
     s=one(s,needle,repl,'vitals ingress')
+    s=one(s,
+       '''    const QByteArray party = QByteArray::fromStdString(hello.party()).trimmed();
+    if (hello.protocol() != CoopProtocol) {''',
+       '''    // V22: reject hostile identity metadata before creating a party key.
+    const bool safe_ids =
+        Guard::SafeWireText(hello.member(), 96) &&
+        Guard::SafeWireText(hello.party(), 512);
+    const QByteArray party = safe_ids ? QByteArray::fromStdString(hello.party()).trimmed()
+                                    : QByteArray{};
+    if (!safe_ids) {
+        welcome.set_text("invalid member name or party key");
+    } else if (hello.protocol() != CoopProtocol) {''',"hello bounds")
+    s=one(s,
+       '''    if (hello.protocol() != CoopProtocol || hello.member().empty()) {''',
+       '''    if (hello.protocol() != CoopProtocol ||
+        !SeamlessHunt::SessionGuard::SafeWireText(hello.member(), 96) ||
+        !SeamlessHunt::SessionGuard::SafeWireText(hello.name(), 192)) {''',"lobby hello bounds")
     return s
 
 def transform(src):
