@@ -26,6 +26,9 @@ int main() {
     assert(AddReviveDamage(UINT32_MAX-2, 200)==UINT32_MAX);
     assert(AddReviveDamage(100, 500)==600);
     assert(SafeWireText("hunter_01", 96));
+    assert(SafeOptionalWireText("", 192));
+    assert(SafeOptionalWireText("new hunter", 192));
+    assert(!SafeOptionalWireText("bad\nname", 192));
     assert(!SafeWireText("bad\nname", 96));
     assert(!SafeWireText("", 96));
     assert(!SafeWireText("abcdef", 5));
