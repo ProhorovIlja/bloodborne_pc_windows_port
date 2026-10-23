@@ -117,3 +117,78 @@ jobs:
           path: /tmp/shyt-v9-source/
           retention-days: 14
           if-no-files-found: error
+
+  linux-shadnet-protocol8:
+    needs: source-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Prepare Qt6 and compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq git cmake ninja-build build-essential \
+            qt6-base-dev qt6-httpserver-dev libqt6sql6-sqlite libssl-dev
+      - name: Retrieve validated protocol-8 source overrides
+        uses: actions/download-artifact@v4
+        with:
+          name: SeamlessHunt-V9-Matched-Source-Only
+          path: /tmp/shyt-v9-source
+      - name: Checkout exactly pinned Yharnam shadNet and its protobuf submodule
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q /tmp/shyt-pinned-server
+          git -C /tmp/shyt-pinned-server remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C /tmp/shyt-pinned-server sparse-checkout init --cone
+          git -C /tmp/shyt-pinned-server sparse-checkout set server backend
+          git -C /tmp/shyt-pinned-server fetch --no-tags --depth 1 origin 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          git -C /tmp/shyt-pinned-server checkout -q --detach FETCH_HEAD
+          test "$(git -C /tmp/shyt-pinned-server rev-parse HEAD)" = 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          git -C /tmp/shyt-pinned-server submodule update --init --depth 1 server/externals/protobuf
+          test -f /tmp/shyt-pinned-server/server/externals/protobuf/CMakeLists.txt
+      - name: Apply server half of approved source patch to isolated CI tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/shyt-v9-source/server/coop/coop.proto /tmp/shyt-pinned-server/server/coop/coop.proto
+          cp /tmp/shyt-v9-source/server/coop/team_lobby.cpp /tmp/shyt-pinned-server/server/coop/team_lobby.cpp
+          grep -Fq 'PROTOCOL_CURRENT = 8' /tmp/shyt-pinned-server/server/coop/coop.proto
+          grep -Fq 'SET_DBNO' /tmp/shyt-pinned-server/server/coop/team_lobby.cpp
+      - name: Build Qt6 shadNet protocol-8 native Linux executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S /tmp/shyt-pinned-server/server -B /tmp/shyt-v9-server-build \
+            -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build /tmp/shyt-v9-server-build \
+            --target shadnet test_server_link test_team_lobby --parallel 2
+          test -x /tmp/shyt-v9-server-build/shadnet
+      - name: Exercise actual shadNet link and team lobby unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir /tmp/shyt-v9-server-build \
+            -R '^(server_link|team_lobby)$' --output-on-failure
+      - name: Stage Linux binary as CI-only build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v9-server-artifact
+          cp /tmp/shyt-v9-server-build/shadnet /tmp/shyt-v9-server-artifact/
+          cp /tmp/shyt-pinned-server/server/worlds.cfg /tmp/shyt-v9-server-artifact/
+          cp /tmp/shyt-pinned-server/server/scoreboards.cfg /tmp/shyt-v9-server-artifact/
+          sha256sum /tmp/shyt-v9-server-artifact/shadnet > /tmp/shyt-v9-server-artifact/shadnet.sha256
+          printf '%s\n' \
+            'CI build only; DO NOT DEPLOY to Fornex production or current PoC.' \
+            'Yharnam pinned 77e350743a7cb4524cfcc1782fb6e3af64e25b15; coop protocol=8.' \
+            'Direct peer authorization + in-game Quick Play NOT implemented.' \
+            > /tmp/shyt-v9-server-artifact/NOT-READY-FOR-PLAYERS.txt
+      - name: Upload isolated Linux shadNet developer binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: SeamlessHunt-V9-Linux-shadNet-Protocol8-CI-ONLY
+          path: /tmp/shyt-v9-server-artifact/
+          retention-days: 7
+          if-no-files-found: error
