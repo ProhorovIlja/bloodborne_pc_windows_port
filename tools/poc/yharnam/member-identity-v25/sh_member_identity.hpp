@@ -15,7 +15,7 @@ inline bool StrictMode() noexcept {
     }();
     return enabled;
 }
-inline bool Matches(std::string_view transport_id,
+constexpr bool Matches(std::string_view transport_id,
                     std::string_view claimed_member) noexcept {
     if (transport_id.empty() || transport_id.size() > 48 ||
         claimed_member.size()!=transport_id.size()*2) return false;
