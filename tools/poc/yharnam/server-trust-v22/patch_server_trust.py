@@ -84,8 +84,8 @@ def world(s):
     if (hello.protocol() != CoopProtocol) {''',
        '''    // V22: reject hostile identity metadata before creating a party key.
     const bool safe_ids =
-        Guard::SafeWireText(hello.member(), 96) &&
-        Guard::SafeWireText(hello.party(), 512);
+        SeamlessHunt::SessionGuard::SafeWireText(hello.member(), 96) &&
+        SeamlessHunt::SessionGuard::SafeWireText(hello.party(), 512);
     const QByteArray party = safe_ids ? QByteArray::fromStdString(hello.party()).trimmed()
                                     : QByteArray{};
     if (!safe_ids) {
