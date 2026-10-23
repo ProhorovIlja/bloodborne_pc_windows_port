@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V20
+name: Seamless Hunt native source integrity V14–V21
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -10,6 +10,7 @@ on:
       - tools/poc/yharnam/map-cache-v18/**
       - tools/poc/yharnam/map-data-v19/**
       - tools/poc/yharnam/map-range-v20/**
+      - tools/poc/yharnam/hunter-tools-v21/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -21,6 +22,7 @@ on:
       - tools/poc/yharnam/map-cache-v18/**
       - tools/poc/yharnam/map-data-v19/**
       - tools/poc/yharnam/map-range-v20/**
+      - tools/poc/yharnam/hunter-tools-v21/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -59,6 +61,14 @@ jobs:
           cmake -S tools/poc/yharnam/map-range-v20 -B /tmp/shyt-v20-range -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v20-range --parallel 2
           ctest --test-dir /tmp/shyt-v20-range --output-on-failure
+      - name: V21 Hunter Tools offline editing and split-page guards
+        run: python -m unittest discover -s tools/poc/yharnam/hunter-tools-v21 -p 'test_patch_*.py' -v
+      - name: Compile and test V21 offline policy and overflow-safe level math
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/hunter-tools-v21 -B /tmp/shyt-v21-policy -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v21-policy --parallel 2
+          ctest --test-dir /tmp/shyt-v21-policy --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -73,6 +83,21 @@ jobs:
           python tools/poc/yharnam/gc-safety-v17/patch_texture_gc.py /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
           grep -Fq "SH-MAP-V16" /tmp/sh-map-patched.cpp
           grep -Fq "SH-GC-V17" /tmp/sh-gc-patched.cpp
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_save_editor.cpp" -o /tmp/sh-editor-original.cpp
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_save_editor.h" -o /tmp/sh-editor-original.h
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          p=Path('tools/poc/yharnam/hunter-tools-v21/patch_hunter_tools.py')
+          spec=importlib.util.spec_from_file_location('v21',p)
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          originals={mod.EDITOR:Path('/tmp/sh-editor-original.cpp').read_text('utf-8'),
+                     mod.HEADER:Path('/tmp/sh-editor-original.h').read_text('utf-8')}
+          for path,text in originals.items():
+              out=(mod.editor(text) if path==mod.EDITOR else mod.editor_header(text))
+              assert 'SH-HUNTER-TOOLS-V21' in out
+          PY
           curl -fsSL --retry 3 "${BASE}/shim/bbport_map_charts.cpp" -o /tmp/sh-charts-original.cpp
           python tools/poc/yharnam/map-cache-v18/patch_chart_cache.py /tmp/sh-charts-original.cpp /tmp/sh-charts-patched.cpp
           grep -Fq "SH-MAP-CACHE-V18" /tmp/sh-charts-patched.cpp
