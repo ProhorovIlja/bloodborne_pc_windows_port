@@ -32,16 +32,25 @@ void Draw(unsigned map,float present_frame_ms,int textures){
         s.live_images=BbStats::live_images.load(std::memory_order_relaxed);
         s.gpu_bytes=BbStats::vk_image_bytes.load(std::memory_order_relaxed);
         s.gc_freed=BbStats::gc_freed_images.load(std::memory_order_relaxed);
+        s.gc_used_bytes=BbStats::gc_used_bytes.load(std::memory_order_relaxed);
+        s.gc_trigger_bytes=BbStats::gc_trigger_bytes.load(std::memory_order_relaxed);
+        s.gc_critical_bytes=BbStats::gc_critical_bytes.load(std::memory_order_relaxed);
+        s.gc_kept=BbStats::gc_kept_images.load(std::memory_order_relaxed);
         if(history.Add(s)&&history.Size()%6==0){
             const auto trend=history.Compare();
-            std::printf("SH-PERF: map=%08x frame=%.2fms rss=%lluMiB gpuimg=%lluMiB images=%llu gc_freed=%llu samples=%u drift_ms=%.1f%% rss_drift=%lldMiB gpu_drift=%lldMiB\n",
+            std::printf("SH-PERF: map=%08x frame=%.2fms rss=%lluMiB gpuimg=%lluMiB images=%llu gc_freed=%llu samples=%u drift_ms=%.1f%% rss_drift=%lldMiB gpu_drift=%lldMiB gc_used=%lluMiB gc_trigger=%lluMiB gc_critical=%lluMiB gc_kept=%llu gc_used_drift=%lldMiB\n",
                 s.map_id,s.frame_ms,static_cast<unsigned long long>(s.process_bytes/1048576),
                 static_cast<unsigned long long>(s.gpu_bytes/1048576),
                 static_cast<unsigned long long>(s.live_images),
                 static_cast<unsigned long long>(s.gc_freed),history.Size(),
                 trend.comparable?trend.frame_percent:0.f,
                 static_cast<long long>(trend.rss_mib_delta),
-                static_cast<long long>(trend.gpu_mib_delta));
+                static_cast<long long>(trend.gpu_mib_delta),
+                static_cast<unsigned long long>(s.gc_used_bytes/1048576),
+                static_cast<unsigned long long>(s.gc_trigger_bytes/1048576),
+                static_cast<unsigned long long>(s.gc_critical_bytes/1048576),
+                static_cast<unsigned long long>(s.gc_kept),
+                static_cast<long long>(trend.gc_used_mib_delta));
         }
     }
     if(history.Size()==0)return;
@@ -61,10 +70,19 @@ void Draw(unsigned map,float present_frame_ms,int textures){
     ImGui::Text("Live images %llu | GC freed %llu | ImGui textures %d",
         static_cast<unsigned long long>(sample.live_images),
         static_cast<unsigned long long>(sample.gc_freed),textures);
+    ImGui::Text("GC effective usage %llu MiB | trigger %llu | critical %llu",
+        static_cast<unsigned long long>(sample.gc_used_bytes/1048576),
+        static_cast<unsigned long long>(sample.gc_trigger_bytes/1048576),
+        static_cast<unsigned long long>(sample.gc_critical_bytes/1048576));
+    ImGui::Text("GC kept %llu | Registered image bytes %llu MiB",
+        static_cast<unsigned long long>(sample.gc_kept),
+        static_cast<unsigned long long>(sample.image_bytes/1048576));
     if(trend.comparable){
         ImGui::Text("Same-map trend: frame %+.0f%% | RAM %+lld MiB | GPU %+lld MiB",
             trend.frame_percent,static_cast<long long>(trend.rss_mib_delta),
             static_cast<long long>(trend.gpu_mib_delta));
+        ImGui::Text("GC usage change %+lld MiB (not total dedicated VRAM)",
+            static_cast<long long>(trend.gc_used_mib_delta));
         if(trend.slowdown||trend.process_growth||trend.gpu_growth)
             ImGui::TextUnformatted("Long-session drift suspected. Capture the SH-PERF log.");
     }else{
