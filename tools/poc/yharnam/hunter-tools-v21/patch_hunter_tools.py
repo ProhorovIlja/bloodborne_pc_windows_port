@@ -222,8 +222,9 @@ def coop_impl(s):
 // never allow this untrusted client to edit its local character through the UI.
 extern "C" int bbcoop_offline_character_edit_allowed(void) {
     namespace Coop = Core::Bloodborne::Coop;
+    const auto players = Coop::SessionPlayers();
     return !Coop::TeamModeOn() && !Coop::InPartySession() &&
-           Coop::SessionMembers() <= 1 && Coop::SessionPlayers() <= 1;
+           Coop::SessionMembers() <= 1 && players >= 0 && players <= 1;
 }
 
 extern "C" int bbcoop_lobby_view(bbcoop_lobby* lobby) {''',"coop runtime bridge")
