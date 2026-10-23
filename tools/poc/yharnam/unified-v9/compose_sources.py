@@ -104,6 +104,21 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         output[name]=body.encode("utf-8")
     if len(output)!=len(dest)+6:
         raise ValueError("missing V10 or V11 headers")
+    # V13: AFTER DBNO+UI scale+V11, add the existing native v1.09
+    # camera hook and a passive, down-only camera observer.
+    v13_dir=Path(__file__).resolve().parent.parent/"spectator-v13"
+    v13_module=types.ModuleType("sh_native_spectator_patch")
+    v13_script=v13_dir/"patch_spectator.py"
+    exec(compile(v13_script.read_text("utf-8"),str(v13_script),"exec"),v13_module.__dict__)
+    v13_sources={}
+    for name in v13_module.PATHS:
+        v13_sources[name]=(
+            output[name] if name in output else source[name].encode("utf-8")
+        ).decode("utf-8")
+    for name,contents in v13_module.transform(v13_sources).items():
+        output[name]=contents.encode("utf-8")
+    if len(output)!=len(dest)+9:
+        raise ValueError("missing V13 runtime or policy outputs")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -111,7 +126,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         "upstream_pin":PIN,
         "applied":["V3 in-game UI scale","V5 DBNO protocol 8",
                    "V7 native P2P hooks (dormant)","V8 Github update channel",
-                   "V10 direct channel guard","V11 optional last-hunt title reconnect"],
+                   "V10 direct channel guard","V11 optional last-hunt title reconnect",
+                   "V13 down-only Follow/Free spectator camera"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
@@ -133,7 +149,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8=types.ModuleType("sh_v8")
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # All source anchors and input hashes are checked before writing anything.
