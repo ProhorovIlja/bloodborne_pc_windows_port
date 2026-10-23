@@ -25,6 +25,10 @@ int main() {
     assert(!SafeReviveHits(huge));
     assert(AddReviveDamage(UINT32_MAX-2, 200)==UINT32_MAX);
     assert(AddReviveDamage(100, 500)==600);
+    assert(SafeWireText("hunter_01", 96));
+    assert(!SafeWireText("bad\nname", 96));
+    assert(!SafeWireText("", 96));
+    assert(!SafeWireText("abcdef", 5));
     assert(ShouldAudit(100,0));
     assert(!ShouldAudit(201,100));
     assert(ShouldAudit(10'100,100));
