@@ -10,7 +10,7 @@
 namespace SeamlessHunt::Quality {
 enum class Tri : std::uint8_t { Any, Off, On };
 enum class Preset : std::uint8_t { Balanced, LowLatency, Friends, Unrestricted };
-enum class Link : std::uint8_t { Unknown, Direct, Relay };
+enum class Link : std::uint8_t { Unknown, Direct, Relay, Mixed };
 enum class Sort : std::uint8_t { BestPing, MostPlayers, MostFree };
 struct Peer {
     std::string id;
@@ -22,7 +22,7 @@ struct Peer {
 struct Room {
     std::string id, game_build, region, host_member;
     unsigned occupied=0, capacity=0, reserved=0;
-    bool public_room=true, password_protected=false, dbno_enabled=true,
+    bool public_room=true, password_protected=false, friend_of_host=false, dbno_enabled=true,
          invasions_enabled=false, session_started=false, host_invasions_opt_in=false;
     std::vector<Peer> peers;
 };
@@ -33,7 +33,7 @@ struct Filter {
     unsigned needed_slots=1;
     bool hide_full=true, include_started=true, require_direct=false;
     bool permit_unmeasured=true;
-    bool allow_cross_region=true;
+    bool allow_cross_region=true, friends_only=false;
     Sort sort=Sort::BestPing;
 };
 struct Match {
@@ -48,12 +48,13 @@ inline Match Evaluate(const Room& r,const Filter& f,std::int64_t now_ms){
     if(r.capacity<r.occupied || r.reserved>r.capacity-r.occupied)return out;
     out.free_slots=r.capacity-r.occupied-r.reserved;
     if(!r.public_room||r.password_protected||r.game_build!=f.game_build||
+       (f.friends_only&&!r.friend_of_host)||
        !Is(f.dbno,r.dbno_enabled)||!Is(f.invasions,r.invasions_enabled)||
        (f.invasions==Tri::On&&!r.host_invasions_opt_in)||
        (!f.include_started&&r.session_started)||
        (!f.allow_cross_region&&!f.region.empty()&&r.region!=f.region)||
        (f.hide_full&&out.free_slots==0)||out.free_slots<f.needed_slots)return out;
-    bool any_valid=false,all_valid=true,all_direct=true;
+    bool any_valid=false,all_valid=true,all_direct=true,any_direct=false,any_relay=false;
     for(const auto& peer:r.peers){
         const bool fresh=peer.authenticated && peer.measured_rtt_ms &&
             *peer.measured_rtt_ms>0 && *peer.measured_rtt_ms<=5000 &&
@@ -62,10 +63,12 @@ inline Match Evaluate(const Room& r,const Filter& f,std::int64_t now_ms){
         if(!fresh){all_valid=false;all_direct=false;continue;}
         any_valid=true;
         if(peer.measured_link!=Link::Direct)all_direct=false;
+        any_direct|=peer.measured_link==Link::Direct;
+        any_relay|=peer.measured_link==Link::Relay;
         out.worst_rtt_ms=std::max(out.worst_rtt_ms,*peer.measured_rtt_ms);
     }
     out.measured=any_valid&&all_valid;
-    out.route=out.measured?(all_direct?Link::Direct:Link::Relay):Link::Unknown;
+    out.route=out.measured?(all_direct?Link::Direct:(any_direct&&any_relay?Link::Mixed:Link::Relay)):Link::Unknown;
     if(f.require_direct&&(!out.measured||out.route!=Link::Direct))return out;
     if(f.maximum_ping_ms&&(!out.measured||out.worst_rtt_ms>*f.maximum_ping_ms))return out;
     if(!out.measured&&!f.permit_unmeasured)return out;
@@ -76,7 +79,7 @@ inline Filter Make(Preset p,std::string build){
     Filter f;f.game_build=std::move(build);
     switch(p){
     case Preset::LowLatency:f.maximum_ping_ms=60;f.permit_unmeasured=false;break;
-    case Preset::Friends:f.include_started=true;f.permit_unmeasured=true;break;
+    case Preset::Friends:f.friends_only=true;f.include_started=true;f.permit_unmeasured=true;break;
     case Preset::Unrestricted:f.include_started=true;f.permit_unmeasured=true;break;
     default:f.maximum_ping_ms=120;f.permit_unmeasured=false;break;
     }
