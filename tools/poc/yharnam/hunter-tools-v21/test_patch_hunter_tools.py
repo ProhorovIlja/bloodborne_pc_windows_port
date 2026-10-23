@@ -63,7 +63,8 @@ class Tests(unittest.TestCase):
         header=coop_header('void bbcoop_lobby_request(int action, const char *id);')
         impl=coop_impl('extern "C" int bbcoop_lobby_view(bbcoop_lobby* lobby) {')
         self.assertIn('int bbcoop_offline_character_edit_allowed(void);',header)
-        for term in ['Coop::TeamModeOn()', 'Coop::InPartySession()',
+        for term in ['Coop::TeamLobbyState()', 'lobby && lobby->has_team()',
+                     'Coop::TeamPlaying(&in_hunt)', 'Coop::InPartySession()',
                      'Coop::SessionMembers() <= 1','players >= 0 && players <= 1']:
             self.assertIn(term,impl)
         with self.assertRaisesRegex(ValueError,'coop runtime bridge'):
