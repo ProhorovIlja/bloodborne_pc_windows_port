@@ -1,0 +1,56 @@
+name: Seamless Hunt release V8 updater contract
+on:
+  push:
+    branches: [feature/yharnam-dedicated-server-poc]
+    paths:
+      - tools/poc/yharnam/release-v8/**
+      - tools/poc/yharnam/windows-oneclick/**
+      - .github/workflows/shyt-release-v8-ci.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate release contract safety and launcher updater
+        run: python -m unittest discover -s tools/poc/yharnam/release-v8 -p 'test_release_v8.py' -v
+      - name: Fetch the real pinned Yharnam Together launcher source
+        run: |
+          set -euo pipefail
+          git init /tmp/shyt-launcher
+          git -C /tmp/shyt-launcher remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C /tmp/shyt-launcher sparse-checkout init --cone
+          git -C /tmp/shyt-launcher sparse-checkout set bbport/launcher
+          git -C /tmp/shyt-launcher fetch --depth 1 origin 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          git -C /tmp/shyt-launcher checkout --detach FETCH_HEAD
+      - name: Apply V8 code and validate parsed Python/isolated update source
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/release-v8/patch_update_channel.py \
+            --checkout /tmp/shyt-launcher --out /tmp/shyt-patched
+          python -m py_compile /tmp/shyt-patched/bbport_coop.py /tmp/shyt-patched/bbport_launcher_win.py
+          grep -Fq 'repositories/1429375055/releases' /tmp/shyt-patched/bbport_coop.py
+          grep -Fq 'sh_compatibility_release' /tmp/shyt-patched/bbport_coop.py
+          grep -Fq 'return None  # upstream native engine updates disabled' /tmp/shyt-patched/bbport_launcher_win.py
+          test -z "$(git -C /tmp/shyt-launcher status --porcelain)"
+      - name: Refuse incomplete test release
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-invalid
+          printf 'not-a-client' > /tmp/shyt-invalid/Test-v0.0.1-setup.exe
+          printf 'not-a-server' > /tmp/shyt-invalid/shadnet
+          printf '{"source_sha":"77e350743a7cb4524cfcc1782fb6e3af64e25b15","client_protocol":8,"server_protocol":8,"link_protocol":2,"checks":{}}' > /tmp/shyt-invalid/report.json
+          if python tools/poc/yharnam/release-v8/release_gate.py \
+             --version 0.0.1 --client /tmp/shyt-invalid/Test-v0.0.1-setup.exe \
+             --server /tmp/shyt-invalid/shadnet \
+             --evidence /tmp/shyt-invalid/report.json --out /tmp/shyt-invalid/output; then
+             echo "ERROR: incomplete build would have been marked release ready" >&2; exit 1
+          fi
+      - name: Record status only
+        run: echo "Source update-contract verified; no binary was published, no server changed"
