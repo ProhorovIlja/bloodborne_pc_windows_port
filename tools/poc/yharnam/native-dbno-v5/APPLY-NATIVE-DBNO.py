@@ -11,6 +11,7 @@ PIN="77e350743a7cb4524cfcc1782fb6e3af64e25b15"
 def changes():
     return {
 "server/coop/coop.proto":[
+("    PROTOCOL_CURRENT = 7;","    PROTOCOL_CURRENT = 8; // DBNO rule and host toggle"),
 ("        FORGET_WORLD = 11;\n","        FORGET_WORLD = 11;\n        SET_DBNO = 12; // host sets Down But Not Out before Start\n"),
 ("    string world = 6;\n}\n\nmessage LobbyPlayer {","    string world = 6;\n    bool dbno_enabled = 7;\n}\n\nmessage LobbyPlayer {"),
 ("    string party = 7;\n}\n\nmessage TeamInvite {","    string party = 7;\n    optional bool dbno_enabled = 8; // absent for old teams = ON\n}\n\nmessage TeamInvite {")],
