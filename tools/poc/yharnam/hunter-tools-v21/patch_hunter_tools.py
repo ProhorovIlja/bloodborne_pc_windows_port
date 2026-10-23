@@ -41,6 +41,11 @@ void HunterToolsTab() {
              Dim());
         return;
     }
+    if (!BbSaveEditor::Read()) {
+        Note(T("Load a character before using Hunter Tools.",
+               "Сначала загрузите персонажа для инструментов охотника."), Dim());
+        return;
+    }
     if (!BbSaveEditor::CanEdit()) {
         Note(T("Locked until explicitly enabled. These edits change your save "
                "and can affect game balance. Back up the character first.",
