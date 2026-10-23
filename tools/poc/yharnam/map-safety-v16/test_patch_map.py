@@ -36,6 +36,8 @@ class MapPatchTests(unittest.TestCase):
         self.assertIn('!std::isfinite(chart->ppm)',result)
         self.assertIn('!std::isfinite(extent_w)',result)
         self.assertIn('4096.0f',result)
+        self.assertIn(r'std::printf("Map 3D: invalid chart dimensions for %s\n",',result)
+        self.assertNotIn('std::printf("Map 3D: invalid chart dimensions for %s\n",',result)
     def test_fail_closed_changed_upstream(self):
         with self.assertRaisesRegex(ValueError,'VMA buffers'):
             transform(SOURCE.replace('info.pMappedData == nullptr','info.pMappedData == NULL',1))
