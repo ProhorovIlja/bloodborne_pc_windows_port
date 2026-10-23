@@ -57,6 +57,15 @@ void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id)
             '                       float(game.extent.height)};',
             '        Party::Draw();',
             '    }',
+            "// Hold L3 + R3, or the menu's Quit row:",
+            '        const bool down = event.type == SDL_EVENT_KEY_DOWN;',
+            '        // bbport: numpad 0',
+            'if (Team::open && !menu_open) {',
+            '        Team::Screen();',
+            'return initialized && (menu_open || quit_open || prompt_active || BbSettings::Get().show_fps || party || compass ||',
+            '    if (BbSettings::Get().show_fps && !menu_open) {',
+            '        FpsCounter();',
+            '    }',
         ]),
         "bbport/src/runtime_camhook.c": """static float *field(unsigned char *camera, unsigned offset) { return (float *)(camera+offset); }
 static float camhook_frame(unsigned char *camera,float pitch) {
@@ -100,7 +109,7 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+7)  # CAM/PAD already among source inputs
+        self.assertEqual(len(result),len(source)+8)  # V14 adds one perf monitor header
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
@@ -108,6 +117,9 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SeamlessHunt::Resume::Mode',result['emulator/src/core/last_session_policy.hpp'])
         self.assertIn(b'sh_spectator_frame(camera)',result['bbport/src/runtime_camhook.c'])
         self.assertIn(b'runtime_camhook_spectator',result[compose.OVERLAY])
+        self.assertIn(b'sh-quit-desktop',result[compose.OVERLAY])
+        self.assertIn(b'ShPerformance::Draw',result[compose.OVERLAY])
+        self.assertIn(b'class Watch',result['bbport/gpu/shim/sh_perf_watch.hpp'])
         self.assertIn(b'SeamlessHunt::Spectate::State',result['bbport/gpu/shim/spectator_policy.hpp'])
         for path,needle in [
             ("server/coop/coop.proto",b"PROTOCOL_CURRENT = 8"),
