@@ -32,6 +32,7 @@ SAVE_EDITOR_H = "bbport/gpu/shim/bbport_save_editor.h"
 SERVER_BOARDS = "server/src/bloodborne_party_boards.cpp"
 SERVER_WORLD = "server/src/bloodborne_world.cpp"
 SERVER_WORLD_H = "server/src/bloodborne_world.h"
+COOP_STREAM = "server/coop/coop_stream.h"
 NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 COOP = "bbport/launcher/bbport_coop.py"
 LAUNCHER = "bbport/launcher/bbport_launcher_win.py"
@@ -219,6 +220,16 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         output[name]=contents.encode("utf-8")
     if len(output)!=len(dest)+20:
         raise ValueError("V22 dedicated co-op server sanity header missing")
+    # V24: cap partially-received protobuf envelopes for both game and server.
+    # Stage as source only; NEVER restart or reconfigure the production daemon.
+    v24_dir=Path(__file__).resolve().parent.parent/"stream-bounds-v24"
+    v24_module=types.ModuleType("sh_stream_bounds_patch")
+    v24_script=v24_dir/"patch_stream.py"
+    exec(compile(v24_script.read_text("utf-8"),str(v24_script),"exec"),v24_module.__dict__)
+    output[COOP_STREAM]=v24_module.transform(output[COOP_STREAM].decode("utf-8")).encode("utf-8")
+    output["server/coop/sh_message_bounds.hpp"]=(v24_dir/"sh_message_bounds.hpp").read_bytes()
+    if len(output)!=len(dest)+21:
+        raise ValueError("V24 bounded stream assembler header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -235,7 +246,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V19 bounded compressed map/mesh decoding and safe archive spans",
                    "V20 bounded and exact game archive range I/O",
                    "V21 offline-only unlocked Hunter Tools and separate gameplay cheats",
-                   "V22 server ingress vitals bounds, saturating revive totals and sparse audit"],
+                   "V22 server ingress vitals bounds, saturating revive totals and sparse audit",
+                   "V24 bounded co-op protobuf reassembly (8 MiB per peer)"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
@@ -257,7 +269,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8=types.ModuleType("sh_v8")
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # All source anchors and input hashes are checked before writing anything.
