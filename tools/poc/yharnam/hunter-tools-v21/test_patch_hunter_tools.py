@@ -55,8 +55,8 @@ class Tests(unittest.TestCase):
         self.assertGreaterEqual(s.count('if (!CanEdit()) return;'),7)
     def test_level_overflow_guard(self):
         s=editor_header(HEADER)
-        self.assertIn('std::int64_t level',s)
-        self.assertIn('level > 544 ? 544',s)
+        self.assertIn('#include "sh_hunter_tools_policy.hpp"',s)
+        self.assertIn('SeamlessHunt::HunterTools::LevelAfter',s)
     def test_drift_fails_closed(self):
         with self.assertRaisesRegex(ValueError,"menu routing"):
             overlay(UI.replace('default: SaveTab();','default: FakeTab();'))
