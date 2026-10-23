@@ -62,7 +62,7 @@ class TestIsolatedYharnamPoC(unittest.TestCase):
                     stage.stage_server(c,Path(d)/'stage','999.0.0.1','')
 
     def test_launcher_patch_defaults_and_overrides(self):
-        original='import os\\n'+patch.SOURCE_LINE+'\\n'
+        original='import os\n'+patch.SOURCE_LINE+'\n'
         patched,changed=patch.patch_content(original)
         self.assertTrue(changed)
         self.assertFalse(patch.patch_content(patched)[1])
@@ -78,7 +78,7 @@ class TestIsolatedYharnamPoC(unittest.TestCase):
                              (32313,32315,32314,21443))
 
     def test_invalid_staging_port(self):
-        text='import os\\n'+patch.SOURCE_LINE+'\\n'
+        text='import os\n'+patch.SOURCE_LINE+'\n'
         code=patch.patch_content(text)[0]
         with mock.patch.dict('os.environ',{'SH_YT_UDP_PORT':'invalid'}):
             with self.assertRaises(ValueError):
