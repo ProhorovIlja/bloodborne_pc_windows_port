@@ -95,7 +95,7 @@ def world(s):
        '''    if (hello.protocol() != CoopProtocol || hello.member().empty()) {''',
        '''    if (hello.protocol() != CoopProtocol ||
         !SeamlessHunt::SessionGuard::SafeWireText(hello.member(), 96) ||
-        !SeamlessHunt::SessionGuard::SafeWireText(hello.name(), 192)) {''',"lobby hello bounds")
+        !SeamlessHunt::SessionGuard::SafeOptionalWireText(hello.name(), 192)) {''',"lobby hello bounds")
     return s
 
 def transform(src):
