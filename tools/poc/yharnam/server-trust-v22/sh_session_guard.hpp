@@ -77,6 +77,9 @@ inline bool SafeWireText(std::string_view value, std::size_t limit) noexcept {
     }
     return true;
 }
+inline bool SafeOptionalWireText(std::string_view value, std::size_t limit) noexcept {
+    return value.empty() || SafeWireText(value, limit);
+}
 inline bool ShouldAudit(std::int64_t now_ms, std::int64_t last_ms) noexcept {
     // Log at most once per linked client / ten seconds. Never auto-ban based
     // on these heuristics because gameplay mods can trigger false positives.
