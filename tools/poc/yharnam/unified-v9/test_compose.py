@@ -21,6 +21,8 @@ sys.path.insert(0, str(HERE.parent/"map-data-v19"))
 from test_patch_map_data import SOURCE as MAP_DATA_FIXTURE
 sys.path.insert(0, str(HERE.parent/"map-range-v20"))
 from test_patch_map_range import SOURCE as MAP_RANGE_FIXTURE
+sys.path.insert(0, str(HERE.parent/"hunter-tools-v21"))
+from test_patch_hunter_tools import EDITOR as SAVE_EDITOR_FIXTURE, HEADER as SAVE_HEADER_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -38,6 +40,8 @@ def originals():
         compose.MAPCHARTS: CHART_CACHE_FIXTURE.replace(
             '#include "bbport_settings.h"', MAP_RANGE_FIXTURE),
         compose.MAPART: MAP_DATA_FIXTURE,
+        compose.SAVE_EDITOR: SAVE_EDITOR_FIXTURE,
+        compose.SAVE_EDITOR_H: '#include <vector>\n' + SAVE_HEADER_FIXTURE,
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
         "server/coop/team_lobby.cpp": "    switch (request.action()) {\n    case Action::CREATE: {\n        team.set_leader(member);\n        bbcoop::TeamMember& m = *team.add_members();\n",
         "emulator/src/core/bloodborne_re_internal.h": "void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id);\n",
@@ -82,6 +86,14 @@ void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id)
             '    if (BbSettings::Get().show_fps && !menu_open) {',
             '        FpsCounter();',
             '    }',
+            '        const auto& effect = BbSettings::Effects[e];',
+            '        const char* hint =',
+            '} // namespace Ui',
+            '',
+            'void Menu() {',
+            'static const char* tab_en[] = {"Display", "Upscaler", "Game effects", "Controls", "Advanced", "Save"};',
+            '"Дополнительно", "Сохранение"};',
+            '    default: SaveTab(); break;',
         ]),
         "bbport/src/runtime_camhook.c": """static float *field(unsigned char *camera, unsigned offset) { return (float *)(camera+offset); }
 static float camhook_frame(unsigned char *camera,float pitch) {
@@ -125,7 +137,7 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+10)  # V18 and V20 add two policy headers
+        self.assertEqual(len(result),len(source)+11)  # V21 adds Hunter Tools policy header
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
@@ -143,6 +155,11 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SH_GC_RECLAIM_DEPTH',result[compose.TEXTURE_GC])
         self.assertIn(b'SH-MAP-CACHE-V18',result[compose.MAPCHARTS])
         self.assertIn(b'SH-MAP-RANGE-V20',result[compose.MAPCHARTS])
+        self.assertIn(b'SH-HUNTER-TOOLS-V21',result[compose.OVERLAY])
+        self.assertIn(b'HunterToolsTab();',result[compose.OVERLAY])
+        self.assertIn(b'if (!CanEdit()) return;',result[compose.SAVE_EDITOR])
+        self.assertIn(b'sh_hunter_tools_policy.hpp',result[compose.SAVE_EDITOR_H])
+        self.assertIn(b'AllowLocalEdit',result['bbport/gpu/shim/sh_hunter_tools_policy.hpp'])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
         self.assertIn(b'std::jthread worker;',result[compose.MAPCHARTS])
         self.assertIn(b'class Budget',result['bbport/gpu/shim/sh_map_cache.hpp'])
@@ -165,6 +182,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V18 bounded CPU map cache", " ".join(manifest["applied"]))
         self.assertIn("V19 bounded compressed map/mesh decoding", " ".join(manifest["applied"]))
         self.assertIn("V20 bounded and exact game archive", " ".join(manifest["applied"]))
+        self.assertIn("V21 offline-only unlocked Hunter Tools", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -201,6 +219,12 @@ class AllPatches(unittest.TestCase):
         source[compose.MAPCHARTS]=source[compose.MAPCHARTS].replace(
             'std::vector<std::uint8_t> bytes(size);', 'std::vector<std::uint8_t> bytes(len);', 1)
         with self.assertRaisesRegex(ValueError,"runtime game archive read"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v21_changed_editor_anchor_refused(self):
+        source=originals()
+        source[compose.SAVE_EDITOR]=source[compose.SAVE_EDITOR].replace(
+            "void SetEchoes(std::int32_t echoes) {", "void SetEchoes(int echoes) {")
+        with self.assertRaisesRegex(ValueError,"echoes"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
