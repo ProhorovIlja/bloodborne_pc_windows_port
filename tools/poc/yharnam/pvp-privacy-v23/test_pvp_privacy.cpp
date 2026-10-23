@@ -3,6 +3,7 @@
 #endif
 #include "sh_pvp_privacy.hpp"
 #include <cassert>
+#include <initializer_list>
 #include <iostream>
 using namespace SeamlessHunt::PvpPrivacy;
 int main() {
