@@ -9,6 +9,9 @@ W='''#include "bloodborne_world.h"
         if (const bbcoop::Vitals& vitals = envelope.vitals();
             vitals.map() != 0 && (vitals.vital() == 1 || vitals.vital() == 2) &&
             vitals.has_at()) { // up or down where it stands
+    const QByteArray party = QByteArray::fromStdString(hello.party()).trimmed();
+    if (hello.protocol() != CoopProtocol) {
+    if (hello.protocol() != CoopProtocol || hello.member().empty()) {
 '''
 H='''        bool enemy_owner = false;'''
 class TestServerTrust(unittest.TestCase):
@@ -17,6 +20,9 @@ class TestServerTrust(unittest.TestCase):
         self.assertLess(x.index('if (!valid)'),x.index('if (const bbcoop::Vitals& vitals'))
         self.assertIn('ShouldAudit(now_ms',x)
         self.assertIn('SafeReviveHits(',x)
+        self.assertIn('SafeWireText(hello.party(), 512)',x)
+        self.assertIn('SafeWireText(hello.member(), 96)',x)
+        self.assertIn('SafeWireText(hello.name(), 192)',x)
     def test_damage_cannot_overflow(self):
         x=boards(B);self.assertIn('AddReviveDamage(damage, hit.damage())',x)
         self.assertNotIn('damage += hit.damage()',x)
