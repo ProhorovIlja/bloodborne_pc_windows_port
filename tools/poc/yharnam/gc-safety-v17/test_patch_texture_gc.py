@@ -16,8 +16,12 @@ class TestGcPatch(unittest.TestCase):
         guard=result.index('if (image.binding.is_bound')
         action=result.index('constexpr auto CpuWritten')
         self.assertLess(guard,action)
-        for tag in ['image.binding.is_target','image.usage.vo_surface','image.scene_proxy']:
+        for tag in ['image.binding.is_target','image.usage.vo_surface']:
             self.assertIn(tag,result)
+        # scene_proxy is sticky across SceneTargets::SetSize: do NOT use it
+        # as an unconditional evict guard or long-session VRAM can grow.
+        conditional=result[result.index('if (image.binding.is_bound'):result.index(') {',result.index('if (image.binding.is_bound'))]
+        self.assertNotIn('image.scene_proxy',conditional)
         self.assertIn('image_lru_cache.Touch(image, gc_tick);',result)
     def test_depth_eviction_explicitly_opt_in_and_age_guard_preserved(self):
         result=transform(SOURCE)
