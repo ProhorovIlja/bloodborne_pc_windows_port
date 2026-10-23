@@ -33,7 +33,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tools/poc/yharnam/direct-channel-v10 -p test_guard_adapter.py -v
-          cmake -S tools/poc/yharnam/direct-channel-v10 -B /tmp/shyt-v10-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          python3 tools/poc/yharnam/direct-channel-v10/stage_live_test.py \
+            --v7 tools/poc/yharnam/pinned-archives/SH-YT-NATIVE-DIRECT-P2P-V7-20261023.zip \
+            --source tools/poc/yharnam/direct-channel-v10 \
+            --out /tmp/shyt-v10-test-sources
+          cmake -S /tmp/shyt-v10-test-sources -B /tmp/shyt-v10-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
           cmake --build /tmp/shyt-v10-build --parallel 2
           ctest --test-dir /tmp/shyt-v10-build --output-on-failure
       - name: Test native P2P adapter using real local UDP sockets
