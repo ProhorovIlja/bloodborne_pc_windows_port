@@ -1,5 +1,5 @@
 import unittest
-from patch_hunter_tools import overlay,editor,editor_header
+from patch_hunter_tools import overlay,editor,editor_header,coop_header,coop_impl
 
 UI='''        const auto& effect = BbSettings::Effects[e];
         const char* hint =
@@ -46,16 +46,28 @@ class Tests(unittest.TestCase):
         self.assertIn('HunterToolsTab();',result)
         self.assertIn('SaveTab();',result)
         self.assertIn('Unlock for this session',result)
-        self.assertIn('bbcoop_lobby_view(&lobby)',result)
+        self.assertIn('bbcoop_offline_character_edit_allowed()',result)
     def test_backend_lock_at_enqueue_and_dispatch(self):
         s=editor(EDITOR)
         self.assertIn('editor_unlocked.store(false)',s)
-        self.assertIn('TeamModeActive()',s)
+        self.assertIn('OnlineSessionActive()',s)
+        self.assertIn('bbcoop_offline_character_edit_allowed()',s)
         self.assertIn('!InWorld() || !CanEdit()',s)
         self.assertGreaterEqual(s.count('if (!CanEdit()) return;'),6)
         self.assertIn('!CanEdit() || !attributes',s)
         self.assertIn('quantity < 1 || quantity > 99',s)
         self.assertIn('category != GoodsCategory',s)
+    def test_legacy_coop_runtime_guard(self):
+        header=coop_header('void bbcoop_lobby_request(int action, const char *id);')
+        impl=coop_impl('extern "C" int bbcoop_lobby_view(bbcoop_lobby* lobby) {')
+        self.assertIn('int bbcoop_offline_character_edit_allowed(void);',header)
+        for term in ['Coop::TeamModeOn()', 'Coop::InPartySession()',
+                     'Coop::SessionMembers() <= 1','Coop::SessionPlayers() <= 1']:
+            self.assertIn(term,impl)
+        with self.assertRaisesRegex(ValueError,'coop runtime bridge'):
+            coop_impl('unrecognized legacy server build')
+        with self.assertRaisesRegex(ValueError,'already applied'):
+            coop_impl(impl)
     def test_level_overflow_guard(self):
         s=editor_header(HEADER)
         self.assertIn('#include "sh_hunter_tools_policy.hpp"',s)
