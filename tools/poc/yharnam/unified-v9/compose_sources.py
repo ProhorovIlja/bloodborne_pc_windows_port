@@ -172,6 +172,16 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     output[MAPART]=v19_module.transform(source[MAPART]).encode("utf-8")
     if len(output)!=len(dest)+15:
         raise ValueError("V19 map data parser native source is missing")
+    # V20 follows V18 on the SAME map_charts.cpp. Apply to the composed
+    # V18 output, otherwise the LRU/worker fixes would be silently overwritten.
+    v20_dir=Path(__file__).resolve().parent.parent/"map-range-v20"
+    v20_module=types.ModuleType("sh_map_range_patch")
+    v20_script=v20_dir/"patch_map_range.py"
+    exec(compile(v20_script.read_text("utf-8"),str(v20_script),"exec"),v20_module.__dict__)
+    output[MAPCHARTS]=v20_module.transform(output[MAPCHARTS].decode("utf-8")).encode("utf-8")
+    output[v20_module.HEADER_PATH]=(v20_dir/"sh_map_range_io.hpp").read_bytes()
+    if len(output)!=len(dest)+16:
+        raise ValueError("V20 safe range-reading native header is missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -185,7 +195,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V16 defensive Vulkan map allocation, descriptor and input guards",
                    "V17 active GPU resource GC protection (opt-in stale depth)",
                    "V18 bounded CPU map cache and stop-aware map worker",
-                   "V19 bounded compressed map/mesh decoding and safe archive spans"],
+                   "V19 bounded compressed map/mesh decoding and safe archive spans",
+                   "V20 bounded and exact game archive range I/O"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
