@@ -69,6 +69,9 @@ def originals():
             "    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from\n"
             "    // its hello.\n"
             "    for (const auto& linked : result.linked) {\n"),
+        compose.SERVER_LINK_TEST: """int Relays() {
+  if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
+""",
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
         "server/coop/team_lobby.cpp": "    switch (request.action()) {\n    case Action::CREATE: {\n        team.set_leader(member);\n        bbcoop::TeamMember& m = *team.add_members();\n",
         "emulator/src/core/bloodborne_re_internal.h": "void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id);\n",
@@ -215,6 +218,8 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'constexpr bool MustRetire',result['server/src/sh_endpoint_rebind.hpp'])
         self.assertIn(b'retired_online_ids',result[compose.SERVER_LINK_H])
         self.assertIn(b'udpExt.remove(',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'ChangedAccountOnSameEndpoint()',result[compose.SERVER_LINK_TEST])
+        self.assertIn(b'retired_online_ids.size() == 1',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
         self.assertIn(b'std::jthread worker;',result[compose.MAPCHARTS])
         self.assertIn(b'class Budget',result['bbport/gpu/shim/sh_map_cache.hpp'])
