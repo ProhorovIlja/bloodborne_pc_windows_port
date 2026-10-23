@@ -195,6 +195,7 @@ jobs:
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/server_link.cpp" -o /tmp/sh-v25-server-link.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/server_link.h" -o /tmp/sh-v27-server-link.h
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v27-link-server.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_server_link.cpp" -o /tmp/sh-v27-hub-tests.cpp
           python - <<'PY'
           import importlib.util
           from pathlib import Path
@@ -210,10 +211,12 @@ jobs:
               v27.LINK:m.patch_link(base),
               v27.LINK_H:Path('/tmp/sh-v27-server-link.h').read_text('utf-8'),
               v27.LINK_SERVER:Path('/tmp/sh-v27-link-server.cpp').read_text('utf-8'),
+              v27.TEST:Path('/tmp/sh-v27-hub-tests.cpp').read_text('utf-8'),
           })
           assert 'TellOthers(prior, MemberState::Gone, 0, result)' in patched[v27.LINK]
           assert 'retired_online_ids' in patched[v27.LINK_H]
           assert 'udpExt.remove(' in patched[v27.LINK_SERVER]
+          assert 'ChangedAccountOnSameEndpoint()' in patched[v27.TEST]
           qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
           spec=importlib.util.spec_from_file_location('v26',qs)
           q=importlib.util.module_from_spec(spec); spec.loader.exec_module(q)
