@@ -94,6 +94,11 @@ void Menu() {''',"separate Hunter Tools page")
       '''"Дополнительно", "Сохранение"};''',
       '''"Дополнительно", "Инструменты"};''',"Russian tab label")
     s=one(s,
+      '''    const char* title = T("Settings", "Настройки");''',
+      '''    const char* title = state.tab == 5
+        ? T("Hunter Tools", "Инструменты охотника")
+        : T("Settings", "Настройки");''',"separate tools page title")
+    s=one(s,
       '''    default: SaveTab(); break;''',
       '''    default: HunterToolsTab(); break;''',"menu routing")
     return s
