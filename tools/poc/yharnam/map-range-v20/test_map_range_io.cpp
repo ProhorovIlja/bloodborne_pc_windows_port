@@ -28,6 +28,17 @@ int main() {
     assert(ReadExact(path, std::numeric_limits<std::uint64_t>::max()-1, 6).empty());
     assert(ReadExact(path, 0, SeamlessHunt::MapIO::MaxRangeBytes + 1).empty());
     assert(ReadExact(path.parent_path() / "sh_map_range_missing_unit_file", 0, 1).empty());
+    // Exhaustive small-range test matrix: both valid reads and rejected spans.
+    for (std::uint64_t off = 0; off != 13; ++off) {
+        for (std::uint64_t len = 0; len != 13; ++len) {
+            const auto got = ReadExact(path, off, len);
+            const bool valid = len != 0 && off <= 8 && len <= 8 - off;
+            if (!valid) { assert(got.empty()); continue; }
+            assert(got.size() == len);
+            for (std::uint64_t i = 0; i < len; ++i)
+                assert(got[static_cast<std::size_t>(i)] == static_cast<std::uint8_t>('A' + off + i));
+        }
+    }
     fs::remove(path);
     std::cout << "PASS: exact game-file range I/O and malformed offset/length guards\n";
 }
