@@ -23,6 +23,11 @@ jobs:
           bash -n tools/yharnam_poc/build_linux.sh
       - name: Verify isolated ports, source pinning and reversible client override
         run: python -m unittest discover -s tests -p 'test_yharnam_poc.py' -v
+      - name: Validate in-game group and invasion C++20 matchmaking core
+        run: |
+          cmake -S tools/poc/yharnam/ingame-online -B /tmp/sh-ingame-build -DBUILD_TESTING=ON
+          cmake --build /tmp/sh-ingame-build --parallel 2
+          ctest --test-dir /tmp/sh-ingame-build --output-on-failure
 
 # This workflow does not fetch Bloodborne assets, build Windows client binaries,
 # deploy to Fornex or prove that any multiplayer gameplay works.
