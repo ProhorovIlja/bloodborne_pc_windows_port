@@ -82,13 +82,36 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     adapter_path="emulator/src/core/libraries/network/native_shlk_adapter.hpp"
     output[adapter_path]=v10_guard.patch_adapter(output[adapter_path].decode("utf-8")).encode("utf-8")
     output["emulator/src/core/libraries/network/native_direct_filter.hpp"]=(v10_dir/"native_direct_filter.hpp").read_bytes()
+    # V11: apply title-screen last-hunt preference last, because DBNO and the
+    # UI scale already touch the same native Team menu.
+    v11_dir=Path(__file__).resolve().parent.parent/"last-session-v11"
+    v11_patch=types.ModuleType("sh_native_resume_patch")
+    v11_file=v11_dir/"patch_native_resume.py"
+    exec(compile(v11_file.read_text("utf-8"),str(v11_file),"exec"),v11_patch.__dict__)
+    resume_paths={
+        "emulator/src/core/bloodborne_server_world.cpp",
+        "emulator/src/core/bloodborne_re_internal.h",
+        "bbport/gpu/bbcoop.h",
+        "bbport/gpu/bbcoop/coop.cpp",
+        "bbport/gpu/shim/bbport_overlay.cpp",
+    }
+    resume_sources={name:output[name].decode("utf-8") for name in resume_paths}
+    resume_header=(v11_dir/"last_session_policy.hpp").read_text("utf-8")
+    guarded_resume=v11_patch.transform(resume_sources,resume_header)
+    for name,body in guarded_resume.items():
+        if name not in resume_paths and name!="emulator/src/core/last_session_policy.hpp":
+            raise ValueError("unexpected V11 output "+name)
+        output[name]=body.encode("utf-8")
+    if len(output)!=len(dest)+6:
+        raise ValueError("missing V10 or V11 headers")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
     meta={
         "upstream_pin":PIN,
         "applied":["V3 in-game UI scale","V5 DBNO protocol 8",
-                   "V7 native P2P hooks (dormant)","V8 Github update channel"],
+                   "V7 native P2P hooks (dormant)","V8 Github update channel",
+                   "V10 direct channel guard","V11 optional last-hunt title reconnect"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
