@@ -21,6 +21,15 @@ int main(){
     assert(!MatchPing(sample,f,now).matches);
     f.maximum_ms=100;
     assert(MatchPing(sample,f,now).matches);
+    // Even with fallback enabled a request for DIRECT-only never accepts relay.
+    f.allow_relay_fallback=true;
+    f.maximum_ms=100;
+    assert(!MatchPing(sample,f,now).matches);
+    f.path=PingPath::Any;
+    assert(MatchPing(sample,f,now).matches);
+    f.path=PingPath::DirectOnly;
+    f.maximum_ms.reset(); // unknown direct RTT cannot pass just because cap is absent
+    assert(!MatchPing(sample,f,now).matches);
     f.allow_relay_fallback=false;
     assert(!MatchPing(sample,f,now).matches);
     sample.direct_verified=true;sample.authenticated=false;
