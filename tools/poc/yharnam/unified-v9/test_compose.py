@@ -49,7 +49,23 @@ void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id)
             v3.OLD_HEADER,v3.OLD_CARD,
             '    if (lobby.leader) {\n        ImGui::PushFont(MenuArt::Font(), 19.0f);\n        const ImVec2 remove_size(S(170.0f), S(38.0f));',
             '        bbcoop_team_choose(lobby.in_team ? BBCOOP_TEAM_GO_START : BBCOOP_TEAM_GO_ALONE);',
+            '} // namespace Party',
+            '',
+            '/// Kaniel 2026-10-17: the teammate compass',
+            '    if (Party::shown && !menu_open) {',
+            '        Party::game = {float(game.offset.x), float(game.offset.y), float(game.extent.width),',
+            '                       float(game.extent.height)};',
+            '        Party::Draw();',
+            '    }',
         ]),
+        "bbport/src/runtime_camhook.c": """static float *field(unsigned char *camera, unsigned offset) { return (float *)(camera+offset); }
+static float camhook_frame(unsigned char *camera,float pitch) {
+    return pitch;
+}
+
+#ifdef _WIN32
+""",
+        "bbport/src/runtime_pad.c": 'if (!kbm.mouse_camera) { puts("Runtime: Mouse camera: off (mouse_camera=0)"); return; }',
         compose.NETWORK: "\n".join([v7.INSERT_INCLUDE,v7.INSERT_SEND,v7.INSERT_RECEIVE,
                                     v7.INSERT_TICK,v7.INSERT_FIELD,v7.INSERT_RESET]),
         compose.COOP: """import re, json, urllib.request
@@ -84,12 +100,15 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+6)
+        self.assertEqual(len(result),len(source)+9)
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
         self.assertIn(b'ShResumeMode()',result['emulator/src/core/bloodborne_server_world.cpp'])
         self.assertIn(b'SeamlessHunt::Resume::Mode',result['emulator/src/core/last_session_policy.hpp'])
+        self.assertIn(b'sh_spectator_frame(camera)',result['bbport/src/runtime_camhook.c'])
+        self.assertIn(b'runtime_camhook_spectator',result[compose.OVERLAY])
+        self.assertIn(b'SeamlessHunt::Spectate::State',result['bbport/gpu/shim/spectator_policy.hpp'])
         for path,needle in [
             ("server/coop/coop.proto",b"PROTOCOL_CURRENT = 8"),
             ("server/coop/team_lobby.cpp",b"SET_DBNO"),
