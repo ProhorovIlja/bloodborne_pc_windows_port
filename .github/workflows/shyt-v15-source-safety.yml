@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V23
+name: Seamless Hunt native source integrity V14–V24
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -13,6 +13,7 @@ on:
       - tools/poc/yharnam/hunter-tools-v21/**
       - tools/poc/yharnam/server-trust-v22/**
       - tools/poc/yharnam/pvp-privacy-v23/**
+      - tools/poc/yharnam/stream-bounds-v24/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -27,6 +28,7 @@ on:
       - tools/poc/yharnam/hunter-tools-v21/**
       - tools/poc/yharnam/server-trust-v22/**
       - tools/poc/yharnam/pvp-privacy-v23/**
+      - tools/poc/yharnam/stream-bounds-v24/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -87,6 +89,14 @@ jobs:
           cmake -S tools/poc/yharnam/pvp-privacy-v23 -B /tmp/shyt-v23-privacy -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v23-privacy --parallel 2
           ctest --test-dir /tmp/shyt-v23-privacy --output-on-failure
+      - name: Test V24 bounded co-op stream source patch
+        run: python -m unittest discover -s tools/poc/yharnam/stream-bounds-v24 -p 'test_*.py' -v
+      - name: Compile and test V24 bounded multipart stream
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/stream-bounds-v24 -B /tmp/shyt-v24-stream -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v24-stream --parallel 2
+          ctest --test-dir /tmp/shyt-v24-stream --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -148,6 +158,10 @@ jobs:
           grep -Fq "SH-MAP-DATA-V19" /tmp/sh-map-data-patched.cpp
           ! cmp -s /tmp/sh-map-data-original.cpp /tmp/sh-map-data-patched.cpp
           ! cmp -s /tmp/sh-charts-original.cpp /tmp/sh-charts-patched.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/coop/coop_stream.h" -o /tmp/sh-original-stream.h
+          python tools/poc/yharnam/stream-bounds-v24/patch_stream.py /tmp/sh-original-stream.h /tmp/sh-bounded-stream.h
+          grep -Fq "SH-STREAM-BOUNDS-V24" /tmp/sh-bounded-stream.h
+          grep -Fq "partial.Push(" /tmp/sh-bounded-stream.h
           grep -Fq "SH_GC_RECLAIM_DEPTH" /tmp/sh-gc-patched.cpp
           ! cmp -s /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
           ! cmp -s /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
