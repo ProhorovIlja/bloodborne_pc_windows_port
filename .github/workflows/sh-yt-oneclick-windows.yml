@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/sh-yt-oneclick-windows.yml
       - tools/poc/yharnam/windows-oneclick/**
+      - tools/poc/yharnam/release-v8/**
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,7 +38,7 @@ jobs:
         run: python -m unittest discover -s tools/poc/yharnam/windows-oneclick/tests -v
       - name: Patch and freeze launcher on Windows
         shell: pwsh
-        run: python tools/poc/yharnam/windows-oneclick/patch_and_freeze.py --checkout upstream --out frozen
+        run: python tools/poc/yharnam/windows-oneclick/patch_and_freeze.py --checkout upstream --out frozen --release-channel
       - name: Test PyInstaller script dispatcher
         shell: pwsh
         run: |
@@ -54,6 +55,8 @@ jobs:
           Copy-Item 'tools/poc/yharnam/windows-oneclick/START.cmd' player-package/
           Copy-Item 'tools/poc/yharnam/windows-oneclick/INSTALL-POC.ps1' player-package/
           Copy-Item 'tools/poc/yharnam/windows-oneclick/README-RU.md' player-package/
+          Set-Content -Path 'player-package/launcher-build/VERSION.txt' -Value '0.0.1-dev.1'
+          if (-not (Select-String -Path upstream/bbport/launcher/bbport_coop.py -Pattern 'repositories/1429375055/releases' -Quiet)) { throw 'Seamless Hunt updater not wired' }
           if (-not (Test-Path 'player-package/launcher-build/_internal')) { throw 'Frozen runtime missing' }
       - uses: actions/upload-artifact@v4
         with:
