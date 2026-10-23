@@ -16,14 +16,28 @@ def replace_once(source, old, new, name):
         raise ValueError(f"{name}: upstream anchor count {count} (expected 1)")
     return source.replace(old, new, 1)
 
-def patch_coop(source):
+def load_release_channel():
+    import importlib.util
+    path = pathlib.Path(__file__).resolve().parents[1] / "release-v8" / "patch_update_channel.py"
+    spec = importlib.util.spec_from_file_location("sh_yt_release_channel", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def patch_coop(source, release_channel=False):
     source = replace_once(source, PORT_LINE, PORT_POC, "port constants")
-    source = replace_once(source, COOP_UPDATES, COOP_UPDATES + "\n    return []  # PoC: updater disabled", "co-op updater")
+    if release_channel:
+        source = load_release_channel().patch_coop(source)
+    else:
+        source = replace_once(source, COOP_UPDATES, COOP_UPDATES + "\n    return []  # PoC: updater disabled", "co-op updater")
     source = source.replace("port 20443 doesn't answer", "port 21443 doesn't answer")
     ast.parse(source)
     return source
 
-def patch_launcher(source):
+def patch_launcher(source, release_channel=False):
+    if release_channel:
+        return load_release_channel().patch_launcher(source)
     source = replace_once(source, PROFILE_LINE, PROFILE_POC, "profile isolation")
     source = replace_once(source, NORMAL_UPDATES, NORMAL_UPDATES + "\n    return None  # PoC: updater disabled", "general updater")
     source = replace_once(source, "'check_updates': True, 'animations'", "'check_updates': False, 'animations'", "update preference")
@@ -34,6 +48,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkout", type=pathlib.Path, required=True)
     parser.add_argument("--out", type=pathlib.Path, required=True)
+    parser.add_argument("--release-channel", action="store_true", help="Use Seamless Hunt protocol-gated GitHub Releases")
     args = parser.parse_args()
     repo = args.checkout.resolve()
     actual = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
@@ -43,7 +58,7 @@ def main():
         repo / "bbport/launcher/bbport_coop.py": patch_coop,
         repo / "bbport/launcher/bbport_launcher_win.py": patch_launcher,
     }.items():
-        path.write_text(patch(path.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
+        path.write_text(patch(path.read_text(encoding="utf-8"), args.release_channel), encoding="utf-8", newline="\n")
     launcher = repo / "bbport/launcher/bbport_launcher_win.py"
     icon = repo / "bbport/launcher/bloodborne.ico"
     assert launcher.is_file() and icon.is_file()
