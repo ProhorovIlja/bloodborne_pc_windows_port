@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V24
+name: Seamless Hunt native source integrity V14–V25
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -14,6 +14,7 @@ on:
       - tools/poc/yharnam/server-trust-v22/**
       - tools/poc/yharnam/pvp-privacy-v23/**
       - tools/poc/yharnam/stream-bounds-v24/**
+      - tools/poc/yharnam/member-identity-v25/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -29,6 +30,7 @@ on:
       - tools/poc/yharnam/server-trust-v22/**
       - tools/poc/yharnam/pvp-privacy-v23/**
       - tools/poc/yharnam/stream-bounds-v24/**
+      - tools/poc/yharnam/member-identity-v25/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -97,6 +99,14 @@ jobs:
           cmake -S tools/poc/yharnam/stream-bounds-v24 -B /tmp/shyt-v24-stream -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v24-stream --parallel 2
           ctest --test-dir /tmp/shyt-v24-stream --output-on-failure
+      - name: V25 strict member and account binding source regressions
+        run: python -m unittest discover -s tools/poc/yharnam/member-identity-v25 -p 'test_*.py' -v
+      - name: Compile and test V25 member ID binding in C++20
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/member-identity-v25 -B /tmp/shyt-v25-id -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v25-id --parallel 2
+          ctest --test-dir /tmp/shyt-v25-id --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -162,6 +172,16 @@ jobs:
           python tools/poc/yharnam/stream-bounds-v24/patch_stream.py /tmp/sh-original-stream.h /tmp/sh-bounded-stream.h
           grep -Fq "SH-STREAM-BOUNDS-V24" /tmp/sh-bounded-stream.h
           grep -Fq "partial.Push(" /tmp/sh-bounded-stream.h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/server_link.cpp" -o /tmp/sh-v25-server-link.cpp
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          p=Path('tools/poc/yharnam/member-identity-v25/patch_identity.py')
+          spec=importlib.util.spec_from_file_location('v25',p)
+          m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          base=Path('/tmp/sh-v25-server-link.cpp').read_text('utf-8')
+          assert 'strict identity mode requires authenticated sign-in' in m.patch_link(base)
+          PY
           grep -Fq "SH_GC_RECLAIM_DEPTH" /tmp/sh-gc-patched.cpp
           ! cmp -s /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
           ! cmp -s /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
