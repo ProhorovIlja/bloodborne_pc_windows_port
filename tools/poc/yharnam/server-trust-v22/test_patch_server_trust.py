@@ -25,7 +25,7 @@ class TestServerTrust(unittest.TestCase):
         self.assertIn('last_invalid_vitals_log_ms',x)
     def test_source_drift_fails_closed(self):
         with self.assertRaisesRegex(ValueError,'vitals ingress'):
-            world(W.replace('report','changed'))
+            world(W.replace('case bbcoop::Envelope::kVitals:', 'case bbcoop::Envelope::kVitalsV2:'))
         with self.assertRaisesRegex(ValueError,'saturating revive'):
             boards(B.replace('damage += hit.damage()', 'damage -= hit.damage()'))
     def test_double_apply_fails(self):
