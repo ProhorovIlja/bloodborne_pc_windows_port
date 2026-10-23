@@ -26,6 +26,8 @@ High priority: in-game Network tab showing Direct/Relay/Mixed/unknown, RTT (wors
 High priority: per-save online presets persisted in BBPort user directory, user-visible revert to defaults; private/password room policy and friend-only joining; automatic no-service/retry HUD without spamming.
 High priority: compatibility page: game build/region/patch, native runtime build/protocol, installed mods/patches fingerprint, save format; reject mismatches before connecting while never uploading private save content.
 Medium: accessibility sliders for HUD UI scale and opacity, high-contrast role outlines, controller focus/hold-to-confirm for destructive settings. Camera/graphics and shader cache tuning only with benchmarks and rollback.
+
+Verified pinned upstream graphics settings already include FSR 3.1, FSR 4, FSR 4.1.1, DLSS, XeSS, TAA, native AA, resolution presets and FSR/DLSS frame generation in bbport/gpu/shim/bbport_settings.h and bbport_overlay.cpp. Do NOT duplicate these in a new launcher or claim they need to be invented. Add only safe per-GPU presets, readable compatibility diagnostics and measured rollback paths.
 Medium: game QoL optional host-authoritative revive, team HP/cards, travel synchronization, ready checks, reconnection, per-room invasion rule and non-duplicating loot policy. Avoid rebalancing enemy damage/health by default.
 Nice-to-have: favorites, recently played hunters, server-side blocked players, invites, status indicators, short-lived manual reconnect invitation and named presets.
 
