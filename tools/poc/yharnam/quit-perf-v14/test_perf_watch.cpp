@@ -13,10 +13,12 @@ int main(){
   s.frame_ms=16.6f+(i>8?float(i-8)*0.8f:0);
   s.process_bytes=(200ull+i*30)*1048576;
   s.gpu_bytes=(600ull+i*20)*1048576;
+  s.gc_used_bytes=(500ull+i*15)*1048576;
   assert(w.Add(s));assert(!w.Add(s));
  }
  auto t=w.Compare();assert(t.comparable&&t.slowdown&&t.process_growth&&t.gpu_growth);
  assert(t.rss_mib_delta==570);
+ assert(t.gc_used_mib_delta==285);
  Watch changed;
  for(int i=0;i<15;++i){Sample s;s.timestamp_ms=i*10000;s.map_id=(i<5?1:2);s.frame_ms=16;assert(changed.Add(s));}
  assert(changed.Size()==10 && !changed.Compare().comparable);
