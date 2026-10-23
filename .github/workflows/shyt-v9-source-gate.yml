@@ -25,6 +25,9 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq cmake ninja-build libssl-dev protobuf-compiler unzip
+      - name: Test V9 patch ordering, archive pinning and atomic failure
+        shell: bash
+        run: python3 -m unittest discover -s tools/poc/yharnam/unified-v9 -p test_compose.py -v
       - name: Test native P2P adapter using real local UDP sockets
         shell: bash
         run: |
