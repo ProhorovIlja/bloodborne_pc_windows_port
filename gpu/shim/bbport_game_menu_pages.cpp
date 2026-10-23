@@ -233,6 +233,7 @@ void RefreshConfirmHelps() {
 }
 
 constexpr float SharpnessStep = 0.2f; // Display's slider: 0 off, 1..10 -> 0.2 .. 2.0
+const float SharpnessActual[11] = {0.0f, 0.2f, 0.4f, 0.6f, 0.8f, 1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f};
 constexpr int LodValues[] = {0, 1};
 const float OpacityTable[11] = {0.10f, 0.20f, 0.30f, 0.40f, 0.50f, 0.60f, 0.70f, 0.75f, 0.80f, 0.90f, 1.00f};
 const float ScaleTable[11] = {0.50f, 0.60f, 0.70f, 0.80f, 0.90f, 1.00f, 1.20f, 1.40f, 1.60f, 1.80f, 2.00f};
@@ -716,18 +717,20 @@ void DefineAll() {
                 AddText("Performance", "Performance"), AddText("Ultra Performance", "Ultra Performance")},
                Kind::Steps);
     }
-    AddRow(Setting(
-               Kind::Slider,
-               [](const Values& v) {
-                   return v.sharpen ? std::clamp(int(std::lround(v.sharpness / SharpnessStep)), 1, 10) : 0;
-               },
-               [](int i) {
-                   auto& st = BbSettings::Get();
-                   st.sharpen = i != 0;
-                   if (i != 0) st.sharpness = std::clamp(i, 0, 10) * SharpnessStep;
-               }),
-           "Sharpness", "Резкость", "RCAS after the upscaler: 0 off, 10 strongest",
-           "RCAS после апскейлера: 0 выкл, 10 сильнее всего", {}, Kind::Slider);
+    const int sharpness_field = Setting(
+        Kind::Slider,
+        [](const Values& v) {
+            return v.sharpen ? std::clamp(int(std::lround(v.sharpness / SharpnessStep)), 1, 10) : 0;
+        },
+        [](int i) {
+            auto& st = BbSettings::Get();
+            st.sharpen = i != 0;
+            if (i != 0) st.sharpness = std::clamp(i, 0, 10) * SharpnessStep;
+        });
+    scaled_fields.push_back({sharpness_field, SharpnessActual});
+    AddRow(sharpness_field,
+           "Sharpness", "Резкость", "RCAS after the upscaler: left/right changes intensity",
+           "RCAS после апскейлера: влево/вправо меняет интенсивность", {}, Kind::Slider);
     {
         Field f;
         f.kind = Kind::Steps;
@@ -1709,7 +1712,11 @@ void RefreshScaledHelps() {
         const int position = std::clamp(values[std::size_t(h.field)], 0, 10);
         const float actual = h.table[position];
         char number[40]{};
-        if (h.table == HdrPeakTable || h.table == HdrPaperTable) {
+        if (h.table == HdrPeakTable && position == 0) {
+            std::snprintf(number, sizeof(number), "Auto");
+        } else if (h.table == SharpnessActual && position == 0) {
+            std::snprintf(number, sizeof(number), "Off");
+        } else if (h.table == HdrPeakTable || h.table == HdrPaperTable) {
             std::snprintf(number, sizeof(number), "%.0f nits", double(actual));
         } else if (h.table == OpacityTable || h.table == DeadTable ||
                    h.table == TenthsTable || h.table == SmoothTable) {
