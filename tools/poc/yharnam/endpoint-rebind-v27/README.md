@@ -19,3 +19,6 @@ integration build: it needs actual two-account/reconnection/host-migration
 tests, especially when transport SignIn is enabled.
 
 Does not modify live Fornex/CLS server. No automatic bans or extra threads.
+
+
+**Additional integration regression:** V27 now patches the pinned `server/tests/test_server_link.cpp` test executable to run `ChangedAccountOnSameEndpoint()`, exercising an old virtual route that must be dropped and a newly registered virtual route that must pass. This Qt test was authored and anchored against the pinned source but **has not actually run** without a full Qt server build. The compositor also includes `server_link.h` and `link_server.cpp` changes, removing stale matchmaking `udpExt` records when an account changes on the same socket.
