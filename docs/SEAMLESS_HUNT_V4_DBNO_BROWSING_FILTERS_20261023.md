@@ -20,7 +20,7 @@ C++ test test_dbno_browser.cpp covers DBNO filters, Quick Play, host-only config
 
 ## Standalone local HTTP PoC V4
 
-Released as conversation ZIP SH-YT-DBNO-LOBBY-FILTERS-V4-20261023.zip, not deployed. Python matchmaking.py+matchmaking_http.py: GET /v1/rooms accepts dbno=any|on|off, invasion=any|on|off, scaling, hide_full, min_open_slots, include_started, region and Blood Level; POST /v1/quickplay accepts identical filters in JSON; host-signed /configure accepts down_but_not_out with expected_revision. All public room cards return down_but_not_out, scaling, invasions_enabled, free_slots and revision. Tested: 30 Python unittest cases + 4 C++ CTest executables all green (local package).
+Released as conversation ZIP SH-YT-DBNO-LOBBY-FILTERS-V4-20261023.zip, not deployed. Python matchmaking.py+matchmaking_http.py: GET /v1/rooms accepts dbno=any|on|off, invasion=any|on|off, scaling, hide_full, min_open_slots, include_started, region and Blood Level; POST /v1/quickplay accepts identical filters in JSON; host-signed /configure accepts down_but_not_out with expected_revision. All public room cards return down_but_not_out, scaling, invasions_enabled, free_slots and revision. Tested: 31 Python unittest cases + 5 C++ CTest executables all green (local package), including DBNO-off combat transitions and reservation invalidation on settings update.
 
 **These are prototypes**, NOT integrated into Fornex shadNet's authenticated Qt WebAPI, original co-op protobuf, native in-game UI or combat hooks. The local HTTP service binds only 127.0.0.1:32316 and must not be made public. No VPS services, production CLS, firewall, or DNS touched. GitHub CI run not confirmed.
 
