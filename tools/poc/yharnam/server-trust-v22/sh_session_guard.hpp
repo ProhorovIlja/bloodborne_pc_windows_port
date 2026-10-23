@@ -68,6 +68,15 @@ inline std::uint32_t AddReviveDamage(std::uint32_t existing,
         ? std::numeric_limits<std::uint32_t>::max()
         : static_cast<std::uint32_t>(sum);
 }
+// Reject control characters / excessively large names before converting to Qt
+// strings or creating server-side party/world records.
+inline bool SafeWireText(std::string_view value, std::size_t limit) noexcept {
+    if (value.empty() || value.size() > limit) return false;
+    for (const unsigned char ch : value) {
+        if (ch < 0x20 || ch == 0x7f) return false;
+    }
+    return true;
+}
 inline bool ShouldAudit(std::int64_t now_ms, std::int64_t last_ms) noexcept {
     // Log at most once per linked client / ten seconds. Never auto-ban based
     // on these heuristics because gameplay mods can trigger false positives.
