@@ -69,7 +69,9 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+4)
+        self.assertEqual(len(result),len(source)+5)
+        self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
+        self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         for path,needle in [
             ("server/coop/coop.proto",b"PROTOCOL_CURRENT = 8"),
             ("server/coop/team_lobby.cpp",b"SET_DBNO"),
