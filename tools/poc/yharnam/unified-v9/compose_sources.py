@@ -195,6 +195,9 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         v21_module.OVERLAY:output[OVERLAY].decode("utf-8"),
         v21_module.EDITOR:source[SAVE_EDITOR],
         v21_module.HEADER:source[SAVE_EDITOR_H],
+        # These already have V5/V11 co-op edits; patch the composed versions.
+        v21_module.COOP_API:output["bbport/gpu/bbcoop.h"].decode("utf-8"),
+        v21_module.COOP_IMPL:output["bbport/gpu/bbcoop/coop.cpp"].decode("utf-8"),
     }
     for path, contents in v21_module.transform(v21_sources).items():
         output[path]=contents.encode("utf-8")
