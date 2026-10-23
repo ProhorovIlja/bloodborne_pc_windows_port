@@ -160,6 +160,10 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'if (!CanEdit()) return;',result[compose.SAVE_EDITOR])
         self.assertIn(b'sh_hunter_tools_policy.hpp',result[compose.SAVE_EDITOR_H])
         self.assertIn(b'AllowLocalEdit',result['bbport/gpu/shim/sh_hunter_tools_policy.hpp'])
+        self.assertIn(b'bbcoop_offline_character_edit_allowed',
+                      result['bbport/gpu/bbcoop.h'])
+        self.assertIn(b'Coop::SessionMembers() <= 1',
+                      result['bbport/gpu/bbcoop/coop.cpp'])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
         self.assertIn(b'std::jthread worker;',result[compose.MAPCHARTS])
         self.assertIn(b'class Budget',result['bbport/gpu/shim/sh_map_cache.hpp'])
