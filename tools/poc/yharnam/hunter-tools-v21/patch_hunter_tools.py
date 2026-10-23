@@ -8,6 +8,8 @@ from pathlib import Path
 OVERLAY="bbport/gpu/shim/bbport_overlay.cpp"
 EDITOR="bbport/gpu/shim/bbport_save_editor.cpp"
 HEADER="bbport/gpu/shim/bbport_save_editor.h"
+COOP_API="bbport/gpu/bbcoop.h"
+COOP_IMPL="bbport/gpu/bbcoop/coop.cpp"
 
 def one(s,old,new,label):
     n=s.count(old)
@@ -31,8 +33,7 @@ def overlay(s):
 void Menu() {''',
       '''// SH-HUNTER-TOOLS-V21: voluntary, offline-only character changes.
 void HunterToolsTab() {
-    bbcoop_lobby lobby{};
-    if (bbcoop_lobby_view(&lobby)) {
+    if (!bbcoop_offline_character_edit_allowed()) {
         BbSaveEditor::SetEditorUnlocked(false);
         Note(T("Hunter Tools are unavailable while co-op mode is enabled. "
                "Disconnect and launch the offline mode first.",
@@ -125,9 +126,8 @@ def editor(s):
 // SH-HUNTER-TOOLS-V21: fail closed and clear on entering any supported co-op
 // team mode. The unlock is deliberately never persisted to disk.
 std::atomic<bool> editor_unlocked{false};
-bool TeamModeActive() {
-    bbcoop_lobby state{};
-    return bbcoop_lobby_view(&state) != 0;
+bool OnlineSessionActive() {
+    return bbcoop_offline_character_edit_allowed() == 0;
 }''',"session gate")
     s=one(s,
       '''void SetImage(unsigned char* image) {
@@ -138,7 +138,7 @@ bool TeamModeActive() {
     editor_unlocked.store(false);
 }
 bool CanEdit() {
-    if (TeamModeActive()) {
+    if (OnlineSessionActive()) {
         editor_unlocked.store(false);
         return false;
     }
@@ -147,7 +147,7 @@ bool CanEdit() {
 }
 void SetEditorUnlocked(bool enabled) {
     editor_unlocked.store(SeamlessHunt::HunterTools::AllowLocalEdit(
-        InWorld(), TeamModeActive(), enabled));
+        InWorld(), OnlineSessionActive(), enabled));
 }''',"public guard API")
     # Both at queue time and when executing (a connection can start between frames).
     for name,old,new in [
@@ -198,6 +198,31 @@ void SetEditorUnlocked(bool enabled) {
         s=one(s,old,new,name)
     return s
 
+def coop_header(s):
+    if "SH-HUNTER-TOOLS-V21" in s: raise ValueError("V21 coop API already applied")
+    return one(s,
+        '''void bbcoop_lobby_request(int action, const char *id);''',
+        '''void bbcoop_lobby_request(int action, const char *id);
+// SH-HUNTER-TOOLS-V21: conservative local edit gate covering both Team Lobby
+// and legacy live player sessions. Not a remote anti-cheat mechanism.
+int bbcoop_offline_character_edit_allowed(void);''',"coop API")
+
+def coop_impl(s):
+    if "SH-HUNTER-TOOLS-V21" in s: raise ValueError("V21 coop implementation already applied")
+    return one(s,
+        '''extern "C" int bbcoop_lobby_view(bbcoop_lobby* lobby) {''',
+        '''// SH-HUNTER-TOOLS-V21: when any party or another live player is present,
+// never allow this untrusted client to edit its local character through the UI.
+extern "C" int bbcoop_offline_character_edit_allowed(void) {
+    namespace Coop = Core::Bloodborne::Coop;
+    return !Coop::TeamModeOn() && !Coop::InPartySession() &&
+           Coop::SessionMembers() <= 1 && Coop::SessionPlayers() <= 1;
+}
+
+extern "C" int bbcoop_lobby_view(bbcoop_lobby* lobby) {''',"coop runtime bridge")
+
 def transform(sources):
     return {OVERLAY: overlay(sources[OVERLAY]), EDITOR: editor(sources[EDITOR]),
-            HEADER: editor_header(sources[HEADER])}
+            HEADER: editor_header(sources[HEADER]),
+            COOP_API: coop_header(sources[COOP_API]),
+            COOP_IMPL: coop_impl(sources[COOP_IMPL])}
