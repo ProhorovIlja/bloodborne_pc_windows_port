@@ -1,15 +1,19 @@
-name: Seamless Hunt V14 telemetry and V15 patch safety
+name: Seamless Hunt V14 telemetry, V15 patch safety, V16 map safety
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
     paths:
       - tools/poc/yharnam/quit-perf-v14/**
       - tools/poc/yharnam/patch-safety-v15/**
+      - tools/poc/yharnam/map-safety-v16/**
+      - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
     paths:
       - tools/poc/yharnam/quit-perf-v14/**
       - tools/poc/yharnam/patch-safety-v15/**
+      - tools/poc/yharnam/map-safety-v16/**
+      - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
 permissions:
@@ -25,6 +29,10 @@ jobs:
           python-version: '3.12'
       - name: Test byte-accurate XML conflict gate
         run: python -m unittest discover -s tools/poc/yharnam/patch-safety-v15 -p 'test_*.py' -v
+      - name: Test V16 Vulkan 3D map safety
+        run: python -m unittest discover -s tools/poc/yharnam/map-safety-v16 -p 'test_*.py' -v
+      - name: Test unified pinned source composition
+        run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Test pinned V14 patch anchor transformation
         run: python -m unittest discover -s tools/poc/yharnam/quit-perf-v14 -p 'test_patch.py' -v
       - name: Configure bounded C++ performance watch tests
