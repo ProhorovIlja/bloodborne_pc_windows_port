@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V17
+name: Seamless Hunt native source integrity V14–V18
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -7,6 +7,7 @@ on:
       - tools/poc/yharnam/patch-safety-v15/**
       - tools/poc/yharnam/map-safety-v16/**
       - tools/poc/yharnam/gc-safety-v17/**
+      - tools/poc/yharnam/map-cache-v18/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -15,6 +16,7 @@ on:
       - tools/poc/yharnam/patch-safety-v15/**
       - tools/poc/yharnam/map-safety-v16/**
       - tools/poc/yharnam/gc-safety-v17/**
+      - tools/poc/yharnam/map-cache-v18/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -35,6 +37,14 @@ jobs:
         run: python -m unittest discover -s tools/poc/yharnam/map-safety-v16 -p 'test_*.py' -v
       - name: Test V17 conservative texture GC protection
         run: python -m unittest discover -s tools/poc/yharnam/gc-safety-v17 -p 'test_*.py' -v
+      - name: Test V18 safe map worker transform
+        run: python -m unittest discover -s tools/poc/yharnam/map-cache-v18 -p 'test_*.py' -v
+      - name: Build and test V18 bounded map cache and stoppable worker
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/map-cache-v18 -B /tmp/shyt-v18-cache -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v18-cache --parallel 2
+          ctest --test-dir /tmp/shyt-v18-cache --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -49,6 +59,10 @@ jobs:
           python tools/poc/yharnam/gc-safety-v17/patch_texture_gc.py /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
           grep -Fq "SH-MAP-V16" /tmp/sh-map-patched.cpp
           grep -Fq "SH-GC-V17" /tmp/sh-gc-patched.cpp
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_map_charts.cpp" -o /tmp/sh-charts-original.cpp
+          python tools/poc/yharnam/map-cache-v18/patch_chart_cache.py /tmp/sh-charts-original.cpp /tmp/sh-charts-patched.cpp
+          grep -Fq "SH-MAP-CACHE-V18" /tmp/sh-charts-patched.cpp
+          ! cmp -s /tmp/sh-charts-original.cpp /tmp/sh-charts-patched.cpp
           grep -Fq "SH_GC_RECLAIM_DEPTH" /tmp/sh-gc-patched.cpp
           ! cmp -s /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
           ! cmp -s /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
