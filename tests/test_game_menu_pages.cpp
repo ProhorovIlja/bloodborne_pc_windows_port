@@ -601,6 +601,21 @@ static void RulesPages() {
     P::Load();
 }
 
+static void ScaledSlidersShowRealValues() {
+    // The PS4 widget still has eleven positions, but the explanation must
+    // display actual physical values rather than a lookup table to decipher.
+    P::Load();
+    const auto& vol = RowNamed(PageNamed(u"Sound"), u"Volume boost");
+    assert(std::u16string(P::Text(vol.help, false)).find(u"Current: ") == 0);
+    assert(std::u16string(P::Text(vol.help, true)).find(u"Сейчас: ") == 0);
+    *P::Byte(vol.field) = 10;
+    Advance(500);
+    assert(std::u16string(P::Text(vol.help, false)).find(u"3.00x") != std::u16string::npos);
+    *P::Byte(vol.field) = 0;
+    Advance(500);
+    assert(std::u16string(P::Text(vol.help, false)).find(u"1.00x") != std::u16string::npos);
+}
+
 static void ExitIsDiscoverable() {
     // Everyday PC actions must be on the first new System page, not hidden
     // behind Game patches. Keep the normal two-press confirmation flow.
@@ -698,6 +713,7 @@ int main(int argc, char** argv) {
     assert(ReadIni()["key.cross"] == "X, Space"); // the launcher's keys stay
     Party();
     RulesPages();
+    ScaledSlidersShowRealValues();
     ExitIsDiscoverable();
     Restart();
     Quit();
