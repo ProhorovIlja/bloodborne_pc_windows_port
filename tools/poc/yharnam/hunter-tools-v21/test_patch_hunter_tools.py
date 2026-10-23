@@ -52,7 +52,10 @@ class Tests(unittest.TestCase):
         self.assertIn('editor_unlocked.store(false)',s)
         self.assertIn('TeamModeActive()',s)
         self.assertIn('!InWorld() || !CanEdit()',s)
-        self.assertGreaterEqual(s.count('if (!CanEdit()) return;'),7)
+        self.assertGreaterEqual(s.count('if (!CanEdit()) return;'),6)
+        self.assertIn('!CanEdit() || !attributes',s)
+        self.assertIn('quantity < 1 || quantity > 99',s)
+        self.assertIn('category != GoodsCategory',s)
     def test_level_overflow_guard(self):
         s=editor_header(HEADER)
         self.assertIn('#include "sh_hunter_tools_policy.hpp"',s)
