@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V21
+name: Seamless Hunt native source integrity V14–V22
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -11,6 +11,7 @@ on:
       - tools/poc/yharnam/map-data-v19/**
       - tools/poc/yharnam/map-range-v20/**
       - tools/poc/yharnam/hunter-tools-v21/**
+      - tools/poc/yharnam/server-trust-v22/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -23,6 +24,7 @@ on:
       - tools/poc/yharnam/map-data-v19/**
       - tools/poc/yharnam/map-range-v20/**
       - tools/poc/yharnam/hunter-tools-v21/**
+      - tools/poc/yharnam/server-trust-v22/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -69,6 +71,14 @@ jobs:
           cmake -S tools/poc/yharnam/hunter-tools-v21 -B /tmp/shyt-v21-policy -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v21-policy --parallel 2
           ctest --test-dir /tmp/shyt-v21-policy --output-on-failure
+      - name: Test V22 server trust source transforms
+        run: python -m unittest discover -s tools/poc/yharnam/server-trust-v22 -p 'test_*.py' -v
+      - name: Compile and run V22 server sanity tests
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/server-trust-v22 -B /tmp/shyt-v22-server -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v22-server --parallel 2
+          ctest --test-dir /tmp/shyt-v22-server --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -107,6 +117,23 @@ jobs:
           grep -Fq "SH-MAP-CACHE-V18" /tmp/sh-charts-patched.cpp
           python tools/poc/yharnam/map-range-v20/patch_map_range.py /tmp/sh-charts-patched.cpp /tmp/sh-charts-v20.cpp
           grep -Fq "SH-MAP-RANGE-V20" /tmp/sh-charts-v20.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/bloodborne_party_boards.cpp" -o /tmp/sh-boards-v22.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/bloodborne_world.cpp" -o /tmp/sh-world-v22.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/bloodborne_world.h" -o /tmp/sh-world-v22.h
+          python - <<'PY'
+          from pathlib import Path
+          import importlib.util
+          src=Path('tools/poc/yharnam/server-trust-v22/patch_server_trust.py')
+          spec=importlib.util.spec_from_file_location('v22',src)
+          v22=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(v22)
+          original={v22.BOARDS:Path('/tmp/sh-boards-v22.cpp').read_text('utf-8'),
+                    v22.WORLD:Path('/tmp/sh-world-v22.cpp').read_text('utf-8'),
+                    v22.WORLD_H:Path('/tmp/sh-world-v22.h').read_text('utf-8')}
+          patched=v22.transform(original)
+          for path in [v22.BOARDS,v22.WORLD,v22.WORLD_H]:
+              assert 'SH-SERVER-TRUST-V22' in patched[path],path
+          PY
           grep -Fq "SH-MAP-CACHE-V18" /tmp/sh-charts-v20.cpp
           curl -fsSL --retry 3 "${BASE}/shim/bbport_map_art.cpp" -o /tmp/sh-map-data-original.cpp
           python tools/poc/yharnam/map-data-v19/patch_map_data.py /tmp/sh-map-data-original.cpp /tmp/sh-map-data-patched.cpp
