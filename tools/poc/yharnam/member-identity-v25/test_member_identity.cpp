@@ -4,6 +4,7 @@
 #include "sh_member_identity.hpp"
 #include <cassert>
 #include <iostream>
+#include <string>
 using SeamlessHunt::Identity::Admit;
 using SeamlessHunt::Identity::Matches;
 int main(){
