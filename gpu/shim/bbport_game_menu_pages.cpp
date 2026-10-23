@@ -661,6 +661,27 @@ void DefineAll() {
     auto& s = BbSettings::Get();
     (void)s;
 
+    // ---- PC commands first: do not bury Exit among graphics/game patches. ----
+    // Use the existing confirmed runtime handlers, rather than a hard process kill,
+    // so party peers can be notified and settings are saved.
+    AddPage("PC / Exit", "ПК / Выход", "Exit Bloodborne to Windows or restart the native game",
+            "Выход из Bloodborne в Windows или перезапуск игры");
+    AddRow(Confirmed([] {
+               BbSettings::Save();
+               if (quit_handler) quit_handler();
+           }),
+           "Exit to Windows", "Выйти в Windows",
+           "Press twice to close the game; your party is notified",
+           "Нажмите дважды для выхода из игры; участники группы получат уведомление",
+           {AddText("Exit", "Выход")}, Kind::Button);
+    party.restart_help = AddDynamic(MaxHelpLength);
+    AddRow(Confirmed([] {
+               BbSettings::Save();
+               if (restart_handler) restart_handler();
+           }),
+           AddText("Restart the game", "Перезапуск игры"), party.restart_help,
+           {AddText("Restart", "Перезапуск")}, Kind::Button);
+
     // ---- Display: the picture (sliders and toggles first, the pop-up list last). ----
     AddPage("Display", "Изображение", "Resolution, upscaler, sharpness and model detail (bbport)",
             "Разрешение, апскейлер, резкость и детализация (bbport)");
@@ -1017,26 +1038,10 @@ void DefineAll() {
             AddText("Both", "Обе оси")},
            Kind::List);
 
-    // ---- Game patches (after a restart) and the restart itself. ----
-    AddPage("Game patches", "Патчи игры", "The game's own AA, intros, free camera, debug menu, restart, quit (bbport)",
-            "Сглаживание игры, заставки, свободная камера, отладочное меню, перезапуск, выход (bbport)");
+    // ---- Game patches (after a restart). Exit and Restart are on the first PC page. ----
+    AddPage("Game patches", "Патчи игры", "Optional game image/visual patches (apply on restart)",
+            "Дополнительные патчи игры и изображения (после перезапуска)");
     for (const Short& sh : patches) effect_row(sh);
-    party.restart_help = AddDynamic(MaxHelpLength);
-    AddRow(Confirmed([] {
-               BbSettings::Save();
-               if (restart_handler) restart_handler();
-           }),
-           AddText("Restart the game", "Перезапуск игры"), party.restart_help, {AddText("Restart", "Перезапуск")},
-           Kind::Button);
-    // Upstream 0.51 (#74, #116): quit from the menu, as the window's close button.
-    AddRow(Confirmed([] {
-               BbSettings::Save();
-               if (quit_handler) quit_handler();
-           }),
-           "Quit the game", "Выход из игры",
-           "Press twice: closes the game like the window's close button; in a party the others are told",
-           "Нажмите дважды: закрыть игру, как кнопкой окна; группа об этом узнает", {AddText("Quit", "Выйти")},
-           Kind::Button);
 
     // ---- Party (party_status.h): the action table's rows, on two pages: Party (status, codes,
     // rejoin, leave; the solo title's party game rows) and Party mode (switching role, single
