@@ -4,6 +4,18 @@ Pinned upstream: lKaniel/bloodborne-server @ 77e350743a7cb4524cfcc1782fb6e3af64e
 
 STATUS: SOURCE AUDIT IN PROGRESS. No trusted public PvP, no full Windows build and no production server rollout.
 
+## V25–V27 follow-up: authenticated rooms, inbound work, and endpoint cleanup
+
+The pinned source contains three independent integrity gaps:
+
+- **V25 (source integrated; runtime not verified):** `server/src/server_link.cpp` accepts a logged-in transport ID, while `server/src/bloodborne_world.cpp` separately accepts client-supplied `Hello.member` and `LobbyHello.member`. New strict mode `SH_STRICT_MEMBER_ID_BINDING=1` checks both claims against the lower-hex representation of the transport ID (matching `BoardMemberOfOnlineId`). In strict mode, a missing `ServerLink::SignIn` callback now rejects *all* links. Strict mode is **off by default** to preserve older PS4/BBPort clients. This check does not prove that SignIn itself is cryptographically sound.
+- **V26 (source integrated; runtime not verified):** `Service::Receive` can otherwise decode arbitrarily many complete, small protobuf messages after V24's per-message cap. Strict-mode-only, O(1) per-linked-client quotas now check message count and byte volume **before protobuf decoding** (initial burst 240 messages / 16 MiB; refill 120/s / roughly 4 MiB/s). Rejections are logged sparingly, with no auto-bans. Test with real map joins and catch-up before enabling: these are preliminary thresholds, not production-proven.
+- **V27 (source integrated; runtime not verified):** a `ServerLink::Hub::OnHello` on the **same endpoint** changing its online ID overwrote `virtual_endpoint` without retiring the old `by_virtual` and pair routes. V27 first tells prior teammates it departed, calls `Unlink`, and reports `result.gone` so the previous world is forgotten. It also records `retired_online_ids` and removes their matchmaking `udpExt` mapping in `LinkServer::Apply` **before** registering the new link. Repeating Hello with the same identity remains uninterrupted.
+
+Independent portable C++20 policy tests for V25, V26 and V27 compiled with `-Wall -Wextra -Wpedantic -Werror -fsanitize=undefined` and passed locally. This is **not** a full Qt integration test. Tests and immutable source-anchor checks were added to the workflow, but no successful GitHub Actions workflow run or full Windows client build is confirmed. The production Fornex/CLS server remains untouched.
+
+**Unresolved high-priority risks:** transport Hello/sign-in rate limiting occurs *before* the co-op ingress quota and can incur password-hash/DB work; lower game-link fragments and held out-of-order frames need their own resource limits; bounded per-IP/account connection quotas and safe cleanup of all stale matchmaking entries on normal disconnect; server-issued verified roles and packet filtering for private PvP metadata; server-authoritative gameplay economy and inventory validation; startup cheat checks before joining; signed launcher update metadata. The source-level strict identity check alone is not strong anti-cheat.
+
 ## Non-negotiable product rules
 
 1. A hunter may use local character tools when offline OR online but not in a team, invasion, or live co-op session.
