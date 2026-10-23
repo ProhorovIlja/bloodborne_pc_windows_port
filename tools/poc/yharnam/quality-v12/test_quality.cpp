@@ -11,7 +11,7 @@ int main(){
  a.peers={{"one",20,Link::Direct,true,now-1000},{"two",90,Link::Relay,true,now-1000}};
  auto balanced=Make(Preset::Balanced,"coop8");
  auto m=Evaluate(a,balanced,now);
- assert(m.eligible&&m.measured&&m.worst_rtt_ms==90&&m.route==Link::Relay);
+ assert(m.eligible&&m.measured&&m.worst_rtt_ms==90&&m.route==Link::Mixed);
  auto low=Make(Preset::LowLatency,"coop8");assert(!Evaluate(a,low,now).eligible);
  a.peers[1].measured_rtt_ms=30;a.peers[1].measured_link=Link::Direct;
  assert(Evaluate(a,low,now).eligible);
@@ -35,6 +35,9 @@ int main(){
  a.game_build="coop8";any.allow_cross_region=false;any.region="US";
  assert(!Evaluate(a,any,now).eligible);
  any.region="EU";assert(Evaluate(a,any,now).eligible);
+ auto friends=Make(Preset::Friends,"coop8");
+ assert(!Evaluate(a,friends,now).eligible);
+ a.friend_of_host=true;assert(Evaluate(a,friends,now).eligible);
  Room b=a;b.id="B";b.peers={{"peer",15,Link::Direct,true,now-50}};
  Room c=a;c.id="C";c.peers={{"peer",35,Link::Direct,true,now-50}};
  auto ranked=Discover({a,b,c},any,now);
