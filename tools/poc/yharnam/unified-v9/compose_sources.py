@@ -119,6 +119,18 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         output[name]=contents.encode("utf-8")
     if len(output)!=len(dest)+9:
         raise ValueError("missing V13 runtime or policy outputs")
+    # V14: confirmed Quit to Desktop from title/Team/keyboard, plus passive
+    # performance telemetry. Applied AFTER V13, which modifies the same overlay.
+    v14_dir=Path(__file__).resolve().parent.parent/"quit-perf-v14"
+    v14_module=types.ModuleType("sh_quit_perf_patch")
+    v14_script=v14_dir/"patch_quit_perf.py"
+    exec(compile(v14_script.read_text("utf-8"),str(v14_script),"exec"),v14_module.__dict__)
+    v14_path="bbport/gpu/shim/bbport_overlay.cpp"
+    v14_result=v14_module.transform(output[v14_path].decode("utf-8"))
+    for name,contents in v14_result.items():
+        output[name]=contents.encode("utf-8")
+    if len(output)!=len(dest)+10:
+        raise ValueError("V14 quit/perf generated header is missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -127,7 +139,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         "applied":["V3 in-game UI scale","V5 DBNO protocol 8",
                    "V7 native P2P hooks (dormant)","V8 Github update channel",
                    "V10 direct channel guard","V11 optional last-hunt title reconnect",
-                   "V13 down-only Follow/Free spectator camera"],
+                   "V13 down-only Follow/Free spectator camera",
+                   "V14 confirmed quit and opt-in long-session performance diagnostics"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
