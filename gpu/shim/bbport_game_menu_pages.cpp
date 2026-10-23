@@ -86,6 +86,12 @@ struct Field {
     bool debounce = false; ///< applied once the value rests for 0.4 s (re-creates targets)
 };
 std::vector<Field> fields;
+// The game's old System sliders expose only positions 0..10. Record their
+// actual lookup tables to show a live, physical value in the help line.
+struct ScaledField { int field; const float* table; };
+struct ScaledHelp { int field; const float* table; u32 base_help, display_help; };
+std::vector<ScaledField> scaled_fields;
+std::vector<ScaledHelp> scaled_helps;
 std::vector<int> values, defaults, applied, resting;
 std::vector<u8> bytes, default_bytes;
 std::vector<std::int64_t> rested_since, armed_at;
@@ -131,9 +137,11 @@ int Flag(std::atomic<bool> Values::*member) {
 
 /// A 0..10 slider over an 11-entry table of a float setting.
 int Scaled(std::atomic<float> Values::*member, const float* table) {
-    return Setting(
+    const int field = Setting(
         Kind::Slider, [member, table](const Values& v) { return int(NearestPosition(table, (v.*member).load())); },
         [member, table](int i) { (BbSettings::Get().*member) = table[std::clamp(i, 0, 10)]; });
+    scaled_fields.push_back({field, table});
+    return field;
 }
 
 /// A button (Kind::Button): `fn` on every press (Press).
@@ -188,6 +196,15 @@ void AddPage(const char* en, const char* ru, const char* help_en, const char* he
 }
 void AddRow(int field, u32 name, u32 help, std::vector<u32> choices, Kind kind,
             std::function<bool()> visible = nullptr) {
+    if (kind == Kind::Slider) {
+        const auto it = std::find_if(scaled_fields.begin(), scaled_fields.end(),
+                                     [field](const ScaledField& f) { return f.field == field; });
+        if (it != scaled_fields.end()) {
+            const u32 actual_help = AddDynamic(MaxHelpLength);
+            scaled_helps.push_back({field, it->table, help, actual_help});
+            help = actual_help;
+        }
+    }
     pages.back().rows.push_back({field, name, HelpFor(field, help), std::move(choices), kind, std::move(visible)});
 }
 void AddRow(int field, const char* en, const char* ru, const char* help_en, const char* help_ru,
@@ -1687,8 +1704,39 @@ void RefreshHdr() {
                "0 = Авто (" + automatic_ru + "), 1-10 = 400 .. 4000 нит; сейчас " + std::to_string(peak));
 }
 
+void RefreshScaledHelps() {
+    for (const ScaledHelp& h : scaled_helps) {
+        const int position = std::clamp(values[std::size_t(h.field)], 0, 10);
+        const float actual = h.table[position];
+        char number[40]{};
+        if (h.table == HdrPeakTable || h.table == HdrPaperTable) {
+            std::snprintf(number, sizeof(number), "%.0f nits", double(actual));
+        } else if (h.table == OpacityTable || h.table == DeadTable ||
+                   h.table == TenthsTable || h.table == SmoothTable) {
+            std::snprintf(number, sizeof(number), "%.0f%%", double(actual * 100.0f));
+        } else if (h.table == ScaleTable || h.table == SensTable ||
+                   h.table == BoostTable || h.table == HdrStrengthTable ||
+                   h.table == HdrSaturationTable) {
+            std::snprintf(number, sizeof(number), "%.2fx", double(actual));
+        } else {
+            std::snprintf(number, sizeof(number), "%.2f", double(actual));
+        }
+        const std::u16string value = Utf16(number);
+        const auto summary = [&](bool ru) {
+            const char16_t* text = Text(h.base_help, ru);
+            std::u16string base = text ? text : u"";
+            const std::size_t colon = base.find(u':');
+            if (colon != std::u16string::npos) base.resize(colon);
+            const std::u16string prefix = ru ? u"Сейчас: " : u"Current: ";
+            return prefix + value + u" | " + base;
+        };
+        SetDynamic16(h.display_help, summary(false), summary(true));
+    }
+}
+
 void RefreshDynamic() {
     std::scoped_lock lock{StateMutex()};
+    RefreshScaledHelps();
     RefreshHdr();
     RefreshParty();
     RefreshRestart();
