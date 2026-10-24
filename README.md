@@ -1,8 +1,35 @@
 # Seamless Hunt: Bloodborne PC
 
-**Единая экспериментальная разработка на базе Yharnam Together, а не отдельный форк Visy или старый Windows-порт.** Native Windows client, Yharnam Together BLauncher, gameplay co-op, Qt shadNet, and the Fornex Ubuntu 24.04 server share **one pinned source baseline**.
+**An independent, experimental downstream of [Yharnam Together](https://github.com/lKaniel/bloodborne-server), not a replacement with the Visy launcher or the older Windows-port launcher.** The native Windows game, Yharnam Together BLauncher, co-op runtime, Qt shadNet backend, and Ubuntu 24.04 Fornex staging server all share a single pinned upstream source baseline.
 
 > **Not a public player release.** Game startup, real co-op, NPC signs, guest doors, cross-client PS4/CLS interoperability and the full launcher/server kit still require end-to-end tests. Nothing here changes the production Fornex server or the `master` branch. The project contains no retail Bloodborne game files.
+
+## Credits, copyright and upstream licenses
+
+**Built on the work of others, with attribution.** Seamless Hunt incorporates a
+pinned, modified Yharnam Together source build, which already credits the
+original native-port developers, shadPS4, co-op and shadNet contributors, and
+third-party graphics, shader and middleware authors. We maintain the original
+authors' copyright, licenses and notices. **We do not claim their work as
+ours or imply their endorsement.**
+
+**[Full author credits and provenance](CREDITS.md)** ·
+**[Third-party license notices and release obligations](THIRD_PARTY_NOTICES.md)** ·
+**[Rules for importing code from external forks](CONTRIBUTING.md)** ·
+[Official upstream Yharnam Together credits](https://github.com/lKaniel/bloodborne-server#credits-and-forks).
+
+> Public source on GitHub is **not automatically open-source licensed**.
+> The pinned Yharnam Together project states **GPL-2.0-or-later**; the
+> historical root `LICENSE` in this repository contains **GPLv3**.
+> Each component retains its own terms. This project must complete
+> the compatible-license, copyright-notice and corresponding-source
+> audit **before distributing its combined binaries**. No game's
+> proprietary files or private data may be bundled.
+
+Our project is unofficial and is **not affiliated with, sponsored by or
+endorsed by** Sony Interactive Entertainment, FromSoftware, the Yharnam
+Together maintainers or any third-party developer listed in the credits.
+`Seamless Hunt` is not a statement of collaboration by those authors.
 
 ## The single source of truth
 
