@@ -1,7 +1,9 @@
-name: Seamless Hunt native source integrity V14–V30
+name: Seamless Hunt native source integrity V14–V32
 on:
   push:
-    branches: [feature/yharnam-dedicated-server-poc]
+    branches:
+      - feature/yharnam-dedicated-server-poc
+      - feature/yharnam-v32-account-gateway-staging
     paths:
       - tools/poc/yharnam/quit-perf-v14/**
       - tools/poc/yharnam/patch-safety-v15/**
@@ -21,6 +23,7 @@ on:
       - tools/poc/yharnam/rpc-budget-v29/**
       - tools/poc/yharnam/auth-revocation-v30/**
       - tools/poc/yharnam/qt-http-compat-v30/**
+      - tools/poc/yharnam/account-gateway-v32/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -43,6 +46,7 @@ on:
       - tools/poc/yharnam/rpc-budget-v29/**
       - tools/poc/yharnam/auth-revocation-v30/**
       - tools/poc/yharnam/qt-http-compat-v30/**
+      - tools/poc/yharnam/account-gateway-v32/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -161,6 +165,8 @@ jobs:
           ctest --test-dir /tmp/shyt-v30-auth --output-on-failure
       - name: Test Qt6.4 and modern Qt WebAPI compatibility source anchors
         run: python -m unittest discover -s tools/poc/yharnam/qt-http-compat-v30 -p 'test_*.py' -v
+      - name: Test V32 optional account modes and mandatory public-realm admission
+        run: python -m unittest discover -s tools/poc/yharnam/account-gateway-v32 -p 'test_*.py' -v
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -232,6 +238,7 @@ jobs:
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_server_link.cpp" -o /tmp/sh-v27-hub-tests.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_server.cpp" -o /tmp/sh-v30-webapi.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_routes_session.cpp" -o /tmp/sh-v30-http-session.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_auth.cpp" -o /tmp/sh-v32-bearer-auth.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/stats_server.cpp" -o /tmp/sh-v30-stats-server.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/bloodborne_backend_server.cpp" -o /tmp/sh-v30-bb-backend.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v29-link-server.cpp
@@ -302,6 +309,13 @@ jobs:
           patched_backend=qt.transform_backend(Path('/tmp/sh-v30-bb-backend.cpp').read_text('utf-8'))
           assert 'QHttpServerResponder::HeaderList headers' in patched_backend
           assert 'SH-QT-STATS-PORTABLE' in patched_stats
+          ap=Path('tools/poc/yharnam/account-gateway-v32/patch_bearer_auth.py')
+          spec=importlib.util.spec_from_file_location('authv32',ap)
+          authv32=importlib.util.module_from_spec(spec);spec.loader.exec_module(authv32)
+          patched_auth=authv32.patch_auth(Path('/tmp/sh-v32-bearer-auth.cpp').read_text('utf-8'))
+          assert 'WHERE token = ? AND banned = 0' in patched_auth
+          db_with_v30=transformed[v30.DB_CPP]
+          assert 'account_token_lookup' in authv32.patch_db(db_with_v30)
           assert 'ChangedAccountOnSameEndpoint()' in patched[v27.TEST]
           qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
           spec=importlib.util.spec_from_file_location('v26',qs)
