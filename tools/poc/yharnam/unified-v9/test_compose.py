@@ -41,6 +41,8 @@ sys.path.insert(0, str(HERE.parent/"auth-revocation-v30"))
 from test_patch_auth_revocation import DBH as AUTH_DB_H, DBC as AUTH_DB_CPP, ACCOUNT as AUTH_ACCOUNT_TEST
 sys.path.insert(0,str(HERE.parent/"qt-http-compat-v30"))
 from test_patch_http_compat import SOURCE as HTTP_FIXTURE, SessionUtcCompatibility, StatsBackendQtCompatibility
+sys.path.insert(0, str(HERE.parent/"account-gateway-v32"))
+from test_patch_bearer_auth import AUTH as GATEWAY_AUTH_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -91,12 +93,13 @@ def originals():
         compose.LINK_SERVER_H: RPC_H_FIXTURE +
             '\n    QHash<QByteArray, QByteArray> m_signedIn; // player id -> its secret\'s hash, once signed in\n',
         compose.DATABASE_H: AUTH_DB_H,
-        compose.DATABASE_CPP: AUTH_DB_CPP,
+        compose.DATABASE_CPP: AUTH_DB_CPP + '\n    qInfo() << "Database migrations complete";\n',
         compose.ACCOUNT_TEST_CPP: AUTH_ACCOUNT_TEST,
         compose.HTTP_CPP: HTTP_FIXTURE,
         compose.HTTP_SESSION_CPP: SessionUtcCompatibility.SOURCE,
         compose.HTTP_STATS_CPP: StatsBackendQtCompatibility.STATS,
         compose.HTTP_BACKEND_CPP: StatsBackendQtCompatibility.BACKEND,
+        compose.WEB_AUTH_CPP: GATEWAY_AUTH_FIXTURE,
         compose.SERVER_LINK_TEST: """int Relays() {
   if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
 """,
@@ -271,6 +274,9 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SH-QT-STATS-PORTABLE',result[compose.HTTP_STATS_CPP])
         self.assertIn(b'SH-QT-BACKEND-PORTABLE',result[compose.HTTP_BACKEND_CPP])
         self.assertIn(b'QHttpServerResponder::HeaderList',result[compose.HTTP_BACKEND_CPP])
+        self.assertIn(b'SH-V32-BEARER-BAN',result[compose.WEB_AUTH_CPP])
+        self.assertIn(b'WHERE token = ? AND banned = 0',result[compose.WEB_AUTH_CPP])
+        self.assertIn(b'account_token_lookup',result[compose.DATABASE_CPP])
         self.assertIn(b'QHttpServerResponder::StatusCode::NotFound',result[compose.HTTP_CPP])
         self.assertIn(b'ChangedAccountOnSameEndpoint()',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'retired_online_ids.size() == 1',result[compose.SERVER_LINK_TEST])
@@ -308,6 +314,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("Qt 6.4 / modern WebAPI ABI compatibility", " ".join(manifest["applied"]))
         self.assertIn("Qt 6.4 / modern WebAPI session invitation UTC", " ".join(manifest["applied"]))
         self.assertIn("Qt 6.4 / modern StatsServer and BloodborneBackendServer", " ".join(manifest["applied"]))
+        self.assertIn("V32 WebAPI bearer rejects banned users", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -417,6 +424,12 @@ class AllPatches(unittest.TestCase):
         source[compose.HTTP_BACKEND_CPP]=source[compose.HTTP_BACKEND_CPP].replace(
             'responder.sendResponse(response);','responder.write(response);')
         with self.assertRaisesRegex(ValueError,'backend HTTP response headers'):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v32_bearer_sql_anchor_drift_rejected(self):
+        source=originals()
+        source[compose.WEB_AUTH_CPP]=source[compose.WEB_AUTH_CPP].replace(
+            'WHERE token = ?', 'WHERE bearer_token = ?')
+        with self.assertRaisesRegex(ValueError,'HTTP token lookup banned status'):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
