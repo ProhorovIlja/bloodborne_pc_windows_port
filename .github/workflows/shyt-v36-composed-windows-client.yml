@@ -98,6 +98,15 @@ jobs:
           test -s out/bb-gpu-capabilities.exe
           test -s out/bb-play.exe
           echo REAL_NATIVE_WINDOWS_EXE_BUILT_NO_GAMEPLAY_CLAIM
+      - name: Enable pinned Yharnam Together guest door and event compatibility in package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $eventTool = 'pinned-upstream/tools/re/party_boss_events.py'
+          if (-not (Test-Path $eventTool)) { throw 'Co-op event patcher missing from pinned upstream' }
+          python tools/poc/yharnam/package-v40/patch_windows_package.py pinned-upstream/bbport/packaging/windows/package.sh
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned native package script drifted' }
+          Write-Host 'COOP_EVENT_PATCHER_STAGED; NPC summons still require live verification'
       - name: Package complete portable native Windows launcher and DLL dependencies
         shell: msys2 {0}
         run: |
