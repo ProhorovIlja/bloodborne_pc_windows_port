@@ -60,6 +60,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_direct_datagram.cpp \
             -o /tmp/shyt-v58-direct-datagram
           /tmp/shyt-v58-direct-datagram
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_direct_ingress.cpp \
+            -o /tmp/shyt-v59-direct-ingress
+          /tmp/shyt-v59-direct-ingress
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - name: Native MSVC C++ hybrid selector regression (no real P2P claim)
@@ -82,3 +87,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'direct UDP datagram compile failed' }
           ./shyt-v58-direct-datagram.exe
           if ($LASTEXITCODE -ne 0) { throw 'direct UDP MAC, grant and replay regressions failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_direct_ingress.cpp /Fe:shyt-v59-direct-ingress.exe
+          if ($LASTEXITCODE -ne 0) { throw 'direct UDP game ingress compile failed' }
+          ./shyt-v59-direct-ingress.exe
+          if ($LASTEXITCODE -ne 0) { throw 'direct UDP game ingress authorization regression failed' }
