@@ -178,6 +178,15 @@ jobs:
             tools/poc/yharnam/friends-privacy-v47/test_friends_permissions.cpp \
             -o /tmp/shyt-v47-friend-permissions
           /tmp/shyt-v47-friend-permissions
+      - name: Verify authenticated coop lobby and world identity source guards
+        run: python -m unittest discover -s tools/poc/yharnam/friends-privacy-v47 -p 'test_patch_lobby_identity.py' -v
+      - name: Compile and test signed-in account identity to board-member binding
+        run: |
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/friends-privacy-v47 \
+            tools/poc/yharnam/friends-privacy-v47/test_lobby_identity.cpp \
+            -o /tmp/shyt-v48-account-binding
+          /tmp/shyt-v48-account-binding
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
