@@ -18,6 +18,7 @@ REQUIRED = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe",
     "bin/bb-gpu-capabilities.exe", "run.py", "README.md", "LICENSE",
     "tools/party_boss_events.py", "CREDITS.txt",
+    "tools/SeamlessHunt-network-profile.example.json",
     "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
     "licenses/AMD-FidelityFX-SDK-LICENSE.txt",
     "licenses/Intel-XeSS-LICENSE.txt", "licenses/PkgTool-LICENSE.txt",
