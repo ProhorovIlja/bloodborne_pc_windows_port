@@ -7,12 +7,14 @@ signature, runtime ABI proof, or a public updater trust root.
 from __future__ import annotations
 import argparse
 import json
+import tarfile
 from pathlib import Path
 import re
 import zipfile
 
 GAME_NAME = "SHYT-CLIENT-SOURCE-IDENTITY.json"
 SERVER_NAME = "SHYT-SERVER-SOURCE-IDENTITY.json"
+LINUX_NAME = "SHYT-UBUNTU-SOURCE-IDENTITY.json"
 UPSTREAM = "77e350743a7cb4524cfcc1782fb6e3af64e25b15"
 FIELDS = {"schema", "component", "source_commit", "upstream_pin", "release_ready"}
 
@@ -22,7 +24,7 @@ class SourceIdentityError(ValueError):
 
 
 def identity(component: str, source_commit: str) -> dict:
-    if component not in ("game", "server"):
+    if component not in ("game", "server", "ubuntu"):
         raise SourceIdentityError("unknown build component")
     if not isinstance(source_commit, str) or re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
         raise SourceIdentityError("source commit must be a lowercase 40-digit SHA-1")
@@ -67,19 +69,38 @@ def stamp_game_zip(path: Path, source_commit: str) -> None:
         archive.writestr(member, content)
 
 
+def verify_ubuntu_tarball(path: Path) -> dict:
+    # Read only the small, regular manifest: never extract a staging archive.
+    member_name = "shyt-internal-linux-server/" + LINUX_NAME
+    with tarfile.open(path, "r:gz") as archive:
+        matching = [m for m in archive.getmembers() if m.name == member_name]
+        if len(matching) != 1 or not matching[0].isfile() or matching[0].size > 4096:
+            raise SourceIdentityError("Ubuntu source identity absent, duplicated or unsafe")
+        stream = archive.extractfile(matching[0])
+        if stream is None:
+            raise SourceIdentityError("Ubuntu source identity unreadable")
+        with stream:
+            return validate(stream.read(4097), "ubuntu")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--game-zip", type=Path)
     target.add_argument("--server-dir", type=Path)
+    target.add_argument("--linux-dir", type=Path)
     parser.add_argument("--commit", required=True)
     args = parser.parse_args()
     if args.game_zip:
         stamp_game_zip(args.game_zip, args.commit)
-    else:
+    elif args.server_dir:
         if not args.server_dir.is_dir():
-            parser.error("native server staging directory missing")
+            parser.error("native Windows server staging directory missing")
         stamp_file(args.server_dir / SERVER_NAME, "server", args.commit)
+    else:
+        if not args.linux_dir.is_dir():
+            parser.error("native Ubuntu server staging directory missing")
+        stamp_file(args.linux_dir / LINUX_NAME, "ubuntu", args.commit)
     print("MATCHED_NATIVE_SOURCE_IDENTITY_STAMPED_INTERNAL_ONLY")
 
 
