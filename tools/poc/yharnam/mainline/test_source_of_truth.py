@@ -151,6 +151,19 @@ class MainlineContracts(unittest.TestCase):
         with self.assertRaisesRegex(p.SourceDrift, "inspiration"):
             p.check_transport_feature_policy(changed)
 
+    def test_invasions_are_a_core_goal_but_never_forced_on_pve_parties(self):
+        policy = json.loads(p.POLICY.with_name(
+            "transport_and_feature_priorities.json").read_text("utf-8"))
+        p.check_transport_feature_policy(policy)
+        change = copy.deepcopy(policy)
+        change["invasion_policy"]["enabled_by_default"] = True
+        with self.assertRaisesRegex(p.SourceDrift, "invasion"):
+            p.check_transport_feature_policy(change)
+        change = copy.deepcopy(policy)
+        change["priority_order"][0]["features"].remove("opt_in_invasions")
+        with self.assertRaisesRegex(p.SourceDrift, "opt_in_invasions"):
+            p.check_transport_feature_policy(change)
+
     def test_cannot_drop_client_host_server_or_event_check(self):
         for name in list(self.good["mainline_workflows"]):
             altered = copy.deepcopy(self.good)
