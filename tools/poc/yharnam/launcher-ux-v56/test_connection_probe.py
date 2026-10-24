@@ -68,8 +68,8 @@ class ProbeTests(unittest.TestCase):
             v57.transform(first)
         with self.assertRaisesRegex(ValueError,"source drift"):
             v57.transform(v56.transform(SOURCE).replace(
-                "def build_coop_custom(self, parent, start):",
-                "def moved_custom(self, parent, start):"))
+                "def coop_changed(self):",
+                "def moved_changed(self):"))
 
 if __name__=="__main__":
     unittest.main()

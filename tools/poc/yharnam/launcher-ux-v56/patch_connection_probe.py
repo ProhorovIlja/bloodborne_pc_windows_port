@@ -107,7 +107,7 @@ def transform(src: str) -> str:
         threading.Thread(target=work, daemon=True).start()
 
 """
-    src = exactly(src, "    def build_coop_custom(self, parent, start):\n",
-                  new_method + "    def build_coop_custom(self, parent, start):\n",
+    src = exactly(src, "    def coop_changed(self):\n",
+                  new_method + "    def coop_changed(self):\n",
                   "explicit per-click TCP probe method")
     return src
