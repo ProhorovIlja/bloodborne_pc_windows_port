@@ -96,6 +96,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v10_dir=Path(__file__).resolve().parent.parent/"direct-channel-v10"
     v10_guard=types.ModuleType("sh_direct_channel_guard")
     v10_py=v10_dir/"guard_adapter.py"
+    v10_guard.__file__=str(v10_py)
     exec(compile(v10_py.read_text("utf-8"),str(v10_py),"exec"),v10_guard.__dict__)
     adapter_path="emulator/src/core/libraries/network/native_shlk_adapter.hpp"
     output[adapter_path]=v10_guard.patch_adapter(output[adapter_path].decode("utf-8")).encode("utf-8")
@@ -105,6 +106,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v11_dir=Path(__file__).resolve().parent.parent/"last-session-v11"
     v11_patch=types.ModuleType("sh_native_resume_patch")
     v11_file=v11_dir/"patch_native_resume.py"
+    v11_patch.__file__=str(v11_file)
     exec(compile(v11_file.read_text("utf-8"),str(v11_file),"exec"),v11_patch.__dict__)
     resume_paths={
         "emulator/src/core/bloodborne_server_world.cpp",
@@ -127,6 +129,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v13_dir=Path(__file__).resolve().parent.parent/"spectator-v13"
     v13_module=types.ModuleType("sh_native_spectator_patch")
     v13_script=v13_dir/"patch_spectator.py"
+    v13_module.__file__=str(v13_script)
     exec(compile(v13_script.read_text("utf-8"),str(v13_script),"exec"),v13_module.__dict__)
     v13_sources={}
     for name in v13_module.PATHS:
@@ -142,6 +145,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v14_dir=Path(__file__).resolve().parent.parent/"quit-perf-v14"
     v14_module=types.ModuleType("sh_quit_perf_patch")
     v14_script=v14_dir/"patch_quit_perf.py"
+    v14_module.__file__=str(v14_script)
     exec(compile(v14_script.read_text("utf-8"),str(v14_script),"exec"),v14_module.__dict__)
     v14_path="bbport/gpu/shim/bbport_overlay.cpp"
     v14_result=v14_module.transform(output[v14_path].decode("utf-8"))
@@ -154,6 +158,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v16_dir=Path(__file__).resolve().parent.parent/"map-safety-v16"
     v16_module=types.ModuleType("sh_map_safety_patch")
     v16_script=v16_dir/"patch_map.py"
+    v16_module.__file__=str(v16_script)
     exec(compile(v16_script.read_text("utf-8"),str(v16_script),"exec"),v16_module.__dict__)
     output[MAP3D]=v16_module.transform(source[MAP3D]).encode("utf-8")
     if len(output)!=len(dest)+11:
@@ -163,6 +168,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v17_dir=Path(__file__).resolve().parent.parent/"gc-safety-v17"
     v17_module=types.ModuleType("sh_gc_safety_patch")
     v17_script=v17_dir/"patch_texture_gc.py"
+    v17_module.__file__=str(v17_script)
     exec(compile(v17_script.read_text("utf-8"),str(v17_script),"exec"),v17_module.__dict__)
     output[TEXTURE_GC]=v17_module.transform(source[TEXTURE_GC]).encode("utf-8")
     if len(output)!=len(dest)+12:
@@ -172,6 +178,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v18_dir=Path(__file__).resolve().parent.parent/"map-cache-v18"
     v18_module=types.ModuleType("sh_map_cache_patch")
     v18_script=v18_dir/"patch_chart_cache.py"
+    v18_module.__file__=str(v18_script)
     exec(compile(v18_script.read_text("utf-8"),str(v18_script),"exec"),v18_module.__dict__)
     output[MAPCHARTS]=v18_module.transform(source[MAPCHARTS]).encode("utf-8")
     output[v18_module.HEADER_PATH]=(v18_dir/"sh_map_cache.hpp").read_bytes()
@@ -182,6 +189,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v19_dir=Path(__file__).resolve().parent.parent/"map-data-v19"
     v19_module=types.ModuleType("sh_map_data_patch")
     v19_script=v19_dir/"patch_map_data.py"
+    v19_module.__file__=str(v19_script)
     exec(compile(v19_script.read_text("utf-8"),str(v19_script),"exec"),v19_module.__dict__)
     output[MAPART]=v19_module.transform(source[MAPART]).encode("utf-8")
     if len(output)!=len(dest)+15:
@@ -191,6 +199,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v20_dir=Path(__file__).resolve().parent.parent/"map-range-v20"
     v20_module=types.ModuleType("sh_map_range_patch")
     v20_script=v20_dir/"patch_map_range.py"
+    v20_module.__file__=str(v20_script)
     exec(compile(v20_script.read_text("utf-8"),str(v20_script),"exec"),v20_module.__dict__)
     output[MAPCHARTS]=v20_module.transform(output[MAPCHARTS].decode("utf-8")).encode("utf-8")
     output[v20_module.HEADER_PATH]=(v20_dir/"sh_map_range_io.hpp").read_bytes()
@@ -202,6 +211,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v21_dir=Path(__file__).resolve().parent.parent/"hunter-tools-v21"
     v21_module=types.ModuleType("sh_hunter_tools_patch")
     v21_script=v21_dir/"patch_hunter_tools.py"
+    v21_module.__file__=str(v21_script)
     exec(compile(v21_script.read_text("utf-8"),str(v21_script),"exec"),v21_module.__dict__)
     v21_sources={
         v21_module.OVERLAY:output[OVERLAY].decode("utf-8"),
@@ -221,6 +231,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v22_dir=Path(__file__).resolve().parent.parent/"server-trust-v22"
     v22_module=types.ModuleType("sh_server_trust_patch")
     v22_script=v22_dir/"patch_server_trust.py"
+    v22_module.__file__=str(v22_script)
     exec(compile(v22_script.read_text("utf-8"),str(v22_script),"exec"),v22_module.__dict__)
     v22_paths=(v22_module.BOARDS,v22_module.WORLD,v22_module.WORLD_H)
     v22_sources={name:output[name].decode("utf-8") for name in v22_paths}
@@ -233,6 +244,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v24_dir=Path(__file__).resolve().parent.parent/"stream-bounds-v24"
     v24_module=types.ModuleType("sh_stream_bounds_patch")
     v24_script=v24_dir/"patch_stream.py"
+    v24_module.__file__=str(v24_script)
     exec(compile(v24_script.read_text("utf-8"),str(v24_script),"exec"),v24_module.__dict__)
     output[COOP_STREAM]=v24_module.transform(output[COOP_STREAM].decode("utf-8")).encode("utf-8")
     output["server/coop/sh_message_bounds.hpp"]=(v24_dir/"sh_message_bounds.hpp").read_bytes()
@@ -244,6 +256,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v25_dir=Path(__file__).resolve().parent.parent/"member-identity-v25"
     v25_module=types.ModuleType("sh_member_identity_patch")
     v25_script=v25_dir/"patch_identity.py"
+    v25_module.__file__=str(v25_script)
     exec(compile(v25_script.read_text("utf-8"),str(v25_script),"exec"),v25_module.__dict__)
     v25_sources={v25_module.WORLD:output[SERVER_WORLD].decode("utf-8"),
                  v25_module.LINK:output[SERVER_LINK_CPP].decode("utf-8")}
@@ -256,6 +269,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v26_dir=Path(__file__).resolve().parent.parent/"ingress-quota-v26"
     v26_module=types.ModuleType("sh_ingress_quota_patch")
     v26_script=v26_dir/"patch_ingress_quota.py"
+    v26_module.__file__=str(v26_script)
     exec(compile(v26_script.read_text("utf-8"),str(v26_script),"exec"),v26_module.__dict__)
     v26_sources={v26_module.WORLD:output[SERVER_WORLD].decode("utf-8"),
                  v26_module.WORLD_H:output[SERVER_WORLD_H].decode("utf-8")}
@@ -268,6 +282,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v27_dir=Path(__file__).resolve().parent.parent/"endpoint-rebind-v27"
     v27_module=types.ModuleType("sh_endpoint_rebind_patch")
     v27_script=v27_dir/"patch_rebind.py"
+    v27_module.__file__=str(v27_script)
     exec(compile(v27_script.read_text("utf-8"),str(v27_script),"exec"),v27_module.__dict__)
     v27_paths=(v27_module.LINK,v27_module.LINK_H,v27_module.LINK_SERVER,v27_module.TEST)
     v27_sources={p:output[p].decode("utf-8") for p in v27_paths}
@@ -280,6 +295,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v28_dir=Path(__file__).resolve().parent.parent/"login-admission-v28"
     v28_module=types.ModuleType("sh_login_admission_patch")
     v28_script=v28_dir/"patch_login_admission.py"
+    v28_module.__file__=str(v28_script)
     exec(compile(v28_script.read_text("utf-8"),str(v28_script),"exec"),v28_module.__dict__)
     v28_paths=(v28_module.LINK_CPP,v28_module.LINK_H,v28_module.QT_TEST)
     v28_sources={p:output[p].decode("utf-8") for p in v28_paths}
@@ -292,6 +308,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v29_dir=Path(__file__).resolve().parent.parent/"rpc-budget-v29"
     v29_module=types.ModuleType("sh_rpc_budget_patch")
     v29_script=v29_dir/"patch_rpc_budget.py"
+    v29_module.__file__=str(v29_script)
     exec(compile(v29_script.read_text("utf-8"),str(v29_script),"exec"),v29_module.__dict__)
     v29_sources={v29_module.LINK:output[LINK_SERVER_CPP].decode("utf-8"),
                  v29_module.HEADER:output[LINK_SERVER_H].decode("utf-8")}
@@ -304,6 +321,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v30_dir=Path(__file__).resolve().parent.parent/"auth-revocation-v30"
     v30_module=types.ModuleType("sh_auth_revocation_patch")
     v30_script=v30_dir/"patch_auth_revocation.py"
+    v30_module.__file__=str(v30_script)
     exec(compile(v30_script.read_text("utf-8"),str(v30_script),"exec"),v30_module.__dict__)
     v30_paths=(v30_module.DB_H,v30_module.DB_CPP,v30_module.LINK_H,
                v30_module.LINK_CPP,v30_module.ACCOUNT_TEST)
@@ -355,6 +373,7 @@ def run(checkout:Path, repo:Path, out:Path):
     archives=repo/"tools/poc/yharnam/pinned-archives"
     patch_path=repo/"tools/poc/yharnam/release-v8/patch_update_channel.py"
     v8=types.ModuleType("sh_v8")
+    v8.__file__=str(patch_path)
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
     required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
