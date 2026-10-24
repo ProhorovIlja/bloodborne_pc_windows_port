@@ -119,7 +119,7 @@ public:
              std::span<std::uint8_t> tag_out) const noexcept {
         if (tag_out.size() != DirectReceiver::kTagBytes)
             return false;
-        std::fill(tag_out.begin(), tag_out.end(), 0);
+        std::fill(tag_out.begin(), tag_out.end(), std::uint8_t{0});
         if (!ready_) return false;
         std::array<std::uint8_t,32> digest{};
         const bool ok = CryptoDetail::Sha256Hmac(key_, authenticated, digest);
