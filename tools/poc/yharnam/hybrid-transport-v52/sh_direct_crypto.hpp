@@ -9,6 +9,9 @@
 #include <span>
 #include <vector>
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <bcrypt.h>
 #ifdef _MSC_VER
@@ -44,7 +47,7 @@ inline bool Sha256Hmac(std::span<const std::uint8_t> key,
     if (key.size() != 32 || message.size() > DirectReceiver::kMaxDatagramBytes)
         return false;
 #ifdef _WIN32
-    if (message.size() > std::numeric_limits<ULONG>::max())
+    if (message.size() > (std::numeric_limits<ULONG>::max)())
         return false;
     BCRYPT_ALG_HANDLE alg = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
