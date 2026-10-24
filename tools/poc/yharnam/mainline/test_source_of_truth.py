@@ -57,7 +57,7 @@ class MainlineContracts(unittest.TestCase):
         # stdout throw in bb_dummy_server.Handler.log_message, disconnecting
         # the client before native-vs-reference parity can be measured.
         source = (p.REPO_ROOT / self.good["mainline_workflows"]["windows_server"]).read_text("utf-8")
-        step = source.split("      - name: Validate backend parity, accounts and world\\n", 1)
+        step = source.split("      - name: Validate backend parity, accounts and world", 1)
         self.assertEqual(len(step), 2, "native server parity test must be present")
         parity = step[1].split("      - name: ", 1)[0]
         self.assertIn("PYTHONIOENCODING: utf-8", parity)
