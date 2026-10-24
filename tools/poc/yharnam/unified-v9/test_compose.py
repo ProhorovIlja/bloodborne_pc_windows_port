@@ -41,6 +41,7 @@ sys.path.insert(0, str(HERE.parent/"auth-revocation-v30"))
 from test_patch_auth_revocation import DBH as AUTH_DB_H, DBC as AUTH_DB_CPP, ACCOUNT as AUTH_ACCOUNT_TEST
 sys.path.insert(0,str(HERE.parent/"qt-http-compat-v30"))
 from test_patch_http_compat import SOURCE as HTTP_FIXTURE, SessionUtcCompatibility, StatsBackendQtCompatibility
+from test_bloodborne_headers import FIXTURE as BLOODBORNE_HTTP_FIXTURE
 sys.path.insert(0, str(HERE.parent/"account-gateway-v32"))
 from test_patch_bearer_auth import AUTH as GATEWAY_AUTH_FIXTURE
 def load(path,name):
@@ -99,6 +100,7 @@ def originals():
         compose.HTTP_SESSION_CPP: SessionUtcCompatibility.SOURCE,
         compose.HTTP_STATS_CPP: StatsBackendQtCompatibility.STATS,
         compose.HTTP_BACKEND_CPP: StatsBackendQtCompatibility.BACKEND,
+        compose.HTTP_BLOODBORNE_CPP: BLOODBORNE_HTTP_FIXTURE,
         compose.WEB_AUTH_CPP: GATEWAY_AUTH_FIXTURE,
         compose.SERVER_LINK_TEST: """int Relays() {
   if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
@@ -213,6 +215,8 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'sh-quit-desktop',result[compose.OVERLAY])
         self.assertIn(b'ShPerformance::Draw',result[compose.OVERLAY])
         self.assertIn(b'class Watch',result['bbport/gpu/shim/sh_perf_watch.hpp'])
+        self.assertIn(b'SH-QT-BLOODBORNE-PLACEMENT',result[compose.HTTP_BLOODBORNE_CPP])
+        self.assertEqual(result[compose.HTTP_BLOODBORNE_CPP].count(b'AddPlacementHeader(response, '), 3)
         self.assertIn(b'SH-MAP-V16',result[compose.MAP3D])
         self.assertIn(b'texture != VK_NULL_HANDLE',result[compose.MAP3D])
         self.assertIn(b'SH-GC-V17',result[compose.TEXTURE_GC])
