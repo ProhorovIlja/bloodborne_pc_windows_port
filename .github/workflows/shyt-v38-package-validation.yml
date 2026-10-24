@@ -6,6 +6,11 @@ on:
       - tools/diagnostics/check_windows_candidate.py
       - tools/diagnostics/tests/test_windows_candidate.py
       - .github/workflows/shyt-v38-package-validation.yml
+  pull_request:
+    paths:
+      - tools/diagnostics/check_windows_candidate.py
+      - tools/diagnostics/tests/test_windows_candidate.py
+      - .github/workflows/shyt-v38-package-validation.yml
   workflow_dispatch:
 permissions:
   contents: read
