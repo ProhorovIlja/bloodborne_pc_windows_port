@@ -96,6 +96,12 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path build-native-windows/shadnet.exe)) { throw 'Windows shadnet build failed' }
       - name: Validate backend parity, accounts and world
         shell: pwsh
+        # On Windows the reference Python backend otherwise inherits cp1252
+        # when output is piped through CTest. Non-ASCII player names can crash
+        # the reference HTTP request handler while logging a successful login.
+        # Keep the exact same Unicode parity assertions; use UTF-8 for stdout.
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           ctest --test-dir build-native-windows --output-on-failure -R '^(server_link|bloodborne_world|accounts|bloodborne_backend_parity)$'
           if ($LASTEXITCODE -ne 0) { throw 'Windows backend parity tests failed' }
