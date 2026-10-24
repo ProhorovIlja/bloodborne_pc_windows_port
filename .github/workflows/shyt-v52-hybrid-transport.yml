@@ -70,6 +70,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_direct_crypto.cpp \
             -lcrypto -o /tmp/shyt-v60-cryptographic-udp
           /tmp/shyt-v60-cryptographic-udp
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_direct_loopback_udp.cpp \
+            -lcrypto -o /tmp/shyt-v61-direct-udp-loopback
+          /tmp/shyt-v61-direct-udp-loopback
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - name: Native MSVC C++ hybrid selector regression (no real P2P claim)
@@ -100,3 +105,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'native Windows CNG crypto compile failed' }
           ./shyt-v60-cryptographic-udp.exe
           if ($LASTEXITCODE -ne 0) { throw 'real HMAC direct UDP auth tests failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_direct_loopback_udp.cpp bcrypt.lib ws2_32.lib /Fe:shyt-v61-direct-udp-loopback.exe
+          if ($LASTEXITCODE -ne 0) { throw 'native WinSock direct UDP loopback compile failed' }
+          ./shyt-v61-direct-udp-loopback.exe
+          if ($LASTEXITCODE -ne 0) { throw 'native WinSock encrypted-tag direct UDP loopback failed' }
