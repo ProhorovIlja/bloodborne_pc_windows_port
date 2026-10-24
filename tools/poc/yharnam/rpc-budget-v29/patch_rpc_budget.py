@@ -21,6 +21,8 @@ def patch_header(s):
 
 def patch_cpp(s):
     if 'SH-RPC-BUDGET-V29' in s: raise ValueError('V29 already applied to cpp')
+    s=one(s, '#include <QCryptographicHash>',
+      '#include <QCryptographicHash>\n#include <algorithm>', 'std::max include')
     s=one(s,
       '''    m_signedIn.insert(online_id, hash);
     return true;''',
