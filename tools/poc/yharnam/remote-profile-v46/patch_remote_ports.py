@@ -108,10 +108,14 @@ def transform_coop(source: str) -> str:
 def transform_launcher(source: str) -> str:
     if "SHYT-V46-REMOTE-LAUNCHER-PORTS" in source:
         raise ValueError("V46 launcher already patched")
-    return once(source,
-                "bbport_coop.host_overrides(settings['host_ip'])",
-                "bbport_coop.host_overrides(settings['host_ip'], PORT_DIR)  # SHYT-V46-REMOTE-LAUNCHER-PORTS",
-                "launcher custom game backend port")
+    updated = once(source,
+                   "bbport_coop.host_overrides(settings['host_ip'])",
+                   "bbport_coop.host_overrides(settings['host_ip'], PORT_DIR)",
+                   "launcher custom game backend port")
+    # The call is nested inside write_text(..., encoding=...), and appending
+    # an inline comment here consumes its comma, breaking Python syntax.
+    # Keep the idempotence marker safely OUTSIDE the multi-line expression.
+    return updated + "\n# SHYT-V46-REMOTE-LAUNCHER-PORTS\n"
 
 
 def transform(src: dict[str, str]) -> dict[str, str]:

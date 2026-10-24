@@ -117,6 +117,19 @@ class EndpointProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already patched"):
             p.transform_coop(result[p.COOP])
 
+    def test_launcher_port_patch_keeps_multiline_write_text_valid(self):
+        # Real pinned Yharnam Together constructs write_text across lines;
+        # its comma was previously swallowed by the injected inline comment.
+        source = ("def update(settings):\n"
+                  "    return target.write_text(bbport_coop.host_overrides(settings['host_ip']),\n"
+                  "                             encoding='utf-8')\n")
+        patched = p.transform_launcher(source)
+        ast.parse(patched)
+        self.assertIn("settings['host_ip'], PORT_DIR),", patched)
+        self.assertEqual(patched.count("SHYT-V46-REMOTE-LAUNCHER-PORTS"), 1)
+        with self.assertRaisesRegex(ValueError, "already patched"):
+            p.transform_launcher(patched)
+
     def test_source_drift_or_missing_real_launcher_rejected(self):
         with self.assertRaisesRegex(ValueError, "anchor changed"):
             p.transform_launcher("legacy_launcher.py")

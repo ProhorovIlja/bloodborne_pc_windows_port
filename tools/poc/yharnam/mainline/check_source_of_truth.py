@@ -21,11 +21,18 @@ class SourceDrift(ValueError):
 
 
 def check_interop_policy(policy: dict) -> None:
+    # Seamless Hunt's only supported multiplayer runtime is Yharnam Together.
+    # Researching another author's optimization is NOT permission to silently
+    # adopt a foreign account system or speak another game's wire protocol.
     if (policy.get("schema") != 1
             or policy.get("default_client") != "yharnam_together"
             or policy.get("default_server") != "experimental_yt_shadnet"
-            or policy.get("default_version") != PIN):
-        raise SourceDrift("An unrelated client or unpinned co-op server became the default")
+            or policy.get("default_version") != PIN
+            or policy.get("supported_game_protocol") != "yharnam_together_only"
+            or policy.get("supported_network_clients") != ["yharnam_together"]
+            or policy.get("third_party_crossplay_enabled") is not False
+            or policy.get("external_projects_ideas_only") is not True):
+        raise SourceDrift("Only original Yharnam Together multiplayer protocol is supported")
     for key in ("force_user_migration", "replace_live_fornex",
                 "auto_forward_player_credentials",
                 "allow_cross_protocol_join_without_live_tests"):
@@ -34,26 +41,22 @@ def check_interop_policy(policy: dict) -> None:
     if policy.get("preserve_existing_saves") is not True:
         raise SourceDrift("Cannot permit migration that overwrites player saves")
     providers = policy.get("providers")
-    if not isinstance(providers, list) or len(providers) != 4:
-        raise SourceDrift("Co-op providers require separately documented protocols")
-    ids = {entry.get("id") for entry in providers if isinstance(entry, dict)}
-    if ids != {"yharnam_together", "cls_bbsc", "visy_native_party", "nightwatch"}:
-        raise SourceDrift("Provider identity mismatch: cannot relabel another project's protocol")
-    for provider in providers:
-        if not provider.get("source", "").startswith("https://github.com/"):
-            raise SourceDrift("Independent provider attribution missing")
-        if provider.get("crossplay_with_cls_verified") is not False:
-            raise SourceDrift("Cannot assert cross-client compatibility without game evidence")
-        if provider["id"] == "yharnam_together":
-            if provider.get("included") is not True:
-                raise SourceDrift("Yharnam Together must remain the actual baseline")
-        elif provider.get("included") is not False:
-            raise SourceDrift("Research-only co-op code must not be labelled shipped")
+    if not isinstance(providers, list) or len(providers) != 1:
+        raise SourceDrift("Additional online clients are forbidden in Seamless Hunt")
+    only = providers[0]
+    if (not isinstance(only, dict) or only.get("id") != "yharnam_together"
+            or only.get("project") != "lKaniel/bloodborne-server"
+            or only.get("source") != "https://github.com/lKaniel/bloodborne-server"
+            or only.get("included") is not True
+            or only.get("crossplay_with_cls_verified") is not False):
+        raise SourceDrift("Yharnam Together must be the only multiplayer client")
     essentials = {"pinned_provenance", "account_and_save_backup",
                   "explicit_player_opt_in", "two_real_pc_gameplay_logs",
-                  "negative_password_isolation_tests", "reversible_cutover"}
+                  "negative_password_isolation_tests",
+                  "same_version_game_and_server_protocol",
+                  "direct_p2p_and_relay_fallback_2pc_tests"}
     if not essentials.issubset(set(policy.get("transitions_require", []))):
-        raise SourceDrift("Unsafe or unverified provider replacement plan")
+        raise SourceDrift("Cannot skip same-protocol gameplay and network release tests")
 
 
 def check_transport_feature_policy(policy: dict) -> None:
