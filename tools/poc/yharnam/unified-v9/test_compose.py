@@ -267,6 +267,10 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SetActiveAccountAllowed',result[compose.SERVER_LINK_H])
         self.assertIn(b'RevokedActiveAccountExitsWorld',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'SeamlessHunt::ActiveSession::Enabled()',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'm_activeDbStamps',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'm_activeDbStamps',result[compose.LINK_SERVER_H])
+        self.assertIn(b'm_activeDbStamps.remove(retired)',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'm_activeDbStamps.insert(linked.online_id',result[compose.LINK_SERVER_CPP])
         self.assertIn(b'CheckNow(',result[compose.SERVER_LINK_CPP])
         self.assertIn(b'MaxDbChecksPerTick',result['server/src/sh_active_session.hpp'])
         self.assertIn(b'SH-QT-HTTP-COMPAT-V30',result[compose.HTTP_CPP])
@@ -306,7 +310,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V29 bounded local RPC backpressure", " ".join(manifest["applied"]))
         self.assertIn("V30 live DB verification", " ".join(manifest["applied"]))
         self.assertIn("Qt 6.4 / modern WebAPI ABI compatibility", " ".join(manifest["applied"]))
-        self.assertIn("V31 staging: opt-in active account revocation", " ".join(manifest["applied"]))
+        self.assertIn("V31.1 staging: pin active credential fingerprint", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -411,6 +415,13 @@ class AllPatches(unittest.TestCase):
             "for (const Link& link : std::as_const(members))",
             "for (const Link& link : stale_members)")
         with self.assertRaisesRegex(ValueError,"bounded verification tick"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v31_1_missing_matchmaking_reap_refused(self):
+        source=originals()
+        source[compose.LINK_SERVER_CPP]=source[compose.LINK_SERVER_CPP].replace(
+            'for (const auto& linked : result.linked) {',
+            'for (const auto& linked_player : result.linked) {')
+        with self.assertRaises(ValueError):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
