@@ -53,7 +53,16 @@ class CoupledKitTests(unittest.TestCase):
     def make_server(self, missing=None, added=None):
         with zipfile.ZipFile(self.server, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name in sorted(mod.SERVER_FILES - ({missing} if missing else set())):
-                data = b"Native qt or shadnet" * 110 if name.endswith((".dll", ".exe")) else b"test config"
+                if name == "server/CREDITS.txt":
+                    data = (b"Yharnam Together deadinside28 Supermedo "
+                            b"original contributor author copyright and license " * 8)
+                elif name == "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt":
+                    data = (b"Qt HTTP Server GPL v3; not LGPL v3; "
+                            b"source, redistribution, corresponding license review " * 8)
+                elif name.endswith(".txt"):
+                    data = b"Original license rights and conditions reproduced for testing " * 8
+                else:
+                    data = b"Native qt or shadnet" * 110 if name.endswith((".dll", ".exe")) else b"test config"
                 z.writestr(name, data)
             if added:
                 z.writestr(added, b"test")
@@ -74,7 +83,10 @@ class CoupledKitTests(unittest.TestCase):
 
     def test_missing_native_server_library_cannot_be_distributed(self):
         for missing in ("server/shadnet.exe", "server/Qt6Core.dll",
-                        "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py"):
+                        "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py",
+                        "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",
+                        "server/licenses/LGPL-3.0.txt",
+                        "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt"):
             with self.subTest(missing=missing):
                 self.make_server(missing=missing)
                 with self.assertRaisesRegex(mod.InvalidCandidate, "missing"):
