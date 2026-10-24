@@ -26,6 +26,15 @@ the final combined work, including any GPL-2-only or proprietary-component
 restrictions, must be audited before redistribution. No unqualified
 whole-product license claim is being made while this audit is incomplete.
 
+**Important: the open-source Qt 6.8 HTTP Server module is GPL-3.0-only
+(not LGPL-3.0).** This exact module is linked by the Qt shadNet backend.
+Qt Core/Network/Sql and other modules have their own licenses. The
+shadNet combined-work license must meet the GPL-3.0 requirement,
+and its upstream GPL-2.0-or-later option and all other linked code
+must be reviewed before distributing a binary. A blanket “Qt is LGPL”
+notice would be inaccurate. See [official Qt 6.8 licensing](https://doc.qt.io/qt-6.8/licensing.html)
+and [Qt HTTP Server's own license](https://doc.qt.io/qt-6.8/qthttpserver-index.html#licenses).
+
 A GPL-2.0-**only** component cannot simply be combined with GPLv3-covered
 code, but a component available under GPL-2.0-**or-later** may permit
 GPLv3 combinations, depending on every linked or bundled dependency.
@@ -51,7 +60,8 @@ the portable ZIP's `licenses/` folder, including where actually bundled:
 | Intel XeSS | `licenses/Intel-XeSS-LICENSE.txt`, `licenses/Intel-XeSS-third-party-programs.txt` | SDK license and third-party notices copied |
 | ReShade and preset shaders | `licenses/` entries copied from upstream ReShade package | Each third-party license kept |
 | PkgTool / LibOrbisPkg | `licenses/PkgTool-LICENSE.txt` | Redistribution of its binaries requires that notice |
-| Qt 6 (Windows shadNet and Ubuntu server) | Qt's distributed notices, applicable Qt LGPL license and source obligations | **Windows server Qt DLL license deployment requires further review** |
+| Qt 6.8.3 Core / Network / Sql / WebSockets | Qt's module-specific LGPL-3.0 / GPL terms, original Qt copyright notices and source obligations | Library conditions and availability of complete Qt sources/relinking must be reviewed |
+| **Qt 6.8.3 HTTP Server** | **GPL-3.0**, not LGPL-3.0, under Qt open-source licensing; [Qt 6.8 official licensing](https://doc.qt.io/qt-6.8/licensing.html) | **The combined native shadNet distribution must meet Qt HTTP Server's GPLv3 obligations**, or use a separate duly licensed Qt version; confirm other incorporated code is compatible |
 | MSYS2 / LLVM / SDL3 / FFmpeg and other native runtimes | `licenses/` and individual runtime documentation | Actual ZIP contents must be matched to notices, not guessed |
 | GLSL, Vulkan, third-party git submodules | Upstream `.gitmodules` and each component's own LICENSE | No blanket claim that all submodules are MIT |
 
