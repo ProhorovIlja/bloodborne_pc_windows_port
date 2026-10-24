@@ -54,6 +54,26 @@ ported, licensed for redistribution or shipped. Some, such as FireBurn's
 FSR-Vulkan, are **already present inside the upstream baseline**; others are
 not. Each new import must be independently audited.
 
+### Additional co-op projects researched, **not imported**
+
+- [Visy: native Windows Bloodborne co-op](https://github.com/visy/bloodborne_pc_windows_port)
+  documents an independently developed direct-party implementation,
+  GPLv3, and describes LukeYui's Seamless Co-op as a **design reference**.
+  We have **not** imported Visy's latest co-op code.
+- [Nightwatch Co-op](https://github.com/vladtepes22/NightwatchCoop)
+  expressly credits its combination of **Awaken/Lantern Engine** with
+  Visy's co-op. Its GPLv3 license and Lantern Engine's separate
+  `NOTICE` impose attribution conditions that require their own review.
+  No Nightwatch files have been incorporated into this mainline.
+- [CLS BBSC](https://github.com/CLSAMG22/BBSC), by CLS_AMG, is a
+  separate network/co-op implementation and an **interop target**, not
+  proof of shared client protocol or a copied source dependency.
+
+This is an **acknowledgement of independent projects, not an accusation**
+of plagiarism or an endorsement. Similar seamless gameplay concepts do
+not establish common source-code ancestry. Any future inclusion must be
+reviewed under its exact license and credited to its actual authors.
+
 ## Important third-party components and runtime dependencies
 
 The Yharnam Together Windows bundle stages separate notices/licenses for
