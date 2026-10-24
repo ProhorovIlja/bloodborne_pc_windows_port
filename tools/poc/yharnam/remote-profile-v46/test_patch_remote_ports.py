@@ -85,6 +85,7 @@ class EndpointProfileTests(unittest.TestCase):
     def test_mismatch_bad_ports_credentials_and_missing_consent_rejected(self):
         mutations = [
             {"opt_in": False}, {"opt_in": 1}, {"schema": 2},
+            {"schema": True}, {"schema": 1.0}, {"schema": "1"}, {"schema": None},
             {"server_ipv4": "198.51.100.1"},
             {"udp_game_port": 32315}, {"udp_game_port": True},
             {"udp_game_port": 999}, {"backend_tcp_port": 65536},
