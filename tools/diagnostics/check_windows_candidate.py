@@ -17,13 +17,14 @@ ROOT = "bbport-windows/"
 REQUIRED = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe",
     "bin/bb-gpu-capabilities.exe", "run.py", "README.md", "LICENSE",
+    "tools/party_boss_events.py",
 }
 FATAL_EXACT = {
     "eboot.bin", "shadnet.db", "shadnet.cfg", "coop.json",
     "id_rsa", "id_ed25519", ".env",
 }
 FATAL_DIRS = {"dvdroot_ps4", "sce_module", "sce_sys", "user", "game", "secrets"}
-FATAL_EXTS = {".pkg", ".sav", ".pem", ".pfx", ".p12", ".key"}
+FATAL_EXTS = {".pkg", ".sav", ".pem", ".pfx", ".p12", ".key", ".dcx", ".emevd", ".bdt", ".bhd", ".prx", ".sprx", ".sfo"}
 MAX_ENTRIES = 18000
 MAX_UNCOMPRESSED = 3 * 1024**3
 MAX_FILE = 1024**3
@@ -82,6 +83,16 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
         missing = sorted(ROOT + req for req in REQUIRED if ROOT + req not in found)
         if missing:
             raise UnsafeBundle("missing required native runtime or launcher: " + ", ".join(missing))
+        # The standalone Windows port package is NOT a seamless co-op kit
+        # unless the user-owned game's event patcher is present and supports
+        # guest door interactions. Don't release a port that silently lacks it.
+        event_script = z.read(ROOT + "tools/party_boss_events.py")
+        if len(event_script) > 1024 * 1024:
+            raise UnsafeBundle("oversized co-op event patcher")
+        for symbol in (b"HOST_DOOR_EFFECT", b"patch_host_door_effect",
+                       b"m29.emevd.dcx", b"m35_00_00_00.emevd.dcx"):
+            if symbol not in event_script:
+                raise UnsafeBundle("co-op door event patch missing: " + symbol.decode())
         for binary in ("BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe"):
             if z.getinfo(ROOT + binary).file_size < 1024:
                 raise UnsafeBundle("empty or placeholder executable")
