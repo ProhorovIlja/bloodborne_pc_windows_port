@@ -2,7 +2,6 @@
 #include "sh_channel_offload.hpp"
 #include <array>
 #include <cassert>
-
 using namespace SeamlessHunt::Hybrid;
 
 constexpr ChannelAuthority Good() {
@@ -16,95 +15,82 @@ constexpr ChannelAuthority Good() {
     g.map_epoch_verified = true;
     g.both_on_same_map = true;
     g.enemy_stream_authorized = true;
+    g.reliable_stream_handover_verified = true;
+    g.sender_enemy_role = EnemyRole::Owner;
+    g.target_enemy_role = EnemyRole::Follower;
     return g;
 }
-static_assert(EligibleChannel(kPlayerMovement, false, Good()).direct_eligible);
-static_assert(EligibleChannel(kEnemyMovement, false, Good()).direct_eligible);
-static_assert(!EligibleChannel(kPlayerMovement, true, Good()).direct_eligible);
-static_assert(!EligibleChannel(0x05, false, Good()).direct_eligible);
-static_assert(!EligibleChannel(0x14, false, Good()).direct_eligible);
-static_assert(!EligibleChannel(0x2C, false, Good()).direct_eligible);
-static_assert(!EligibleChannel(0x2F, false, Good()).direct_eligible);
-static_assert(!EligibleChannel(0x27, false, Good()).direct_eligible);
-static_assert(!EligibleChannel(0x44, false, Good()).direct_eligible);
-static_assert(!EligibleChannel(0x00, false, ChannelAuthority{}).direct_eligible);
+constexpr bool Direct(std::uint32_t ch, const ChannelAuthority& a) {
+    return EligibleChannel(ch, NativeReliable(ch), a).direct_eligible;
+}
+static_assert(Direct(0x06, Good()));
+static_assert(Direct(0x04, Good()));
+static_assert(Direct(0x05, Good())); // owner --> follower enemy HP, once stream is safe
+static_assert(Direct(0x14, Good())); // hits are not server-owned protocol messages
+static_assert(Direct(0x40, Good())); // bullets
+static_assert(Direct(0x16, []{ auto g=Good();g.sender_enemy_role=EnemyRole::Follower;g.target_enemy_role=EnemyRole::Owner;return g;}()));
+static_assert(Direct(0x17, Good()));
+static_assert(!Direct(0x15, Good())); // owner cannot send enemy hit to follower
+static_assert(!Direct(0x27, Good()));
+static_assert(!Direct(0x2C, Good()));
+static_assert(!Direct(0x2F, Good()));
+static_assert(!Direct(0x44, Good()));
+static_assert(!Direct(0x06, ChannelAuthority{}));
+static_assert(EligibleGameAck(Good()).direct_eligible);
 
 int main() {
-    const auto good = Good();
-    const std::array must_relay = {0x05U,0x0EU,0x0FU,0x12U,0x14U,0x15U,0x16U,
-        0x17U,0x24U,0x25U,0x27U,0x29U,0x2AU,0x2BU,0x2CU,0x2DU,0x2EU,0x2FU,
-        0x30U,0x31U,0x34U,0x36U,0x37U,0x3DU,0x3EU,0x40U,0x41U};
-    for (const auto ch : must_relay) {
-        assert(!EligibleChannel(ch, false, good).direct_eligible);
+    auto g = Good();
+    // Every valid pinned Pass/SameMap channel (not Ours/Drop) should be an
+    // offload candidate once the complete stream is proven and game routing
+    // allows sender/receiver roles, not only movement channels.
+    for (std::uint32_t c=0; c<=kLastChannel; ++c) {
+        const auto d = EligibleChannel(c, NativeReliable(c), g);
+        if (IsLegacyServerOnly(c)) assert(!d.direct_eligible);
+        else if (!IsSameMap(c)) assert(d.direct_eligible);
     }
-    const auto noMap = [] {
-        auto p = Good();
-        p.map_known = false;
-        return p;
-    }();
-    assert(!EligibleChannel(kPlayerMovement, false, noMap).direct_eligible);
-    const auto staleEpoch = [] {
-        auto p = Good();
-        p.map_epoch_verified = false;
-        return p;
-    }();
-    assert(!EligibleChannel(kEnemyMovement, false, staleEpoch).direct_eligible);
-    const auto differentMap = [] {
-        auto p = Good();
-        p.both_on_same_map = false;
-        return p;
-    }();
-    assert(!EligibleChannel(kPlayerMovement, false, differentMap).direct_eligible);
-    const auto enemyNotAuthorized = [] {
-        auto p = Good();
-        p.enemy_stream_authorized = false;
-        return p;
-    }();
-    assert(EligibleChannel(kPlayerMovement, false, enemyNotAuthorized).direct_eligible);
-    assert(!EligibleChannel(kEnemyMovement, false, enemyNotAuthorized).direct_eligible);
-    const auto noTeam = [] {
-        auto p = Good();
-        p.both_on_same_authorized_team = false;
-        return p;
-    }();
-    assert(!EligibleChannel(kPlayerMovement, false, noTeam).direct_eligible);
-    const auto noConsent = [] {
-        auto p = Good();
-        p.both_peers_consented = false;
-        return p;
-    }();
-    assert(!EligibleChannel(kPlayerMovement, false, noConsent).direct_eligible);
-    const auto unboundPeer = [] {
-        auto p = Good();
-        p.peer_binding_verified = false;
-        return p;
-    }();
-    assert(!EligibleChannel(kPlayerMovement, false, unboundPeer).direct_eligible);
-    const auto untrustedGrant = [] {
-        auto p = Good();
-        p.session_grant_verified = false;
-        return p;
-    }();
-    assert(!EligibleChannel(kPlayerMovement, false, untrustedGrant).direct_eligible);
-    const auto wrongProtocol = [] {
-        auto p = Good();
-        p.protocol_compatible = false;
-        return p;
-    }();
-    assert(!EligibleChannel(kPlayerMovement, false, wrongProtocol).direct_eligible);
-
-    const std::array<FrameEntry, 2> bulkMovement = {{
-        {kPlayerMovement, false}, {kEnemyMovement, false}
-    }};
-    assert(EligibleFrame(bulkMovement, good).direct_eligible);
-    assert(!EligibleFrame(bulkMovement, enemyNotAuthorized).direct_eligible);
-    const std::array<FrameEntry, 2> mixed = {{
-        {kPlayerMovement, false}, {0x14, true}
-    }};
-    assert(!EligibleFrame(mixed, good).direct_eligible);
-    const std::array<FrameEntry, 1> passChannel = {{{0x01, false}}};
-    assert(EligibleFrame(passChannel, good).direct_eligible);
-    assert(!EligibleFrame(passChannel, untrustedGrant).direct_eligible);
-    assert(!EligibleFrame(std::span<const FrameEntry>{}, good).direct_eligible);
+    const auto noAuth = []{auto a=Good();a.peer_binding_verified=false;return a;}();
+    assert(!Direct(0x06,noAuth));
+    assert(!Direct(0x14,noAuth));
+    const auto noConsent = []{auto a=Good();a.both_peers_consented=false;return a;}();
+    assert(!Direct(0x40,noConsent));
+    const auto noTeam = []{auto a=Good();a.both_on_same_authorized_team=false;return a;}();
+    assert(!Direct(0x06,noTeam));
+    const auto staleMap = []{auto a=Good();a.map_epoch_verified=false;return a;}();
+    assert(!Direct(0x06,staleMap));
+    assert(!Direct(0x14,staleMap));
+    assert(Direct(0x01,staleMap)); // game's peer handshake Pass
+    const auto differentMap = []{auto a=Good();a.both_on_same_map=false;return a;}();
+    assert(!Direct(0x14,differentMap));
+    const auto noOwner = []{auto a=Good();a.enemy_stream_authorized=false;return a;}();
+    assert(!Direct(0x04,noOwner));
+    assert(Direct(0x06,noOwner));
+    const auto notFenced = []{auto a=Good();a.reliable_stream_handover_verified=false;return a;}();
+    assert(!Direct(0x14,notFenced)); // reliable stream migration not yet safe
+    assert(Direct(0x06,notFenced)); // movement is unreliable by native definition
+    assert(!EligibleGameAck(notFenced).direct_eligible);
+    assert(!EligibleChannel(0x14,false,g).direct_eligible); // class spoof
+    assert(!EligibleChannel(0x04,true,g).direct_eligible);
+    const auto wrongDirections = []{auto a=Good();a.sender_enemy_role=EnemyRole::Follower;return a;}();
+    assert(!Direct(0x17,wrongDirections));
+    assert(!Direct(0x05,wrongDirections)); // cannot send owner-only HP
+    assert(Direct(0x16, []{auto a=Good();a.sender_enemy_role=EnemyRole::Follower;a.target_enemy_role=EnemyRole::Owner;return a;}()));
+    assert(!Direct(0x16,g));
+    assert(!Direct(0x15,g));
+    assert(Direct(0x15, []{auto a=Good();a.sender_enemy_role=EnemyRole::Follower;a.target_enemy_role=EnemyRole::Owner;return a;}()));
+    const auto ownerTarget = []{auto a=Good();a.target_enemy_role=EnemyRole::Owner;return a;}();
+    assert(!Direct(0x05,ownerTarget));
+    const auto noneTarget = []{auto a=Good();a.target_enemy_role=EnemyRole::None;return a;}();
+    assert(Direct(0x05,noneTarget));
+    const auto followerToNone = []{auto a=Good();a.sender_enemy_role=EnemyRole::Follower;a.target_enemy_role=EnemyRole::None;return a;}();
+    assert(!Direct(0x05,followerToNone));
+    // A multiplexed frame with ANY server-only game entry must use relay:
+    const std::array<FrameEntry,3> peerBatch = {{{0x04,false},{0x14,true},{0x40,true}}};
+    assert(EligibleFrame(peerBatch,g).direct_eligible);
+    assert(!EligibleFrame(peerBatch,notFenced).direct_eligible);
+    const std::array<FrameEntry,2> mixed = {{{0x06,false},{0x2F,true}}};
+    assert(!EligibleFrame(mixed,g).direct_eligible);
+    assert(EligibleFrame({},g,true).direct_eligible);
+    assert(!EligibleFrame({},g).direct_eligible);
+    assert(!EligibleFrame({},notFenced,true).direct_eligible);
     return 0;
 }
