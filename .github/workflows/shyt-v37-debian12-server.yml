@@ -5,6 +5,10 @@ on:
     paths:
       - tools/poc/yharnam/**
       - .github/workflows/shyt-v37-debian12-server.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/**
+      - .github/workflows/shyt-v37-debian12-server.yml
   workflow_dispatch:
 permissions:
   contents: read
