@@ -45,21 +45,21 @@ def transform(source: str) -> str:
                                                 pady=(px(2), px(4)))
 """,
         "insert one shared-world first-run hero")
-    source = once(source,
-        """        self.flow(card, _('Set co-op up once: where your game is, who hosts, and how hard the enemies are. '
-                          "Everyone uses this same release; the others see your character's name.",
-                          'Настройте кооператив один раз: где игра, кто хост и насколько сильны враги. '
-                          'Все используют один релиз; другие видят имя вашего персонажа.'), 'body', MUTED).grid(
-            row=1, column=0, columnspan=2, sticky='we', pady=(px(6), px(4)))
-""",
-        """        self.flow(card, _('Find Bloodborne, choose your Yharnam Together server and confirm the '
+    # The original prose contains an escaped apostrophe that varies in
+    # serialized Python text. Match the pinned method boundaries, not a
+    # typographic quote, while still refusing missing/drifted anchors.
+    intro_start = source.find("        self.flow(card, _('Set co-op up once:")
+    intro_end = source.find("        cell = self.cell(card, 2, 0,", intro_start)
+    if intro_start < 0 or intro_end < intro_start:
+        raise ValueError("V56 original co-op introductory text anchor drift")
+    intro = """        self.flow(card, _('Find Bloodborne, choose your Yharnam Together server and confirm the '
                           'shared enemy difficulty. No other multiplayer client is required.',
                           'Найдите Bloodborne, выберите сервер Yharnam Together и подтвердите '
                           'общую сложность врагов. Другие клиенты мультиплеера не нужны.'),
                   'body', MUTED).grid(
             row=2, column=0, columnspan=2, sticky='we', pady=(px(6), px(4)))
-""",
-        "short, single-client introduction")
+"""
+    source = source[:intro_start] + intro + source[intro_end:]
     source = once(source,
         """        cell = self.cell(card, 2, 0, _('Your Bloodborne folder (version 1.09, or with the 1.09 update next to it)',
                                        'Папка Bloodborne (версия 1.09 или с обновлением 1.09 рядом)'), span=2)
