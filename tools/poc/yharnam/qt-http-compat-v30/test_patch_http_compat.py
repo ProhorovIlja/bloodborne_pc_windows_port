@@ -1,5 +1,5 @@
 import unittest
-from patch_http_compat import transform,transform_session
+from patch_http_compat import transform,transform_session,transform_stats,transform_backend
 SOURCE='''#include <QHostAddress>
     if (!m_http->bind(m_tcp.get())) {
         qCritical() << "WebApiServer: QHttpServer failed to attach to listener";
@@ -51,3 +51,55 @@ QString IsoUtc(qint64 ms) {
     def test_not_double_applied(self):
         with self.assertRaisesRegex(ValueError,'already applied'):
             transform_session(transform_session(self.SOURCE))
+
+
+class StatsBackendQtCompatibility(unittest.TestCase):
+    STATS='''#include <QHostAddress>
+    if (!m_http->bind(m_tcp.get())) {
+        qCritical() << "StatsServer: QHttpServer failed to attach to listener";
+        return false;
+    }
+    m_http->setMissingHandler(
+        this, [](const QHttpServerRequest& req, QHttpServerResponder& responder) {
+            responder.sendResponse(QHttpServerResponse{"application/json", toJson(body),
+                                                       QHttpServerResponder::StatusCode::NotFound});
+'''
+    BACKEND='''#include <QHttpHeaders>
+    m_http->setMissingHandler(this, [this](const QHttpServerRequest& request,
+                                           QHttpServerResponder& responder) {
+        QHttpServerResponse response(reply.contentType, reply.body,
+                                     static_cast<QHttpServerResponse::StatusCode>(reply.status));
+        if (!reply.headers.isEmpty()) {
+            QHttpHeaders headers = response.headers();
+            for (const auto& [name, value] : reply.headers) {
+                headers.append(name, value);
+            }
+            response.setHeaders(std::move(headers));
+        }
+        responder.sendResponse(response);
+    if (!m_http->bind(m_tcp.get())) {
+        qCritical() << "Backend: QHttpServer failed to attach to listener";
+        return false;
+    }'''
+    def test_stats_listener_and_404_both_versions(self):
+        s=transform_stats(self.STATS)
+        self.assertIn('SH-QT-STATS-PORTABLE',s)
+        self.assertIn('QHttpServerResponder&& responder',s)
+        self.assertIn('responder.write(QJsonDocument(body), QHttpServerResponder::StatusCode::NotFound)',s)
+        self.assertIn('m_http->bind(m_tcp.get());',s)
+    def test_backend_headers_preserved_on_older_qt(self):
+        s=transform_backend(self.BACKEND)
+        self.assertIn('SH-QT-BACKEND-PORTABLE',s)
+        self.assertIn('QHttpServerResponder::HeaderList headers',s)
+        self.assertIn('Content-Type',s)
+        self.assertIn('headers.append({name, value});',s)
+        self.assertIn('responder.write(reply.body, headers,',s)
+        self.assertIn('response.setHeaders(std::move(headers));',s)
+        self.assertIn('QHttpServerResponder&& responder',s)
+        self.assertIn('QHttpServerResponder& responder',s)
+    def test_backend_drift_refused(self):
+        with self.assertRaisesRegex(ValueError,'backend HTTP response headers'):
+            transform_backend(self.BACKEND.replace('response.setHeaders(std::move(headers));','response.setHeader(headers);'))
+    def test_backend_repeat_refused(self):
+        with self.assertRaisesRegex(ValueError,'already applied'):
+            transform_backend(transform_backend(self.BACKEND))
