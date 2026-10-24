@@ -106,3 +106,13 @@ The branch includes portable C++20 policy tests, pinned-source Python transform 
 Note: this corrects **new login decisions**, not instantaneous expulsion of already connected sessions. Server-initiated session revocation after an admin ban still needs a proper authenticated control channel. The current UDP Hello secret is not itself encrypted; future public service should add a secure transport or secure admission handshake.
 
 Implementation: `tools/poc/yharnam/auth-revocation-v30/`. Working Fornex/CLS not modified.
+
+## Qt6 native server full-build blockers (verified CI, Oct 24)
+
+Full Linux/Qt6 server CI reached C++ object 730/753 on Ubuntu 24.04 Qt 6.4. The first failure was the new-Qt-only QHttpServer::bind return type, setMissingHandler context overload and QHttpServerResponder::sendResponse. After adding a version-adapted WebAPI compatibility shim, the next full CI compile reached 735/753 and failed at QTimeZone::UTC in WebAPI invitation timestamp serialization.
+
+An exact pinned-source check also discovered the same version-dependent HTTP interfaces in StatsServer and BloodborneBackendServer, where QHttpHeaders / QHttpServerResponse::setHeaders are unavailable before Qt 6.8. New source adapters preserve JSON 404 response codes, UTC invitation timestamps and backend Content-Type/custom headers. Transforms and fail-closed anchors are included in unified V3–V30 composition.
+
+Source safety passed at commit 9d28d675d8e13dc76f839c8045b03c3f00778542, CI run 40048136242; **full native Qt binary and integration tests are not yet confirmed passing**. V31 staging and V31.1 must pass equivalent checks before any merge or deployment.
+
+V31.1 active-stamp bug caught in its source CI: unreachable source-transform statements were fixed, followed by an ambiguous matchmaking address anchor. The anchor now targets only the retired-online-ID loop. This branch remains in Draft PR #4; its new CI is not yet confirmed green. No live Fornex/CLS change.
