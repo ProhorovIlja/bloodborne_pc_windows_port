@@ -98,6 +98,23 @@ transport recovery, (P2) optional training, camera, filters and accessibility.
 PvE-only parties must never be involuntarily exposed to invasions.
 Experimental gameplay additions remain opt-in until validated.
 
+## Remote Fornex staging endpoint support (V46)
+
+The **original Yharnam Together BLauncher** now has an opt-in, source-checked
+guest profile for **isolated Fornex test endpoints**. The pinned upstream
+hardcodes UDP 31314, WebAPI TCP 31315 and backend TCP 20443; isolated staging
+uses UDP 32314, WebAPI TCP 32315 and backend TCP 21443. Without the profile,
+local hosts and normal Yharnam Together clients keep the original behavior.
+The remote guest profile requires a matching IPv4 host, explicit opt-in, valid
+distinct ports and separate disposable credentials; alternate realms do not
+receive automatic crash dumps. The portable ZIP contains **only a sanitized
+example**, never users' real server profiles or private data.
+
+[How to configure the developer-only server profile](tools/poc/yharnam/remote-profile-v46/README.md).
+This is a **real BLauncher source change, not proof of working live
+connections**. Direct P2P, lobby browser, invitations and password isolation
+must still pass live two-client tests before public distribution.
+
 ## Game/launcher/server gates
 
 The components that **must** become one complete, usable test bundle are:
