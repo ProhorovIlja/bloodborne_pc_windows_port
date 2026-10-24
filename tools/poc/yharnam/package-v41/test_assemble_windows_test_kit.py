@@ -1,5 +1,7 @@
 """Offline coupled native Bloodborne Windows candidate safety tests, no game assets."""
 import importlib.util
+import io
+import tarfile
 from pathlib import Path
 import json
 import sys
@@ -148,6 +150,36 @@ class CoupledKitTests(unittest.TestCase):
                         mod.assemble(self.game, self.server, self.out)
             self.make_game()
             self.make_server()
+
+    def test_fornex_archive_rejects_mismatched_and_unsafe_source_identity(self):
+        import source_identity
+        path = Path(self.tmp.name) / "fornex-ubuntu.tar.gz"
+        member = "shyt-internal-linux-server/" + source_identity.LINUX_NAME
+        def make(commit, *, duplicate=False, symlink=False):
+            contents = json.dumps(source_identity.identity("ubuntu", commit)).encode("utf-8")
+            with tarfile.open(path, "w:gz") as archive:
+                entry = tarfile.TarInfo(member)
+                if symlink:
+                    entry.type = tarfile.SYMTYPE
+                    entry.linkname = "../../hidden"
+                    archive.addfile(entry)
+                else:
+                    entry.size = len(contents)
+                    archive.addfile(entry, io.BytesIO(contents))
+                    if duplicate:
+                        archive.addfile(entry, io.BytesIO(contents))
+        make("1" * 40)
+        valid = source_identity.verify_ubuntu_tarball(path)
+        self.assertEqual(valid["component"], "ubuntu")
+        self.assertEqual(valid["source_commit"], "1" * 40)
+        make("2" * 40)
+        self.assertNotEqual(source_identity.verify_ubuntu_tarball(path)["source_commit"],
+                            "1" * 40)
+        for key in ("duplicate", "symlink"):
+            with self.subTest(key=key):
+                make("1" * 40, duplicate=key == "duplicate", symlink=key == "symlink")
+                with self.assertRaises(source_identity.SourceIdentityError):
+                    source_identity.verify_ubuntu_tarball(path)
 
     def test_qt_concurrent_is_optional_in_real_native_server(self):
         self.assertNotIn("server/Qt6Concurrent.dll", mod.SERVER_FILES)
