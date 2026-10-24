@@ -32,6 +32,8 @@ jobs:
           python-version: '3.12'
       - name: Check source Python syntax
         run: python -m py_compile tools/poc/yharnam/package-v41/assemble_windows_test_kit.py tools/poc/yharnam/package-v41/test_assemble_windows_test_kit.py
+      - name: Test pinned FireBurn FidelityFX CLANG64 portable wide printf shim
+        run: python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_fireburn_clang64.py' -v
       - name: Verify unified bundle requires only deployed Qt server dependencies
         run: python -c "from pathlib import Path; s=Path('.github/workflows/shyt-mainline-candidate.yml').read_text(); assert 'server/Qt6Concurrent.dll' not in s; assert 'bbport-windows/server/Qt6Core.dll' in s; print('NATIVE_QT_ASSEMBLY_DEPENDENCIES_PASS')"
       - name: Reject Windows ZIP case collisions and malformed network profiles
