@@ -36,6 +36,19 @@ user supplies their own legitimate copy of Bloodborne. A reference to a
 person/project in this repository does not make them a collaborator or
 endorser.
 
+## Community conduct and fair technical comparisons
+
+Report **reproducible behavior**, not insults or speculation about another
+developer's intentions. Do not claim code theft without a file- and
+revision-specific evidence review. Similar gameplay ideas alone are not
+proof of copied source. Do not misrepresent CLS BBSC, Visy, Nightwatch,
+Awaken/Lantern Engine, LukeYui or any other community as part of our
+release unless its code is genuinely included and appropriately licensed.
+
+The project must remain optional and must not silently redirect existing
+players to another host or send one provider's passwords to another.
+See [our interoperability and migration policy](docs/COOP_INTEROPERABILITY_AND_MIGRATION.md).
+
 ## Development structure and source hierarchy
 
 The sole maintained codebase for new player work is
