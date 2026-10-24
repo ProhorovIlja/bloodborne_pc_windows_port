@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "purpose": "Source-only mod/source candidate registry, never downloaded or auto-enabled",
+  "auto_install": false,
+  "entries": [
+    {
+      "id": "noxde-save-editor",
+      "title": "Bloodborne Save Editor",
+      "source": "https://github.com/Noxde/Bloodborne-save-editor",
+      "area": "save",
+      "review_state": "research_only",
+      "allowed_modes": [
+        "offline"
+      ],
+      "license_review": "GPL-3.0 source; requires component/license compatibility review",
+      "why": "Local backups, gems, runes, attributes. Never upload raw saves to public site."
+    },
+    {
+      "id": "hikkaruu-build-calculator",
+      "title": "BloodborneCalculator",
+      "source": "https://github.com/Hikkaruu/BloodborneCalculator",
+      "area": "website-tool",
+      "review_state": "research_only",
+      "allowed_modes": [
+        "website"
+      ],
+      "license_review": "Source and formula licensing unverified",
+      "why": "Build origins, weapon attack calculations, boss damage simulations."
+    },
+    {
+      "id": "bb-pc-remaster",
+      "title": "BB PC Remaster",
+      "source": "https://www.nexusmods.com/bloodborne/mods/45",
+      "area": "visual",
+      "review_state": "research_only",
+      "allowed_modes": [
+        "offline"
+      ],
+      "license_review": "Textures/artwork redistribution permissions unverified",
+      "why": "Visual overhaul candidate; large VRAM and package-size costs; never mandatory."
+    },
+    {
+      "id": "bloodborne-enhanced",
+      "title": "Bloodborne Enhanced",
+      "source": "https://www.nexusmods.com/games/bloodborne?modSort=popular",
+      "area": "gameplay",
+      "review_state": "research_only",
+      "allowed_modes": [
+        "offline"
+      ],
+      "license_review": "Gameplay mod redistribution and compatibility unverified",
+      "why": "Optional lamp and boss-rematch features; altered gameplay excluded from public realm."
+    },
+    {
+      "id": "performance-drawparams",
+      "title": "Performance Drawparams",
+      "source": "https://www.nexusmods.com/games/bloodborne?modSort=popular",
+      "area": "performance",
+      "review_state": "research_only",
+      "allowed_modes": [
+        "offline"
+      ],
+      "license_review": "Patch assets and licensing unverified",
+      "why": "Measure native GPU percentiles and visual regressions; not an assumed FPS improvement."
+    },
+    {
+      "id": "bloodborne-randomizer-ps4",
+      "title": "Bloodborne Randomizer PS4",
+      "source": "https://github.com/AtomFry/bloodbornerandomizerps4",
+      "area": "randomizer",
+      "review_state": "research_only",
+      "allowed_modes": [
+        "offline"
+      ],
+      "license_review": "Check license and region/1.09 data before any code reuse",
+      "why": "Reproducible item and enemy seeds; no online game modification."
+    },
+    {
+      "id": "nodream-server",
+      "title": "No Dream for the Hunter backend",
+      "source": "https://github.com/Mob100percent/NoDreamForTheHunterBB",
+      "area": "server-reference",
+      "review_state": "research_only",
+      "allowed_modes": [
+        "reference_only"
+      ],
+      "license_review": "GPL-3.0; evaluate combined-work obligations",
+      "why": "FastAPI/SQLite source to study stats and relay architecture; no code copy."
+    }
+  ]
+}
