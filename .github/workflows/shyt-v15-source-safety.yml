@@ -2,6 +2,7 @@ name: Seamless Hunt native source integrity V14–V32
 on:
   push:
     branches:
+      - fix/shyt-friends-private-session-gate
       - feature/yharnam-dedicated-server-poc
       - feature/yharnam-v32-account-gateway-staging
     paths:
