@@ -30,6 +30,13 @@ if [[ ! -s "$credits" ]]; then
     exit 1
 fi
 cp "$credits" "$dest/CREDITS.txt"
+# Store an EXAMPLE only. Real player endpoints stay in ignored user/ directory.
+profile_example=../tools/release/kit/SeamlessHunt-network-profile.example.json
+if [[ ! -s "$profile_example" ]]; then
+    echo "Missing example for isolated remote co-op ports" >&2
+    exit 1
+fi
+cp "$profile_example" "$dest/tools/SeamlessHunt-network-profile.example.json"
 for notice in "$dest/LICENSE" "$dest/licenses/FireBurn-FSR-Vulkan-LICENSE.txt" "$dest/licenses/AMD-FidelityFX-SDK-LICENSE.txt" "$dest/licenses/Intel-XeSS-LICENSE.txt" "$dest/licenses/PkgTool-LICENSE.txt"; do
     if [[ ! -s "$notice" ]]; then
         echo "Missing upstream GPL or required redistributed third-party notice: $notice" >&2
