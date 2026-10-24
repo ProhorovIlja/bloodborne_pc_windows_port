@@ -8,6 +8,8 @@ on:
       - .github/workflows/shyt-v41-win-qt683-server.yml
       - tools/poc/yharnam/mainline/**
       - tools/poc/yharnam/parity-diagnostics-v43/**
+      - tools/poc/yharnam/friends-privacy-v47/**
+      - tools/poc/yharnam/friends-ui-v49/**
   workflow_call:
   workflow_dispatch:
 permissions:
