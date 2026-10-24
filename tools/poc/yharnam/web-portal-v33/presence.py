@@ -101,9 +101,14 @@ class Presence:
         # Reveal rough area counts only for explicit opt-in, non-PvP hunters.
         # Suppress tiny groups so a lone user cannot be tracked by region.
         by_area = Counter(o.area_key for o in active if o.share_area and not o.in_pvp)
-        most = sorted(by_area.items(), key=lambda x:(-x[1],x[0]))[:MAX_AREAS]
-        areas = [{"key":key, "hunters":n if n >= MIN_PUBLIC_AREA_POPULATION else None,
-                  "suppressed":n < MIN_PUBLIC_AREA_POPULATION}
-                 for key,n in most]
+        # Never publish a low-population area's KEY, not merely its count.
+        # A suppressed location name alone can identify a lone consenting hunter.
+        most = sorted(
+            ((key, n) for key, n in by_area.items()
+             if n >= MIN_PUBLIC_AREA_POPULATION),
+            key=lambda x: (-x[1], x[0]),
+        )[:MAX_AREAS]
+        areas = [{"key": key, "hunters": n, "suppressed": False}
+                 for key, n in most]
         return {"state": "live", "online": len(active), "areas": areas,
                 "location_precision": "area_only", "source": "authoritative_server"}
