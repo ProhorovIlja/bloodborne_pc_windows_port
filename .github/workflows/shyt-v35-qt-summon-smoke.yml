@@ -24,7 +24,7 @@ jobs:
       - name: Install Qt HTTP Server SDK and compiler
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends g++ pkg-config qt6-base-dev qt6-httpserver-dev
+          sudo apt-get install -y --no-install-recommends g++ pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev
       - name: Fail-closed pinned source compatibility tests
         run: python3 -m unittest discover -s tools/poc/yharnam/qt-http-compat-v30 -p 'test_bloodborne_headers.py' -v
       - name: Compile and run real Qt HTTP server header smoke
