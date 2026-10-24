@@ -1,0 +1,116 @@
+name: Seamless Hunt native Yharnam Together unified candidate
+on:
+  push:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/**
+      - tools/diagnostics/**
+      - .github/workflows/shyt-mainline-candidate.yml
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+      - .github/workflows/shyt-v41-win-qt683-server.yml
+      - .github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-unified-mainline
+  cancel-in-progress: true
+jobs:
+  source-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prove this is pinned Yharnam Together, NOT legacy Windows master
+        run: |
+          python3 tools/poc/yharnam/mainline/check_source_of_truth.py
+          python3 -m unittest discover -s tools/poc/yharnam/mainline -p 'test_source_of_truth.py' -v
+  windows-game:
+    needs: source-contract
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
+  windows-coop-host:
+    needs: source-contract
+    uses: ./.github/workflows/shyt-v41-win-qt683-server.yml
+  fornex-ubuntu-staging:
+    needs: source-contract
+    uses: ./.github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
+  assemble-test-kit:
+    needs: [windows-game, windows-coop-host, fornex-ubuntu-staging]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: seamless-hunt-V36-native-windows-INTERNAL
+          path: inputs/game
+      - uses: actions/download-artifact@v4
+        with:
+          name: shyt-v41-native-windows-qt683-INTERNAL
+          path: inputs/windows-server
+      - uses: actions/download-artifact@v4
+        with:
+          name: seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL
+          path: inputs/fornex
+      - name: Validate Ubuntu 24.04 Qt 6.8.3 tarball and safely combine Windows kit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          name = 'seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz'
+          root = Path('inputs/fornex')
+          checksum = (root / (name + '.sha256')).read_text('ascii').split()
+          if len(checksum) != 2 or Path(checksum[1]).name != name:
+              raise SystemExit('Ubuntu server SHA manifest malformed')
+          if hashlib.sha256((root / name).read_bytes()).hexdigest() != checksum[0]:
+              raise SystemExit('Ubuntu server checksum mismatch')
+          print('FORNEX_UBUNTU2404_QT683_SHA_PASS')
+          PY
+          python3 tools/poc/yharnam/package-v41/assemble_windows_test_kit.py \
+            --game inputs/game/bbport-windows.zip \
+            --game-sha inputs/game/bbport-windows.zip.sha256 \
+            --server inputs/windows-server/candidate-win-server-qt683.zip \
+            --server-sha inputs/windows-server/candidate-win-server-qt683.zip.sha256 \
+            --out stage/Seamless-Hunt-Windows-Coop-INTERNAL.zip
+          python3 - <<'PY'
+          import json, zipfile
+          name = 'stage/Seamless-Hunt-Windows-Coop-INTERNAL.zip'
+          with zipfile.ZipFile(name) as z:
+              assert z.testzip() is None, 'invalid ZIP'
+              required = (
+                  'bbport-windows/BLauncher.exe',
+                  'bbport-windows/Bloodborne.exe',
+                  'bbport-windows/bin/bb-probe.exe',
+                  'bbport-windows/tools/party_boss_events.py',
+                  'bbport-windows/server/shadnet.exe',
+                  'bbport-windows/server/Qt6Core.dll',
+                  'bbport-windows/backend/bb_dummy_server.py',
+              )
+              assert all(k in z.namelist() for k in required), 'incomplete kit'
+              meta = json.loads(z.read('bbport-windows/SHYT-INTERNAL-CANDIDATE-MANIFEST.json'))
+              assert meta['release_ready'] is False, 'test kit cannot claim public readiness'
+          print('SHYT_WINDOWS_GAME_LAUNCHER_NATIVE_SERVER_KIT_PASS')
+          PY
+      - name: Preserve one test-only Windows kit and one Ubuntu staging server
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-MAINLINE-WINDOWS-FORNEX-TEST-ONLY
+          path: |
+            stage/Seamless-Hunt-Windows-Coop-INTERNAL.zip
+            stage/Seamless-Hunt-Windows-Coop-INTERNAL.zip.sha256
+            inputs/fornex/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz
+            inputs/fornex/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
