@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/yharnam-dedicated-server-poc
+      - feature/yharnam-v33-hunter-web-portal
     paths:
       - tools/poc/yharnam/**
       - .github/workflows/shyt-v28-native-server-build.yml
@@ -25,7 +26,7 @@ jobs:
     timeout-minutes: 50
     env:
       PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
-      OUT_ROOT: /tmp/shyt-${{ github.run_id }}
+      OUT_ROOT: /tmp/shyt-native-qt
     steps:
       - name: Check out maintained changes
         uses: actions/checkout@v4
@@ -34,8 +35,21 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang cmake ninja-build git rsync \
+            build-essential clang cmake ninja-build git rsync ccache \
             qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite python3 pkg-config
+
+      # Ccache validates each source and command; never skips compilation tests.
+      - name: Restore compiler object cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: shyt-native-qt-ubuntu24-${{ hashFiles('tools/poc/yharnam/unified-v9/compose_sources.py', 'tools/poc/yharnam/qt-http-compat-v30/patch_http_compat.py') }}
+          restore-keys: |
+            shyt-native-qt-ubuntu24-
+      - name: Prepare bounded compiler cache
+        run: |
+          ccache --max-size=850M
+          ccache --zero-stats
 
       - name: Fetch immutable upstream and dependencies
         shell: bash
@@ -66,7 +80,8 @@ jobs:
         run: |
           set -euo pipefail
           cmake -S "$OUT_ROOT/upstream/server" -B "$OUT_ROOT/build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Compile actual server, network and database integration tests
         shell: bash
@@ -80,9 +95,49 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ccache --show-stats
           ctest --test-dir "$OUT_ROOT/build" \
-            --output-on-failure -R '^(server_link|bloodborne_world|accounts)$' \
+            --output-on-failure -R '^(server_link|bloodborne_world|accounts|bloodborne_backend_parity)$' \
             2>&1 | tee "$OUT_ROOT/server-ctest.log"
+
+      - name: Stage tested native Linux Qt shadnet as INTERNAL candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg="$OUT_ROOT/shyt-internal-linux-server"
+          mkdir -p "$pkg/bin" "$pkg/licenses" "$pkg/config-reference"
+          install -m 755 "$OUT_ROOT/build/shadnet" "$pkg/bin/shadnet"
+          install -m 644 "$OUT_ROOT/upstream/server/LICENSES/GPL-2.0-or-later.txt" "$pkg/licenses/GPL-2.0-or-later.txt"
+          # These are configuration references, NOT live production settings.
+          for file in worlds.cfg scoreboards.cfg; do
+            if [[ -f "$OUT_ROOT/build/$file" ]]; then
+              install -m 644 "$OUT_ROOT/build/$file" "$pkg/config-reference/$file"
+            else
+              install -m 644 "$OUT_ROOT/upstream/server/$file" "$pkg/config-reference/$file"
+            fi
+          done
+          ldd "$pkg/bin/shadnet" > "$pkg/SHADNET-RUNTIME-LIBS.txt"
+          if grep -Fq 'not found' "$pkg/SHADNET-RUNTIME-LIBS.txt"; then
+            echo "Bundled server links against a missing library" >&2
+            exit 1
+          fi
+          printf 'INTERNAL CI CANDIDATE; never copy into live production without staging validation.\nPinned upstream: %s\nSource revision: %s\nBuild OS: ubuntu-24.04 x86_64; dynamic Qt 6.4 runtime libraries required.\nNetwork/protocol: legacy cross-client and login not game-tested.\nRelease approved: NO\n' \
+            "$PIN" "$GITHUB_SHA" > "$pkg/NOT-READY-FOR-PRODUCTION.txt"
+          (cd "$pkg" && sha256sum bin/shadnet config-reference/* > SHA256SUMS)
+          tar -czf "$OUT_ROOT/seamless-hunt-shadnet-internal-linux-qt64.tar.gz" \
+            -C "$OUT_ROOT" shyt-internal-linux-server
+          sha256sum "$OUT_ROOT/seamless-hunt-shadnet-internal-linux-qt64.tar.gz" \
+            > "$OUT_ROOT/seamless-hunt-shadnet-internal-linux-qt64.tar.gz.sha256"
+          test -s "$OUT_ROOT/seamless-hunt-shadnet-internal-linux-qt64.tar.gz"
+      - name: Preserve tested Linux server candidate (NOT a live update)
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-shadnet-linux-qt64-INTERNAL
+          path: |
+            /tmp/shyt-native-qt/seamless-hunt-shadnet-internal-linux-qt64.tar.gz
+            /tmp/shyt-native-qt/seamless-hunt-shadnet-internal-linux-qt64.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Preserve manifest and failure diagnostics
         if: always()
@@ -90,9 +145,9 @@ jobs:
         with:
           name: seamless-hunt-v30-qt-build-diagnostics
           path: |
-            /tmp/shyt-${{ github.run_id }}/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json
-            /tmp/shyt-${{ github.run_id }}/server-build.log
-            /tmp/shyt-${{ github.run_id }}/server-ctest.log
-            /tmp/shyt-${{ github.run_id }}/build/Testing/Temporary/LastTest.log
+            /tmp/shyt-native-qt/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json
+            /tmp/shyt-native-qt/server-build.log
+            /tmp/shyt-native-qt/server-ctest.log
+            /tmp/shyt-native-qt/build/Testing/Temporary/LastTest.log
           if-no-files-found: ignore
           retention-days: 7
