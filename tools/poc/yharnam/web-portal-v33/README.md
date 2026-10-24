@@ -25,8 +25,11 @@ To become a REAL live map:
 3. Return the public projection from a same-origin HTTP endpoint
    `GET /api/public/v1/presence`. Set caching to <=5s, rate limit public
    requests, and treat unavailable/stale as unavailable rather than zero.
-4. Only publish area-level populations for consenting hunters. Suppress
-   populations below 3 and all PvP-active individual locations. Add
+4. Only publish area-level populations for consenting hunters. **Omit
+   the entire area entry (including its key/name) when fewer than 3
+   consenting non-PvP hunters occupy it.** Masking the count while
+   retaining the area name can still expose a lone hunter's location.
+   Never reveal PvP-active individual locations. Add
    team-only authenticated detailed positions in a separate endpoint after
    authorization/party membership checks, never mixed with public data.
 5. An actual **map geometry asset** must be versioned and licensed from
