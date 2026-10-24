@@ -40,7 +40,7 @@ from test_patch_rpc_budget import CPP as RPC_CPP_FIXTURE, H as RPC_H_FIXTURE
 sys.path.insert(0, str(HERE.parent/"auth-revocation-v30"))
 from test_patch_auth_revocation import DBH as AUTH_DB_H, DBC as AUTH_DB_CPP, ACCOUNT as AUTH_ACCOUNT_TEST
 sys.path.insert(0,str(HERE.parent/"qt-http-compat-v30"))
-from test_patch_http_compat import SOURCE as HTTP_FIXTURE
+from test_patch_http_compat import SOURCE as HTTP_FIXTURE, SessionUtcCompatibility
 sys.path.insert(0,str(HERE.parent/"active-session-v31"))
 from test_patch_active_session import H as ACTIVE_H_FIXTURE, CPP as ACTIVE_HUB_FIXTURE, SERVER as ACTIVE_SRV_FIXTURE
 def load(path,name):
@@ -96,6 +96,7 @@ def originals():
         compose.DATABASE_CPP: AUTH_DB_CPP,
         compose.ACCOUNT_TEST_CPP: AUTH_ACCOUNT_TEST,
         compose.HTTP_CPP: HTTP_FIXTURE,
+        compose.HTTP_SESSION_CPP: SessionUtcCompatibility.SOURCE,
         compose.SERVER_LINK_TEST: """int Relays() {
   if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
 """,
@@ -274,6 +275,8 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'CheckNow(',result[compose.SERVER_LINK_CPP])
         self.assertIn(b'MaxDbChecksPerTick',result['server/src/sh_active_session.hpp'])
         self.assertIn(b'SH-QT-HTTP-COMPAT-V30',result[compose.HTTP_CPP])
+        self.assertIn(b'SH-QT-SESSION-UTC',result[compose.HTTP_SESSION_CPP])
+        self.assertIn(b'Qt::UTC',result[compose.HTTP_SESSION_CPP])
         self.assertIn(b'QT_VERSION_CHECK(6, 8, 0)',result[compose.HTTP_CPP])
         self.assertIn(b'QHttpServerResponder::StatusCode::NotFound',result[compose.HTTP_CPP])
         self.assertIn(b'ChangedAccountOnSameEndpoint()',result[compose.SERVER_LINK_TEST])
@@ -310,6 +313,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V29 bounded local RPC backpressure", " ".join(manifest["applied"]))
         self.assertIn("V30 live DB verification", " ".join(manifest["applied"]))
         self.assertIn("Qt 6.4 / modern WebAPI ABI compatibility", " ".join(manifest["applied"]))
+        self.assertIn("Qt 6.4 / modern WebAPI session invitation UTC", " ".join(manifest["applied"]))
         self.assertIn("V31.1 staging: pin active credential fingerprint", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
@@ -422,6 +426,12 @@ class AllPatches(unittest.TestCase):
             'for (const auto& linked : result.linked) {',
             'for (const auto& linked_player : result.linked) {')
         with self.assertRaises(ValueError):
+            compose.compose(source,ARCHIVES,v8)
+    def test_qt_session_timestamp_drift_refused(self):
+        source=originals()
+        source[compose.HTTP_SESSION_CPP]=source[compose.HTTP_SESSION_CPP].replace(
+            'QTimeZone::UTC','QTimeZone::utc()')
+        with self.assertRaisesRegex(ValueError,'session UTC timestamp overload'):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
