@@ -233,6 +233,7 @@ def run_coop():
     )
     fixture[compose.SERVER_WORLD_H] = (
         "#include <map>\n#include <QList>\n" + fixture[compose.SERVER_WORLD_H]
+        + "    void SendLobby(qint64 now_ms);\n"
     )
     fixture[compose.LINK_SERVER_CPP] = (
         "#include <QRandomGenerator>\n" + fixture[compose.LINK_SERVER_CPP]
