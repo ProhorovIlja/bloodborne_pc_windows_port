@@ -52,3 +52,25 @@ def transform(s):
             responder.write(QJsonDocument(body), QHttpServerResponder::StatusCode::NotFound);''',
             'portable JSON 404')
     return s
+
+
+SESSION_PATH = "server/src/webapi_routes_session.cpp"
+
+def transform_session(s):
+    """Keep UTC invitation timestamps on Qt6.4 and Qt6.8+."""
+    if "SH-QT-SESSION-UTC" in s:
+        raise ValueError("Qt UTC compatibility already applied")
+    s = one(s,
+        '#include <QTimeZone>',
+        '#include <QTimeZone>\n#include <QtGlobal> // SH-QT-SESSION-UTC',
+        'session Qt version include')
+    s = one(s,
+        '    return QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::UTC).toString(Qt::ISODate);',
+        '''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    // Qt 6.4: QTimeZone::UTC does not exist; Qt::UTC yields the same Z timestamp.
+    return QDateTime::fromMSecsSinceEpoch(ms, Qt::UTC).toString(Qt::ISODate);
+#else
+    return QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::UTC).toString(Qt::ISODate);
+#endif''',
+        'session UTC timestamp overload')
+    return s
