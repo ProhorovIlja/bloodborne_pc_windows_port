@@ -33,6 +33,7 @@ jobs:
           git -C pinned-upstream submodule update --init --depth 1 -- server/externals/protobuf
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path pinned-upstream/server/externals/protobuf/CMakeLists.txt)) { throw 'No protobuf' }
       - uses: actions/setup-python@v5
+        id: py312
         with:
           python-version: '3.12'
       - name: Compose unchanged pinned native source plus verified patches
@@ -60,7 +61,15 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "$env:QT_ROOT_DIR/lib/cmake/Qt6/Qt6Config.cmake")) { throw 'Qt 6.8.3 kit missing' }
-          cmake -S pinned-upstream/server -B build-native-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" -Dprotobuf_BUILD_TESTS=OFF
+          # Qt install action can replace PATH's Python with 3.14.x.
+          # The pinned backend parity fixtures are certified on Python 3.12:
+          # explicitly pass that interpreter to FindPython3, never skip parity.
+          $testPython = '${{ steps.py312.outputs.python-path }}'
+          & $testPython --version
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $testPython)) {
+            throw 'Missing verified Python 3.12 for backend parity tests'
+          }
+          cmake -S pinned-upstream/server -B build-native-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" "-DPython3_EXECUTABLE=$testPython" -Dprotobuf_BUILD_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { throw 'Qt server configuration failed' }
           cmake --build build-native-windows --parallel 2 --target shadnet test_server_link test_bloodborne_world test_accounts
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path build-native-windows/shadnet.exe)) { throw 'Windows shadnet build failed' }
