@@ -83,3 +83,14 @@ V28 inserts an **opt-in** fixed-memory per-IP and global token budget immediatel
 The native C++20 policy test and five local Python transform tests passed; the C++ test also passed under UndefinedBehaviorSanitizer, including address collisions and extreme time values. A **new GitHub Actions workflow** `.github/workflows/shyt-v28-native-server-build.yml` was added to compile the actual pinned Qt/Linux server and Qt networking/world tests, but **no successful workflow run has been observed**. Draft PR #2 was opened for review and CI without merging. No production Fornex deployment.
 
 **Still required:** per-IP/total admission tuning under real NAT connections and login storms, bounds on account-sign-in cache and RPC pending buffer, full Qt test results, signed/verified identities, and signed release pipeline. This protects server CPU but does not prevent volumetric traffic or a botnet starving valid logins.
+
+## V29 follow-up: finite RPC buffers and credential cache (2026-10-24)
+
+The pinned server's `LinkServer::OnRpc` appended bytes indefinitely to `RpcEnd.pending` while its local backend socket was not connected; even a connected `QTcpSocket` could accumulate queued output via `write` without checking `bytesToWrite`. Long-lived `m_signedIn` accumulated cached successful account hashes without an eviction policy.
+
+V29 introduces a 2 MiB backpressure limit for pending RPC and queued Qt TCP writes; it checks BEFORE constructing the copied QByteArray, closes over-budget sockets and refuses more data for that tunnel until a new `Opened` event. The successful credential hash cache is limited to 2048 entries; an evicted account is authenticated again using the normal database path. No new threads or timers.
+
+V29 was integrated into the V3–V29 compositor, the native Qt build workflow and source-safety CI. Isolated **5/5 Python tests** and a C++20 standalone unit with `-Wall -Wextra -Wpedantic -Werror -fsanitize=undefined` passed locally; source patch anchors were each verified against exactly one occurrence in the pinned server. Qt game-link server and real cross-client sessions are **not compiled/tested yet** in the present environment. The 2 MiB queue and 2048 account thresholds are provisional. Full load tests and cache invalidation after credential rotation remain open.
+
+Implementation: `tools/poc/yharnam/rpc-budget-v29/`.
+
