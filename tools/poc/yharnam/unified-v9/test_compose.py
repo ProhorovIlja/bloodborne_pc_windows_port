@@ -41,6 +41,8 @@ sys.path.insert(0, str(HERE.parent/"auth-revocation-v30"))
 from test_patch_auth_revocation import DBH as AUTH_DB_H, DBC as AUTH_DB_CPP, ACCOUNT as AUTH_ACCOUNT_TEST
 sys.path.insert(0,str(HERE.parent/"qt-http-compat-v30"))
 from test_patch_http_compat import SOURCE as HTTP_FIXTURE
+sys.path.insert(0,str(HERE.parent/"active-session-v31"))
+from test_patch_active_session import H as ACTIVE_H_FIXTURE, CPP as ACTIVE_HUB_FIXTURE, SERVER as ACTIVE_SRV_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -73,8 +75,8 @@ def originals():
             '#include "server_link.h"\n' + LOGIN_CPP_FIXTURE
         ) + '''    const bool again = members.contains(from.Key());
     Link& link = members[from.Key()];
-''',
-        compose.SERVER_LINK_H: LOGIN_H_FIXTURE +
+''' + ACTIVE_HUB_FIXTURE,
+        compose.SERVER_LINK_H: LOGIN_H_FIXTURE + ACTIVE_H_FIXTURE +
             '        QList<Endpoint> gone; // links forgotten\n',
         compose.LINK_SERVER_CPP: '#include "link_server.h"\n' + RPC_CPP_FIXTURE.replace(
             '    m_signedIn.insert(online_id, hash);',
@@ -87,7 +89,7 @@ def originals():
     m_signedIn.insert(online_id, hash);''') + (
             "    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from\n"
             "    // its hello.\n"
-            "    for (const auto& linked : result.linked) {\n"),
+            "    for (const auto& linked : result.linked) {\n") + ACTIVE_SRV_FIXTURE,
         compose.LINK_SERVER_H: RPC_H_FIXTURE +
             '\n    QHash<QByteArray, QByteArray> m_signedIn; // player id -> its secret\'s hash, once signed in\n',
         compose.DATABASE_H: AUTH_DB_H,
@@ -261,6 +263,12 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'if (!user || user->banned)',result[compose.LINK_SERVER_CPP])
         self.assertIn(b'int RevokedDatabaseCredentialsAreVisible(const QString &folder)',result[compose.ACCOUNT_TEST_CPP])
         self.assertIn(b'CanTrustCache',result['server/src/sh_auth_revocation.hpp'])
+        self.assertIn(b'SH-ACTIVE-SESSION-V31',result[compose.SERVER_LINK_CPP])
+        self.assertIn(b'SetActiveAccountAllowed',result[compose.SERVER_LINK_H])
+        self.assertIn(b'RevokedActiveAccountExitsWorld',result[compose.SERVER_LINK_TEST])
+        self.assertIn(b'SeamlessHunt::ActiveSession::Enabled()',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'CheckNow(',result[compose.SERVER_LINK_CPP])
+        self.assertIn(b'MaxDbChecksPerTick',result['server/src/sh_active_session.hpp'])
         self.assertIn(b'SH-QT-HTTP-COMPAT-V30',result[compose.HTTP_CPP])
         self.assertIn(b'QT_VERSION_CHECK(6, 8, 0)',result[compose.HTTP_CPP])
         self.assertIn(b'QHttpServerResponder::StatusCode::NotFound',result[compose.HTTP_CPP])
@@ -298,6 +306,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V29 bounded local RPC backpressure", " ".join(manifest["applied"]))
         self.assertIn("V30 live DB verification", " ".join(manifest["applied"]))
         self.assertIn("Qt 6.4 / modern WebAPI ABI compatibility", " ".join(manifest["applied"]))
+        self.assertIn("V31 staging: opt-in active account revocation", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -395,6 +404,13 @@ class AllPatches(unittest.TestCase):
         source[compose.HTTP_CPP]=source[compose.HTTP_CPP].replace(
             'if (!m_http->bind(m_tcp.get()))','if (!m_http->bind(nullptr))')
         with self.assertRaisesRegex(ValueError,"bind signature"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v31_status_tick_anchor_drift_refused(self):
+        source=originals()
+        source[compose.SERVER_LINK_CPP]=source[compose.SERVER_LINK_CPP].replace(
+            "for (const Link& link : std::as_const(members))",
+            "for (const Link& link : stale_members)")
+        with self.assertRaisesRegex(ValueError,"bounded verification tick"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
