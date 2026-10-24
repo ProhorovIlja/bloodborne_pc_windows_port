@@ -35,7 +35,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             build-essential clang cmake ninja-build git rsync \
-            qt6-base-dev qt6-httpserver-dev libqt6sql6-sqlite python3 pkg-config
+            qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite python3 pkg-config
 
       - name: Fetch immutable upstream and dependencies
         shell: bash
@@ -47,7 +47,8 @@ jobs:
           git -C "$OUT_ROOT/upstream" fetch --depth=1 origin "$PIN"
           git -C "$OUT_ROOT/upstream" checkout --detach FETCH_HEAD
           test "$(git -C "$OUT_ROOT/upstream" rev-parse HEAD)" = "$PIN"
-          git -C "$OUT_ROOT/upstream" submodule update --init --recursive --depth=1
+          git -C "$OUT_ROOT/upstream" submodule update --init --depth=1 server/externals/protobuf
+          test -f "$OUT_ROOT/upstream/server/externals/protobuf/CMakeLists.txt"
 
       - name: Compose immutable V3-V30 source overlay
         shell: bash
