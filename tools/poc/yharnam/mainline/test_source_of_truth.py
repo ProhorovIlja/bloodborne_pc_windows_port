@@ -52,6 +52,19 @@ class MainlineContracts(unittest.TestCase):
                 "needs: [windows-game, windows-coop-host, fornex-ubuntu-staging]",
                 "needs: windows-game"))
 
+    def test_windows_reference_unicode_parity_runs_with_utf8_stdout(self):
+        # On Windows CI, a Unicode display name can make Python's cp1252
+        # stdout throw in bb_dummy_server.Handler.log_message, disconnecting
+        # the client before native-vs-reference parity can be measured.
+        source = (p.REPO_ROOT / self.good["mainline_workflows"]["windows_server"]).read_text("utf-8")
+        step = source.split("      - name: Validate backend parity, accounts and world\\n", 1)
+        self.assertEqual(len(step), 2, "native server parity test must be present")
+        parity = step[1].split("      - name: ", 1)[0]
+        self.assertIn("PYTHONIOENCODING: utf-8", parity)
+        self.assertIn("ctest --test-dir build-native-windows --output-on-failure", parity)
+        self.assertIn("bloodborne_backend_parity", parity)
+        self.assertIn("Windows backend parity tests failed", parity)
+
     def test_v1_2_cannot_enter_without_pinned_review(self):
         changed = copy.deepcopy(self.good)
         changed["source_of_truth"]["commit"] = changed["source_of_truth"]["newer_upstream_review"]["commit"]
