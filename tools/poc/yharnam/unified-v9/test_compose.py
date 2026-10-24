@@ -190,10 +190,31 @@ def fetch_newest_release(timeout=15):
 def download_update(release):
     if digest.hexdigest() != want:
         return None
+SHADNET_PORT, WEBAPI_PORT, MATCHING_PORT, BACKEND_PORT = 31313, 31315, 31314, 20443
+def host_overrides(host_ip):
+    return json.dumps({GAME_SERVER: f'http://{host_ip}:{BACKEND_PORT}'}, indent=2) + '\\n'
+def game_environment(env, settings, install, root):
+    host = settings['host_ip']
+    env.update({
+        'BB_SHADNET_SERVER': f'{host}:{MATCHING_PORT}', 'BB_SHADNET_WEBAPI': f'http://{host}:{WEBAPI_PORT}',
+    })
+    return env
+def report_request(host_ip, path, data, player, secret):
+    return urllib.request.Request(f'http://{host_ip}:{WEBAPI_PORT}/bb/report/{Path(path).name}', data=data,
+                                  method='POST')
+def send_reports(install, settings, timeout=30):
+    log = Path(install) / 'user' / 'log'
+    sent = []
+    for path in reports_to_send(log):
+        request = report_request(settings['host_ip'], path, path.read_bytes(), settings['account'],
+                                 settings['password'])
+    return len(sent)
 """,
         compose.LAUNCHER: """CONFIG=('bbport-launcher-coop' if COOP_TEST else 'bbport-launcher')
 def fetch_update_release(beta=False):
     pass
+def run_coop():
+    result = bbport_coop.host_overrides(settings['host_ip'])
 """,
     }
 
@@ -205,6 +226,10 @@ class AllPatches(unittest.TestCase):
         # Fixed counts from UI-only composition are no longer valid.
         self.assertGreater(len(result),len(source))
         self.assertTrue(set(compose.ARCHIVES).issuperset({"dbno","ui"}))
+        self.assertIn(b'SHYT-V46-EXPLICIT-REMOTE-PORTS', result[compose.COOP])
+        self.assertIn(b'shyt_remote_ports(install, host)', result[compose.COOP])
+        self.assertIn(b'bbport_coop.host_overrides(settings[\'host_ip\'], PORT_DIR)', result[compose.LAUNCHER])
+        self.assertIn('V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher', manifest['applied'])
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
