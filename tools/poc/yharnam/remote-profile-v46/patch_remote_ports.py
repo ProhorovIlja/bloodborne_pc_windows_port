@@ -39,7 +39,7 @@ def shyt_remote_ports(install, host_ip):
                'webapi_tcp_port', 'backend_tcp_port'}
     if not isinstance(data, dict) or set(data) != allowed:
         raise ValueError('Invalid Seamless Hunt network profile keys')
-    if data['schema'] != 1 or data['opt_in'] is not True:
+    if type(data['schema']) is not int or data['schema'] != 1 or data['opt_in'] is not True:
         raise ValueError('Staging server connection requires explicit opt-in')
     if not isinstance(data['server_ipv4'], str) or data['server_ipv4'] != host_ip:
         raise ValueError('The staging profile IPv4 must match Host IP in the launcher')
