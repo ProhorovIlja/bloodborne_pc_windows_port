@@ -70,6 +70,33 @@ reversible migration is preferable to permanent lock-in.
 
 [Independent co-op approaches, evidence rules and migration plan](docs/COOP_INTEROPERABILITY_AND_MIGRATION.md).
 
+## Transport and gameplay feature priorities
+
+**The current Yharnam Together team mode is server-relayed UDP, not a
+fully direct player-to-player connection.** The upstream
+[`SERVER_COOP_PLAN.md`](https://github.com/lKaniel/bloodborne-server/blob/77e350743a7cb4524cfcc1782fb6e3af64e25b15/docs/SERVER_COOP_PLAN.md)
+documents one UDP link per hunter to shadNet, server-forwarded game packets
+and an authoritative shared world. Older direct-P2P notes refer to a
+superseded development stage.
+
+A future **opt-in hybrid P2P / relay fallback** must preserve world
+authority, reconnects, privacy, NAT traversal and protocol compatibility.
+It is not yet implemented or benchmarked. Our machine-readable
+[transport and feature review](tools/poc/yharnam/mainline/transport_and_feature_priorities.json)
+has hard-fail tests preventing unsupported P2P or low-server-load claims.
+The [game traffic capacity tool](tools/diagnostics/game_traffic_capacity.py)
+can model relay fanout from **assumed** bandwidth, but cannot claim real
+Fornex CPU, RTT or game traffic until actual instrumentation is recorded.
+
+We review design concepts from **LukeYui's Elden Ring Seamless Co-op**,
+**Demon's Souls**, **Dark Souls**, **Sekiro** and **Elden Ring**, as well as
+other Bloodborne forks. These are **ideas for future, license-reviewed
+implementation, not claims that we imported their source code**.
+Priority is strictly: (P0) boot/launcher/joins/saves/NPCs/doors/stable long
+sessions and network measurements, (P1) invasions and experimental hybrid
+transport, (P2) optional training, camera, filters and accessibility.
+Experimental gameplay additions remain opt-in until validated.
+
 ## Game/launcher/server gates
 
 The components that **must** become one complete, usable test bundle are:
