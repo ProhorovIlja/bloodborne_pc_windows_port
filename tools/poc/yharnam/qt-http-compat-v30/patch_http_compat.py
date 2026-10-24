@@ -74,3 +74,111 @@ def transform_session(s):
 #endif''',
         'session UTC timestamp overload')
     return s
+
+
+STATS_PATH = "server/src/stats_server.cpp"
+BACKEND_PATH = "server/src/bloodborne_backend_server.cpp"
+
+def transform_stats(s):
+    """Qt6.4/6.8+ stats HTTP listener and 404 JSON handlers."""
+    if "SH-QT-STATS-PORTABLE" in s:
+        raise ValueError("Qt stats compatibility already applied")
+    s = one(s, '#include <QHostAddress>',
+        '#include <QHostAddress>\n#include <QtGlobal> // SH-QT-STATS-PORTABLE',
+        'stats Qt version include')
+    s = one(s,
+'''    if (!m_http->bind(m_tcp.get())) {
+        qCritical() << "StatsServer: QHttpServer failed to attach to listener";
+        return false;
+    }''',
+'''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    m_http->bind(m_tcp.get()); // Qt 6.4 returns void
+#else
+    if (!m_http->bind(m_tcp.get())) {
+        qCritical() << "StatsServer: QHttpServer failed to attach to listener";
+        return false;
+    }
+#endif''', 'stats HTTP binding')
+    s = one(s,
+'''    m_http->setMissingHandler(
+        this, [](const QHttpServerRequest& req, QHttpServerResponder& responder) {''',
+'''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    m_http->setMissingHandler(
+        [](const QHttpServerRequest& req, QHttpServerResponder&& responder) {
+#else
+    m_http->setMissingHandler(
+        this, [](const QHttpServerRequest& req, QHttpServerResponder& responder) {
+#endif''', 'stats missing-handler')
+    s = one(s,
+'''            responder.sendResponse(QHttpServerResponse{"application/json", toJson(body),
+                                                       QHttpServerResponder::StatusCode::NotFound});''',
+'''            responder.write(QJsonDocument(body), QHttpServerResponder::StatusCode::NotFound);''',
+'stats 404 JSON')
+    return s
+
+
+def transform_backend(s):
+    """Preserve backend MIME, status and custom headers on both Qt generations."""
+    if "SH-QT-BACKEND-PORTABLE" in s:
+        raise ValueError("Qt backend compatibility already applied")
+    s = one(s, '#include <QHttpHeaders>',
+'''#include <QtGlobal> // SH-QT-BACKEND-PORTABLE
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+#include <QHttpHeaders>
+#endif''', 'backend headers include')
+    s = one(s,
+'''    m_http->setMissingHandler(this, [this](const QHttpServerRequest& request,
+                                           QHttpServerResponder& responder) {''',
+'''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    m_http->setMissingHandler([this](const QHttpServerRequest& request,
+                                     QHttpServerResponder&& responder) {
+#else
+    m_http->setMissingHandler(this, [this](const QHttpServerRequest& request,
+                                           QHttpServerResponder& responder) {
+#endif''', 'backend missing-handler')
+    s = one(s,
+'''        QHttpServerResponse response(reply.contentType, reply.body,
+                                     static_cast<QHttpServerResponse::StatusCode>(reply.status));
+        if (!reply.headers.isEmpty()) {
+            QHttpHeaders headers = response.headers();
+            for (const auto& [name, value] : reply.headers) {
+                headers.append(name, value);
+            }
+            response.setHeaders(std::move(headers));
+        }
+        responder.sendResponse(response);''',
+'''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+        // Qt 6.4 has no QHttpHeaders/setHeaders, but supports HeaderList.
+        // Preserve Content-Type, status and every backend-defined header.
+        QHttpServerResponder::HeaderList headers;
+        headers.append({QByteArrayLiteral("Content-Type"), reply.contentType});
+        for (const auto& [name, value] : reply.headers)
+            headers.append({name, value});
+        responder.write(reply.body, headers,
+                        static_cast<QHttpServerResponder::StatusCode>(reply.status));
+#else
+        QHttpServerResponse response(reply.contentType, reply.body,
+                                     static_cast<QHttpServerResponse::StatusCode>(reply.status));
+        if (!reply.headers.isEmpty()) {
+            QHttpHeaders headers = response.headers();
+            for (const auto& [name, value] : reply.headers) {
+                headers.append(name, value);
+            }
+            response.setHeaders(std::move(headers));
+        }
+        responder.sendResponse(response);
+#endif''', 'backend HTTP response headers')
+    s = one(s,
+'''    if (!m_http->bind(m_tcp.get())) {
+        qCritical() << "Backend: QHttpServer failed to attach to listener";
+        return false;
+    }''',
+'''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    m_http->bind(m_tcp.get()); // Qt 6.4 returns void
+#else
+    if (!m_http->bind(m_tcp.get())) {
+        qCritical() << "Backend: QHttpServer failed to attach to listener";
+        return false;
+    }
+#endif''', 'backend HTTP binding')
+    return s
