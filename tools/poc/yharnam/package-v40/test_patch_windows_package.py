@@ -25,6 +25,7 @@ class PackagerTests(unittest.TestCase):
         self.assertIn("event_patcher=../tools/re/party_boss_events.py", result)
         self.assertIn('cp "$event_patcher" "$dest/tools/party_boss_events.py"', result)
         self.assertIn('cp "$credits" "$dest/CREDITS.txt"', result)
+        self.assertIn('cp "$profile_example" "$dest/tools/SeamlessHunt-network-profile.example.json"', result)
         self.assertIn('Missing downstream author and copyright notices', result)
         self.assertIn('Missing upstream GPL or required redistributed third-party notice', result)
         for required in ('FireBurn-FSR-Vulkan-LICENSE.txt', 'AMD-FidelityFX-SDK-LICENSE.txt',
