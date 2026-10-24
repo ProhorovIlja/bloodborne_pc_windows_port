@@ -65,6 +65,28 @@
       ],
       "mixed_frame_policy": "if any entry denied, keep whole native frame on shadNet",
       "current_v10_filter": "existing game V10 Pass-only filter remains unmodified; no movement offload in a shipping binary"
+    },
+    "peer_game_stream_offload": {
+      "intent": "every upstream peer-forwarded game channel should use Direct whenever authorized; server-owned world and Drop channels must not bypass shadNet",
+      "pinned_packet_policy": "lKaniel/bloodborne-server server/coop/packet_routes.h at 77e350743a7cb4524cfcc1782fb6e3af64e25b15",
+      "runtime_status": "source_only_not_wired_to_live_network",
+      "eligible_categories": [
+        "NativeChannelPolicy::Pass",
+        "NativeChannelPolicy::SameMap after verified current map and owner role"
+      ],
+      "always_server_or_drop": [
+        "0x2C map item ownership",
+        "0x2F world correction",
+        "0x27 boss kick Drop",
+        "account/auth/session/world control envelopes"
+      ],
+      "reliable_stream_condition": "verified complete per-peer GameLink sender/instance/seq/ACK/retransmit and transport handover, not UDP reachability alone",
+      "ack_only_condition": "authenticated game frame and verified reliable stream handover",
+      "frame_parser_source": "tools/poc/yharnam/hybrid-transport-v52/sh_game_frame_offload.hpp",
+      "path_selector_source": "tools/poc/yharnam/hybrid-transport-v52/sh_hybrid_selector.hpp",
+      "peer_packet_mac_and_endpoint_rendezvous": "not_implemented",
+      "actual_game_and_server_link_integration": "not_implemented",
+      "legacy_compatibility": "fallback to shadNet relay; never require a Direct-only connection"
     }
   },
   "benchmarks": {
@@ -177,7 +199,9 @@
         "measured_network_load",
         "hybrid_direct_p2p_relay_fallback_live_verified",
         "authenticated_same_map_movement_direct_live_verified",
-        "two_hundred_client_relay_fallback_load_test"
+        "two_hundred_client_relay_fallback_load_test",
+        "all_peer_forwarded_game_traffic_direct_when_authorized",
+        "reliable_game_link_direct_stream_migration_tested"
       ]
     },
     {

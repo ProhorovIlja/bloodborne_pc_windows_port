@@ -197,6 +197,25 @@ class MainlineContracts(unittest.TestCase):
         with self.assertRaisesRegex(p.SourceDrift, "measured live network"):
             p.check_transport_feature_policy(changed)
 
+    def test_full_direct_peer_stream_stays_a_real_release_blocker(self):
+        policy = json.loads(p.POLICY.with_name(
+            "transport_and_feature_priorities.json").read_text("utf-8"))
+        p.check_transport_feature_policy(policy)
+        fake = copy.deepcopy(policy)
+        fake["target_transport"]["peer_game_stream_offload"]["runtime_status"] = "live"
+        with self.assertRaisesRegex(p.SourceDrift, "broad Direct P2P"):
+            p.check_transport_feature_policy(fake)
+        fake = copy.deepcopy(policy)
+        fake["target_transport"]["peer_game_stream_offload"][
+            "actual_game_and_server_link_integration"] = "implemented"
+        with self.assertRaisesRegex(p.SourceDrift, "not wired"):
+            p.check_transport_feature_policy(fake)
+        fake = copy.deepcopy(policy)
+        fake["priority_order"][0]["features"].remove(
+            "reliable_game_link_direct_stream_migration_tested")
+        with self.assertRaisesRegex(p.SourceDrift, "reliable_game_link"):
+            p.check_transport_feature_policy(fake)
+
     def test_200_player_capacity_and_real_movement_offload_cannot_be_faked(self):
         policy = json.loads(p.POLICY.with_name(
             "transport_and_feature_priorities.json").read_text("utf-8"))

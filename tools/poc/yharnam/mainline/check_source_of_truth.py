@@ -105,6 +105,16 @@ def check_transport_feature_policy(policy: dict) -> None:
             or movement.get("current_v10_filter") !=
                 "existing game V10 Pass-only filter remains unmodified; no movement offload in a shipping binary"):
         raise SourceDrift("high-volume movement Direct P2P is source-only until verified")
+    bulk = target.get("peer_game_stream_offload", {})
+    if (bulk.get("runtime_status") != "source_only_not_wired_to_live_network"
+            or bulk.get("frame_parser_source") !=
+                "tools/poc/yharnam/hybrid-transport-v52/sh_game_frame_offload.hpp"
+            or bulk.get("peer_packet_mac_and_endpoint_rendezvous") != "not_implemented"
+            or bulk.get("actual_game_and_server_link_integration") != "not_implemented"
+            or "NativeChannelPolicy::Pass" not in bulk.get("eligible_categories", [])
+            or "NativeChannelPolicy::SameMap after verified current map and owner role"
+               not in bulk.get("eligible_categories", [])):
+        raise SourceDrift("broad Direct P2P game traffic is not wired or game verified")
     benchmarks = policy.get("benchmarks", {})
     offload = benchmarks.get("relay_offload_accounting", {})
     if (offload.get("verified_live_movement_offload") is not False
@@ -125,7 +135,9 @@ def check_transport_feature_policy(policy: dict) -> None:
             or [s.get("priority") for s in stages] != [0, 1, 2]):
         raise SourceDrift("P0 core stability must precede optional gameplay changes")
     core = set(stages[0].get("features", []))
-    for requirement in ("authenticated_same_map_movement_direct_live_verified",
+    for requirement in ("all_peer_forwarded_game_traffic_direct_when_authorized",
+                        "reliable_game_link_direct_stream_migration_tested",
+                        "authenticated_same_map_movement_direct_live_verified",
                         "two_hundred_client_relay_fallback_load_test",
                         "hybrid_direct_p2p_relay_fallback_live_verified",
                         "native_game_boot", "reliable_login_and_discovery",
