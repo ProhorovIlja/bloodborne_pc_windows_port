@@ -37,6 +37,8 @@ sys.path.insert(0, str(HERE.parent/"login-admission-v28"))
 from test_patch_login_admission import CPP as LOGIN_CPP_FIXTURE, HEADER as LOGIN_H_FIXTURE
 sys.path.insert(0, str(HERE.parent/"rpc-budget-v29"))
 from test_patch_rpc_budget import CPP as RPC_CPP_FIXTURE, H as RPC_H_FIXTURE
+sys.path.insert(0, str(HERE.parent/"auth-revocation-v30"))
+from test_patch_auth_revocation import DBH as AUTH_DB_H, DBC as AUTH_DB_CPP, ACCOUNT as AUTH_ACCOUNT_TEST
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -72,11 +74,23 @@ def originals():
 ''',
         compose.SERVER_LINK_H: LOGIN_H_FIXTURE +
             '        QList<Endpoint> gone; // links forgotten\n',
-        compose.LINK_SERVER_CPP: RPC_CPP_FIXTURE + (
+        compose.LINK_SERVER_CPP: RPC_CPP_FIXTURE.replace(
+            '    m_signedIn.insert(online_id, hash);',
+            '''    const auto known = m_signedIn.constFind(online_id);
+    if (known != m_signedIn.constEnd())
+        return *known == hash;
+    const bool make = !m_shared->config || m_shared->config->IsMakingAccountsAtSignIn();
+    if (!user)
+        return false;
+    m_signedIn.insert(online_id, hash);''') + (
             "    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from\n"
             "    // its hello.\n"
             "    for (const auto& linked : result.linked) {\n"),
-        compose.LINK_SERVER_H: RPC_H_FIXTURE,
+        compose.LINK_SERVER_H: RPC_H_FIXTURE +
+            '\n    QHash<QByteArray, QByteArray> m_signedIn; // player id -> its secret\'s hash, once signed in\n',
+        compose.DATABASE_H: AUTH_DB_H,
+        compose.DATABASE_CPP: AUTH_DB_CPP,
+        compose.ACCOUNT_TEST_CPP: AUTH_ACCOUNT_TEST,
         compose.SERVER_LINK_TEST: """int Relays() {
   if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
 """,
@@ -176,7 +190,7 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+18)  # V29 adds one bounded-RPC policy header
+        self.assertEqual(len(result),len(source)+19)  # V30 adds live DB credential status policy header
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
@@ -235,6 +249,12 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'MustEvictAuthCache(',result[compose.LINK_SERVER_CPP])
         self.assertIn(b'bool blocked = false',result[compose.LINK_SERVER_H])
         self.assertIn(b'MaxBufferedRpcBytes',result['server/src/sh_rpc_budget.hpp'])
+        self.assertIn(b'CurrentCredentialStatus',result[compose.DATABASE_H])
+        self.assertIn(b'CurrentCredentialStatus',result[compose.DATABASE_CPP])
+        self.assertIn(b'db_hash_at_signin',result[compose.LINK_SERVER_H])
+        self.assertIn(b'if (!user || user->banned)',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'RevokedDatabaseCredentialsAreVisible()',result[compose.ACCOUNT_TEST_CPP])
+        self.assertIn(b'CanTrustCache',result['server/src/sh_auth_revocation.hpp'])
         self.assertIn(b'ChangedAccountOnSameEndpoint()',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'retired_online_ids.size() == 1',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
@@ -267,6 +287,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V27 stale virtual-address cleanup", " ".join(manifest["applied"]))
         self.assertIn("V28 opt-in bounded pre-database Hello admission", " ".join(manifest["applied"]))
         self.assertIn("V29 bounded local RPC backpressure", " ".join(manifest["applied"]))
+        self.assertIn("V30 live DB verification", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -352,6 +373,12 @@ class AllPatches(unittest.TestCase):
         source[compose.LINK_SERVER_CPP]=source[compose.LINK_SERVER_CPP].replace(
             "end.pending.append(data)", "end.pending.push_back(data)")
         with self.assertRaisesRegex(ValueError,"bounded rpc data and socket write"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v30_changed_cached_auth_anchor_rejected(self):
+        source=originals()
+        source[compose.LINK_SERVER_H]=source[compose.LINK_SERVER_H].replace(
+            "QHash<QByteArray, QByteArray> m_signedIn", "QMap<QByteArray, QByteArray> m_signedIn")
+        with self.assertRaisesRegex(ValueError,"cached credential representation"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
