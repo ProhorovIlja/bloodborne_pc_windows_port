@@ -57,7 +57,7 @@ def originals():
             '#include "bbport_settings.h"', MAP_RANGE_FIXTURE),
         compose.MAPART: MAP_DATA_FIXTURE,
         compose.SAVE_EDITOR: SAVE_EDITOR_FIXTURE,
-        compose.SAVE_EDITOR_H: '#include <vector>\n' + SAVE_HEADER_FIXTURE,
+        compose.SAVE_EDITOR_H: SAVE_HEADER_FIXTURE,
         compose.SERVER_BOARDS: SERVER_BOARDS_FIXTURE,
         compose.SERVER_WORLD: SERVER_WORLD_FIXTURE + (
             '    // The same run saying hello again (a guest whose game took the session host\'s role: phase 7).\n'
