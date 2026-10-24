@@ -21,6 +21,37 @@ class MainlineContracts(unittest.TestCase):
     def test_real_repository_and_merged_workflows(self):
         p.check_workspace(p.REPO_ROOT, self.good)
 
+    def test_reusable_native_jobs_are_connected_from_canonical_mainline(self):
+        meta = self.good
+        workflows = {
+            key: (p.REPO_ROOT / relative).read_text("utf-8")
+            for key, relative in meta["mainline_workflows"].items()
+        }
+        orchestrator = (p.REPO_ROOT / ".github/workflows/shyt-mainline-candidate.yml").read_text("utf-8")
+        # Deliberately branch-agnostic reusable jobs are accepted through their
+        # canonical caller, not because they happen to contain a branch string.
+        p.check_workflow_wiring(meta, workflows, orchestrator)
+        self.assertNotIn(p.CANONICAL, workflows["windows_game"])
+
+        with self.assertRaisesRegex(p.SourceDrift, "entry point"):
+            p.check_workflow_wiring(meta, workflows, orchestrator.replace(
+                f"branches: [{p.CANONICAL}]", "branches: [master]"))
+        with self.assertRaisesRegex(p.SourceDrift, "disconnected"):
+            p.check_workflow_wiring(meta, workflows, orchestrator.replace(
+                f"uses: ./{meta['mainline_workflows']['windows_game']}",
+                "uses: ./.github/workflows/legacy-client.yml"))
+        without_pin = dict(workflows)
+        without_pin["linux_server"] = without_pin["linux_server"].replace(p.PIN, "0" * 40)
+        with self.assertRaisesRegex(p.SourceDrift, "pins"):
+            p.check_workflow_wiring(meta, without_pin, orchestrator)
+        with self.assertRaisesRegex(p.SourceDrift, "event/kit"):
+            p.check_workflow_wiring(meta, workflows, orchestrator.replace(
+                "test_patch_windows_package.py", "skipped_package_test.py"))
+        with self.assertRaisesRegex(p.SourceDrift, "assemble before"):
+            p.check_workflow_wiring(meta, workflows, orchestrator.replace(
+                "needs: [windows-game, windows-coop-host, fornex-ubuntu-staging]",
+                "needs: windows-game"))
+
     def test_v1_2_cannot_enter_without_pinned_review(self):
         changed = copy.deepcopy(self.good)
         changed["source_of_truth"]["commit"] = changed["source_of_truth"]["newer_upstream_review"]["commit"]
