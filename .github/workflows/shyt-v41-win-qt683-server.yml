@@ -49,6 +49,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Reference diagnostic patch rejected pinned upstream' }
           python -m py_compile pinned-upstream/backend/tests/test_parity.py
           if ($LASTEXITCODE -ne 0) { throw 'Bad Python backend reference diagnostics' }
+      - name: Verify real pinned reference Python backend before expensive native compilation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $python = '${{ steps.py312.outputs.python-path }}'
+          if (-not (Test-Path $python)) { throw 'Expected Python 3.12 setup-python interpreter missing' }
+          & $python tools/poc/yharnam/parity-diagnostics-v43/smoke_python_backend.py --backend pinned-upstream/backend/bb_dummy_server.py --python $python
+          if ($LASTEXITCODE -ne 0) { throw 'Python backend cannot answer real Bloodborne login or ss.info' }
       - name: Install exact native Qt 6.8.3 MSVC 2022
         uses: jurplel/install-qt-action@v4
         with:
@@ -110,7 +118,11 @@ jobs:
               throw "Required author/Qt license notice absent or truncated: $legal"
             }
           }
-          & "$env:QT_ROOT_DIR/bin/windeployqt6.exe" --release --no-translations "$out/server/shadnet.exe"
+          $qtDeployer = @("$env:QT_ROOT_DIR/bin/windeployqt.exe",
+                          "$env:QT_ROOT_DIR/bin/windeployqt6.exe") |
+                        Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $qtDeployer) { throw 'Qt 6.8.3 native deployment tool not found' }
+          & $qtDeployer --release --no-translations "$out/server/shadnet.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Qt runtime deployment failed' }
           foreach ($p in @('server/shadnet.exe','server/Qt6Core.dll','server/Qt6Network.dll',
                            'server/Qt6Sql.dll','server/Qt6Concurrent.dll','server/Qt6HttpServer.dll',
