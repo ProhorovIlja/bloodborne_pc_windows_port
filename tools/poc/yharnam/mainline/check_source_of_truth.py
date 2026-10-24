@@ -220,7 +220,7 @@ def check_workspace(root: Path, meta: dict) -> None:
             or "tools/poc/yharnam/package-v40/patch_windows_package.py" not in game):
         raise SourceDrift("Windows client build/launcher missing native Yharnam/game event packager")
     host = (root / meta["mainline_workflows"]["windows_server"]).read_text("utf-8")
-    if ("shadnet" not in host or "windeployqt6.exe" not in host): 
+    if ("shadnet" not in host or "windeployqt.exe" not in host): 
 
         raise SourceDrift("Windows co-op host kit must include actual Qt server runtime")
     if ("Qt-6.8.3-LICENSE-SCOPE.txt" not in host
