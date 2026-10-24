@@ -40,9 +40,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Composition failed' }
           $manifest = Get-Content "$out/SEAMLESS-HUNT-COMPOSE-MANIFEST.json" -Raw | ConvertFrom-Json
           if ($manifest.upstream_pin -ne $env:PIN -or $manifest.public_release_ready -ne $false) { throw 'Unsafe composition' }
+          python tools/poc/yharnam/server-relay-perf-v45/stage_hotpath.py --overlay "$out"
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned C++ UDP relay optimization/hash verification rejected' }
           Copy-Item "$out/*" pinned-upstream -Recurse -Force
-          python tools/poc/yharnam/server-relay-perf-v45/patch_server_hotpath.py pinned-upstream/server/src/server_link.cpp
-          if ($LASTEXITCODE -ne 0) { throw 'Pinned C++ server UDP hotpath optimization rejected' }
+          if ((Get-FileHash "$out/server/src/server_link.cpp" -Algorithm SHA256).Hash -ne
+              (Get-FileHash pinned-upstream/server/src/server_link.cpp -Algorithm SHA256).Hash) {
+            throw 'Pinned UDP overlay differs from staged server source'
+          }
           if (-not (Select-String -Path pinned-upstream/server/src/server_link.cpp -Pattern SHYT-SERVER-RELAY-PERF-V45 -Quiet)) {
             throw 'Native C++ UDP hotpath optimization missing'
           }
