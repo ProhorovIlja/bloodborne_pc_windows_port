@@ -44,6 +44,8 @@ from test_patch_http_compat import SOURCE as HTTP_FIXTURE, SessionUtcCompatibili
 from test_bloodborne_headers import FIXTURE as BLOODBORNE_HTTP_FIXTURE
 sys.path.insert(0, str(HERE.parent/"account-gateway-v32"))
 from test_patch_bearer_auth import AUTH as GATEWAY_AUTH_FIXTURE
+sys.path.insert(0,str(HERE.parent/"friends-privacy-v47"))
+from test_patch_session_privacy import SOURCE as SESSION_PRIVATE_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -97,7 +99,7 @@ def originals():
         compose.DATABASE_CPP: AUTH_DB_CPP + '\n    qInfo() << "Database migrations complete";\n',
         compose.ACCOUNT_TEST_CPP: AUTH_ACCOUNT_TEST,
         compose.HTTP_CPP: HTTP_FIXTURE,
-        compose.HTTP_SESSION_CPP: SessionUtcCompatibility.SOURCE,
+        compose.HTTP_SESSION_CPP: SessionUtcCompatibility.SOURCE + '\n' + SESSION_PRIVATE_FIXTURE,
         compose.HTTP_STATS_CPP: StatsBackendQtCompatibility.STATS,
         compose.HTTP_BACKEND_CPP: StatsBackendQtCompatibility.BACKEND,
         compose.HTTP_BLOODBORNE_CPP: BLOODBORNE_HTTP_FIXTURE,
@@ -299,6 +301,10 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SH-QT-HTTP-COMPAT-V30',result[compose.HTTP_CPP])
         self.assertIn(b'QT_VERSION_CHECK(6, 8, 0)',result[compose.HTTP_CPP])
         self.assertIn(b'SH-QT-SESSION-UTC',result[compose.HTTP_SESSION_CPP])
+        self.assertIn(b'SHYT-V47-FRIENDS-PRIVATE-SESSION',result[compose.HTTP_SESSION_CPP])
+        self.assertIn(b'MayJoinSession(',result[compose.HTTP_SESSION_CPP])
+        self.assertIn(b'MaySendSessionInvite(',result[compose.HTTP_SESSION_CPP])
+        self.assertIn(b'namespace SeamlessHunt::Friends',result['server/src/sh_friends_permissions.hpp'])
         self.assertIn(b'Qt::UTC',result[compose.HTTP_SESSION_CPP])
         self.assertIn(b'SH-QT-STATS-PORTABLE',result[compose.HTTP_STATS_CPP])
         self.assertIn(b'SH-QT-BACKEND-PORTABLE',result[compose.HTTP_BACKEND_CPP])
