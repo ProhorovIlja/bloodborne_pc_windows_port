@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {generateChallenge,TIERS} from "./site/challenges.mjs";
+import {generateChallenge,TIERS} from "./challenges.mjs";
 for(const tier of TIERS) {
   const a=generateChallenge("HUNT-2026",tier),b=generateChallenge("HUNT-2026",tier);
   assert.deepEqual(a,b,"same input reproduces same run");
