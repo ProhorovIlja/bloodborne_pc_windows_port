@@ -19,7 +19,10 @@ Hub::Result Hub::Tick(qint64 now_ms) {
 SERVER='''    m_link.SetSignIn([this](const QByteArray& online_id, const QByteArray& secret) {
         return SignIn(online_id, secret);
     });
+    for (const QByteArray& retired : result.retired_online_ids) {
+        QWriteLocker lk(&m_shared->matching.udpLock);
         m_shared->matching.udpExt.remove(QString::fromUtf8(retired));
+    }
     for (const auto& linked : result.linked) {'''
 SH='''    QHash<QArray, VerifiedCredential> m_signedIn;'''.replace('QArray','QByteArray')
 T='''int Relays() {
@@ -44,6 +47,13 @@ class Tests(unittest.TestCase):
     def test_anchor_drift(self):
         with self.assertRaisesRegex(ValueError,'bounded verification tick'):
             hub_cpp(CPP.replace('std::as_const(members)','std::as_const(sessions)'))
+    def test_credential_epoch_targets_only_retired_links(self):
+        noisy=SERVER.replace('    for (const QByteArray& retired :',
+            '        m_shared->matching.udpExt.remove(QString::fromUtf8(retired));\n'
+            '    for (const QByteArray& retired :')
+        transformed=server_cpp(noisy)
+        self.assertEqual(transformed.count('m_activeDbStamps.remove(retired)'),1)
+        self.assertIn('m_activeDbStamps.insert(linked.online_id',transformed)
     def test_credential_epoch_anchors_fail_closed(self):
         with self.assertRaisesRegex(ValueError,'pin credential stamp at authenticated link'):
             server_cpp(SERVER.replace('result.linked','result.new_members'))
