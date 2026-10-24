@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "product": "Seamless Hunt: Bloodborne PC",
+  "canonical_branch": "feature/seamless-hunt-mainline",
+  "source_of_truth": {
+    "repository": "lKaniel/bloodborne-server",
+    "commit": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
+    "upstream_tag": "v1.1.9",
+    "newer_upstream_review": {
+      "tag": "v1.2.0",
+      "commit": "08e56cd82c5cfafa76200946f3e08d1616108deb",
+      "status": "pending_port_and_protocol_review"
+    }
+  },
+  "components": {
+    "game": {
+      "upstream": "bbport",
+      "entry": "bbport/gpu/shim/bbport_overlay.cpp",
+      "build": "bbport/build.sh",
+      "runtime": "bbport/out/bb-probe.exe",
+      "platform": "Windows 10/11 x64"
+    },
+    "launcher": {
+      "upstream": "bbport/launcher/bbport_launcher_win.py",
+      "coop": "bbport/launcher/bbport_coop.py",
+      "packaging": "bbport/packaging/windows/package.sh",
+      "rule": "Enhance Yharnam Together launcher; never substitute legacy master launcher"
+    },
+    "network": {
+      "upstream": "emulator/src/core/libraries/network/p2p_sockets.cpp",
+      "gameplay_proto": "server/coop/coop.proto",
+      "compatibility": "Legacy PS4/CLS interoperability not yet demonstrated by real cross-client sessions"
+    },
+    "server": {
+      "upstream": "server",
+      "linux": {
+        "os": "Ubuntu 24.04 x86_64",
+        "qt": "6.8.3",
+        "target": "staging Fornex, production untouched"
+      },
+      "windows": {
+        "os": "Windows 10/11 x64",
+        "qt": "6.8.3",
+        "target": "test/local host server"
+      }
+    },
+    "website": {
+      "status": "source_only_preview",
+      "root": "tools/poc/yharnam/web-portal-v33"
+    }
+  },
+  "overlay_builder": "tools/poc/yharnam/unified-v9/compose_sources.py",
+  "mainline_workflows": {
+    "windows_game": ".github/workflows/shyt-v36-composed-windows-client.yml",
+    "windows_server": ".github/workflows/shyt-v41-win-qt683-server.yml",
+    "linux_server": ".github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml",
+    "event_patch": ".github/workflows/shyt-v40-coop-event-package.yml",
+    "package_gate": ".github/workflows/shyt-v41-assemble-kit-tests.yml"
+  },
+  "legacy_master": {
+    "status": "read_only_reference",
+    "reason": "Old Mrsuss60/deadinside Windows implementation and launcher are NOT the mainline engine or launcher",
+    "must_not_ship_its_launch_gui_bat": true
+  },
+  "feature_status": {
+    "implemented_as_pinned_source_patches": [
+      "quit_to_desktop",
+      "opt_in_memory_diagnostics",
+      "partial_spectator_camera",
+      "bounded_gpu_resource_management",
+      "backend_http_compatibility",
+      "account_ban_cache_invalidation",
+      "local_event_patcher_packaging"
+    ],
+    "not_yet_game_verified": [
+      "npc_summon_signs",
+      "guest_interact_doors",
+      "2_player_death_and_teleport",
+      "long_session_lag",
+      "cls_ps4_shadps4_bbport_crossplay",
+      "public_room_matchmaking",
+      "password_isolation",
+      "full_auto_updater",
+      "gameplay_save_safety"
+    ]
+  },
+  "external_review": {
+    "baseline_includes": [
+      "deadinside28/bloodborne_pc",
+      "Supermedo/bloodborne_pc",
+      "shadPS4 renderer code already integrated by upstream"
+    ],
+    "evaluate_not_bulk_merge": [
+      "Visy Bloodborne PC improvements",
+      "bbhost",
+      "FireBurn FSR-Vulkan",
+      "deadinside newer commits",
+      "shadPS4 GPU and texture fixes",
+      "CLS seamless coop protocol changes",
+      "Mrsuss60 native Windows improvements",
+      "Lance McDonald and Illusion patch references"
+    ],
+    "requirements": [
+      "pin reviewed commit",
+      "document license",
+      "verify ABI, protocol and affected game versions",
+      "test performance and multiplayer",
+      "reversible rollback"
+    ]
+  },
+  "release_ready": false,
+  "fornex_deployment_authorized": false
+}
