@@ -71,5 +71,75 @@ class ProbeTests(unittest.TestCase):
                 "def coop_changed(self):",
                 "def moved_changed(self):"))
 
+
+    def test_ui_recovers_after_worker_error_and_thread_start_failure(self):
+        # Execute the real injected method without opening Tk or making sockets.
+        import ast
+        import queue
+        import types
+
+        patched = v57.transform(v56.transform(SOURCE))
+        defs = [node for node in ast.walk(ast.parse(patched))
+                if isinstance(node, ast.FunctionDef)
+                and node.name == "coop_probe_server"]
+        self.assertEqual(len(defs), 1)
+        method = ast.fix_missing_locations(
+            ast.Module(body=[defs[0]], type_ignores=[]))
+
+        class Widget:
+            def __init__(self):
+                self.state = {}
+            def configure(self, **kwargs):
+                self.state.update(kwargs)
+            def get(self):
+                return "198.51.100.4"
+
+        class BrokenCoop:
+            def valid_ip(self, ip):
+                return True
+            def shyt_remote_ports(self, install, ip):
+                raise RuntimeError("private local path must not appear")
+
+        class SynchronousThread:
+            def __init__(self, target, daemon):
+                self.target = target
+            def start(self):
+                self.target()
+
+        class NoThread(SynchronousThread):
+            def start(self):
+                raise RuntimeError("worker creation failed")
+
+        def make_self():
+            return types.SimpleNamespace(
+                coop_probe_pending=False,
+                coop_probe_button=Widget(),
+                coop_probe_line=Widget(),
+                coop_vars={"host_ip": Widget()},
+                ui_calls=queue.Queue(),
+            )
+
+        base = {
+            "bbport_coop": BrokenCoop(),
+            "PORT_DIR": "/private/installation",
+            "_": lambda en, ru: en,
+            "OK": "green",
+            "CAUTION": "orange",
+            "MUTED": "gray",
+            "shyt_tcp_backend_probe": lambda *a: (_ for _ in ()).throw(
+                RuntimeError("private diagnostic failure")),
+        }
+        for thread_type in (SynchronousThread, NoThread):
+            env = dict(base, threading=types.SimpleNamespace(Thread=thread_type))
+            exec(compile(method, "injected_coop_probe_server.py", "exec"), env)
+            gui = make_self()
+            env["coop_probe_server"](gui)
+            if thread_type is SynchronousThread:
+                gui.ui_calls.get_nowait()()
+            self.assertFalse(gui.coop_probe_pending)
+            self.assertEqual(gui.coop_probe_button.state.get("state"), "normal")
+            self.assertNotIn("private", gui.coop_probe_line.state["text"])
+            self.assertEqual(gui.coop_probe_line.state.get("fg"), "orange")
+
 if __name__=="__main__":
     unittest.main()
