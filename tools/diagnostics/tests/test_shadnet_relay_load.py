@@ -1,11 +1,14 @@
 """Real shadNet tick-line traffic analyzer, no PII in outputs."""
 import importlib.util
 from pathlib import Path
+import sys
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "shadnet_relay_load.py"
 spec = importlib.util.spec_from_file_location("shyt_relay_counter_v44", SCRIPT)
 load = importlib.util.module_from_spec(spec)
+# dataclasses resolves __module__ through sys.modules during class creation.
+sys.modules[spec.name] = load
 spec.loader.exec_module(load)
 
 
