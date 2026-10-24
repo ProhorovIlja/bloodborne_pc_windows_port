@@ -29,6 +29,8 @@ QHttpServerResponse HandleSessionJoin(Database& db, SharedState& shared,
             return JsonError(QHttpServerResponse::StatusCode::Forbidden, SESSION_NOT_PERMITTED,
                              QStringLiteral("The session is locked"));
         }
+        SharedState::SessionMember m;
+        s.members.append(m);
     }
 }
 QHttpServerResponse HandleSessionInvite(Database& db, SharedState& shared,
@@ -53,6 +55,24 @@ class PrivateSessionTests(unittest.TestCase):
         self.assertLess(join.index("MayJoinSession("), join.index("if (s.sessionLockFlag)"))
         self.assertIn("SESSION_NOT_PERMITTED", join)
 
+    def test_private_invite_is_single_use_only_after_successful_join(self):
+        patched = p.transform(SOURCE)
+        join = patched.split("QHttpServerResponse HandleSessionJoin(", 1)[1].split(
+            "QHttpServerResponse HandleSessionInvite(", 1)[0]
+        self.assertEqual(join.count("SHYT-V50-PRIVATE-INVITE-ONE-SHOT"), 1)
+        self.assertLess(join.index("if (s.sessionLockFlag)"), join.index("s.members.append(m);"))
+        self.assertLess(join.index("s.members.append(m);"), join.index("SHYT-V50-PRIVATE-INVITE-ONE-SHOT"))
+        self.assertIn('s.sessionPrivacy == QStringLiteral("private")', join)
+        self.assertIn("invitation.sessionId == sessionId", join)
+        self.assertIn("invitation.toUserId == *auth.userId", join)
+        self.assertIn("!invitation.used", join)
+        self.assertIn("usedAt <= invitation.validUntil", join)
+        self.assertIn("invitation.used = true;", join)
+        self.assertIn("invitation.updatedAt = usedAt;", join)
+        # All eligible invitations for the same account/session are consumed
+        # so multiple earlier invitations cannot bypass a removal.
+        self.assertNotIn("break;", join.split("SHYT-V50-PRIVATE-INVITE-ONE-SHOT", 1)[1])
+
     def test_private_invitation_requires_sender_already_in_session(self):
         patched = p.transform(SOURCE)
         invite = patched.split("QHttpServerResponse HandleSessionInvite(", 1)[1]
@@ -76,6 +96,9 @@ class PrivateSessionTests(unittest.TestCase):
         changed = SOURCE.replace("        for (const auto& r : recipients) {",
                                  "        for (const auto& target : recipients) {")
         with self.assertRaisesRegex(ValueError, "invitation"):
+            p.transform(changed)
+        changed = SOURCE.replace("        s.members.append(m);", "        s.members.push_back(m);")
+        with self.assertRaisesRegex(ValueError, "consume private invitations"):
             p.transform(changed)
         with self.assertRaisesRegex(ValueError, "already applied"):
             p.transform(p.transform(SOURCE))

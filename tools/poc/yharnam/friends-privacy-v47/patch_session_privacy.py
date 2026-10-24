@@ -30,6 +30,29 @@ JOIN_GUARD = """        // SHYT-V47-FRIENDS-PRIVATE-SESSION: a private session I
                              QStringLiteral("A valid invitation is required for this private session"));
         }
 """
+# An unused invite opens a private session exactly once. Without this, a guest
+# can leave and join again with the same invitation forever (upstream default
+# TTL is 0 = no expiry). Invalidate *all* live invitations for this
+# recipient/session on successful admission, while holding sessionsLock.
+# Do not mark anything used when admission fails or the session is public.
+JOIN_CONSUME = """        // SHYT-V50-PRIVATE-INVITE-ONE-SHOT: an accepted private invitation
+        // cannot be replayed after the guest leaves or the host removes them.
+        // Keep this under sessionsLock so the initial authorization and
+        // consumption cannot race other joins.
+        if (s.sessionPrivacy == QStringLiteral("private")) {
+            const qint64 usedAt = QDateTime::currentMSecsSinceEpoch();
+            for (auto it = shared.invitations.begin(); it != shared.invitations.end(); ++it) {
+                auto& invitation = it.value();
+                if (invitation.sessionId == sessionId &&
+                    invitation.toUserId == *auth.userId &&
+                    !invitation.used &&
+                    (invitation.validUntil == 0 || usedAt <= invitation.validUntil)) {
+                    invitation.used = true;
+                    invitation.updatedAt = usedAt;
+                }
+            }
+        }
+"""
 INVITE_GUARD = """        // SHYT-V47-FRIENDS-PRIVATE-INVITE: an unrelated account must not
         // mint invitations that bypass the private session's access rules.
         // Public sessions keep the original invitation behavior.
@@ -71,6 +94,9 @@ def transform(source: str) -> str:
                   "private session join")
     source = once(source, INVITE_ANCHOR, INVITE_GUARD + INVITE_ANCHOR,
                   "private session invitation")
+    source = once(source, "        s.members.append(m);\n",
+                  "        s.members.append(m);\n" + JOIN_CONSUME,
+                  "consume private invitations on successful join")
     return source
 
 if __name__ == "__main__":
