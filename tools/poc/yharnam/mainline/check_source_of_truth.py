@@ -94,10 +94,17 @@ def check_transport_feature_policy(policy: dict) -> None:
         raise SourceDrift("P0 core stability must precede optional gameplay changes")
     core = set(stages[0].get("features", []))
     for requirement in ("native_game_boot", "reliable_login_and_discovery",
-                        "join_and_host_coop", "safe_save_backups", "doors_and_npc_signs",
+                        "join_and_host_coop", "opt_in_invasions", "safe_save_backups", "doors_and_npc_signs",
                         "crash_free_2_hour_sessions", "measured_network_load"):
         if requirement not in core:
             raise SourceDrift("missing core release gate: " + requirement)
+    invasion = policy.get("invasion_policy", {})
+    if (invasion.get("enabled_by_default") is not False
+            or invasion.get("require_explicit_match_opt_in") is not True
+            or invasion.get("session_permissions_tested") is not False
+            or invasion.get("version_and_protocol_compatibility_tested") is not False
+            or invasion.get("adversarial_join_tested") is not False):
+        raise SourceDrift("unverified PvP invasion mode must be off and require explicit consent")
     if policy.get("no_unreviewed_external_source_code") is not True or (
             policy.get("requires_license_and_original_author_credit") is not True
             or policy.get("release_ready") is not False):
