@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "source": "lKaniel/bloodborne-server",
+  "source_commit": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
+  "documented_source": "docs/SERVER_COOP_PLAN.md",
+  "current_transport": {
+    "mode": "server_relay_udp",
+    "client_peer_direct_game_packets": false,
+    "central_server_owns_shared_world": true,
+    "game_net_packets_forwarded_by_shadnet": true,
+    "server_memory_and_egress_measured": false,
+    "note": "Pinned Yharnam Together routes active game datagrams via shadNet; legacy direct P2P described in NATIVE_NETCODE.md is historical, not the released team architecture."
+  },
+  "target_transport": {
+    "mode": "hybrid_direct_p2p_with_relay_fallback",
+    "status": "design_only_not_implemented",
+    "matchmaking_and_presence": "server",
+    "world_authority": "server_until_explicitly_validated",
+    "direct_game_packets": "only_after_negotiated_capability_and_live_validation",
+    "relay_fallback": "when NAT/firewall cannot establish an authorized direct path",
+    "require_consent_for_network_endpoint_exposure": true,
+    "never_forward_account_password_or_auth_token_to_peers": true,
+    "must_not_auto_enable": true
+  },
+  "benchmarks": {
+    "verified_live_p2p": false,
+    "verified_fornex_relay_load": false,
+    "required_real_sessions": [
+      "two_clients_one_host",
+      "joining_existing_lobby",
+      "guest_door_interaction",
+      "npc_summon_sign",
+      "death_and_respawn",
+      "boss_area_transition",
+      "optional_invasion",
+      "host_disconnect_recovery",
+      "two_hour_soak",
+      "bad_network_packet_loss_and_jitter"
+    ],
+    "metrics": [
+      "join_success_rate",
+      "rtt_p50_ms",
+      "rtt_p95_ms",
+      "jitter_p95_ms",
+      "packet_loss_pct",
+      "game_frametime_p95_ms",
+      "client_private_memory_growth_mb_per_hour",
+      "fornex_cpu_pct",
+      "fornex_ram_mb",
+      "fornex_egress_mbps",
+      "relay_datagrams_per_second",
+      "crashes",
+      "saves_rolled_back"
+    ]
+  },
+  "design_references": [
+    {
+      "source": "LukeYui Elden Ring Seamless Co-op",
+      "status": "design_ideas_only",
+      "candidates": [
+        "party_death_and_recovery",
+        "session_persistence",
+        "difficulty_scaling_for_party",
+        "peer_connection_recovery"
+      ]
+    },
+    {
+      "source": "Demon's Souls / Dark Souls I-III",
+      "status": "gameplay_concepts_only",
+      "candidates": [
+        "opt_in_invasion",
+        "summon_sign_visibility",
+        "message_and_bloodstain_consistency",
+        "door_and_shortcut_progress"
+      ]
+    },
+    {
+      "source": "Sekiro / Elden Ring",
+      "status": "gameplay_concepts_only",
+      "candidates": [
+        "controls_and_accessibility",
+        "training_and_boss_practice",
+        "configurable_item_filters",
+        "streaming_and_camera_tools"
+      ]
+    },
+    {
+      "source": "Yharnam Together and CLS BBSC",
+      "status": "test_verified_code_only",
+      "candidates": [
+        "stable_coop_lobby",
+        "reconnect_after_crash",
+        "save_backups",
+        "npc_events",
+        "guest_doors"
+      ]
+    }
+  ],
+  "priority_order": [
+    {
+      "priority": 0,
+      "scope": "release_blockers",
+      "features": [
+        "native_game_boot",
+        "yarnham_together_launcher",
+        "reliable_login_and_discovery",
+        "join_and_host_coop",
+        "safe_save_backups",
+        "doors_and_npc_signs",
+        "stable_death_and_respawn",
+        "crash_free_2_hour_sessions",
+        "reproducible_windows_and_ubuntu_builds",
+        "measured_network_load"
+      ]
+    },
+    {
+      "priority": 1,
+      "scope": "after_core_stable",
+      "features": [
+        "opt_in_invasions",
+        "hybrid_p2p_prototype",
+        "direct_connection_nature_and_fallback",
+        "advanced_session_browser",
+        "privacy_safe_world_presence",
+        "long_session_gpu_memory_regressions"
+      ]
+    },
+    {
+      "priority": 2,
+      "scope": "opt_in_optional_additions",
+      "features": [
+        "spectator_and_free_camera",
+        "boss_practice_and_rematches",
+        "optional_scaling_presets",
+        "accessibility_and_filters",
+        "nonbreaking_inventory_quality_of_life"
+      ]
+    }
+  ],
+  "no_unreviewed_external_source_code": true,
+  "requires_license_and_original_author_credit": true,
+  "release_ready": false
+}
