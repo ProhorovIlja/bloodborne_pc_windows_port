@@ -25,7 +25,12 @@ class CandidateTests(unittest.TestCase):
                 data = (b"Exe data " * 200) if name.endswith(".exe") else b"sample document"
                 z.writestr(m.ROOT + name, data)
             for name in extra:
-                z.writestr(name, "some file")
+                # zipfile.ZipInfo converts backslashes to slashes on Windows
+                # when constructed from a plain string. Bypass that conversion
+                # to simulate a malicious archive produced by a different OS.
+                entry = zipfile.ZipInfo(name)
+                entry.filename = name
+                z.writestr(entry, "some file")
             for info in extra_info:
                 z.writestr(info, b"unsafe link")
 
