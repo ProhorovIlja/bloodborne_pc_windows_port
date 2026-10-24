@@ -1,5 +1,5 @@
 import unittest
-from patch_http_compat import transform
+from patch_http_compat import transform,transform_session
 SOURCE='''#include <QHostAddress>
     if (!m_http->bind(m_tcp.get())) {
         qCritical() << "WebApiServer: QHttpServer failed to attach to listener";
@@ -31,3 +31,23 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'already applied'):
             transform(transform(SOURCE))
 if __name__=='__main__':unittest.main()
+
+
+class SessionUtcCompatibility(unittest.TestCase):
+    SOURCE='''#include <QTimeZone>
+QString IsoUtc(qint64 ms) {
+    return QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::UTC).toString(Qt::ISODate);
+}'''
+    def test_utc_both_qt_generations(self):
+        s=transform_session(self.SOURCE)
+        self.assertIn('SH-QT-SESSION-UTC',s)
+        self.assertIn('QT_VERSION_CHECK(6, 8, 0)',s)
+        self.assertIn('fromMSecsSinceEpoch(ms, Qt::UTC)',s)
+        self.assertIn('fromMSecsSinceEpoch(ms, QTimeZone::UTC)',s)
+        self.assertIn('Qt::ISODate',s)
+    def test_fail_closed_if_upstream_drifted(self):
+        with self.assertRaisesRegex(ValueError,'session UTC timestamp overload'):
+            transform_session(self.SOURCE.replace('QTimeZone::UTC','QTimeZone::utc()'))
+    def test_not_double_applied(self):
+        with self.assertRaisesRegex(ValueError,'already applied'):
+            transform_session(transform_session(self.SOURCE))
