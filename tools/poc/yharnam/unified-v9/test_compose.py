@@ -33,6 +33,8 @@ sys.path.insert(0, str(HERE.parent/"ingress-quota-v26"))
 from test_patch_ingress_quota import W as QUOTA_WORLD_FIXTURE, H as QUOTA_HEADER_FIXTURE
 sys.path.insert(0, str(HERE.parent/"endpoint-rebind-v27"))
 from test_patch_rebind import SOURCE as LINK_REBIND_FIXTURE
+sys.path.insert(0, str(HERE.parent/"login-admission-v28"))
+from test_patch_login_admission import CPP as LOGIN_CPP_FIXTURE, HEADER as LOGIN_H_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -60,11 +62,14 @@ def originals():
             '        if (const auto envelope = DecodeEnvelope(message)) {\n'),
         compose.SERVER_WORLD_H: '#include "bloodborne_party_boards.h"\n' + SERVER_HEADER_FIXTURE,
         compose.COOP_STREAM: STREAM_FIXTURE,
-        compose.SERVER_LINK_CPP: LINK_ID_FIXTURE +
-            '''    const bool again = members.contains(from.Key());
+        compose.SERVER_LINK_CPP: LINK_ID_FIXTURE.replace(
+            '#include "server_link.h"',
+            '#include "server_link.h"\n' + LOGIN_CPP_FIXTURE
+        ) + '''    const bool again = members.contains(from.Key());
     Link& link = members[from.Key()];
 ''',
-        compose.SERVER_LINK_H: '        QList<Endpoint> gone; // links forgotten\n',
+        compose.SERVER_LINK_H: LOGIN_H_FIXTURE +
+            '        QList<Endpoint> gone; // links forgotten\n',
         compose.LINK_SERVER_CPP: (
             "    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from\n"
             "    // its hello.\n"
@@ -168,7 +173,7 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+16)  # V27 adds endpoint rebind guard header
+        self.assertEqual(len(result),len(source)+17)  # V28 adds fixed-memory login admission header
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
@@ -218,6 +223,11 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'constexpr bool MustRetire',result['server/src/sh_endpoint_rebind.hpp'])
         self.assertIn(b'retired_online_ids',result[compose.SERVER_LINK_H])
         self.assertIn(b'udpExt.remove(',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'SH-LOGIN-ADMISSION-V28',result[compose.SERVER_LINK_CPP])
+        self.assertIn(b'hello_admission.Allow(',result[compose.SERVER_LINK_CPP])
+        self.assertIn(b'LoginAdmission::Gate hello_admission',result[compose.SERVER_LINK_H])
+        self.assertIn(b'HelloAdmissionLimitsDbCalls()',result[compose.SERVER_LINK_TEST])
+        self.assertIn(b'class Gate',result['server/src/sh_login_admission.hpp'])
         self.assertIn(b'ChangedAccountOnSameEndpoint()',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'retired_online_ids.size() == 1',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
@@ -248,6 +258,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V25 opt-in signed-in identity binding", " ".join(manifest["applied"]))
         self.assertIn("V26 opt-in co-op ingress quotas", " ".join(manifest["applied"]))
         self.assertIn("V27 stale virtual-address cleanup", " ".join(manifest["applied"]))
+        self.assertIn("V28 opt-in bounded pre-database Hello admission", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -320,6 +331,13 @@ class AllPatches(unittest.TestCase):
         source[compose.SERVER_LINK_CPP]=source[compose.SERVER_LINK_CPP].replace(
             "members.contains(from.Key())", "members.find(from.Key())")
         with self.assertRaisesRegex(ValueError,"identity-rebind cleanup"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v28_changed_login_gate_anchor_refused(self):
+        source=originals()
+        source[compose.SERVER_LINK_CPP]=source[compose.SERVER_LINK_CPP].replace(
+            "const auto hello = DecodeHello(datagram);",
+            "const auto hello = DecodeHello(payload);")
+        with self.assertRaisesRegex(ValueError,"before SignIn"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
