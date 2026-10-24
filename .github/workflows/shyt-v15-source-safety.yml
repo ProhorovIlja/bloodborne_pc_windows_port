@@ -2,6 +2,7 @@ name: Seamless Hunt native source integrity V14–V32
 on:
   push:
     branches:
+      - fix/shyt-friends-private-session-gate
       - feature/yharnam-dedicated-server-poc
       - feature/yharnam-v32-account-gateway-staging
     paths:
@@ -25,7 +26,9 @@ on:
       - tools/poc/yharnam/qt-http-compat-v30/**
       - tools/poc/yharnam/account-gateway-v32/**
       - tools/poc/yharnam/unified-v9/**
+      - tools/poc/yharnam/friends-ui-v49/**
       - tools/poc/yharnam/remote-profile-v46/**
+      - tools/poc/yharnam/friends-privacy-v47/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
     paths:
@@ -49,7 +52,9 @@ on:
       - tools/poc/yharnam/qt-http-compat-v30/**
       - tools/poc/yharnam/account-gateway-v32/**
       - tools/poc/yharnam/unified-v9/**
+      - tools/poc/yharnam/friends-ui-v49/**
       - tools/poc/yharnam/remote-profile-v46/**
+      - tools/poc/yharnam/friends-privacy-v47/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
 permissions:
@@ -169,6 +174,26 @@ jobs:
         run: python -m unittest discover -s tools/poc/yharnam/qt-http-compat-v30 -p 'test_*.py' -v
       - name: Test V32 optional account modes and mandatory public-realm admission
         run: python -m unittest discover -s tools/poc/yharnam/account-gateway-v32 -p 'test_*.py' -v
+      - name: Test V47 actual WebAPI private invitation authorization and pin drift
+        run: python -m unittest discover -s tools/poc/yharnam/friends-privacy-v47 -p 'test_patch_session_privacy.py' -v
+      - name: Compile and execute V47 native friend permission truth table
+        run: |
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/friends-privacy-v47 \
+            tools/poc/yharnam/friends-privacy-v47/test_friends_permissions.cpp \
+            -o /tmp/shyt-v47-friend-permissions
+          /tmp/shyt-v47-friend-permissions
+      - name: Verify authenticated coop lobby and world identity source guards
+        run: python -m unittest discover -s tools/poc/yharnam/friends-privacy-v47 -p 'test_patch_lobby_identity.py' -v
+      - name: Compile and test signed-in account identity to board-member binding
+        run: |
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/friends-privacy-v47 \
+            tools/poc/yharnam/friends-privacy-v47/test_lobby_identity.cpp \
+            -o /tmp/shyt-v48-account-binding
+          /tmp/shyt-v48-account-binding
+      - name: Check mutual friend filtering uses authenticated account data, not client claims
+        run: python -m unittest discover -s tools/poc/yharnam/friends-ui-v49 -p 'test_online_friend_source.py' -v
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources

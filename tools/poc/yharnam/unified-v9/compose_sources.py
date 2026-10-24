@@ -380,6 +380,46 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    v46_module.LAUNCHER:output[LAUNCHER].decode("utf-8")}
     for name,body in v46_module.transform(remote_source).items():
         output[name]=body.encode("utf-8")
+    # V47: Friends feature uses existing Yharnam Together account/friend/
+    # presence/session APIs. Secure private invitations and private joins at
+    # the actual Qt WebAPI, before adding in-game Join/Invite/Invade controls.
+    v47_dir=Path(__file__).resolve().parent.parent/"friends-privacy-v47"
+    v47_script=v47_dir/"patch_session_privacy.py"
+    v47_module=types.ModuleType("sh_v47_friends_private_session")
+    v47_module.__file__=str(v47_script)
+    exec(compile(v47_script.read_text("utf-8"),str(v47_script),"exec"),v47_module.__dict__)
+    output[HTTP_SESSION_CPP]=v47_module.transform(output[HTTP_SESSION_CPP].decode("utf-8")).encode("utf-8")
+    output[v47_module.HEADER]=(v47_dir/"sh_friends_permissions.hpp").read_bytes()
+    if not output[v47_module.HEADER]:
+        raise ValueError("V47 private-session policy header missing")
+    # V48: bind both the native co-op world identity and the team lobby
+    # identity to the UDP link's signed-in account. Character labels are not
+    # identities. Native LinkServer enables this before receiving game traffic;
+    # standalone upstream world fixtures keep their legacy test setup.
+    v48_dir=Path(__file__).resolve().parent.parent/"friends-privacy-v47"
+    v48_script=v48_dir/"patch_lobby_identity.py"
+    v48_module=types.ModuleType("sh_v48_authenticated_member")
+    v48_module.__file__=str(v48_script)
+    exec(compile(v48_script.read_text("utf-8"),str(v48_script),"exec"),v48_module.__dict__)
+    v48_input={name:output[name].decode("utf-8")
+               for name in (SERVER_WORLD,SERVER_WORLD_H,LINK_SERVER_CPP)}
+    for name,body in v48_module.transform(v48_input).items():
+        output[name]=body.encode("utf-8")
+    output[v48_module.HEADER]=(v48_dir/"sh_lobby_identity.hpp").read_bytes()
+    if not output[v48_module.HEADER]:
+        raise ValueError("V48 identity policy header missing")
+    # V49: only annotate *online mutual friends* in the native team lobby,
+    # and render a filter in the game's current Team screen. This does not
+    # implement unsolicited joins, invasions or offline friend presence.
+    v49_dir=Path(__file__).resolve().parent.parent/"friends-ui-v49"
+    v49_script=v49_dir/"patch_online_friends.py"
+    v49_module=types.ModuleType("sh_v49_online_mutual_friends")
+    v49_module.__file__=str(v49_script)
+    exec(compile(v49_script.read_text("utf-8"),str(v49_script),"exec"),v49_module.__dict__)
+    v49_paths=v49_module.PATHS
+    v49_sources={name:output[name].decode("utf-8") for name in v49_paths}
+    for name,body in v49_module.transform(v49_sources).items():
+        output[name]=body.encode("utf-8")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -409,7 +449,10 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "Qt 6.4 / modern StatsServer and BloodborneBackendServer HTTP API compatibility",
                    "Qt 6.4 / modern Bloodborne cross-area summon HTTP header compatibility",
                    "V32 WebAPI bearer rejects banned users, indexed SQLite token lookup; no web login yet",
-                    "V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher"],
+                    "V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher",
+                    "V47 private session join and invitation authorization (existing friend APIs)",
+                    "V48 bind native lobby and co-op player to authenticated link account",
+                    "V49 native game Team UI online mutual-friend filter and invite (not game-tested)"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
