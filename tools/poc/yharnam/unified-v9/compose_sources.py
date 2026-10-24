@@ -271,6 +271,18 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         output[name]=contents.encode("utf-8")
     if len(output)!=len(dest)+24:
         raise ValueError("V27 endpoint rebind policy header missing")
+    # V28: inexpensive admission BEFORE database/KDF login checks.
+    # Must run AFTER V27, since both update server_link.cpp/h and the Qt test.
+    v28_dir=Path(__file__).resolve().parent.parent/"login-admission-v28"
+    v28_module=types.ModuleType("sh_login_admission_patch")
+    v28_script=v28_dir/"patch_login_admission.py"
+    exec(compile(v28_script.read_text("utf-8"),str(v28_script),"exec"),v28_module.__dict__)
+    v28_paths=(v28_module.LINK_CPP,v28_module.LINK_H,v28_module.QT_TEST)
+    v28_sources={p:output[p].decode("utf-8") for p in v28_paths}
+    for name, contents in v28_module.transform(v28_sources).items():
+        output[name]=contents.encode("utf-8")
+    if len(output)!=len(dest)+25:
+        raise ValueError("V28 bounded pre-database auth admission header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -291,7 +303,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V24 bounded co-op protobuf reassembly (8 MiB per peer)",
                    "V25 opt-in signed-in identity binding (legacy compatible)",
                    "V26 opt-in co-op ingress quotas (pre-protobuf)",
-                   "V27 stale virtual-address cleanup on changed transport identity"],
+                   "V27 stale virtual-address cleanup on changed transport identity",
+                   "V28 opt-in bounded pre-database Hello admission"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
