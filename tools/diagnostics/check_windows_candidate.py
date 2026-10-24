@@ -17,7 +17,10 @@ ROOT = "bbport-windows/"
 REQUIRED = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe",
     "bin/bb-gpu-capabilities.exe", "run.py", "README.md", "LICENSE",
-    "tools/party_boss_events.py",
+    "tools/party_boss_events.py", "CREDITS.txt",
+    "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+    "licenses/AMD-FidelityFX-SDK-LICENSE.txt",
+    "licenses/Intel-XeSS-LICENSE.txt", "licenses/PkgTool-LICENSE.txt",
 }
 FATAL_EXACT = {
     "eboot.bin", "shadnet.db", "shadnet.cfg", "coop.json",
@@ -83,6 +86,22 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
         missing = sorted(ROOT + req for req in REQUIRED if ROOT + req not in found)
         if missing:
             raise UnsafeBundle("missing required native runtime or launcher: " + ", ".join(missing))
+        # A valid archive MUST acknowledge its original developers and carry
+        # upstream redistributable notices, not only the Seamless Hunt name.
+        credits = z.read(ROOT + "CREDITS.txt")
+        if len(credits) > 128 * 1024:
+            raise UnsafeBundle("oversized credits notice")
+        for author in (b"Yharnam Together", b"deadinside28", b"Supermedo",
+                       b"shadPS4", b"Wozzardman", b"0xCydral",
+                       b"NOT a public", b"GPL-2.0-or-later"):
+            if author.lower() not in credits.lower():
+                raise UnsafeBundle("author attribution missing: " + author.decode())
+        for filename in ("LICENSE", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+                         "licenses/AMD-FidelityFX-SDK-LICENSE.txt",
+                         "licenses/Intel-XeSS-LICENSE.txt",
+                         "licenses/PkgTool-LICENSE.txt"):
+            if z.getinfo(ROOT + filename).file_size < 32:
+                raise UnsafeBundle("missing or truncated original license: " + filename)
         # The standalone Windows port package is NOT a seamless co-op kit
         # unless the user-owned game's event patcher is present and supports
         # guest door interactions. Don't release a port that silently lacks it.
