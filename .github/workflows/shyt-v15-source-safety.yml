@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V29
+name: Seamless Hunt native source integrity V14–V30
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -19,6 +19,7 @@ on:
       - tools/poc/yharnam/endpoint-rebind-v27/**
       - tools/poc/yharnam/login-admission-v28/**
       - tools/poc/yharnam/rpc-budget-v29/**
+      - tools/poc/yharnam/auth-revocation-v30/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -39,6 +40,7 @@ on:
       - tools/poc/yharnam/endpoint-rebind-v27/**
       - tools/poc/yharnam/login-admission-v28/**
       - tools/poc/yharnam/rpc-budget-v29/**
+      - tools/poc/yharnam/auth-revocation-v30/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -147,6 +149,14 @@ jobs:
           cmake -S tools/poc/yharnam/rpc-budget-v29 -B /tmp/shyt-v29-rpc -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v29-rpc --parallel 2
           ctest --test-dir /tmp/shyt-v29-rpc --output-on-failure
+      - name: V30 live database credential status and login revocation source tests
+        run: python -m unittest discover -s tools/poc/yharnam/auth-revocation-v30 -p 'test_*.py' -v
+      - name: Compile and test V30 cached-auth revocation policy
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/auth-revocation-v30 -B /tmp/shyt-v30-auth -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v30-auth --parallel 2
+          ctest --test-dir /tmp/shyt-v30-auth --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -255,6 +265,22 @@ jobs:
           assert 'RpcBudget::Fits(pending, bytes)' in x
           assert 'MustEvictAuthCache' in x
           assert 'bool blocked = false' in h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.h" -o /tmp/sh-v30-database.h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.cpp" -o /tmp/sh-v30-database.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_accounts.cpp" -o /tmp/sh-v30-accounts-test.cpp
+          ap=Path('tools/poc/yharnam/auth-revocation-v30/patch_auth_revocation.py')
+          spec=importlib.util.spec_from_file_location('v30',ap)
+          v30=importlib.util.module_from_spec(spec); spec.loader.exec_module(v30)
+          transformed=v30.transform({
+              v30.DB_H:Path('/tmp/sh-v30-database.h').read_text('utf-8'),
+              v30.DB_CPP:Path('/tmp/sh-v30-database.cpp').read_text('utf-8'),
+              v30.LINK_H:h,
+              v30.LINK_CPP:x,
+              v30.ACCOUNT_TEST:Path('/tmp/sh-v30-accounts-test.cpp').read_text('utf-8')
+          })
+          assert 'CurrentCredentialStatus' in transformed[v30.DB_CPP]
+          assert 'if (!user || user->banned)' in transformed[v30.LINK_CPP]
+          assert 'RevokedDatabaseCredentialsAreVisible' in transformed[v30.ACCOUNT_TEST]
           assert 'ChangedAccountOnSameEndpoint()' in patched[v27.TEST]
           qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
           spec=importlib.util.spec_from_file_location('v26',qs)
