@@ -1,0 +1,44 @@
+name: Seamless Hunt V33 Hunter Portal privacy and offline tools
+on:
+  push:
+    branches:
+      - feature/yharnam-v33-hunter-web-portal
+    paths:
+      - tools/poc/yharnam/web-portal-v33/**
+      - docs/SEAMLESS_HUNT_HUNTER_PORTAL_V33.md
+      - .github/workflows/shyt-v33-hunter-portal.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/web-portal-v33/**
+      - docs/SEAMLESS_HUNT_HUNTER_PORTAL_V33.md
+      - .github/workflows/shyt-v33-hunter-portal.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  privacy-source-and-challenges:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Public presence privacy, lifetime, and no-fake-data tests
+        run: python -m unittest discover -s tools/poc/yharnam/web-portal-v33 -p 'test_*.py' -v
+      - name: Shareable challenges deterministic and no external dependencies
+        run: node tools/poc/yharnam/web-portal-v33/test_challenges.mjs
+      - name: Static portal contains no bundled game data, credential forms, or external scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s tools/poc/yharnam/web-portal-v33/site/index.html
+          test -s tools/poc/yharnam/web-portal-v33/site/challenge.html
+          ! grep -R -Ei '<script[^>]*src="https?://' tools/poc/yharnam/web-portal-v33/site/
