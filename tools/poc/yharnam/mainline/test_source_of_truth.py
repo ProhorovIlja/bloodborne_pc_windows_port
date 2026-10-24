@@ -197,6 +197,24 @@ class MainlineContracts(unittest.TestCase):
         with self.assertRaisesRegex(p.SourceDrift, "measured live network"):
             p.check_transport_feature_policy(changed)
 
+    def test_200_player_capacity_and_real_movement_offload_cannot_be_faked(self):
+        policy = json.loads(p.POLICY.with_name(
+            "transport_and_feature_priorities.json").read_text("utf-8"))
+        p.check_transport_feature_policy(policy)
+        changed = copy.deepcopy(policy)
+        changed["target_transport"]["movement_offload"]["status"] = "live"
+        with self.assertRaisesRegex(p.SourceDrift, "high-volume movement"):
+            p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(policy)
+        changed["benchmarks"]["relay_offload_accounting"]["verified_200_player_capacity"] = True
+        with self.assertRaisesRegex(p.SourceDrift, "200 hunters"):
+            p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(policy)
+        changed["priority_order"][0]["features"].remove(
+            "authenticated_same_map_movement_direct_live_verified")
+        with self.assertRaisesRegex(p.SourceDrift, "authenticated_same_map"):
+            p.check_transport_feature_policy(changed)
+
     def test_direct_p2p_prototype_requires_consent_and_real_network_data(self):
         config = json.loads(p.POLICY.with_name(
             "transport_and_feature_priorities.json").read_text("utf-8"))

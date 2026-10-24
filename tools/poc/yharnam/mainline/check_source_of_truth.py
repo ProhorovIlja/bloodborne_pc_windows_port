@@ -94,7 +94,24 @@ def check_transport_feature_policy(policy: dict) -> None:
             or failover.get("cooldown_ms") != 10000
             or failover.get("live_network_validation") is not False):
         raise SourceDrift("hybrid fallback requires measured live network proof")
+    movement = target.get("movement_offload", {})
+    if (movement.get("status") != "source_only_no_game_or_network_integration"
+            or movement.get("selector") !=
+            "tools/poc/yharnam/hybrid-transport-v52/sh_channel_offload.hpp"
+            or "0x06 player movement with verified map/team epoch" not in
+                movement.get("initial_channels", [])
+            or "0x04 enemy movement with additionally verified enemy stream ownership" not in
+                movement.get("initial_channels", [])
+            or movement.get("current_v10_filter") !=
+                "existing game V10 Pass-only filter remains unmodified; no movement offload in a shipping binary"):
+        raise SourceDrift("high-volume movement Direct P2P is source-only until verified")
     benchmarks = policy.get("benchmarks", {})
+    offload = benchmarks.get("relay_offload_accounting", {})
+    if (offload.get("verified_live_movement_offload") is not False
+            or offload.get("verified_200_player_capacity") is not False
+            or offload.get("minimum_target_players") != 200
+            or offload.get("estimate_only_until_game_packets_sampled") is not True):
+        raise SourceDrift("cannot certify 200 hunters or P2P offload without real measurements")
     if (benchmarks.get("verified_live_p2p") is not False
             or benchmarks.get("verified_fornex_relay_load") is not False):
         raise SourceDrift("cannot mark P2P or production bandwidth measured without a real test")
@@ -108,7 +125,9 @@ def check_transport_feature_policy(policy: dict) -> None:
             or [s.get("priority") for s in stages] != [0, 1, 2]):
         raise SourceDrift("P0 core stability must precede optional gameplay changes")
     core = set(stages[0].get("features", []))
-    for requirement in ("hybrid_direct_p2p_relay_fallback_live_verified",
+    for requirement in ("authenticated_same_map_movement_direct_live_verified",
+                        "two_hundred_client_relay_fallback_load_test",
+                        "hybrid_direct_p2p_relay_fallback_live_verified",
                         "native_game_boot", "reliable_login_and_discovery",
                         "join_and_host_coop", "opt_in_invasions", "safe_save_backups", "doors_and_npc_signs",
                         "crash_free_2_hour_sessions", "measured_network_load"):

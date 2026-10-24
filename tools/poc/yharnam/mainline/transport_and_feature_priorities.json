@@ -38,6 +38,33 @@
       "stale_path_ms": 2000,
       "cooldown_ms": 10000,
       "live_network_validation": false
+    },
+    "movement_offload": {
+      "status": "source_only_no_game_or_network_integration",
+      "selector": "tools/poc/yharnam/hybrid-transport-v52/sh_channel_offload.hpp",
+      "initial_channels": [
+        "0x06 player movement with verified map/team epoch",
+        "0x04 enemy movement with additionally verified enemy stream ownership"
+      ],
+      "required_proof": [
+        "mutual_consent",
+        "current_signed_in_peers",
+        "same_team",
+        "same_map",
+        "authoritative_map_epoch",
+        "sender_enemy_authority_if_applicable",
+        "fresh_session_grant"
+      ],
+      "never_direct_until_proven": [
+        "reliable_game_stream",
+        "0x05 enemy HP",
+        "0x14 PvP hits",
+        "0x2C map items",
+        "0x2F world correction",
+        "0x27 boss kick"
+      ],
+      "mixed_frame_policy": "if any entry denied, keep whole native frame on shadNet",
+      "current_v10_filter": "existing game V10 Pass-only filter remains unmodified; no movement offload in a shipping binary"
     }
   },
   "benchmarks": {
@@ -70,8 +97,24 @@
       "fornex_egress_mbps",
       "relay_datagrams_per_second",
       "crashes",
-      "saves_rolled_back"
-    ]
+      "saves_rolled_back",
+      "direct_eligible_movement_bytes_per_second",
+      "game_relay_outbound_bytes_by_channel",
+      "direct_peer_payload_bytes_per_second",
+      "relay_fallback_player_fraction",
+      "server_cpu_millicores_at_200_clients",
+      "server_peak_egress_mbps_at_200_clients"
+    ],
+    "relay_offload_accounting": {
+      "verified_live_movement_offload": false,
+      "verified_200_player_capacity": false,
+      "minimum_target_players": 200,
+      "estimate_only_until_game_packets_sampled": true,
+      "verify_per_channel_payload_bytes": true,
+      "verify_relay_fallback_share_by_nat_type": true,
+      "verify_game_udp_overhead_and_forwarded_peer_count": true,
+      "verify_fornex_egress_and_cores_under_load": true
+    }
   },
   "design_references": [
     {
@@ -132,7 +175,9 @@
         "crash_free_2_hour_sessions",
         "reproducible_windows_and_ubuntu_builds",
         "measured_network_load",
-        "hybrid_direct_p2p_relay_fallback_live_verified"
+        "hybrid_direct_p2p_relay_fallback_live_verified",
+        "authenticated_same_map_movement_direct_live_verified",
+        "two_hundred_client_relay_fallback_load_test"
       ]
     },
     {
