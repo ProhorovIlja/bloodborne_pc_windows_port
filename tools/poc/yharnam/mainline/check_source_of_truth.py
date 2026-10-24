@@ -47,6 +47,20 @@ def check_policy(meta: dict) -> None:
                 "password_isolation"):
         if key not in meta.get("feature_status", {}).get("not_yet_game_verified", []):
             raise SourceDrift(f"cannot silently certify untested gameplay: {key}")
+    rights = meta.get("attribution_and_licenses", {})
+    if (rights.get("primary_license_as_documented_upstream") != "GPL-2.0-or-later"
+            or rights.get("legacy_repo_root_license") != "GPL-3.0"
+            or rights.get("qt_httpserver_6_8_3_open_source_license") != "GPL-3.0 (NOT LGPL-3.0)"
+            or rights.get("release_license_audit_completed") is not False
+            or rights.get("redistribution_approved") is not False):
+        raise SourceDrift("original GPL licenses or the Qt HTTP Server GPLv3 release block changed")
+    if set(rights.get("english_docs", [])) != {
+            "README.md", "CREDITS.md", "THIRD_PARTY_NOTICES.md", "CONTRIBUTING.md"}:
+        raise SourceDrift("English authorship, copyright and license documentation missing")
+    if "CREDITS.txt" not in rights.get("game_candidate_notices", []):
+        raise SourceDrift("Windows game must show authorship and provenance")
+    if "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt" not in rights.get("server_candidate_notices", []):
+        raise SourceDrift("Qt HTTP Server GPLv3 notice missing from Windows host")
     paths = meta.get("mainline_workflows", {})
     if set(paths) != {"windows_game", "windows_server", "linux_server",
                       "event_patch", "package_gate"}:
@@ -80,14 +94,34 @@ def check_workspace(root: Path, meta: dict) -> None:
             raise SourceDrift("native Windows builds must actually run on Windows")
         if key == "linux_server" and ("runs-on: ubuntu-24.04" not in data or "'6.8.3'" not in data):
             raise SourceDrift("real Ubuntu 24.04 / Qt 6.8.3 server build missing")
+    rights = meta["attribution_and_licenses"]
+    for doc in rights["english_docs"]:
+        contents = (root / doc).read_text("utf-8")
+        if "Yharnam Together" not in contents or len(contents) < 200:
+            raise SourceDrift("missing primary upstream authorship in " + doc)
+    copyright_notice = (root / "tools/poc/yharnam/attribution-v42/CREDITS.txt").read_text("utf-8")
+    for name in ("Yharnam Together", "deadinside28", "Supermedo",
+                 "Wozzardman", "shadPS4", "0xCydral", "GPL-2.0-or-later",
+                 "Qt 6.8 HTTP Server is GPL-3.0"):
+        if name not in copyright_notice:
+            raise SourceDrift("downstream Windows user-facing CREDITS missing " + name)
+    game_packaging = (root / "tools/poc/yharnam/package-v40/patch_windows_package.py").read_text("utf-8")
+    if ('cp "$credits" "$dest/CREDITS.txt"' not in game_packaging
+            or "FireBurn-FSR-Vulkan-LICENSE.txt" not in game_packaging):
+        raise SourceDrift("portable launcher would omit credits or upstream runtime licenses")
     game = (root / meta["mainline_workflows"]["windows_game"]).read_text("utf-8")
     if ("pinned-upstream/bbport" not in game or "bash build.sh" not in game
             or "bash packaging/windows/package.sh" not in game
             or "tools/poc/yharnam/package-v40/patch_windows_package.py" not in game):
         raise SourceDrift("Windows client build/launcher missing native Yharnam/game event packager")
     host = (root / meta["mainline_workflows"]["windows_server"]).read_text("utf-8")
-    if ("shadnet" not in host or "windeployqt6.exe" not in host):
+    if ("shadnet" not in host or "windeployqt6.exe" not in host): 
+
         raise SourceDrift("Windows co-op host kit must include actual Qt server runtime")
+    if ("Qt-6.8.3-LICENSE-SCOPE.txt" not in host
+            or 'Copy-Item LICENSE "$out/server/licenses/GPL-3.0.txt"' not in host):
+        raise SourceDrift("Windows Qt HTTP Server GPLv3-only notice absent from candidate")
+
 
 
 def main() -> int:
