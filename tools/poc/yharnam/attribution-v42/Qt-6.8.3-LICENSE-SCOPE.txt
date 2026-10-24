@@ -1,0 +1,28 @@
+SEAMLESS HUNT QT 6.8.3 LICENSE SCOPE - UNOFFICIAL DEVELOPMENT BUNDLE
+
+This development bundle links a Yharnam Together-derived shadNet server
+against Qt 6.8.3. Qt is a product of The Qt Company / Qt contributors.
+
+IMPORTANT:
+- Qt HTTP Server 6.8 is offered for open-source use under GNU GPL v3,
+  NOT under the LGPL v3.
+  https://doc.qt.io/qt-6.8/qthttpserver-index.html#licenses
+- Other Qt modules, including Core, Sql and Network, have their own
+  terms; LGPL v3 and GPL alternatives may apply.
+  https://doc.qt.io/qt-6.8/licensing.html
+- The combined application, bundled Qt DLLs and corresponding source
+  must satisfy the applicable terms, copyright notices and any Qt
+  third-party licensing requirements.
+- The development ZIP includes the GPL v3 and LGPL v3 license texts
+  as references; that alone is NOT proof of complete compliance.
+  A per-module and third-party notice audit is required before
+  public binaries or production deployment can be approved.
+- Qt has not sponsored or endorsed Seamless Hunt.
+
+The upstream Yharnam Together source identifies GPL-2.0-or-later.
+This repository's older root LICENSE contains GPL v3. Every original
+component retains its own copyright and license.
+Full legal/provenance notes:
+https://github.com/ProhorovIlja/bloodborne_pc_windows_port/blob/feature/seamless-hunt-mainline/THIRD_PARTY_NOTICES.md
+
+INTERNAL DEVELOPMENT ONLY. NO PUBLIC LICENSE APPROVAL IS IMPLIED.
