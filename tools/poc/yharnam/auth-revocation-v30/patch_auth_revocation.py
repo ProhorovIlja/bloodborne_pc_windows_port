@@ -7,6 +7,7 @@ DB_CPP = 'server/src/database.cpp'
 LINK_H = 'server/src/link_server.h'
 LINK_CPP = 'server/src/link_server.cpp'
 POLICY = 'server/src/sh_auth_revocation.hpp'
+ACCOUNT_TEST = 'server/tests/test_accounts.cpp'
 HERE = Path(__file__).resolve().parent
 
 def one(s,old,new,label):
@@ -102,9 +103,47 @@ def link_cpp(s):
     return true;''', 'store DB stamp with secret')
     return s
 
+def accounts_test(s):
+    if 'SH-AUTH-REVOCATION-V30' in s: raise ValueError('V30 accounts test already patched')
+    s=one(s, '''int AnOldAccountSignsInAsBefore(const QString &folder) {''',
+'''// SH-AUTH-REVOCATION-V30: SQLite integration: the credential snapshot is
+// immediately updated after ban, password-hash rotation and deletion.
+int RevokedDatabaseCredentialsAreVisible(const QString &folder) {
+  Database db("revocation");
+  CHECK(db.Open(folder + "/revocation.db"));
+  const auto user=db.SignIn("hunter_30", "a_secret", {}, false, true);
+  CHECK(user.has_value());
+  const auto initial=db.CurrentCredentialStatus("hunter_30");
+  CHECK(initial && !initial->banned && initial->db_hash==user->hash);
+  CHECK(db.BanUser(user->userId,true));
+  CHECK(db.CurrentCredentialStatus("hunter_30")->banned);
+  CHECK(db.BanUser(user->userId,false));
+  const QByteArray changed_hash = QByteArray("altered_hash_stamp");
+  QSqlQuery change(db.Conn());
+  change.prepare("UPDATE account SET hash=? WHERE user_id=?");
+  change.addBindValue(changed_hash);
+  change.addBindValue(static_cast<qlonglong>(user->userId));
+  CHECK(change.exec());
+  const auto rotated=db.CurrentCredentialStatus("hunter_30");
+  CHECK(rotated && rotated->db_hash==changed_hash && !rotated->banned);
+  CHECK(db.DeleteUser(user->userId));
+  CHECK(!db.CurrentCredentialStatus("hunter_30"));
+  return 0;
+}
+
+int AnOldAccountSignsInAsBefore(const QString &folder) {''','new Qt/SQLite test')
+    s=one(s,
+'''       {AFirstSignInMakesTheAccount, WithoutMakingAnUnknownIdIsRefused,
+        AnOldAccountSignsInAsBefore}) {''',
+'''       {AFirstSignInMakesTheAccount, WithoutMakingAnUnknownIdIsRefused,
+        AnOldAccountSignsInAsBefore, RevokedDatabaseCredentialsAreVisible}) {''',
+        'execute Qt SQLite test')
+    return s
+
 def transform(src):
     return {DB_H: database_header(src[DB_H]),
             DB_CPP: database_cpp(src[DB_CPP]),
             LINK_H: link_header(src[LINK_H]),
             LINK_CPP: link_cpp(src[LINK_CPP]),
+            ACCOUNT_TEST: accounts_test(src[ACCOUNT_TEST]),
             POLICY: (HERE/'sh_auth_revocation.hpp').read_text('utf-8')}
