@@ -1,6 +1,7 @@
 import unittest
 from patch_rpc_budget import patch_cpp,patch_header
-CPP='''    m_signedIn.insert(online_id, hash);
+CPP='''#include <QCryptographicHash>
+    m_signedIn.insert(online_id, hash);
     return true;
         case Kind::Opened:
             OpenRpc(online_id, end);
