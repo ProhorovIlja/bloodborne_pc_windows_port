@@ -210,12 +210,16 @@ def send_reports(install, settings, timeout=30):
                                  settings['password'])
     return len(sent)
 """,
+        # Compose the minimal V8 update-channel test source with the
+        # actual pinned Tkinter co-op popup/method fixtures used by V56.
+        # Without the real launcher anchors this test fails for the wrong
+        # reason, despite full V46+V56 upstream source passing separately.
         compose.LAUNCHER: """CONFIG=('bbport-launcher-coop' if COOP_TEST else 'bbport-launcher')
 def fetch_update_release(beta=False):
     pass
 def run_coop():
     result = bbport_coop.host_overrides(settings['host_ip'])
-""",
+""" + (HERE.parent/"launcher-ux-v56/pinned_coop_onboarding_fixture.py").read_text(encoding="utf-8"),
     }
 
 class AllPatches(unittest.TestCase):
@@ -229,6 +233,13 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SHYT-V46-EXPLICIT-REMOTE-PORTS', result[compose.COOP])
         self.assertIn(b'shyt_remote_ports(install, host)', result[compose.COOP])
         self.assertIn(b'bbport_coop.host_overrides(settings[\'host_ip\'], PORT_DIR)', result[compose.LAUNCHER])
+        self.assertIn(b'SHYT_LAUNCHER_ONBOARDING_V56', result[compose.LAUNCHER])
+        self.assertIn(b'self.coop_setup_progress.configure(', result[compose.LAUNCHER])
+        self.assertIn("V56 original Yharnam Together BLauncher first-run guided UX; safe vanilla difficulty default", manifest["applied"])
+        # V46 and V56 must compose into syntactically correct Python, not just
+        # "contain expected text" (previous V46 wrote invalid write_text()).
+        compile(result[compose.LAUNCHER].decode("utf-8"),
+                "composed-original-blauncher.py", "exec")
         self.assertIn('V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher', manifest['applied'])
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
