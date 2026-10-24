@@ -73,3 +73,13 @@ Implementation:
 - tools/poc/yharnam/pvp-privacy-v23/
 - tools/poc/yharnam/stream-bounds-v24/
 - tools/poc/yharnam/unified-v9/compose_sources.py
+
+## V28 update: cheap Hello admission before password database (source-only)
+
+Confirmed: `server/src/server_link.cpp` called an optional authentication callback on every parsed Hello; the actual `LinkServer::SignIn` callback may invoke the account database and password KDF for previously unseen account IDs. Earlier V26 quotas applied only to *completed co-op protobuf messages*, too late to protect the authentication path.
+
+V28 inserts an **opt-in** fixed-memory per-IP and global token budget immediately after decoding Hello and before `SignIn`. The initial limits are 8 per-IP burst at 2/s and 24 global burst at 6/s. A four-way hash table contains at most 8192 address slots with 30-second idle reuse; there are no background timers, per-request heap allocations or automatic bans. Environment variable: `SH_LOGIN_ADMISSION=1`. If disabled, existing legacy behavior is preserved. Rejected Hellos receive no refusal so clients can retry, and the default remains **OFF** until stress testing confirms suitable caps.
+
+The native C++20 policy test and five local Python transform tests passed; the C++ test also passed under UndefinedBehaviorSanitizer, including address collisions and extreme time values. A **new GitHub Actions workflow** `.github/workflows/shyt-v28-native-server-build.yml` was added to compile the actual pinned Qt/Linux server and Qt networking/world tests, but **no successful workflow run has been observed**. Draft PR #2 was opened for review and CI without merging. No production Fornex deployment.
+
+**Still required:** per-IP/total admission tuning under real NAT connections and login storms, bounds on account-sign-in cache and RPC pending buffer, full Qt test results, signed/verified identities, and signed release pipeline. This protects server CPU but does not prevent volumetric traffic or a botnet starving valid logins.
