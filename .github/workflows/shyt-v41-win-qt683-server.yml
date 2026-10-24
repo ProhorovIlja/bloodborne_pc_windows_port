@@ -1,7 +1,7 @@
 name: Seamless Hunt V41 native Windows shadnet Qt 6.8.3
 on:
   push:
-    branches: [feature/yharnam-v41-win-qt683-server-kit]
+    branches: [feature/seamless-hunt-mainline]
     paths:
       - .github/workflows/shyt-v41-win-qt683-server.yml
       - tools/poc/yharnam/**
