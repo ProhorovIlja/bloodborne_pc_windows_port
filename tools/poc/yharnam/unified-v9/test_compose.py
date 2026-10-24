@@ -71,7 +71,9 @@ def originals():
             '    const bool arrived = member.lobby.empty();\n'
             '    for (const std::vector<u8>& message : messages) {\n'
             '        if (const auto envelope = DecodeEnvelope(message)) {\n'),
-        compose.SERVER_WORLD_H: '#include "bloodborne_party_boards.h"\n' + SERVER_HEADER_FIXTURE,
+        compose.SERVER_WORLD_H: '#include "bloodborne_party_boards.h"\n' + SERVER_HEADER_FIXTURE + (
+            '    const BloodborneCoop::TeamLobby& Lobby() const {\n'
+            '    BloodborneCoop::TeamLobby lobby;\n'),
         compose.COOP_STREAM: STREAM_FIXTURE,
         compose.SERVER_LINK_CPP: LINK_ID_FIXTURE.replace(
             '#include "server_link.h"',
@@ -92,7 +94,8 @@ def originals():
     m_signedIn.insert(online_id, hash);''') + (
             "    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from\n"
             "    // its hello.\n"
-            "    for (const auto& linked : result.linked) {\n"),
+            "    for (const auto& linked : result.linked) {\n"
+            "    // Phase 11: the hello signs the player in (its id's account is made the first time).\n"),
         compose.LINK_SERVER_H: RPC_H_FIXTURE +
             '\n    QHash<QByteArray, QByteArray> m_signedIn; // player id -> its secret\'s hash, once signed in\n',
         compose.DATABASE_H: AUTH_DB_H,
@@ -304,6 +307,10 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SHYT-V47-FRIENDS-PRIVATE-SESSION',result[compose.HTTP_SESSION_CPP])
         self.assertIn(b'MayJoinSession(',result[compose.HTTP_SESSION_CPP])
         self.assertIn(b'MaySendSessionInvite(',result[compose.HTTP_SESSION_CPP])
+        self.assertEqual(result[compose.SERVER_WORLD].count(b'SHYT-V48-LOBBY-ACCOUNT-BOUND'), 2)
+        self.assertIn(b'RequireAuthenticatedIdentity();',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'require_authenticated_identity = false',result[compose.SERVER_WORLD_H])
+        self.assertIn(b'MatchesAuthenticatedMember',result["server/src/sh_lobby_identity.hpp"])
         self.assertIn(b'namespace SeamlessHunt::Friends',result['server/src/sh_friends_permissions.hpp'])
         self.assertIn(b'Qt::UTC',result[compose.HTTP_SESSION_CPP])
         self.assertIn(b'SH-QT-STATS-PORTABLE',result[compose.HTTP_STATS_CPP])
