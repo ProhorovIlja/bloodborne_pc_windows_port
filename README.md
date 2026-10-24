@@ -92,9 +92,10 @@ We review design concepts from **LukeYui's Elden Ring Seamless Co-op**,
 **Demon's Souls**, **Dark Souls**, **Sekiro** and **Elden Ring**, as well as
 other Bloodborne forks. These are **ideas for future, license-reviewed
 implementation, not claims that we imported their source code**.
-Priority is strictly: (P0) boot/launcher/joins/saves/NPCs/doors/stable long
-sessions and network measurements, (P1) invasions and experimental hybrid
-transport, (P2) optional training, camera, filters and accessibility.
+Priority is strictly: (P0) boot/launcher/joins/consensual opt-in invasions/saves/NPCs/doors/stable long
+sessions and network measurements, (P1) experimental hybrid P2P and reliable
+transport recovery, (P2) optional training, camera, filters and accessibility.
+PvE-only parties must never be involuntarily exposed to invasions.
 Experimental gameplay additions remain opt-in until validated.
 
 ## Game/launcher/server gates
