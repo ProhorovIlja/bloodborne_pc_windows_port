@@ -114,6 +114,8 @@ class CandidateTests(unittest.TestCase):
             for name in sorted(m.REQUIRED):
                 data = (b"fake event script" if name == "tools/party_boss_events.py"
                         else CREDITS if name == "CREDITS.txt"
+                        else b'{"schema":1,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}'
+                        if name == "tools/SeamlessHunt-network-profile.example.json"
                         else b"Exe data " * 200)
                 z.writestr(m.ROOT + name, data)
         with self.assertRaisesRegex(m.UnsafeBundle, "co-op door event patch missing"):
