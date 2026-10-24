@@ -1,0 +1,98 @@
+name: Seamless Hunt V30 composed native Qt server build
+on:
+  push:
+    branches:
+      - feature/yharnam-dedicated-server-poc
+    paths:
+      - tools/poc/yharnam/**
+      - .github/workflows/shyt-v28-native-server-build.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/**
+      - .github/workflows/shyt-v28-native-server-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shyt-v30-qt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compiled-qt-server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+      OUT_ROOT: /tmp/shyt-${{ github.run_id }}
+    steps:
+      - name: Check out maintained changes
+        uses: actions/checkout@v4
+
+      - name: Install native Qt6 and C++ build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake ninja-build git rsync \
+            qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite python3 pkg-config
+
+      - name: Fetch immutable upstream and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT_ROOT"
+          git init "$OUT_ROOT/upstream"
+          git -C "$OUT_ROOT/upstream" remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C "$OUT_ROOT/upstream" fetch --depth=1 origin "$PIN"
+          git -C "$OUT_ROOT/upstream" checkout --detach FETCH_HEAD
+          test "$(git -C "$OUT_ROOT/upstream" rev-parse HEAD)" = "$PIN"
+          git -C "$OUT_ROOT/upstream" submodule update --init --depth=1 server/externals/protobuf
+          test -f "$OUT_ROOT/upstream/server/externals/protobuf/CMakeLists.txt"
+
+      - name: Compose immutable V3-V30 source overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream "$OUT_ROOT/upstream" \
+            --repo "$GITHUB_WORKSPACE" \
+            --out "$OUT_ROOT/overlay"
+          test -s "$OUT_ROOT/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json"
+          rsync -a "$OUT_ROOT/overlay/" "$OUT_ROOT/upstream/"
+
+      - name: Configure actual native Qt server
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$OUT_ROOT/upstream/server" -B "$OUT_ROOT/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON
+
+      - name: Compile actual server, network and database integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$OUT_ROOT/build" --target \
+            test_server_link test_bloodborne_world test_accounts shadnet --parallel 2 \
+            2>&1 | tee "$OUT_ROOT/server-build.log"
+
+      - name: Run Qt network, world and SQLite account tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir "$OUT_ROOT/build" \
+            --output-on-failure -R '^(server_link|bloodborne_world|accounts)$' \
+            2>&1 | tee "$OUT_ROOT/server-ctest.log"
+
+      - name: Preserve manifest and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-v30-qt-build-diagnostics
+          path: |
+            /tmp/shyt-${{ github.run_id }}/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json
+            /tmp/shyt-${{ github.run_id }}/server-build.log
+            /tmp/shyt-${{ github.run_id }}/server-ctest.log
+            /tmp/shyt-${{ github.run_id }}/build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7

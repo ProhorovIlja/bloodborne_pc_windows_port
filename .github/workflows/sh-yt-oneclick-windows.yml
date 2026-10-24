@@ -1,0 +1,65 @@
+name: Yharnam Windows one-click PoC package
+on:
+  push:
+    branches:
+      - feature/yharnam-dedicated-server-poc
+    paths:
+      - .github/workflows/sh-yt-oneclick-windows.yml
+      - tools/poc/yharnam/windows-oneclick/**
+      - tools/poc/yharnam/release-v8/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  freeze-and-package:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Windows packager
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check pyinstaller pillow
+      - name: Fetch pinned Yharnam source, launcher only
+        shell: pwsh
+        run: |
+          git init upstream
+          git -C upstream remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C upstream sparse-checkout init --cone
+          git -C upstream sparse-checkout set bbport/launcher
+          git -C upstream fetch --no-tags --depth 1 origin 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned fetch failed' }
+          git -C upstream checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned checkout failed' }
+      - name: Test PoC patches and no-developer-dependency installer
+        shell: pwsh
+        run: python -m unittest discover -s tools/poc/yharnam/windows-oneclick/tests -v
+      - name: Patch and freeze launcher on Windows
+        shell: pwsh
+        run: python tools/poc/yharnam/windows-oneclick/patch_and_freeze.py --checkout upstream --out frozen --release-channel
+      - name: Test PyInstaller script dispatcher
+        shell: pwsh
+        run: |
+          "from pathlib import Path" | Out-File -Encoding ascii smoke.py
+          "Path('sh-yt-freeze-smoke-ok.txt').write_text('ok')" | Out-File -Encoding ascii -Append smoke.py
+          & './frozen/BLauncher/BLauncher.exe' --script "$PWD/smoke.py"
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path sh-yt-freeze-smoke-ok.txt)) { throw 'Frozen launcher smoke FAILED' }
+      - name: Create easy player-facing package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path player-package/launcher-build -Force | Out-Null
+          Copy-Item 'frozen/BLauncher/*' 'player-package/launcher-build/' -Recurse -Force
+          Copy-Item 'tools/poc/yharnam/windows-oneclick/INSTALL.cmd' player-package/
+          Copy-Item 'tools/poc/yharnam/windows-oneclick/START.cmd' player-package/
+          Copy-Item 'tools/poc/yharnam/windows-oneclick/INSTALL-POC.ps1' player-package/
+          Copy-Item 'tools/poc/yharnam/windows-oneclick/README-RU.md' player-package/
+          Set-Content -Path 'player-package/launcher-build/VERSION.txt' -Value '0.0.1-dev.1'
+          if (-not (Select-String -Path upstream/bbport/launcher/bbport_coop.py -Pattern 'repositories/1429375055/releases' -Quiet)) { throw 'Seamless Hunt updater not wired' }
+          if (-not (Test-Path 'player-package/launcher-build/_internal')) { throw 'Frozen runtime missing' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SH-YT-Windows-OneClick-POC-20261023
+          path: player-package/
+          if-no-files-found: error

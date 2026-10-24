@@ -1,0 +1,325 @@
+name: Seamless Hunt native source integrity V14–V30
+on:
+  push:
+    branches: [feature/yharnam-dedicated-server-poc]
+    paths:
+      - tools/poc/yharnam/quit-perf-v14/**
+      - tools/poc/yharnam/patch-safety-v15/**
+      - tools/poc/yharnam/map-safety-v16/**
+      - tools/poc/yharnam/gc-safety-v17/**
+      - tools/poc/yharnam/map-cache-v18/**
+      - tools/poc/yharnam/map-data-v19/**
+      - tools/poc/yharnam/map-range-v20/**
+      - tools/poc/yharnam/hunter-tools-v21/**
+      - tools/poc/yharnam/server-trust-v22/**
+      - tools/poc/yharnam/pvp-privacy-v23/**
+      - tools/poc/yharnam/stream-bounds-v24/**
+      - tools/poc/yharnam/member-identity-v25/**
+      - tools/poc/yharnam/ingress-quota-v26/**
+      - tools/poc/yharnam/endpoint-rebind-v27/**
+      - tools/poc/yharnam/login-admission-v28/**
+      - tools/poc/yharnam/rpc-budget-v29/**
+      - tools/poc/yharnam/auth-revocation-v30/**
+      - tools/poc/yharnam/qt-http-compat-v30/**
+      - tools/poc/yharnam/unified-v9/**
+      - .github/workflows/shyt-v15-source-safety.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/quit-perf-v14/**
+      - tools/poc/yharnam/patch-safety-v15/**
+      - tools/poc/yharnam/map-safety-v16/**
+      - tools/poc/yharnam/gc-safety-v17/**
+      - tools/poc/yharnam/map-cache-v18/**
+      - tools/poc/yharnam/map-data-v19/**
+      - tools/poc/yharnam/map-range-v20/**
+      - tools/poc/yharnam/hunter-tools-v21/**
+      - tools/poc/yharnam/server-trust-v22/**
+      - tools/poc/yharnam/pvp-privacy-v23/**
+      - tools/poc/yharnam/stream-bounds-v24/**
+      - tools/poc/yharnam/member-identity-v25/**
+      - tools/poc/yharnam/ingress-quota-v26/**
+      - tools/poc/yharnam/endpoint-rebind-v27/**
+      - tools/poc/yharnam/login-admission-v28/**
+      - tools/poc/yharnam/rpc-budget-v29/**
+      - tools/poc/yharnam/auth-revocation-v30/**
+      - tools/poc/yharnam/qt-http-compat-v30/**
+      - tools/poc/yharnam/unified-v9/**
+      - .github/workflows/shyt-v15-source-safety.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test byte-accurate XML conflict gate
+        run: python -m unittest discover -s tools/poc/yharnam/patch-safety-v15 -p 'test_*.py' -v
+      - name: Test V16 Vulkan 3D map safety
+        run: python -m unittest discover -s tools/poc/yharnam/map-safety-v16 -p 'test_*.py' -v
+      - name: Test V17 conservative texture GC protection
+        run: python -m unittest discover -s tools/poc/yharnam/gc-safety-v17 -p 'test_*.py' -v
+      - name: Test V18 safe map worker transform
+        run: python -m unittest discover -s tools/poc/yharnam/map-cache-v18 -p 'test_*.py' -v
+      - name: Build and test V18 bounded map cache and stoppable worker
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/map-cache-v18 -B /tmp/shyt-v18-cache -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v18-cache --parallel 2
+          ctest --test-dir /tmp/shyt-v18-cache --output-on-failure
+      - name: Test V19 persisted map/mesh decompression bounds
+        run: python -m unittest discover -s tools/poc/yharnam/map-data-v19 -p 'test_*.py' -v
+      - name: Test V20 safe game archive read patch
+        run: python -m unittest discover -s tools/poc/yharnam/map-range-v20 -p 'test_patch_*.py' -v
+      - name: Build and test V20 bounded game file reader
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/map-range-v20 -B /tmp/shyt-v20-range -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v20-range --parallel 2
+          ctest --test-dir /tmp/shyt-v20-range --output-on-failure
+      - name: V21 Hunter Tools offline editing and split-page guards
+        run: python -m unittest discover -s tools/poc/yharnam/hunter-tools-v21 -p 'test_patch_*.py' -v
+      - name: Compile and test V21 offline policy and overflow-safe level math
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/hunter-tools-v21 -B /tmp/shyt-v21-policy -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v21-policy --parallel 2
+          ctest --test-dir /tmp/shyt-v21-policy --output-on-failure
+      - name: Test V22 server trust source transforms
+        run: python -m unittest discover -s tools/poc/yharnam/server-trust-v22 -p 'test_*.py' -v
+      - name: Compile and run V22 server sanity tests
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/server-trust-v22 -B /tmp/shyt-v22-server -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v22-server --parallel 2
+          ctest --test-dir /tmp/shyt-v22-server --output-on-failure
+      - name: Compile and test V23 PvP visibility privacy policy (dormant)
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/pvp-privacy-v23 -B /tmp/shyt-v23-privacy -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v23-privacy --parallel 2
+          ctest --test-dir /tmp/shyt-v23-privacy --output-on-failure
+      - name: Test V24 bounded co-op stream source patch
+        run: python -m unittest discover -s tools/poc/yharnam/stream-bounds-v24 -p 'test_*.py' -v
+      - name: Compile and test V24 bounded multipart stream
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/stream-bounds-v24 -B /tmp/shyt-v24-stream -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v24-stream --parallel 2
+          ctest --test-dir /tmp/shyt-v24-stream --output-on-failure
+      - name: V25 strict member and account binding source regressions
+        run: python -m unittest discover -s tools/poc/yharnam/member-identity-v25 -p 'test_*.py' -v
+      - name: Compile and test V25 member ID binding in C++20
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/member-identity-v25 -B /tmp/shyt-v25-id -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v25-id --parallel 2
+          ctest --test-dir /tmp/shyt-v25-id --output-on-failure
+      - name: V26 pre-protobuf per-peer quota regression
+        run: python -m unittest discover -s tools/poc/yharnam/ingress-quota-v26 -p 'test_*.py' -v
+      - name: Compile and test V26 message-and-byte token budget
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/ingress-quota-v26 -B /tmp/shyt-v26-quota -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v26-quota --parallel 2
+          ctest --test-dir /tmp/shyt-v26-quota --output-on-failure
+      - name: Test V27 changed-account endpoint cleanup
+        run: python -m unittest discover -s tools/poc/yharnam/endpoint-rebind-v27 -p 'test_*.py' -v
+      - name: Compile and test V27 endpoint identity lifecycle
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/endpoint-rebind-v27 -B /tmp/shyt-v27-rebind -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v27-rebind --parallel 2
+          ctest --test-dir /tmp/shyt-v27-rebind --output-on-failure
+      - name: Test V28 pre-database login flood admission source guards
+        run: python -m unittest discover -s tools/poc/yharnam/login-admission-v28 -p 'test_*.py' -v
+      - name: Compile and test V28 constant-memory login gate
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/login-admission-v28 -B /tmp/shyt-v28-login -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v28-login --parallel 2
+          ctest --test-dir /tmp/shyt-v28-login --output-on-failure
+      - name: V29 bounded RPC and credential cache source regression
+        run: python -m unittest discover -s tools/poc/yharnam/rpc-budget-v29 -p 'test_*.py' -v
+      - name: Compile and test V29 bounded RPC and finite auth cache policy
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/rpc-budget-v29 -B /tmp/shyt-v29-rpc -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v29-rpc --parallel 2
+          ctest --test-dir /tmp/shyt-v29-rpc --output-on-failure
+      - name: V30 live database credential status and login revocation source tests
+        run: python -m unittest discover -s tools/poc/yharnam/auth-revocation-v30 -p 'test_*.py' -v
+      - name: Compile and test V30 cached-auth revocation policy
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/auth-revocation-v30 -B /tmp/shyt-v30-auth -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v30-auth --parallel 2
+          ctest --test-dir /tmp/shyt-v30-auth --output-on-failure
+      - name: Test Qt6.4 and modern Qt WebAPI compatibility source anchors
+        run: python -m unittest discover -s tools/poc/yharnam/qt-http-compat-v30 -p 'test_*.py' -v
+      - name: Test unified pinned source composition
+        run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
+      - name: Patch actual pinned upstream 3D map and texture cache sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIN=77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          BASE="https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/bbport/gpu"
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_map_3d.cpp" -o /tmp/sh-map-original.cpp
+          curl -fsSL --retry 3 "${BASE}/shadps4/video_core/texture_cache/texture_cache.cpp" -o /tmp/sh-gc-original.cpp
+          python tools/poc/yharnam/map-safety-v16/patch_map.py /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
+          python tools/poc/yharnam/gc-safety-v17/patch_texture_gc.py /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
+          grep -Fq "SH-MAP-V16" /tmp/sh-map-patched.cpp
+          grep -Fq "SH-GC-V17" /tmp/sh-gc-patched.cpp
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_overlay.cpp" -o /tmp/sh-overlay-original.cpp
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_save_editor.cpp" -o /tmp/sh-editor-original.cpp
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_save_editor.h" -o /tmp/sh-editor-original.h
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          p=Path('tools/poc/yharnam/hunter-tools-v21/patch_hunter_tools.py')
+          spec=importlib.util.spec_from_file_location('v21',p)
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          originals={mod.EDITOR:Path('/tmp/sh-editor-original.cpp').read_text('utf-8'),
+                     mod.HEADER:Path('/tmp/sh-editor-original.h').read_text('utf-8'),
+                     mod.OVERLAY:Path('/tmp/sh-overlay-original.cpp').read_text('utf-8')}
+          for path,text in originals.items():
+              out=(mod.editor(text) if path==mod.EDITOR else
+                   mod.editor_header(text) if path==mod.HEADER else
+                   mod.overlay(text))
+              assert 'SH-HUNTER-TOOLS-V21' in out
+          PY
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_map_charts.cpp" -o /tmp/sh-charts-original.cpp
+          python tools/poc/yharnam/map-cache-v18/patch_chart_cache.py /tmp/sh-charts-original.cpp /tmp/sh-charts-patched.cpp
+          grep -Fq "SH-MAP-CACHE-V18" /tmp/sh-charts-patched.cpp
+          python tools/poc/yharnam/map-range-v20/patch_map_range.py /tmp/sh-charts-patched.cpp /tmp/sh-charts-v20.cpp
+          grep -Fq "SH-MAP-RANGE-V20" /tmp/sh-charts-v20.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/bloodborne_party_boards.cpp" -o /tmp/sh-boards-v22.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/bloodborne_world.cpp" -o /tmp/sh-world-v22.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/bloodborne_world.h" -o /tmp/sh-world-v22.h
+          python - <<'PY'
+          from pathlib import Path
+          import importlib.util
+          src=Path('tools/poc/yharnam/server-trust-v22/patch_server_trust.py')
+          spec=importlib.util.spec_from_file_location('v22',src)
+          v22=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(v22)
+          original={v22.BOARDS:Path('/tmp/sh-boards-v22.cpp').read_text('utf-8'),
+                    v22.WORLD:Path('/tmp/sh-world-v22.cpp').read_text('utf-8'),
+                    v22.WORLD_H:Path('/tmp/sh-world-v22.h').read_text('utf-8')}
+          patched=v22.transform(original)
+          for path in [v22.BOARDS,v22.WORLD,v22.WORLD_H]:
+              assert 'SH-SERVER-TRUST-V22' in patched[path],path
+          PY
+          grep -Fq "SH-MAP-CACHE-V18" /tmp/sh-charts-v20.cpp
+          curl -fsSL --retry 3 "${BASE}/shim/bbport_map_art.cpp" -o /tmp/sh-map-data-original.cpp
+          python tools/poc/yharnam/map-data-v19/patch_map_data.py /tmp/sh-map-data-original.cpp /tmp/sh-map-data-patched.cpp
+          grep -Fq "SH-MAP-DATA-V19" /tmp/sh-map-data-patched.cpp
+          ! cmp -s /tmp/sh-map-data-original.cpp /tmp/sh-map-data-patched.cpp
+          ! cmp -s /tmp/sh-charts-original.cpp /tmp/sh-charts-patched.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/coop/coop_stream.h" -o /tmp/sh-original-stream.h
+          python tools/poc/yharnam/stream-bounds-v24/patch_stream.py /tmp/sh-original-stream.h /tmp/sh-bounded-stream.h
+          grep -Fq "SH-STREAM-BOUNDS-V24" /tmp/sh-bounded-stream.h
+          grep -Fq "partial.Push(" /tmp/sh-bounded-stream.h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/server_link.cpp" -o /tmp/sh-v25-server-link.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/server_link.h" -o /tmp/sh-v27-server-link.h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v27-link-server.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_server_link.cpp" -o /tmp/sh-v27-hub-tests.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_server.cpp" -o /tmp/sh-v30-webapi.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_routes_session.cpp" -o /tmp/sh-v30-http-session.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/stats_server.cpp" -o /tmp/sh-v30-stats-server.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/bloodborne_backend_server.cpp" -o /tmp/sh-v30-bb-backend.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v29-link-server.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.h" -o /tmp/sh-v29-link-server.h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.h" -o /tmp/sh-v30-database.h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.cpp" -o /tmp/sh-v30-database.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_accounts.cpp" -o /tmp/sh-v30-accounts-test.cpp
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          p=Path('tools/poc/yharnam/member-identity-v25/patch_identity.py')
+          spec=importlib.util.spec_from_file_location('v25',p)
+          m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          base=Path('/tmp/sh-v25-server-link.cpp').read_text('utf-8')
+          assert 'strict identity mode requires authenticated sign-in' in m.patch_link(base)
+          rp=Path('tools/poc/yharnam/endpoint-rebind-v27/patch_rebind.py')
+          spec=importlib.util.spec_from_file_location('v27',rp)
+          v27=importlib.util.module_from_spec(spec); spec.loader.exec_module(v27)
+          patched=v27.transform_all({
+              v27.LINK:m.patch_link(base),
+              v27.LINK_H:Path('/tmp/sh-v27-server-link.h').read_text('utf-8'),
+              v27.LINK_SERVER:Path('/tmp/sh-v27-link-server.cpp').read_text('utf-8'),
+              v27.TEST:Path('/tmp/sh-v27-hub-tests.cpp').read_text('utf-8'),
+          })
+          assert 'TellOthers(prior, MemberState::Gone, 0, result)' in patched[v27.LINK]
+          assert 'retired_online_ids' in patched[v27.LINK_H]
+          assert 'udpExt.remove(' in patched[v27.LINK_SERVER]
+          ap=Path('tools/poc/yharnam/login-admission-v28/patch_login_admission.py')
+          spec=importlib.util.spec_from_file_location('v28',ap)
+          v28=importlib.util.module_from_spec(spec); spec.loader.exec_module(v28)
+          hub=v28.patch_link_cpp(v27.transform(m.patch_link(base)))
+          hdr=v28.patch_link_h(patched[v27.LINK_H])
+          qt=v28.patch_test(patched[v27.TEST])
+          assert 'hello_admission.Allow(from.ipv4, now_ms)' in hub
+          assert 'LoginAdmission::Gate hello_admission;' in hdr
+          assert 'HelloAdmissionLimitsDbCalls' in qt
+          bp=Path('tools/poc/yharnam/rpc-budget-v29/patch_rpc_budget.py')
+          spec=importlib.util.spec_from_file_location('v29',bp)
+          v29=importlib.util.module_from_spec(spec); spec.loader.exec_module(v29)
+          x=v29.patch_cpp(Path('/tmp/sh-v29-link-server.cpp').read_text('utf-8'))
+          h=v29.patch_header(Path('/tmp/sh-v29-link-server.h').read_text('utf-8'))
+          assert 'RpcBudget::Fits(pending, bytes)' in x
+          assert 'MustEvictAuthCache' in x
+          assert 'bool blocked = false' in h
+          ap=Path('tools/poc/yharnam/auth-revocation-v30/patch_auth_revocation.py')
+          spec=importlib.util.spec_from_file_location('v30',ap)
+          v30=importlib.util.module_from_spec(spec); spec.loader.exec_module(v30)
+          transformed=v30.transform({
+              v30.DB_H:Path('/tmp/sh-v30-database.h').read_text('utf-8'),
+              v30.DB_CPP:Path('/tmp/sh-v30-database.cpp').read_text('utf-8'),
+              v30.LINK_H:h,
+              v30.LINK_CPP:x,
+              v30.ACCOUNT_TEST:Path('/tmp/sh-v30-accounts-test.cpp').read_text('utf-8')
+          })
+          assert 'CurrentCredentialStatus' in transformed[v30.DB_CPP]
+          assert 'if (!user || user->banned)' in transformed[v30.LINK_CPP]
+          assert 'RevokedDatabaseCredentialsAreVisible' in transformed[v30.ACCOUNT_TEST]
+          qp=Path('tools/poc/yharnam/qt-http-compat-v30/patch_http_compat.py')
+          spec=importlib.util.spec_from_file_location('qthttpcompat',qp)
+          qt=importlib.util.module_from_spec(spec); spec.loader.exec_module(qt)
+          patched_qt=qt.transform(Path('/tmp/sh-v30-webapi.cpp').read_text('utf-8'))
+          assert 'QT_VERSION_CHECK(6, 8, 0)' in patched_qt
+          assert 'responder.write(QJsonDocument(body)' in patched_qt
+          patched_utc=qt.transform_session(Path('/tmp/sh-v30-http-session.cpp').read_text('utf-8'))
+          assert 'SH-QT-SESSION-UTC' in patched_utc
+          assert 'fromMSecsSinceEpoch(ms, Qt::UTC)' in patched_utc
+          patched_stats=qt.transform_stats(Path('/tmp/sh-v30-stats-server.cpp').read_text('utf-8'))
+          patched_backend=qt.transform_backend(Path('/tmp/sh-v30-bb-backend.cpp').read_text('utf-8'))
+          assert 'QHttpServerResponder::HeaderList headers' in patched_backend
+          assert 'SH-QT-STATS-PORTABLE' in patched_stats
+          assert 'ChangedAccountOnSameEndpoint()' in patched[v27.TEST]
+          qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
+          spec=importlib.util.spec_from_file_location('v26',qs)
+          q=importlib.util.module_from_spec(spec); spec.loader.exec_module(q)
+          pinned=Path('/tmp/sh-world-v22.cpp').read_text('utf-8')
+          assert 'ingress.Accept(message.size(), now_ms)' in q.world(pinned)
+          h=Path('/tmp/sh-world-v22.h').read_text('utf-8')
+          assert 'Ingress::Budget ingress' in q.world_h(h)
+          PY
+          grep -Fq "SH_GC_RECLAIM_DEPTH" /tmp/sh-gc-patched.cpp
+          ! cmp -s /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
+          ! cmp -s /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
+      - name: Test pinned V14 patch anchor transformation
+        run: python -m unittest discover -s tools/poc/yharnam/quit-perf-v14 -p 'test_patch.py' -v
+      - name: Configure bounded C++ performance watch tests
+        run: cmake -S tools/poc/yharnam/quit-perf-v14 -B /tmp/shyt-v14-check -DCMAKE_BUILD_TYPE=Release
+      - name: Compile performance monitor unit tests
+        run: cmake --build /tmp/shyt-v14-check --parallel 2
+      - name: Run C++ diagnostics tests
+        run: ctest --test-dir /tmp/shyt-v14-check --output-on-failure
+# Source and unit-test gate only. Full Windows game and Fornex staging require separate approval/testing.

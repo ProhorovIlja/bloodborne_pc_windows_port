@@ -1,0 +1,73 @@
+name: Yharnam native DBNO V5 pinned source validation
+on:
+  push:
+    branches: [feature/yharnam-dedicated-server-poc]
+    paths:
+      - tools/poc/yharnam/native-dbno-v5/**
+      - .github/workflows/yt-native-dbno-v5.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pinned-source-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch exact Yharnam Together upstream revision, selected source directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init /tmp/yt-upstream
+          git -C /tmp/yt-upstream remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C /tmp/yt-upstream sparse-checkout init --cone
+          git -C /tmp/yt-upstream sparse-checkout set \
+            server/coop server/src emulator/src/core bbport/gpu/bbcoop bbport/gpu/shim
+          git -C /tmp/yt-upstream fetch --depth 1 origin 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          git -C /tmp/yt-upstream checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/yt-upstream rev-parse HEAD)" = 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+      - name: Patch all native game and server source anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/poc/yharnam/native-dbno-v5/APPLY-NATIVE-DBNO.py
+          python tools/poc/yharnam/native-dbno-v5/APPLY-NATIVE-DBNO.py \
+            --checkout /tmp/yt-upstream --out /tmp/yt-v5-patches
+          grep -Fq 'PROTOCOL_CURRENT = 8' /tmp/yt-v5-patches/server/coop/coop.proto
+          grep -Fq 'SET_DBNO = 12' /tmp/yt-v5-patches/server/coop/coop.proto
+          grep -Fq 'return refuse("DBNO is locked after the hunt starts")' /tmp/yt-v5-patches/server/coop/team_lobby.cpp
+          grep -Fq 'if (!TeamDbnoEnabled())' /tmp/yt-v5-patches/emulator/src/core/bloodborne_party_death.cpp
+          grep -Fq '"sh-dbno"' /tmp/yt-v5-patches/bbport/gpu/shim/bbport_overlay.cpp
+      - name: Check no second patch / no modification to pristine checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git -C /tmp/yt-upstream status --porcelain)"
+          if python tools/poc/yharnam/native-dbno-v5/APPLY-NATIVE-DBNO.py \
+             --checkout /tmp/yt-upstream --out /tmp/yt-v5-patches; then
+            echo "ERROR: refused to protect existing output" >&2; exit 1
+          fi
+      - name: Validate schema using protoc
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq protobuf-compiler
+          mkdir -p /tmp/yt-v5-proto-gen
+          protoc -I /tmp/yt-v5-patches/server/coop \
+            --cpp_out=/tmp/yt-v5-proto-gen \
+            /tmp/yt-v5-patches/server/coop/coop.proto
+          test -s /tmp/yt-v5-proto-gen/coop.pb.h
+      - name: Upload generated source patch for Windows / Qt build intake
+        uses: actions/upload-artifact@v4
+        with:
+          name: SH-YT-Native-DBNO-V5-Patched-Sources
+          path: /tmp/yt-v5-patches/
+          retention-days: 7
+          if-no-files-found: error
+
+# Important: this validates pinned source patching and protobuf generation only.
+# It does not build or execute the full Bloodborne native runtime, nor deploy to Fornex.

@@ -565,6 +565,9 @@ public:
     /// (VK_EXT_memory_budget: what this process can use now, other processes included).
     [[nodiscard]] u64 GetDeviceMemoryBudgetNow() const;
 
+    /// Free reusable space inside VMA's existing device-local blocks.
+    [[nodiscard]] u64 GetDeviceBlockSlack() const;
+
     /// Returns the total memory budget available to the device.
     [[nodiscard]] u64 GetTotalMemoryBudget() const {
         return total_memory_budget;

@@ -139,6 +139,14 @@ set "mods_result=%out%\mods_game.txt"
 if exist "%mods_result%" del "%mods_result%"
 "%PYTHON%" scripts\mods.py "%game%" --out "%out%" --mods-dir "%mods_dir%" --config "%mods_config%" --enabled "%mods_enabled%" > "%mods_result%"
 if exist "%mods_result%" for /f "usebackq delims=" %%g in ("%mods_result%") do set "game=%%g"
+REM MOAL replaces the game's lamp talk scripts. The native BB_LAMP_TRAVEL hook
+REM also intercepts that talk command and would open a second competing menu.
+REM Only when the MOAL overlay is actually active in SOLO play is it disabled.
+REM Do not change saved user preferences. The mod loader omits MOAL in parties.
+if exist "%out%\moal-active.flag" (
+  set "BB_LAMP_TRAVEL=0"
+  echo Mods: MOAL lantern script active - native lamp travel hook safely disabled.
+)
 
 REM The boot image (scripts\boot_image.py: prepare.py, link_libc.py, link_modules.py in one process)
 REM is built once and reused while the game files and scripts stay the same (docs\STARTUP.md;

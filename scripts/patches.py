@@ -714,6 +714,12 @@ def main():
     if a.patches_dir:
         # After the built-in ones: an external patch of the same bytes wins.
         selected=external_selection(external_patches(a.patches_dir,a.app_version,a.xml),a.patches_config)
+        # Doll Rebirth respec is not proven safe in live seamless co-op and
+        # its companion dialogue mod is also omitted from multiplayer overlays.
+        # Keep the executable patch off in parties, even when isEnabled=true.
+        if party_mode(os.environ):
+            selected=[item for item in selected
+                      if not item[0].casefold().startswith("dollrebirth.xml/")]
         if party_mode():
             dropped=[key for key,_,meta in selected if meta.get('Name')==DISABLE_HTTP]
             for key in dropped:

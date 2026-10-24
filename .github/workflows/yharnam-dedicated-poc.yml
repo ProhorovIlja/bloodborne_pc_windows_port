@@ -1,0 +1,50 @@
+name: Yharnam dedicated PoC offline checks
+
+on:
+  push:
+    branches:
+      - feature/yharnam-dedicated-server-poc
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-kit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check staging and launcher source syntax
+        run: |
+          python -m py_compile tools/yharnam_poc/*.py tests/test_yharnam_poc.py
+          bash -n tools/yharnam_poc/build_linux.sh
+      - name: Verify isolated ports, source pinning and reversible client override
+        run: python -m unittest discover -s tests -p 'test_yharnam_poc.py' -v
+      - name: Validate in-game group and invasion C++20 matchmaking core
+        run: |
+          cmake -S tools/poc/yharnam/ingame-online -B /tmp/sh-ingame-build -DBUILD_TESTING=ON
+          cmake --build /tmp/sh-ingame-build --parallel 2
+          ctest --test-dir /tmp/sh-ingame-build --output-on-failure
+
+# This workflow does not fetch Bloodborne assets, build Windows client binaries,
+# deploy to Fornex or prove that any multiplayer gameplay works.
+
+      - name: Check UI patch against pinned upstream Yharnam source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init /tmp/sh-yt-overlay-upstream
+          git -C /tmp/sh-yt-overlay-upstream remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C /tmp/sh-yt-overlay-upstream sparse-checkout init --cone
+          git -C /tmp/sh-yt-overlay-upstream sparse-checkout set bbport/gpu/shim
+          git -C /tmp/sh-yt-overlay-upstream fetch --depth 1 origin 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          git -C /tmp/sh-yt-overlay-upstream checkout --detach FETCH_HEAD
+          python3 tools/poc/yharnam/ingame-online/PATCH-YHARNAM-TEAM-UI.py \
+            --source /tmp/sh-yt-overlay-upstream/bbport/gpu/shim/bbport_overlay.cpp \
+            --out /tmp/sh-yt-overlay-patched/bbport_overlay.cpp
+          grep -Fq 'sh-scale-plus' /tmp/sh-yt-overlay-patched/bbport_overlay.cpp
+          grep -Fq 'ImVec2& p = draw->VtxBuffer[v].pos' /tmp/sh-yt-overlay-patched/bbport_overlay.cpp
+          grep -Fq 'TeamScalePercent()' /tmp/sh-yt-overlay-patched/bbport_overlay.cpp

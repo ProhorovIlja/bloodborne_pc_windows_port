@@ -11,11 +11,12 @@ import shutil
 import subprocess
 import sys
 import threading
+import webbrowser
 import tkinter as tk
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog
 
 APP_DIR = Path(__file__).resolve().parent
 # The port's version (VERSION at the repository root; the release has no such file).
@@ -25,7 +26,7 @@ LOG_FILE = APP_DIR / "launcher.log"
 LOG_DIR = APP_DIR / "logs"
 LOG_KEEP = 20
 SETTINGS_FILE = APP_DIR / "launcher_settings.json"
-UPDATE_CACHE_FILE = APP_DIR / "launcher_update_check.json"  # scripts/update_check.py, 6 h
+UPDATE_CACHE_FILE = APP_DIR / "seamless_hunt_update_check.json"  # scripts/update_check.py, 6 h
 PATCHES_XML = APP_DIR / "patches" / "Bloodborne.xml"
 DEFAULT_GAME = Path(os.environ.get("BB_GAME_DIR", "../CUSA03173"))
 
@@ -504,6 +505,33 @@ def party_session_module():
         sys.path.insert(0, scripts_dir)
     import party_session
     return party_session
+
+
+def seamless_hunt_module():
+    """Read-only Seamless Hunt diagnostics. No account login or P2P protocol changes."""
+    scripts_dir = str(APP_DIR / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import seamless_hunt
+    return seamless_hunt
+
+
+def patch_preflight_module():
+    """Byte-accurate, offline XML patch collision detection."""
+    scripts_dir = str(APP_DIR / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import patch_preflight
+    return patch_preflight
+
+
+def seamless_hunt_network_module():
+    """Opt-in STUN and IPv6 checks; no gameplay traffic or account credentials."""
+    scripts_dir = str(APP_DIR / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import seamless_hunt_network
+    return seamless_hunt_network
 
 
 PARTY_RENDEZVOUS_TIP = (
@@ -1622,15 +1650,20 @@ def acquire_single_instance():
 class BloodborneLauncher(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"Bloodborne PC Launcher {PORT_VERSION}")
-        self.geometry("780x760")  # the Party tab is the tallest settings tab
-        self.minsize(720, 680)
+        self.title(f"Seamless Hunt PC | Bloodborne {PORT_VERSION}")
+        # Compact launch-first window. Advanced settings scroll inside their panel.
+        self.geometry("900x630")
+        self.minsize(740, 510)
 
         self.proc = None
         self.log_fh = None
         self.hidden_count = 0
         self.log_queue = queue.Queue()
+        self.discovery_queue = queue.Queue()
+        self.discovery_busy = False
         self.settings = self.load_settings()
+        from scripts import hunter_preview
+        self.hunter_preview_pin = hunter_preview.validate_pin(self.settings.get("hunter_preview"))
         try:  # the game settings of an older launcher_settings.json move to bbport.ini once
             migrate_ini_rev(bbport_ini_path())  # bbport.ini's one-time changes (rot off, 0.7.2)
             moved = migrate_settings_to_ini(self.settings, bbport_ini_path())
@@ -1650,20 +1683,27 @@ class BloodborneLauncher(tk.Tk):
 
         self.build_style()
         self.build_ui()
-        # Tall enough for the tallest settings tab when the screen allows (the tabs outgrew a fixed
-        # 760); on a smaller screen the tabs are clipped, never the Launch row (build_ui).
+        # Notebook pages remain mounted but are hidden until requested; their scrollable
+        # container is sized independently of the tallest page and the player's screen.
         self.update_idletasks()
-        req_h = max(self.notebook.nametowidget(t).winfo_reqheight() for t in self.notebook.tabs())
-        need = self.winfo_reqheight() - self.notebook.winfo_reqheight() + req_h + 40
-        self.geometry(f"780x{max(760, min(need, self.winfo_screenheight() - 80))}")
+        self.refresh_home_state()
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.bind("<Control-f>", lambda _event: self.show_settings_search(), add="+")
+        self.bind("<Control-1>", lambda _event: self.show_settings_section("Display"), add="+")
+        self.bind("<Control-2>", lambda _event: self.show_settings_section("Party"), add="+")
+        self.bind("<Control-3>", lambda _event: self.show_settings_section("Game"), add="+")
+        self.bind("<Escape>", lambda _event: self.hide_settings_panel(), add="+")
         self._ini_stamp = self.ini_stamp()
         self.bind("<FocusIn>", lambda e: self.refresh_game_settings() if e.widget is self else None, add="+")
         self.after(50, self.poll_queue)
         self.log("Ready. Select your eboot.bin and press Launch Bloodborne.")
         self.after(1200, self.check_last_party_session)
         self.start_update_check()
+        # Read-only targeted discovery; runs off the UI thread and never replaces
+        # a user-chosen game path or moves a save without explicit permission.
+        self.after(800, lambda: self.discover_installs(silent=True))
+        self.after(300, self.refresh_pinned_hunter)
 
     # ------------------------------------------------------------------ UI
     def build_style(self):
@@ -1684,6 +1724,14 @@ class BloodborneLauncher(tk.Tk):
         style.configure("SubHeader.TLabel", font=("Segoe UI", 9), foreground="#888888", background=bg_dark)
         style.configure("Section.TLabel", font=("Segoe UI", 8, "bold"), foreground="#c5a059", background=bg_card)
         style.configure("Hint.TLabel", font=("Segoe UI", 8), foreground="#888888", background=bg_card)
+        # Calm, high-contrast Home surface. No decorative fake statuses.
+        style.configure("Hub.TFrame", background="#202629")
+        style.configure("HubTitle.TLabel", background="#202629",
+                        foreground="#c4ad87", font=("Segoe UI", 10, "bold"))
+        style.configure("HubCaption.TLabel", background="#202629",
+                        foreground="#9ea5a5", font=("Segoe UI", 9, "bold"))
+        style.configure("HubInfo.TLabel", background="#202629",
+                        foreground="#f0ece4", font=("Segoe UI", 10))
         style.map("Card.TCheckbutton", background=[("active", "#2d2d30")],
                   foreground=[("disabled", "#666666")])
 
@@ -1750,9 +1798,16 @@ class BloodborneLauncher(tk.Tk):
         main = ttk.Frame(self, padding=(16, 12, 16, 12))
         main.pack(fill="both", expand=True)
 
-        ttk.Label(main, text="BLOODBORNE PC", style="Header.TLabel").pack(anchor="w")
-        ttk.Label(main, text="Native Windows Port (bbport) Launcher",
+        ttk.Label(main, text="SEAMLESS HUNT  /  BLOODBORNE", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(main, text="NATIVE WINDOWS CLIENT  ·  HUNTER'S REFUGE",
                   style="SubHeader.TLabel").pack(anchor="w", pady=(0, 8))
+        # Contextual tools: a read-only character viewer and release history.
+        head_actions = ttk.Frame(main)
+        head_actions.pack(fill="x", pady=(0, 8))
+        ttk.Button(head_actions, text="Hunters / Saves", style="Secondary.TButton",
+                   command=self.show_hunters).pack(side="left")
+        ttk.Button(head_actions, text="What's New / Updates", style="Secondary.TButton",
+                   command=self.show_release_center).pack(side="right")
         # Update notice (scripts/update_check.py): packed here once a newer release is known.
         self.update_label = tk.Label(main, text="", fg="#c5a059", bg="#1a1a1a", cursor="hand2",
                                      font=("Segoe UI", 10, "underline"), anchor="w")
@@ -1776,15 +1831,58 @@ class BloodborneLauncher(tk.Tk):
                 initial_path = str(DEFAULT_GAME)
 
         self.eboot_var = tk.StringVar(value=initial_path)
+        self.eboot_var.trace_add("write", lambda *_: self.refresh_home_state())
         eboot_entry = ttk.Entry(select_frame, textvariable=self.eboot_var, font=("Consolas", 10))
         eboot_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         browse_btn = ttk.Button(select_frame, text="Browse...", style="Secondary.TButton",
                                 command=self.browse_eboot)
         browse_btn.pack(side="right")
+        find_btn = ttk.Button(select_frame, text="Auto Find", style="Secondary.TButton",
+                              command=self.discover_installs)
+        find_btn.pack(side="right", padx=(0, 8))
+        Tooltip(find_btn, "Discover installed game dumps by eboot.bin + param.sfo, "
+                          "including all known retail CUSA regions and patch versions. "
+                          "Also find other ports' saves, mods, patches and cheats. "
+                          "Read-only, bounded scan; does not change saves or install updates.")
         eboot_tip = ("The game's eboot.bin, or the folder that contains it: Bloodborne (any retail region) with "
                      "update 1.09 merged. The folder is passed to run.bat as BB_GAME_DIR.")
         Tooltip(eboot_entry, eboot_tip)
         Tooltip(browse_btn, "Pick the game's eboot.bin. " + eboot_tip.split(": ", 1)[1])
+
+        # A small, truthful home dashboard. The dense settings surface stays
+        # available through five clear category shortcuts and Ctrl+F.
+        overview = ttk.Frame(main, style="Hub.TFrame", padding=(16, 12, 16, 12))
+        overview.pack(fill="x", pady=(0, 10))
+        ttk.Label(overview, text="YOUR HUNT", style="HubTitle.TLabel").pack(anchor="w", pady=(0, 6))
+        self.home_game_var = tk.StringVar(value="Checking selected game...")
+        self.home_client_var = tk.StringVar(value="Checking native client files...")
+        self.home_party_var = tk.StringVar(value="Checking play mode...")
+        self.home_hunter_var = tk.StringVar(
+            value="No preview pinned · open Hunters / Saves to pick one")
+        for label, variable in (("HUNTER", self.home_hunter_var),
+                                ("GAME", self.home_game_var),
+                                ("CLIENT", self.home_client_var),
+                                ("PLAY MODE", self.home_party_var)):
+            line = ttk.Frame(overview, style="Hub.TFrame")
+            line.pack(fill="x", pady=2)
+            ttk.Label(line, text=label, style="HubCaption.TLabel", width=12).pack(side="left")
+            ttk.Label(line, textvariable=variable, style="HubInfo.TLabel").pack(
+                side="left", fill="x", expand=True)
+        nav = ttk.Frame(main)
+        nav.pack(fill="x", pady=(0, 8))
+        for label, tab_title in (
+                ("Graphics", "Display"),
+                ("Performance", "Performance & Shaders"),
+                ("Online / Party", "Party"),
+                ("Game & Mods", "Game"),
+                ("Advanced", "Advanced / Debug")):
+            ttk.Button(nav, text=label, style="Secondary.TButton",
+                       command=lambda t=tab_title: self.show_settings_section(t)).pack(
+                           side="left", padx=(0, 7))
+        self.settings_toggle_button = ttk.Button(
+            nav, text="All settings  ▾", style="Secondary.TButton",
+            command=self.toggle_settings_panel)
+        self.settings_toggle_button.pack(side="right")
 
         # ---- setting variables
         fps = self.settings.get("fps", "uncap")
@@ -1934,6 +2032,14 @@ class BloodborneLauncher(tk.Tk):
         self.party_lan_code_var = tk.StringVar(value=_lan)
         self.party_status_var = tk.StringVar()
         self.party_test_running = False
+        self.seamless_hunt_host_var = tk.StringVar(value=str(
+            self.settings.get("seamless_hunt_host", "play.seamlesshunt.com") or "play.seamlesshunt.com"))
+        self.seamless_hunt_status_var = tk.StringVar(value="Optional server connectivity check; game P2P is unchanged.")
+        self.seamless_hunt_test_running = False
+        self.seamless_hunt_result_queue = queue.Queue()
+        # Experimental legacy CLS BBSC is re-confirmed EVERY launcher session.
+        # Deliberately not restored from launcher_settings.json.
+        self.legacy_bbsc_var = tk.BooleanVar(value=False)
         # Party rules & sync dialog (PARTY_SWITCHES, start mode, guest Insight, backups)
         self.party_switch_vars = {key: tk.BooleanVar(value=bool(self.settings.get(key, default)))
                                   for key, _, default in PARTY_SWITCHES}
@@ -1959,26 +2065,48 @@ class BloodborneLauncher(tk.Tk):
         ttk.Label(preset_row, text="Settings", font=("Segoe UI", 10, "bold")).pack(side="left")
         ttk.Label(preset_row, text="hover over any option for details",
                   style="SubHeader.TLabel").pack(side="left", padx=(8, 0))
+        find_btn = ttk.Button(preset_row, text="Find setting...  Ctrl+F",
+                              style="Secondary.TButton", command=self.show_settings_search)
+        find_btn.pack(side="left", padx=(8, 0))
+        Tooltip(find_btn, "Search all visible setting names without changing options. "
+                          "Use Ctrl+F from anywhere in the launcher.")
+        latency_btn = ttk.Button(preset_row, text="Low latency", style="Secondary.TButton",
+                                 command=self.set_low_latency_mode)
+        latency_btn.pack(side="right", padx=(6, 0))
+        Tooltip(latency_btn, "Set GPU frames ahead to 1 and disable frame generation (which can add input lag). "
+                             "Keeps your FPS target, graphics quality, co-op, password, mods and saves unchanged. "
+                             "A preset, not a promise of zero network latency.")
         vanilla_btn = ttk.Button(preset_row, text="Vanilla mode", style="Secondary.TButton",
                                  command=self.set_vanilla_mode)
         vanilla_btn.pack(side="right", padx=(6, 0))
-        everything_btn = ttk.Button(preset_row, text="Everything on", style="Secondary.TButton",
-                                    command=self.set_everything_on)
-        everything_btn.pack(side="right")
+        balanced_btn = ttk.Button(preset_row, text="Balanced 60", style="Secondary.TButton",
+                                  command=self.set_recommended_mode)
+        balanced_btn.pack(side="right")
         Tooltip(vanilla_btn, "Preset: turns the port's optional features off (upscaler, object motion, overlay, "
                              "FPS patch, mods, resolution scaling, tracing, watchdog, draw prep workers, async "
                              "shaders, GPL, performance HUD, mouse & keyboard controls, party mode), sets "
                              "30 FPS, anisotropic filtering Off and disables all XML patches. Saved "
                              "immediately.")
-        Tooltip(everything_btn, "Preset: turns the features back on (including async shaders and GPL; not Debug tracing), sets "
-                                "Uncap FPS and 16x anisotropic filtering, and enables the recommended patches "
-                                "(Skip Intro, Performance Patch, Disable Motion Blur). The performance HUD, "
-                                "mouse & keyboard controls and the Party tab are preferences and stay as "
-                                "they are. Saved immediately.")
+        Tooltip(balanced_btn, "Previewed 60 FPS starting point: normal GPU frame queue, shader precompile "
+                              "and tracing off. Does not touch your mods, gameplay patches, party "
+                              "configuration, resolution, HDR, saves or input.")
 
-        # ---- settings notebook
-        self.notebook = ttk.Notebook(main)
-        self.notebook.pack(fill="x", pady=(0, 8))
+        # Scrollable settings panel (collapsed by default). No options are removed:
+        # the exact same notebook stays alive for search and in-game setting sync.
+        self.settings_panel = ttk.Frame(main)
+        self.settings_canvas = tk.Canvas(
+            self.settings_panel, bg="#15191b", borderwidth=0,
+            highlightthickness=0, height=380)
+        self.settings_scrollbar = ttk.Scrollbar(
+            self.settings_panel, orient="vertical", command=self.settings_canvas.yview)
+        self.settings_canvas.configure(yscrollcommand=self.settings_scrollbar.set)
+        self.settings_scrollbar.pack(side="right", fill="y")
+        self.settings_canvas.pack(side="left", fill="both", expand=True)
+        self.notebook = ttk.Notebook(self.settings_canvas)
+        self.settings_canvas_item = self.settings_canvas.create_window(
+            (0, 0), window=self.notebook, anchor="nw")
+        self.notebook.bind("<Configure>", lambda _e: self._settings_update_scroll(), add="+")
+        self.settings_canvas.bind("<Configure>", self._settings_resize, add="+")
 
         # 1. Display
         tab = self._tab("Display")
@@ -2241,6 +2369,27 @@ class BloodborneLauncher(tk.Tk):
                              "patches\\Bloodborne.xml (game version 1.09). The quick patch boxes in these tabs "
                              "stay in sync (BB_PATCHES).")
 
+        community_btn = ttk.Button(sec, text="Import Jump L3 / Lamp / Rebirth ZIPs...",
+                                   style="Secondary.TButton",
+                                   command=self.open_community_mod_import)
+        community_btn.grid(row=sec.next_row, column=0, columnspan=2, sticky="w", pady=(4, 2))
+        sec.next_row += 1
+        Tooltip(community_btn,
+                "Import your own audited Bloodborne 1.09 mod ZIPs. Checks SHA-256, dependencies, "
+                "conflicting files, safe install and offline-only lamp/respec behavior. "
+                "No game files or existing mods are overwritten.")
+
+        manage_mods_btn = ttk.Button(sec, text="Manage installed mods...",
+                                     style="Secondary.TButton",
+                                     command=self.open_community_mod_manager)
+        manage_mods_btn.grid(row=sec.next_row, column=0, columnspan=2,
+                             sticky="w", pady=(2, 2))
+        sec.next_row += 1
+        Tooltip(manage_mods_btn, "Enable or disable individual loose-file mods without "
+                                "touching Bloodborne's files or changing their load order. "
+                                "MOAL and DollRebirth are kept out of unverified multiplayer.")
+
+
         # 5. Input & Audio
         tab = self._tab("Input & Audio")
         sec = self._section(tab, 0, "Controller & overlay")
@@ -2382,12 +2531,14 @@ class BloodborneLauncher(tk.Tk):
 
         self.update_res_scaling_state()
         self.update_party_state()
-        self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.refresh_party_code(), add="+")
+        self.notebook.bind("<<NotebookTabChanged>>", lambda e: (
+            self.refresh_party_code(), self.after_idle(self._settings_update_scroll)),
+                           add="+")
 
-        # Launch, log and log buttons: packed before the notebook, so a window shorter than the
-        # content clips the settings tabs and then shrinks the log, never the Launch button.
-        bottom = ttk.Frame(main)
-        bottom.pack(side="bottom", fill="both", expand=True, before=self.notebook)
+        # The primary Play button is always visible. Settings scroll independently
+        # above it, even on smaller displays.
+        bottom = self.bottom = ttk.Frame(main)
+        bottom.pack(side="bottom", fill="x")
 
         # launch / stop
         action = ttk.Frame(bottom)
@@ -2406,7 +2557,10 @@ class BloodborneLauncher(tk.Tk):
         # log header
         log_header = ttk.Frame(bottom)
         log_header.pack(fill="x")
-        ttk.Label(log_header, text="Launcher Log:", font=("Segoe UI", 9, "bold")).pack(side="left")
+        self.diagnostics_button = ttk.Button(
+            log_header, text="Diagnostics & logs  ▸", style="Secondary.TButton",
+            command=self.toggle_diagnostics)
+        self.diagnostics_button.pack(side="left")
         self.hide_vk_var = tk.BooleanVar(value=self.settings.get("hide_vk", True))
         hide_vk_cb = ttk.Checkbutton(log_header, text="Hide Vulkan warnings", variable=self.hide_vk_var)
         hide_vk_cb.pack(side="right")
@@ -2436,12 +2590,149 @@ class BloodborneLauncher(tk.Tk):
         # log text + scrollbar
         log_frame = ttk.Frame(bottom)
         log_frame.pack(fill="both", expand=True, pady=(2, 0))
+        self.diagnostics_bar = bar
+        self.diagnostics_log_frame = log_frame
         self.log_text = tk.Text(log_frame, height=3, bg="#111111", fg="#a0a0a0", insertbackground="white",
                                 font=("Consolas", 9), relief="flat", wrap="word")
         scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.log_text.pack(side="left", fill="both", expand=True)
+        self.diagnostics_open = False
+        self.diagnostics_bar.pack_forget()
+        self.diagnostics_log_frame.pack_forget()
+        self.settings_open = False
+        self._bind_settings_wheel(self.notebook)
+
+    def _bind_settings_wheel(self, widget):
+        # Tk mouse wheel is sent to the hovered child. Bind informative widgets
+        # but not comboboxes/text entries, whose own wheel behavior is useful.
+        for child in widget.winfo_children():
+            if isinstance(child, (ttk.Frame, ttk.Label, ttk.Checkbutton, tk.Label)):
+                child.bind("<MouseWheel>", self._settings_wheel, add="+")
+                child.bind("<Button-4>", self._settings_wheel, add="+")
+                child.bind("<Button-5>", self._settings_wheel, add="+")
+            self._bind_settings_wheel(child)
+
+    def _settings_wheel(self, event):
+        if not getattr(self, "settings_open", False):
+            return
+        if getattr(event, "num", None) == 4:
+            ticks = -1
+        elif getattr(event, "num", None) == 5:
+            ticks = 1
+        else:
+            ticks = -(event.delta // 120) if event.delta else 0
+        if ticks:
+            self.settings_canvas.yview_scroll(ticks, "units")
+            return "break"
+
+    def _settings_resize(self, event):
+        # Keep the notebook wide enough to show its existing two-column controls.
+        # Narrow screens still expose all vertical rows through the scrollbar.
+        try:
+            wanted = max(event.width, self.notebook.winfo_reqwidth())
+            self.settings_canvas.itemconfigure(self.settings_canvas_item, width=wanted)
+            self._settings_update_scroll()
+        except tk.TclError:
+            pass
+
+    def _settings_update_scroll(self):
+        try:
+            self.settings_canvas.configure(scrollregion=self.settings_canvas.bbox("all"))
+        except tk.TclError:
+            pass
+
+    def show_settings_section(self, section: str):
+        """Reveal the existing real settings page, never change user options."""
+        if not getattr(self, "settings_open", False):
+            self.settings_panel.pack(fill="both", expand=True, before=self.bottom)
+            self.settings_open = True
+            self.settings_toggle_button.configure(text="Hide settings  ▴")
+        for tab in self.notebook.tabs():
+            if self.notebook.tab(tab, "text") == section:
+                self.notebook.select(tab)
+                break
+        self.after_idle(lambda: (self._settings_update_scroll(),
+                                 self.settings_canvas.yview_moveto(0)))
+        # Preserve available room for the fixed Play bar without going off-screen.
+        wanted = min(810, max(540, self.winfo_screenheight() - 100))
+        self.geometry(f"{max(900, self.winfo_width())}x{wanted}")
+
+    def hide_settings_panel(self):
+        if getattr(self, "settings_open", False):
+            self.settings_panel.pack_forget()
+            self.settings_open = False
+            self.settings_toggle_button.configure(text="All settings  ▾")
+            self.geometry("900x630")
+
+    def toggle_settings_panel(self):
+        if getattr(self, "settings_open", False):
+            self.hide_settings_panel()
+        else:
+            self.show_settings_section(self.notebook.tab(self.notebook.select(), "text"))
+
+    def toggle_diagnostics(self):
+        """Logs remain in memory/on disk while visually collapsed."""
+        if getattr(self, "diagnostics_open", False):
+            self.diagnostics_bar.pack_forget()
+            self.diagnostics_log_frame.pack_forget()
+            self.diagnostics_open = False
+            self.diagnostics_button.configure(text="Diagnostics & logs  ▸")
+        else:
+            self.diagnostics_bar.pack(side="bottom", fill="x", pady=(6, 0))
+            self.diagnostics_log_frame.pack(fill="both", expand=True, pady=(2, 0))
+            self.diagnostics_open = True
+            self.diagnostics_button.configure(text="Hide diagnostics  ▾")
+
+    def refresh_pinned_hunter(self):
+        """Re-open the chosen save READ-ONLY; never trust stale cached stats."""
+        pin = self.hunter_preview_pin
+        if not pin:
+            self.home_hunter_var.set("No preview pinned · open Hunters / Saves to pick one")
+            return
+        from scripts import hunter_preview
+        self.home_hunter_var.set("Checking pinned Hunter's save (read-only)…")
+        results = queue.Queue(maxsize=1)
+
+        def worker():
+            results.put(hunter_preview.preview(pin))
+        threading.Thread(target=worker, daemon=True, name="hunter-preview-read").start()
+
+        def poll(remaining=80):
+            if remaining <= 0 or not self.winfo_exists():
+                if self.winfo_exists() and self.hunter_preview_pin == pin:
+                    self.home_hunter_var.set("Preview unavailable · scan Hunters / Saves again")
+                return
+            if self.hunter_preview_pin != pin:
+                return
+            try:
+                hunter = results.get_nowait()
+            except queue.Empty:
+                self.after(100, lambda: poll(remaining - 1))
+                return
+            self.home_hunter_var.set(hunter_preview.label(hunter))
+        self.after(100, poll)
+
+    def refresh_home_state(self):
+        """Do not claim readiness, validated saves, online authentication or crossplay."""
+        if not hasattr(self, "home_game_var"):
+            return
+        from scripts import launcher_home_state
+        try:
+            selected = self.eboot_var.get().strip()
+            found = bool(selected and resolve_game_dir(selected))
+            self.home_game_var.set(launcher_home_state.game_label(selected, found))
+            self.home_client_var.set(launcher_home_state.client_label(
+                (APP_DIR / "out" / "bbport.exe").is_file(), RUN_BAT.is_file()))
+            mode = self.party_mode() if hasattr(self, "party_mode_var") else ""
+            if getattr(self, "legacy_bbsc_var", None) is not None and self.legacy_bbsc_var.get():
+                self.home_party_var.set(
+                    "EXPERIMENTAL legacy BBSC selected · native Party must be OFF · online unverified")
+            else:
+                self.home_party_var.set(launcher_home_state.party_label(mode))
+        except (OSError, ValueError, tk.TclError):
+            self.home_game_var.set("Game information unavailable · verify before Play")
 
     # Settings tab helpers: a tab holds two side-by-side sections; a section is a grid of
     # checkboxes (full width) and label + combobox rows, each with a tooltip.
@@ -2653,6 +2944,60 @@ class BloodborneLauncher(tk.Tk):
                                          "log below. Needs a built game (out\\bbport.exe).")
 
         sec = self._section(tab, 1, "Connection")
+        server_label = ttk.Label(sec, text="BBSC realm host:", style="Card.TLabel")
+        server_label.grid(row=sec.next_row, column=0, sticky="w", pady=(2, 5))
+        server_entry = ttk.Entry(sec, textvariable=self.seamless_hunt_host_var, width=29)
+        server_entry.grid(row=sec.next_row, column=1, sticky="w", pady=(2, 5))
+        server_entry.bind("<FocusOut>", lambda _event: self.save_settings())
+        sec.next_row += 1
+        Tooltip(server_entry, "Choose the public Seamless Hunt realm, localhost or your own server. "
+                "Used by Network doctor, account diagnostics and the opt-in experimental "
+                "native BBSC session. Just a hostname, without protocol or port "
+                "(shadNet TCP 31313, WebAPI 31315).")
+        sh_row = ttk.Frame(sec, style="Card.TFrame")
+        sh_row.grid(row=sec.next_row, column=0, columnspan=2, sticky="w", pady=(0, 3))
+        sec.next_row += 1
+        self.seamless_hunt_test_btn = ttk.Button(sh_row, text="Network doctor",
+                                                style="Secondary.TButton", command=self.check_seamless_hunt)
+        self.seamless_hunt_test_btn.pack(side="left")
+        Tooltip(self.seamless_hunt_test_btn,
+                "Optional checks: Seamless Hunt TCP services, game-server status, UDP STUN mapping "
+                "and local IPv6 routing. STUN reveals your IP to your chosen STUN provider. "
+                "No passwords or party codes are transmitted, and the game P2P is unchanged. "
+                "This does not establish that other hunters can join you.")
+        account_btn = ttk.Button(sh_row, text="Check BBSC login...", style="Secondary.TButton",
+                                 command=self.open_bbsc_account_check)
+        account_btn.pack(side="left", padx=(6, 0))
+        Tooltip(account_btn, "Opt-in login to a trusted shadNet server, then immediately disconnect. "
+                "This verifies the username/password, NOT game login or bell matchmaking. "
+                "Upstream shadNet does not encrypt TCP credentials.")
+        private_btn = ttk.Button(sh_row, text="Private account...", style="Secondary.TButton",
+                                 command=lambda: self.open_bbsc_account_check(register_private=True))
+        private_btn.pack(side="left", padx=(6, 0))
+        Tooltip(private_btn, "Create an account on your own shadNet/BBSC server using its "
+                "registration secret key. The public Seamless Hunt realm uses its website.")
+        sh_site_btn = ttk.Button(sh_row, text="Account website",
+                                 style="Secondary.TButton",
+                                 command=lambda: webbrowser.open("https://seamlesshunt.com"))
+        sh_site_btn.pack(side="left", padx=(6, 0))
+        Tooltip(sh_site_btn, "Open the official Seamless Hunt website in your browser "
+                             "to register or manage your account. Launcher sign-in is not implemented yet.")
+        self.seamless_hunt_status_lbl = ttk.Label(
+            sec, textvariable=self.seamless_hunt_status_var, style="Hint.TLabel",
+            wraplength=330, justify="left")
+        self.seamless_hunt_status_lbl.grid(row=sec.next_row, column=0, columnspan=2,
+                                          sticky="w", pady=(0, 5))
+        sec.next_row += 1
+        legacy_cb = self._check(
+            sec, "Experimental: CLS BBSC bells (native DLL)", self.legacy_bbsc_var,
+            "For native Win64 developer testing ONLY. Requires a separately built "
+            "out/gpu/bbnet20.dll, normal Party mode OFF, and a compatible 1.09 "
+            "game image. This is NOT yet proven compatible with CLS BBSC 0.0.2 "
+            "players and does NOT reuse the native Party transport. "
+            "Enabled only for this launcher session, with launch confirmation.",
+            command=self.refresh_home_state)
+        Tooltip(legacy_cb, "Not a regular release feature. No automatic downloads, "
+                "account sign-in, server changes or game save selection.")
         port_tip = ("UDP/TCP port of the party on this PC (1024-65535). The host's friends connect to it; "
                     "forward it in your router if UPnP cannot open it. Default: 9307 (BB_PARTY_PORT).")
         port_lbl = ttk.Label(sec, text="Port:", style="Card.TLabel")
@@ -2947,6 +3292,7 @@ class BloodborneLauncher(tk.Tk):
 
     def on_party_change(self):
         self.update_party_state()
+        self.refresh_home_state()
         self.save_settings()
 
     def update_party_state(self):
@@ -3393,6 +3739,405 @@ class BloodborneLauncher(tk.Tk):
                  + (f" (the old party save is in {backup})" if backup else ""))
         return True
 
+    def show_hunters(self):
+        """Read-only Hunter Hub preview. Never activates, edits or moves game saves."""
+        from scripts import hunter_armory, hunter_profiles, install_discovery
+        from queue import Empty
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Seamless Hunt PC | Hunters")
+        dialog.geometry("830x590")
+        dialog.minsize(590, 420)
+        dialog.transient(self)
+        body = ttk.Frame(dialog, padding=16)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="Your Hunters", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(body, text="Characters detected in native, party, shadPS4 and other-port save slots.",
+                  style="SubHeader.TLabel").pack(anchor="w", pady=(4, 9))
+        status = tk.StringVar(value="No save files are modified. Only validated, decrypted slots are shown.")
+        ttk.Label(body, textvariable=status, style="SubHeader.TLabel",
+                  wraplength=765).pack(anchor="w", pady=(0, 9))
+
+        view = ttk.Frame(body)
+        view.pack(fill="both", expand=True)
+        view.columnconfigure(0, weight=1)
+        view.columnconfigure(1, weight=1)
+        view.rowconfigure(0, weight=1)
+        tree_frame = ttk.Frame(view)
+        tree_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        tree = ttk.Treeview(tree_frame, columns=("hunter", "level", "source"),
+                            show="headings", selectmode="browse", height=13)
+        for col, label, width in (("hunter", "Hunter", 160),
+                                  ("level", "Level", 58),
+                                  ("source", "Save source", 162)):
+            tree.heading(col, text=label)
+            tree.column(col, width=width, stretch=(col != "level"))
+        vs = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vs.set)
+        vs.pack(side="right", fill="y")
+        tree.pack(side="left", fill="both", expand=True)
+
+        details_frame = ttk.Frame(view)
+        details_frame.grid(row=0, column=1, sticky="nsew")
+        details = tk.Text(details_frame, wrap="word", height=19, relief="flat", padx=12, pady=12,
+                          bg="#202023", fg="#e0d9ce", insertbackground="#e0d9ce",
+                          font=("Segoe UI", 10))
+        details_scroll = ttk.Scrollbar(details_frame, orient="vertical", command=details.yview)
+        details.configure(yscrollcommand=details_scroll.set)
+        details_scroll.pack(side="right", fill="y")
+        details.pack(side="left", fill="both", expand=True)
+        details.insert("1.0", "Choose a Hunter to see verified character stats.\n"
+                       "Weapon equipment and last lamp: not yet decoded reliably.")
+        details.configure(state="disabled")
+        profiles = []
+        armory_names = {}
+        pending = queue.Queue(maxsize=1)
+        state = {"busy": False}
+
+        def show_details(_event=None):
+            selection = tree.selection()
+            if not selection:
+                return
+            h = profiles[int(selection[0])]
+            hours, seconds = divmod(h.playtime_seconds, 3600)
+            minutes = seconds // 60
+            weapon_items = h.owned_weapon_ids
+            weapons_list = ("\n".join("  " + hunter_armory.weapon_description(i, armory_names)
+                                       for i in weapon_items[:22])
+                            if weapon_items else "  No weapon entries recognized")
+            if len(weapon_items) > 22:
+                weapons_list += f"\n  ... and {len(weapon_items) - 22} more"
+            desc = (
+                f"{h.name}  |  Blood Level {h.level}\n"
+                f"{h.build_guess}\n\n"
+                f"VITALITY         {h.vitality}\n"
+                f"ENDURANCE        {h.endurance}\n"
+                f"STRENGTH         {h.strength}\n"
+                f"SKILL            {h.skill}\n"
+                f"BLOODTINGE       {h.bloodtinge}\n"
+                f"ARCANE           {h.arcane}\n\n"
+                f"Blood Echoes     {h.echoes:,}\n"
+                f"Insight          {h.insight}\n"
+                f"Play time        {hours}h {minutes}m\n"
+                f"Deaths           {h.deaths}\n"
+                f"NG cycle marker  {h.journey} (raw)\n\n"
+                f"OWNED WEAPONS ({len(weapon_items)})\n{weapons_list}\n"
+                "Not necessarily equipped. Names come from your game files when available.\n\n"
+                f"Save type        {hunter_profiles.source_label(h.source)}\n"
+                f"Slot             {h.slot}\n"
+                f"Folder           {h.folder}\n\n"
+                "Equipped hand slots / last known location: not yet verified.\n"
+                "This viewer does not choose a game slot or edit a save."
+            )
+            details.configure(state="normal")
+            details.delete("1.0", "end")
+            details.insert("1.0", desc)
+            details.configure(state="disabled")
+
+        tree.bind("<<TreeviewSelect>>", show_details)
+
+        controls = ttk.Frame(body)
+        controls.pack(fill="x", pady=(10, 0))
+
+        def poll():
+            if not dialog.winfo_exists():
+                return
+            try:
+                result, names, error = pending.get_nowait()
+            except Empty:
+                dialog.after(120, poll)
+                return
+            state["busy"] = False
+            scan_btn.configure(state="normal")
+            browse_btn.configure(state="normal")
+            profiles[:] = result
+            armory_names.clear()
+            armory_names.update(names)
+            for item in tree.get_children():
+                tree.delete(item)
+            for i, h in enumerate(profiles):
+                tree.insert("", "end", iid=str(i), values=(
+                    h.name, h.level, hunter_profiles.source_label(h.source)))
+            if profiles:
+                tree.selection_set("0")
+                tree.focus("0")
+                tree.see("0")
+                show_details()
+            status.set(error or (f"{len(profiles)} validated characters found (read-only)."
+                                if profiles else
+                                "No validated decrypted character slots found. Try Browse Save Folder."))
+
+        def launch_scan(folder=None):
+            if state["busy"]:
+                return
+            state["busy"] = True
+            scan_btn.configure(state="disabled")
+            browse_btn.configure(state="disabled")
+            status.set("Reading known save folders without altering files…")
+            configured = self.settings.get("discovery_roots", [])
+            roots = [Path(p) for p in configured if isinstance(p, str)][:16] if isinstance(configured, list) else []
+            game_dir = resolve_game_dir(self.eboot_var.get().strip())
+
+            def worker():
+                try:
+                    if folder is not None:
+                        characters = hunter_profiles.read_group(Path(folder), source="manual:folder")
+                    else:
+                        saves = install_discovery.find_saves(APP_DIR, extra_roots=roots)
+                        characters = hunter_profiles.from_discovery([vars(x) for x in saves])
+                    names = hunter_armory.game_weapon_names(str(game_dir)) if game_dir else {}
+                    pending.put((characters, names, ""))
+                except (OSError, ValueError) as exc:
+                    pending.put(([], {}, f"Read-only scan failed: {exc}"))
+            threading.Thread(target=worker, daemon=True,
+                             name="bloodborne-hunter-preview").start()
+            dialog.after(120, poll)
+
+        def browse_save():
+            folder = filedialog.askdirectory(
+                parent=dialog, title="Choose the SPRJ0005 folder containing userdata0000..0009")
+            if folder:
+                launch_scan(folder)
+
+        scan_btn = ttk.Button(controls, text="Scan saved characters",
+                              style="Secondary.TButton", command=launch_scan)
+        scan_btn.pack(side="left")
+        browse_btn = ttk.Button(controls, text="Browse Save Folder",
+                                style="Secondary.TButton", command=browse_save)
+        browse_btn.pack(side="left", padx=(8, 0))
+        def pin_selected():
+            selected = tree.selection()
+            if not selected:
+                status.set("Choose a validated Hunter before pinning its preview.")
+                return
+            h = profiles[int(selected[0])]
+            from scripts import hunter_preview
+            try:
+                self.hunter_preview_pin = hunter_preview.pin_from_hunter(h)
+            except ValueError:
+                status.set("This character cannot be pinned; unsupported slot.")
+                return
+            self.home_hunter_var.set(hunter_preview.label(h))
+            self.save_settings()
+            status.set("Pinned to Home for display ONLY. Play still uses in-game slot selection.")
+
+        def export_selected_for_editor():
+            selected = tree.selection()
+            if not selected:
+                status.set("Choose a native Hunter first.")
+                return
+            h = profiles[int(selected[0])]
+            if h.source not in ("native:pc", "native:party"):
+                messagebox.showinfo("Export Hunter",
+                    "Only this native Windows client's Hunter saves can be exported. "
+                    "Other-port saves remain read-only.", parent=dialog)
+                return
+            if self.proc is not None and self.proc.poll() is None:
+                messagebox.showwarning("Export Hunter",
+                    "Close Bloodborne before exporting a save copy.", parent=dialog)
+                return
+            directory = filedialog.askdirectory(
+                parent=dialog, title="Choose an empty editor folder outside the game save tree")
+            if not directory:
+                return
+            from scripts import save_editor
+            try:
+                result = save_editor.export_hunter_save(
+                    APP_DIR / "user",
+                    "party" if h.source == "native:party" else "solo",
+                    Path(h.folder) / h.slot, directory)
+            except (OSError, ValueError, KeyError) as exc:
+                status.set("Editor export refused: original save unchanged.")
+                messagebox.showerror("Export Hunter", str(exc), parent=dialog)
+                return
+            status.set("Editor copy created. Native Hunter save was not modified.")
+            messagebox.showinfo("Export Hunter",
+                f"Editor copy created:\n{result}\n\n"
+                "Original save unchanged. Import requires separate verification.",
+                parent=dialog)
+
+        def unpin():
+            self.hunter_preview_pin = None
+            self.home_hunter_var.set("No preview pinned · open Hunters / Saves to pick one")
+            self.save_settings()
+            status.set("Home preview cleared; no game save was changed.")
+
+        ttk.Button(controls, text="Pin preview to Home",
+                   style="Secondary.TButton", command=pin_selected).pack(
+                       side="left", padx=(8, 0))
+        ttk.Button(controls, text="Clear preview",
+                   style="Secondary.TButton", command=unpin).pack(
+                       side="left", padx=(8, 0))
+        ttk.Button(controls, text="Export editor copy",
+                   style="Secondary.TButton", command=export_selected_for_editor).pack(
+                       side="left", padx=(8, 0))
+        ttk.Button(controls, text="Close", style="Secondary.TButton",
+                   command=dialog.destroy).pack(side="right")
+        ttk.Label(body, text="Read-only previews. Editor export makes a separate copy; import and save switching are not enabled.",
+                  style="Hint.TLabel").pack(anchor="w", pady=(8, 0))
+        dialog.after(80, launch_scan)
+
+    def show_client_integrity(self):
+        """Hash packaged runtime files on a worker; no downloads or modifications."""
+        from scripts import client_integrity
+        dialog = tk.Toplevel(self)
+        dialog.title("Seamless Hunt PC | Verify Client Installation")
+        dialog.geometry("690x465")
+        dialog.minsize(500, 340)
+        dialog.transient(self)
+        frame = ttk.Frame(dialog, padding=16)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Verify installed client files",
+                  style="Header.TLabel").pack(anchor="w")
+        ttk.Label(frame, text="Only original client files in MANIFEST.json are checked. "
+                  "Game dumps, saves, mods, passwords and settings are never scanned.",
+                  style="SubHeader.TLabel", wraplength=620).pack(anchor="w", pady=(4, 9))
+        status = tk.StringVar(value="Checking local files against the bundled build manifest…")
+        ttk.Label(frame, textvariable=status,
+                  style="SubHeader.TLabel", wraplength=620).pack(anchor="w", pady=(0, 9))
+        holder = ttk.Frame(frame)
+        holder.pack(fill="both", expand=True)
+        info = tk.Text(holder, wrap="word", bg="#202023", fg="#e0d9ce",
+                       insertbackground="#e0d9ce", relief="flat", padx=12, pady=10,
+                       font=("Consolas", 9))
+        scroll = ttk.Scrollbar(holder, orient="vertical", command=info.yview)
+        info.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        info.pack(side="left", fill="both", expand=True)
+        info.insert("1.0", "Working from the locally packaged MANIFEST.json.\n"
+                    "This is damage detection, NOT a cryptographic publisher signature.")
+        info.configure(state="disabled")
+        ttk.Button(frame, text="Close", style="Secondary.TButton",
+                   command=dialog.destroy).pack(anchor="e", pady=(9, 0))
+
+        pending = queue.Queue(maxsize=1)
+        def worker():
+            try:
+                report = client_integrity.verify_installed(APP_DIR)
+                pending.put((report, None))
+            except (OSError, ValueError) as exc:
+                pending.put((None, str(exc)))
+        threading.Thread(target=worker, daemon=True,
+                         name="bloodborne-client-integrity").start()
+
+        def poll():
+            if not dialog.winfo_exists():
+                return
+            try:
+                report, error = pending.get_nowait()
+            except queue.Empty:
+                dialog.after(120, poll)
+                return
+            if error:
+                status.set("Cannot verify this installation")
+                text = (f"{error}\n\nOnly packaged Windows development builds include a "
+                        "matching MANIFEST.json. No files were changed.")
+            else:
+                status.set(
+                    f"{report.checked} files checked · {report.critical_errors} core issues · "
+                    f"{report.optional_changes} optional differences")
+                text = client_integrity.summary(report)
+            info.configure(state="normal")
+            info.delete("1.0", "end")
+            info.insert("1.0", text)
+            info.configure(state="disabled")
+        dialog.after(120, poll)
+
+    def show_release_center(self):
+        """Read-only changelog and manual release check; never installs software."""
+        from scripts import release_center
+        from queue import Empty
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Seamless Hunt PC | Updates & Changelog")
+        dialog.geometry("760x580")
+        dialog.minsize(540, 380)
+        dialog.transient(self)
+        body = ttk.Frame(dialog, padding=18)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="Updates & Changelog", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(body, text=f"Installed launcher version: {PORT_VERSION}",
+                  style="SubHeader.TLabel").pack(anchor="w", pady=(2, 7))
+        status = tk.StringVar(value="Local changelog. Online check is optional and read-only.")
+        ttk.Label(body, textvariable=status, style="SubHeader.TLabel", wraplength=675
+                  ).pack(anchor="w", pady=(0, 10))
+        frame = ttk.Frame(body)
+        frame.pack(fill="both", expand=True)
+        output = tk.Text(frame, wrap="word", relief="flat", bg="#1e1e20",
+                         fg="#e0d9ce", insertbackground="#e0d9ce",
+                         font=("Segoe UI", 10), padx=14, pady=12)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=output.yview)
+        output.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        output.pack(side="left", fill="both", expand=True)
+
+        def display(notes):
+            output.configure(state="normal")
+            output.delete("1.0", "end")
+            output.insert("1.0", notes)
+            output.configure(state="disabled")
+
+        def show_local():
+            display(release_center.local_changelog(APP_DIR / "CHANGELOG.md"))
+            status.set("Bundled notes for this build. Unreleased changes are not shipped updates.")
+
+        controls = ttk.Frame(body)
+        controls.pack(fill="x", pady=(12, 0))
+        channel = tk.StringVar(value="Stable")
+        ttk.Label(controls, text="Channel:", style="SubHeader.TLabel").pack(side="left", padx=(0, 5))
+        ttk.Combobox(controls, textvariable=channel, values=("Stable", "Preview"),
+                     state="readonly", width=9).pack(side="left", padx=(0, 10))
+        pending = queue.Queue(maxsize=1)
+        busy = {"value": False}
+
+        def poll_results():
+            if not dialog.winfo_exists():
+                return
+            try:
+                releases = pending.get_nowait()
+            except Empty:
+                dialog.after(150, poll_results)
+                return
+            busy["value"] = False
+            check_button.configure(state="normal")
+            if not releases:
+                status.set("No release history received (offline, rate limited or no published releases).")
+                return
+            display(release_center.format_history(releases))
+            newest = releases[0]["tag"]
+            if release_center.update_check.newer(newest, PORT_VERSION):
+                status.set(f"New version {newest} listed in the selected channel. Verify compatibility.")
+            else:
+                status.set("Published release history loaded. Current development build may differ.")
+
+        def check_now():
+            if busy["value"]:
+                return
+            busy["value"] = True
+            check_button.configure(state="disabled")
+            status.set("Checking this fork's official GitHub Releases…")
+            selected_channel = "preview" if channel.get() == "Preview" else "stable"
+            def worker():
+                pending.put(release_center.fetch_history(channel=selected_channel))
+            threading.Thread(target=worker, daemon=True).start()
+            dialog.after(150, poll_results)
+
+        check_button = ttk.Button(controls, text="Check now", style="Secondary.TButton",
+                                  command=check_now)
+        check_button.pack(side="left")
+        ttk.Button(controls, text="Bundled changelog", style="Secondary.TButton",
+                   command=show_local).pack(side="left", padx=(7, 0))
+        ttk.Button(controls, text="Official Releases", style="Secondary.TButton",
+                   command=lambda: webbrowser.open(release_center.RELEASES_PAGE)
+                   ).pack(side="left", padx=(7, 0))
+        ttk.Button(controls, text="Verify client files", style="Secondary.TButton",
+                   command=self.show_client_integrity).pack(side="left", padx=(7, 0))
+        ttk.Button(controls, text="Close", style="Secondary.TButton",
+                   command=dialog.destroy).pack(side="right")
+        ttk.Label(body, text="No auto-install yet: signed packages, rollback and user-data isolation are required.",
+                  style="Hint.TLabel").pack(anchor="w", pady=(10, 0))
+        show_local()
+
     def start_update_check(self):
         """Background check for a newer release (scripts/update_check.py); never blocks or fails."""
         if not self.check_updates.get():
@@ -3514,6 +4259,159 @@ class BloodborneLauncher(tk.Tk):
             return self.copy_solo_save_to_party(ask=False)
         return True
 
+    def open_bbsc_account_check(self, register_private=False):
+        """Opt-in BBSC Login or private-host Create. Credentials stay in RAM only."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Seamless Hunt | " + ("Private account registration" if register_private
+                                      else "Check shadNet account"))
+        dlg.geometry("550x450" if register_private else "550x360")
+        dlg.minsize(510, 420 if register_private else 340)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        body = ttk.Frame(dlg, padding=18)
+        body.pack(fill="both", expand=True)
+        chosen_host = self.seamless_hunt_host_var.get().strip()
+        server_var = tk.StringVar(value=(
+            "127.0.0.1" if register_private and chosen_host == "play.seamlesshunt.com"
+            else (chosen_host or "127.0.0.1") if register_private
+            else (chosen_host or "play.seamlesshunt.com")))
+        name_var = tk.StringVar()
+        pass_var = tk.StringVar()
+        email_var = tk.StringVar()
+        key_var = tk.StringVar()
+        status_var = tk.StringVar(value="Ready. Does not sign the game in.")
+        fields = [
+            ("Server (hostname):", server_var, False),
+            ("BBSC Online ID:", name_var, False),
+            ("Password:", pass_var, True),
+        ]
+        if register_private:
+            fields.extend([
+                ("Email:", email_var, False),
+                ("Registration key:", key_var, True),
+            ])
+        for row, (label, variable, is_password) in enumerate(fields):
+            ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", pady=6)
+            entry = ttk.Entry(body, textvariable=variable, width=37,
+                              show="*" if is_password else "")
+            entry.grid(row=row, column=1, sticky="ew", padx=(8, 0), pady=6)
+        body.columnconfigure(1, weight=1)
+        rr = len(fields)
+        ttk.Label(body, text="Security: shadNet 31313 uses unencrypted TCP. "
+                  "Only enter credentials for a server you trust. "
+                  "Password and registration key are cleared after submitting; "
+                  "neither is saved or logged.",
+                  wraplength=480, justify="left").grid(
+                      row=rr, column=0, columnspan=2, sticky="w", pady=(12, 8))
+        note = ("Private BBSC/shadNet servers have their own account database. "
+                "The public Seamless Hunt realm requires registration on its website."
+                if register_private else
+                "This checks credentials, NOT game matchmaking. "
+                "Close your game first or the account may be already logged in.")
+        ttk.Label(body, text=note, wraplength=480, justify="left").grid(
+            row=rr + 1, column=0, columnspan=2, sticky="w", pady=(2, 8))
+        ttk.Label(body, textvariable=status_var, wraplength=480,
+                  justify="left").grid(row=rr + 2, column=0, columnspan=2,
+                                       sticky="w", pady=(8, 8))
+        result_queue = queue.Queue(maxsize=1)
+
+        def poll():
+            if not dlg.winfo_exists():
+                return
+            try:
+                accepted, message = result_queue.get_nowait()
+            except queue.Empty:
+                dlg.after(100, poll)
+                return
+            check_btn.configure(state="normal")
+            status_var.set(("Accepted: " if accepted else "Not accepted: ") + message)
+            # Only sanitized status, never credentials, server or user ID.
+            self.log("[BBSC ACCOUNT] " + ("Registration" if register_private else "Login")
+                     + (" accepted" if accepted else " not accepted")
+                     + "; game sign-in not yet implemented.")
+
+        def begin():
+            host = server_var.get().strip()
+            username = name_var.get().strip()
+            password = pass_var.get()
+            email = email_var.get().strip() if register_private else ""
+            registration_key = key_var.get() if register_private else ""
+            pass_var.set("")
+            key_var.set("")
+            if not password:
+                status_var.set("Enter the password.")
+                return
+            if not messagebox.askyesno(
+                    "BBSC account operation sends plaintext credentials",
+                    "The published shadNet protocol sends passwords over plain TCP, "
+                    "without TLS. Continue only if you trust this server?\\n\\n"
+                    "Your credentials are never saved or logged by this launcher.",
+                    parent=dlg):
+                return
+            check_btn.configure(state="disabled")
+            status_var.set("Contacting server; gameplay and Party networking are unchanged...")
+            def worker():
+                try:
+                    scripts_dir = str(APP_DIR / "scripts")
+                    if scripts_dir not in sys.path:
+                        sys.path.insert(0, scripts_dir)
+                    import shadnet_account
+                    if register_private:
+                        outcome = shadnet_account.register_on_private_server(
+                            host, username, password, email, registration_key)
+                    else:
+                        outcome = shadnet_account.check_account(host, username, password)
+                    result_queue.put((outcome.accepted, outcome.status))
+                except ValueError:
+                    result_queue.put((False, "Invalid server name or account fields"))
+                except Exception:
+                    result_queue.put((False, "Account operation could not complete"))
+            threading.Thread(target=worker, daemon=True,
+                             name="bbsc-registration" if register_private
+                                  else "bbsc-account-check").start()
+            dlg.after(100, poll)
+
+        check_btn = ttk.Button(body, text="Create private account" if register_private
+                               else "Check login once", command=begin)
+        check_btn.grid(row=rr + 3, column=1, sticky="e", pady=(8, 0))
+
+    def check_seamless_hunt(self):
+        """Opt-in read-only probe; keep socket operations off Tk's UI thread."""
+        if self.seamless_hunt_test_running:
+            return
+        self.seamless_hunt_test_running = True
+        self.seamless_hunt_test_btn.configure(state="disabled")
+        stun_address = self.party_stun_var.get()
+        host = self.seamless_hunt_host_var.get().strip()
+        self.save_settings()
+        self.seamless_hunt_status_var.set("Checking BBSC realm TCP, UDP/STUN and IPv6...")
+        def worker():
+            try:
+                sh = seamless_hunt_module()
+                net = seamless_hunt_network_module()
+                services = sh.check_services(host)
+                routes = net.check_routes(stun_address)
+                message = sh.format_results(services) + "; " + net.format_routes(routes)
+            except Exception:
+                message = "Network diagnostic did not complete; game networking is unchanged."
+            self.seamless_hunt_result_queue.put(message)
+        threading.Thread(target=worker, name="sh-network-doctor", daemon=True).start()
+        self.after(100, self.poll_seamless_hunt)
+
+    def poll_seamless_hunt(self):
+        try:
+            message = self.seamless_hunt_result_queue.get_nowait()
+        except queue.Empty:
+            self.after(100, self.poll_seamless_hunt)
+            return
+        self.seamless_hunt_test_running = False
+        self.seamless_hunt_test_btn.configure(state="normal")
+        self.seamless_hunt_status_var.set(message)
+        self.log("[SEAMLESS HUNT] " + message)
+        self.log("[SEAMLESS HUNT] TCP, outbound UDP and IPv6 routing diagnostics only. "
+                 "Successful checks do not prove NAT traversal; P2P and matchmaking remain unchanged.")
+
     def run_party_local_test(self):
         if self.party_test_running:
             self.log("[PARTY TEST] Already running.")
@@ -3568,6 +4466,96 @@ class BloodborneLauncher(tk.Tk):
         else:
             self.res_combo.config(state="disabled")
 
+    def show_settings_search(self):
+        """Find settings in the live UI; never index Entry values or user secrets."""
+        from scripts.settings_index import search_entries
+
+        rows = []
+        widget_types = (ttk.Label, ttk.Checkbutton, ttk.Button, ttk.Radiobutton,
+                        ttk.Labelframe, tk.Label, tk.Button, tk.Checkbutton)
+        for tab_name in self.notebook.tabs():
+            tab_widget = self.notebook.nametowidget(tab_name)
+            section = self.notebook.tab(tab_name, "text")
+            stack = [tab_widget]
+            while stack:
+                current = stack.pop()
+                stack.extend(reversed(current.winfo_children()))
+                if not isinstance(current, widget_types):
+                    continue
+                try:
+                    label = str(current.cget("text")).strip().replace("\\n", " ")
+                except tk.TclError:
+                    continue
+                if label:
+                    rows.append((section, label, tab_name, current))
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Find a setting")
+        dialog.transient(self)
+        dialog.geometry("600x405")
+        dialog.minsize(420, 260)
+        wrap = ttk.Frame(dialog, padding=15)
+        wrap.pack(fill="both", expand=True)
+        ttk.Label(wrap, text="Search settings", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        query_var = tk.StringVar()
+        entry = ttk.Entry(wrap, textvariable=query_var)
+        entry.pack(fill="x", pady=(8, 8))
+        ttk.Label(wrap, text="Select a result to open its tab. No settings are changed.",
+                  style="Hint.TLabel").pack(anchor="w", pady=(0, 6))
+        matches = []
+        result_list = tk.Listbox(wrap, activestyle="dotbox", exportselection=False,
+                                 font=("Segoe UI", 10), borderwidth=0)
+        result_list.pack(fill="both", expand=True)
+
+        def refresh(*_args):
+            matches[:] = search_entries([(tab, label) for tab, label, _, _ in rows],
+                                         query_var.get())
+            result_list.delete(0, tk.END)
+            for index in matches:
+                tab, label, _, _ = rows[index]
+                result_list.insert(tk.END, f"{tab}   >   {label}")
+            if matches:
+                result_list.selection_set(0)
+                result_list.activate(0)
+
+        def choose(_event=None):
+            picked = result_list.curselection()
+            if not picked or not matches:
+                return
+            _, _, tab_name, target = rows[matches[picked[0]]]
+            self.show_settings_section(self.notebook.tab(tab_name, "text"))
+            dialog.destroy()
+            self.after_idle(target.focus_set)
+
+        def entry_down(_event):
+            if matches:
+                result_list.focus_set()
+                result_list.selection_clear(0, tk.END)
+                result_list.selection_set(0)
+                return "break"
+
+        query_var.trace_add("write", refresh)
+        result_list.bind("<Double-1>", choose)
+        result_list.bind("<Return>", choose)
+        entry.bind("<Return>", choose)
+        entry.bind("<Down>", entry_down)
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        ttk.Button(wrap, text="Open selected setting", command=choose).pack(anchor="e", pady=(8, 0))
+        entry.focus_set()
+
+    def set_low_latency_mode(self):
+        """Input-latency preset only; never silently alter network or gameplay rules."""
+        ahead = next((label for label, value in FRAMES_AHEAD_CHOICES if value == "1"), None)
+        if ahead is None:
+            self.log("[PRESET] Low latency unavailable: frame queue option missing.")
+            return
+        self.frames_ahead_var.set(ahead)
+        self.frame_generation_var.set(FRAME_GENERATION_CHOICES[0][0])
+        self.save_frame_generation()
+        self.save_settings()
+        self.log("[PRESET] Low latency: 1 GPU frame ahead, frame generation off. "
+                 "Party, saves, mods and other graphics options unchanged.")
+
     def set_vanilla_mode(self):
         self.feat_upscaler.set(False)
         self.feat_object_motion.set(False)
@@ -3597,32 +4585,28 @@ class BloodborneLauncher(tk.Tk):
         self.save_game_settings()
         self.log("Preset applied: Vanilla mode (all optional features off, FPS preset=30 native, BB_ANISO=0, all patches off, party off).")
 
-    def set_everything_on(self):
-        self.feat_upscaler.set(True)
-        self.feat_object_motion.set(True)
-        self.feat_overlay.set(True)
-        self.feat_fps_patch.set(True)
-        self.feat_frame_hooks.set(True)
-        self.feat_mods.set(True)
-        self.feat_res_scaling.set(True)
-        self.feat_watchdog.set(True)
-        self.feat_draw_prep.set(True)
-        self.feat_game_menu.set(True)
-        self.feat_skip_network_choice.set(True)
-        self.feat_async_shaders.set(True)
-        self.feat_gpl.set(True)
-        self.feat_compile_indicator.set(True)
+    def set_recommended_mode(self):
+        """Conservative 60 FPS starting point, never a hidden "everything on" toggle."""
+        if not messagebox.askyesno(
+                "Balanced 60 FPS",
+                "Apply the following changes?\n\n"
+                "• Target: 60 FPS (subject to PC capability and enabled game hooks)\n"
+                "• GPU frames ahead: 2 (normal)\n"
+                "• Precompile known shaders: on\n"
+                "• Heavy debug tracing: off\n\n"
+                "Your mods, gameplay patches, HDR, render resolution, controls, "
+                "network/party settings and saves remain unchanged.",
+                parent=self):
+            return
+        self.fps_var.set("60")
+        self.frames_ahead_var.set(next(
+            (label for label, value in FRAMES_AHEAD_CHOICES if value == "2"),
+            FRAMES_AHEAD_CHOICES[0][0]))
         self.feat_shader_precompile.set(True)
-        self.fps_var.set("uncap")
-        self.aniso_var.set("16x")
-        self.enabled_patches = {"Skip Intro", "Performance Patch (perf increase)", "Disable Motion Blur (perf increase)"}
-        self.sync_quick_patch_vars()
-        self.update_aniso_desc()
-        self.update_res_scaling_state()
-        self.update_upscaler_state()
+        self.feat_tracing.set(False)
         self.save_settings()
-        self.save_game_settings()
-        self.log("Preset applied: Everything on (restored all defaults and recommended patches).")
+        self.log("[PRESET] Balanced 60: 60 FPS target, 2 frames ahead, known shaders "
+                 "precompiled, debug tracing off. Mods, patches, party and saves unchanged.")
 
     def on_quick_patch_toggle(self):
         if self.feat_skip_intro.get():
@@ -3647,6 +4631,117 @@ class BloodborneLauncher(tk.Tk):
         self.feat_skip_intro.set("Skip Intro" in self.enabled_patches)
         self.feat_perf_patch.set("Performance Patch (perf increase)" in self.enabled_patches)
         self.feat_no_blur.set("Disable Motion Blur (perf increase)" in self.enabled_patches)
+
+    def open_community_mod_manager(self):
+        """Individual on/off switches for the existing native mods.json overlay."""
+        try:
+            from scripts import community_mods
+            base = Path(os.environ.get("BB_DATA_DIR") or APP_DIR)
+            choices = community_mods.installed_mods(base)
+        except Exception as exc:
+            messagebox.showerror("Mod manager", str(exc), parent=self)
+            return
+        if not choices:
+            messagebox.showinfo("Mod manager",
+                "No loose-file mods installed. Choose 'Import Jump L3 / Lamp / Rebirth ZIPs' "
+                "to add your own audited community ZIPs.", parent=self)
+            return
+        dlg = tk.Toplevel(self)
+        dlg.title("Manage community mods")
+        dlg.geometry("560x455")
+        dlg.minsize(450, 360)
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.configure(bg="#1a1a1a")
+        top = ttk.Frame(dlg,style="Card.TFrame",padding=12)
+        top.pack(fill="both",expand=True,padx=12,pady=(12,7))
+        ttk.Label(top,text="Select the mods to enable after the next game restart:",
+                  style="Section.TLabel",wraplength=500).pack(anchor="w",pady=(0,8))
+        listbox = tk.Listbox(top,selectmode=tk.MULTIPLE,exportselection=False,
+                             height=min(max(len(choices),6),14))
+        listbox.pack(fill="both",expand=True)
+        for index,(name,enabled) in enumerate(choices):
+            suffix = "  [solo only until tested]" if name.casefold() in ("moal","dollrebirth") else ""
+            listbox.insert("end",name+suffix)
+            if enabled:
+                listbox.selection_set(index)
+        ttk.Label(top,style="Card.TLabel",wraplength=500,
+                  text="Gameplay mods must match your party members. MOAL and DollRebirth "
+                       "are automatically excluded from multiplayer. Changing a mod here "
+                       "does not edit saves, game files or the active session.").pack(anchor="w",pady=(8,0))
+        bar = ttk.Frame(dlg,style="Card.TFrame",padding=10)
+        bar.pack(fill="x",padx=12,pady=(0,12))
+        def save():
+            enabled = [name for i,(name,_) in enumerate(choices)
+                       if i in listbox.curselection()]
+            try:
+                community_mods.save_mod_selection(base,enabled)
+                self.feat_mods.set(True)
+                self.save_settings()
+            except Exception as exc:
+                messagebox.showerror("Mod selection refused",str(exc),parent=dlg)
+                return
+            self.log("[MODS] Active after restart: " + ", ".join(enabled))
+            dlg.destroy()
+        ttk.Button(bar,text="Save mod selection",style="Action.TButton",
+                   command=save).pack(side="right",padx=(8,0))
+        ttk.Button(bar,text="Cancel",style="Secondary.TButton",
+                   command=dlg.destroy).pack(side="right")
+        dlg.protocol("WM_DELETE_WINDOW",dlg.destroy)
+
+    def open_community_mod_import(self):
+        """Import user-provided community mod ZIPs, never bundled game assets.
+        The preflight must pass before any files are written, and no online
+        session, save data, or live server is modified by this action.
+        """
+        paths = filedialog.askopenfilenames(
+            parent=self,
+            title="Select your Jump L3, DollRebirth, and/or MOAL ZIPs (Ctrl+click multiple)",
+            filetypes=[("ZIP mod archives", "*.zip"), ("All files", "*.*")])
+        if not paths:
+            return
+        try:
+            from scripts import community_mods
+            base = Path(os.environ.get("BB_DATA_DIR") or APP_DIR)
+            choose_enhanced = False
+            if any("Jump" in Path(p).name for p in paths):
+                choose_enhanced = messagebox.askyesno(
+                    "Jump on L3: optional enhancements",
+                    "Install Enhanced instead of Jump only?\n\n"
+                    "Enhanced adds a jumping attack and ladder drop. Both Classic variants "
+                    "require running before L3 jumps.\n\n"
+                    "Yes: Enhanced    No: Jump only (safer default)",
+                    parent=self)
+            plan = community_mods.inspect(paths, base,
+                jump_variant="enhanced" if choose_enhanced else "jump_only")
+            summary = "\n".join(plan.mods)
+            warnings = "\n\n".join(plan.notes)
+            if not messagebox.askyesno(
+                    "Confirm safe community mod import",
+                    f"Install these verified ZIPs?\n{summary}\n\n"
+                    f"New files: {len(plan.files)}. No game files or saves overwritten.\n\n"
+                    f"{warnings}\n\n"
+                    "MOAL and DollRebirth stay offline-only until tested; "
+                    "MOAL automatically disables the native lamp-travel hook for "
+                    "solo sessions. Nothing is changed on the server.\n\nContinue?",
+                    parent=self):
+                return
+            result = community_mods.install(plan, base)
+            self.feat_mods.set(True)
+            self.save_settings()
+            self.log("[MODS] Imported checked community ZIPs: " +
+                     ", ".join(result["installed"]))
+            messagebox.showinfo("Community mods imported",
+                "Installed: " + ", ".join(result["installed"]) +
+                "\n\nRestart the game to apply. Multiplayer sessions automatically "
+                "disable MOAL and DollRebirth while compatibility remains unverified. "
+                "Jump on L3 affects gameplay and must match other players' mods.",
+                parent=self)
+        except Exception as exc:
+            self.log(f"[MODS] Import refused: {exc}")
+            messagebox.showerror("Community mod import refused",
+                                 str(exc) + "\n\nNo game or save files were modified.",
+                                 parent=self)
 
     def open_patches_dialog(self):
         dlg = tk.Toplevel(self)
@@ -3817,7 +4912,31 @@ class BloodborneLauncher(tk.Tk):
         bottom_bar = ttk.Frame(dlg, style="Card.TFrame", padding=10)
         bottom_bar.pack(fill="x", padx=10, pady=(0, 10))
 
+        def check_patch_conflicts():
+            try:
+                scanner = patch_preflight_module()
+                report = scanner.audit([PATCHES_XML], enabled_names=set(working_set))
+                result = scanner.format_report(report)
+            except Exception as exc:
+                return False, f"Patch preflight failed: {type(exc).__name__}"
+            return not report["conflicts"] and not report["warnings"], result
+
+        def show_patch_conflicts():
+            clear, result = check_patch_conflicts()
+            if clear:
+                messagebox.showinfo("XML patch preflight", result, parent=dlg)
+            else:
+                messagebox.showwarning("XML patch conflicts", result, parent=dlg)
+
         def on_save():
+            clear, report_text = check_patch_conflicts()
+            if not clear:
+                messagebox.showerror(
+                    "Resolve patch conflicts before saving",
+                    report_text + "\n\nDisable one patch in each conflicting pair. "
+                    "Seamless Hunt won't silently overwrite conflicting bytes.",
+                    parent=dlg)
+                return
             self.enabled_patches = set(working_set)
             self.sync_quick_patch_vars()
             self.save_settings()
@@ -3831,6 +4950,8 @@ class BloodborneLauncher(tk.Tk):
 
         dlg.protocol("WM_DELETE_WINDOW", on_cancel)
 
+        ttk.Button(bottom_bar, text="Check conflicts...", style="Secondary.TButton",
+                   command=show_patch_conflicts).pack(side="left", padx=(0, 8), ipady=4)
         ttk.Button(bottom_bar, text="Save & Apply", style="Action.TButton",
                    command=on_save).pack(side="right", padx=(8, 0), ipady=4)
         ttk.Button(bottom_bar, text="Cancel", style="Secondary.TButton",
@@ -3983,6 +5104,7 @@ class BloodborneLauncher(tk.Tk):
         gamepad = dict(self.gamepad_choices).get(gamepad_label, "")
         return {
             "eboot": self.eboot_var.get().strip(),
+            "discovery_roots": self.settings.get("discovery_roots", [])[:16],
             "fps": self.fps_var.get(),
             "res": self.res_var.get(),
             "aniso": self.aniso_var.get(),
@@ -4037,6 +5159,7 @@ class BloodborneLauncher(tk.Tk):
             "party_ipv6": self.party_ipv6.get(),
             "party_public_addr": self.party_public_var.get().strip(),
             "party_stun": self.party_stun_var.get().strip(),
+            "seamless_hunt_host": self.seamless_hunt_host_var.get().strip(),
             "party_password": self.party_password_var.get(),
             "party_code": self.party_code_var.get().strip(),
             "party_start": dict(PARTY_START_CHOICES).get(self.party_start_var.get(), PARTY_START_CHOICES[0][1]),
@@ -4046,6 +5169,8 @@ class BloodborneLauncher(tk.Tk):
             "party_log_areas": [key for key, var in self.party_log_area_vars.items() if var.get()],
             "auto_support_bundle": self.auto_support_bundle.get(),
             "check_updates": self.check_updates.get(),
+            # Local UI pointer only: never changes the game's own selected slot.
+            "hunter_preview": self.hunter_preview_pin,
             **{key: self.party_switch_vars[key].get() for key, _, _ in PARTY_SWITCHES},
         }
 
@@ -4260,6 +5385,144 @@ class BloodborneLauncher(tk.Tk):
         self.log(f"[CACHE] Shader cache deleted ({len(files)} files); it is rebuilt while playing.")
 
     # ------------------------------------------------------------- actions
+    def discover_installs(self, silent=False):
+        """Read-only scanner shared by automatic start and explicit Auto Find."""
+        if self.discovery_busy:
+            # A click on Auto Find during startup discovery must never be lost.
+            if not silent:
+                self.discovery_show_when_ready = True
+            return
+        self.discovery_busy = True
+        self.discovery_show_when_ready = False
+        if not silent:
+            self.log("[DISCOVERY] Scanning game libraries and known save roots (read-only)...")
+        configured = self.settings.get("discovery_roots", [])
+        roots = [Path(p) for p in configured if isinstance(p, str)][:16] if isinstance(configured, list) else []
+        def job():
+            try:
+                from scripts import install_discovery
+                data = install_discovery.scan(APP_DIR, roots, deep_scan=not silent)
+                if silent and not data["games"]:
+                    # The fast startup pass misses arbitrary names/deep installs.
+                    # Fall back to a bounded full-library scan without blocking Tk.
+                    data = install_discovery.scan(APP_DIR, roots, deep_scan=True)
+                self.discovery_queue.put((data, bool(silent), None))
+            except Exception as error:
+                self.discovery_queue.put((None, bool(silent), str(error)))
+        threading.Thread(target=job, daemon=True, name="bloodborne-discovery").start()
+        self.after(100, self._poll_discovery)
+
+    def _poll_discovery(self):
+        try:
+            data, silent, error = self.discovery_queue.get_nowait()
+        except queue.Empty:
+            self.after(100, self._poll_discovery)
+            return
+        self.discovery_busy = False
+        if getattr(self, "discovery_show_when_ready", False):
+            silent = False
+        self.discovery_show_when_ready = False
+        if error:
+            self.log(f"[DISCOVERY] Read-only scanner unavailable: {error}")
+            if not silent:
+                messagebox.showerror("Automatic discovery", str(error), parent=self)
+            return
+        games = data["games"]
+        self.log(f"[DISCOVERY] Found {len(games)} game(s), {len(data['saves'])} save location(s), "
+                 f"{len(data['extras'])} mod/patch/cheat folder(s)")
+        if silent:
+            # No automatic conversion, no region switching, no user preference
+            # overwritten. Only a single verified-version candidate is
+            # auto-selected when no valid user selection already exists.
+            if not resolve_game_dir(self.eboot_var.get().strip()):
+                safe = [g for g in games if g["status"] == "candidate_109"]
+                if len(safe) == 1:
+                    self.eboot_var.set(str(Path(safe[0]["folder"]) / "eboot.bin"))
+                    self.save_settings()
+                    self.log(f"[DISCOVERY] Detected game: {safe[0]['title_id']} "
+                             f"update {safe[0]['app_version']} (pre-launch hash still required)")
+                elif safe:
+                    self.home_game_var.set(
+                        f"{len(safe)} Bloodborne installations detected. Click Auto Find to choose.")
+                elif games:
+                    self.home_game_var.set(
+                        f"{len(games)} Bloodborne installations found, but none verified for 1.09. Click Auto Find.")
+                else:
+                    self.home_game_var.set(
+                        "Game not found in bounded disk scan. Click Browse or add a search folder.")
+            return
+        self._show_discovered_installations(data)
+
+    def _show_discovered_installations(self, data):
+        """User approval is required for multiple games. Saving the location
+        only affects launcher settings; saves/assets are always left alone."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Bloodborne installations, saves and mods")
+        dlg.geometry("780x555")
+        dlg.minsize(630, 440)
+        dlg.transient(self)
+        dlg.grab_set()
+        frame = ttk.Frame(dlg, style="Card.TFrame", padding=12)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        ttk.Label(frame, style="Section.TLabel",
+                  text="Detected games (choose one; executable verified at launch):").pack(anchor="w")
+        game_list = tk.Listbox(frame, height=6, exportselection=False)
+        game_list.pack(fill="x", pady=(6, 8))
+        for item in data["games"]:
+            game_list.insert("end", f"{item['title_id']}  {item['app_version'] or 'unknown'}  "
+                             f"[{item['status']}]  {item['folder']}")
+        if data["games"]:
+            game_list.selection_set(0)
+        ttk.Label(frame, style="Section.TLabel",
+                  text="Found saves, mods, patches, cheats (read-only; click nothing to preserve):").pack(anchor="w")
+        results = tk.Text(frame, height=12, wrap="word")
+        results.pack(fill="both", expand=True, pady=(6, 10))
+        for entry in data["saves"]:
+            results.insert("end", f"SAVE [{entry['source']}] {entry['title_id'] or 'unknown'} "
+                           f"{entry['folder']}\n  {entry['compatibility']}\n")
+        for entry in data["extras"]:
+            results.insert("end", f"{entry['kind'].upper()} ({entry['count']} item(s)): "
+                           f"{entry['folder']}\n")
+        if not data["saves"] and not data["extras"]:
+            results.insert("end", "No save or mod folders found in known locations. "
+                           "You can add a custom search folder.")
+        results.configure(state="disabled")
+        ttk.Label(frame, style="Hint.TLabel",
+                  text="Other save formats are NOT automatically converted. "
+                       "Old game updates are shown but cannot launch until their executable "
+                       "hash and patches are supported. No files are modified.",
+                  wraplength=710).pack(anchor="w",pady=(0,8))
+        buttons = ttk.Frame(frame, style="Card.TFrame")
+        buttons.pack(fill="x")
+        def choose():
+            selection = game_list.curselection()
+            if not selection:
+                messagebox.showwarning("No game selected", "Choose a game, or add a search folder.", parent=dlg)
+                return
+            candidate = data["games"][selection[0]]
+            self.eboot_var.set(str(Path(candidate["folder"]) / "eboot.bin"))
+            self.log("[DISCOVERY] Game path selected: " + candidate["folder"])
+            self.save_settings()
+            dlg.destroy()
+        def another_root():
+            folder = filedialog.askdirectory(parent=dlg,title="Additional game or port folder to search")
+            if not folder:
+                return
+            configured = self.settings.get("discovery_roots", [])
+            roots = [p for p in configured if isinstance(p, str)] if isinstance(configured, list) else []
+            if folder not in roots:
+                roots.append(folder)
+            self.settings["discovery_roots"] = roots[-16:]
+            self.save_settings()
+            dlg.destroy()
+            self.discover_installs()
+        ttk.Button(buttons,text="Use selected game",style="Action.TButton",
+                   command=choose).pack(side="right",padx=(6,0))
+        ttk.Button(buttons,text="Scan another folder",style="Secondary.TButton",
+                   command=another_root).pack(side="right",padx=(6,0))
+        ttk.Button(buttons,text="Close",style="Secondary.TButton",
+                   command=dlg.destroy).pack(side="left")
+
     def browse_eboot(self):
         current = resolve_game_dir(self.eboot_var.get()) if self.eboot_var.get().strip() else None
         start = current or (DEFAULT_GAME if DEFAULT_GAME.exists() else Path("D:/"))
@@ -4477,7 +5740,7 @@ class BloodborneLauncher(tk.Tk):
 
         party_problems = [] if warper else self.party_problems()
         if party_problems:
-            self.notebook.select(self.party_tab)
+            self.show_settings_section("Party")
             messagebox.showerror("Party settings", "Fix the Party tab before launching:\n\n"
                                  + "\n".join(party_problems))
             return
@@ -4521,6 +5784,56 @@ class BloodborneLauncher(tk.Tk):
                 env.pop(key, None)
             else:
                 env[key] = value
+        # Do not inadvertently inherit experimental BBSC switches from the
+        # user's shell during ordinary native Party, Solo or world-warper runs.
+        from scripts import legacy_bbsc_launch
+        legacy_bbsc_launch.clear_legacy_env(env)
+        if self.legacy_bbsc_var.get():
+            problem = legacy_bbsc_launch.preflight(
+                APP_DIR, party_mode=self.party_mode(), warper=warper)
+            if problem:
+                self.log("[LEGACY BBSC] Not started: " + problem)
+                messagebox.showerror("Native CLS BBSC (experimental)", problem, parent=self)
+                return
+            if not messagebox.askyesno(
+                "Experimental legacy BBSC",
+                "Enable the unverified legacy CLS BBSC adapter for THIS launch?\n\n"
+                "• Uses native bbport.exe and separately built bbnet20.dll\n"
+                "• Not the existing native Party co-op protocol\n"
+                "• Real account login / bell matchmaking not certified\n"
+                "• May crash or alter normal game saves if upstream BBSC hooks fail\n"
+                "• Use a COPY of your hunter saves for this experiment\n\n"
+                "Do not use this mode for ordinary gameplay until tested.",
+                parent=self):
+                self.log("[LEGACY BBSC] Experimental start cancelled.")
+                return
+            account = simpledialog.askstring(
+                "BBSC game account", "Enter your shadNet NP ID for the selected realm:",
+                parent=self)
+            if account is None:
+                return
+            secret = simpledialog.askstring(
+                "BBSC game account",
+                "Enter your shadNet password. IMPORTANT: upstream shadNet sends "
+                "credentials over unencrypted TCP. Use a UNIQUE password and a trusted server.",
+                show="*", parent=self)
+            if secret is None:
+                return
+            try:
+                legacy_bbsc_launch.activate(env)
+                self._legacy_override_file = legacy_bbsc_launch.configure_realm(
+                    env, APP_DIR, host=self.seamless_hunt_host_var.get().strip(),
+                    account=account.strip(), password=secret)
+            except (OSError, ValueError) as exc:
+                legacy_bbsc_launch.clear_legacy_env(env)
+                self.log("[LEGACY BBSC] Cannot configure experimental connection: " + str(exc))
+                messagebox.showerror("Native CLS BBSC", str(exc), parent=self)
+                return
+            finally:
+                # Credential content is never saved in launcher_settings.json.
+                secret = ""
+            self.log("[LEGACY BBSC] Configured shadNet realm and temporary game HTTP redirect. "
+                     "Actual game login and multiplayer remain unverified.")
         env["BB_GAME_DIR"] = str(game_dir)
         if warper:
             warper_env(env, warper_paths())
@@ -4568,6 +5881,9 @@ class BloodborneLauncher(tk.Tk):
         self.log(f"FPS: {self.fps_var.get()} | Res: {res_choice} | Mods: {env['BB_MODS_ENABLED']}")
         self.log(features_str)
         self.log(f"XML Patches ({len(active_patches)} active): {', '.join(active_patches) if active_patches else 'None'}")
+        if env.get("BB_BBSC") == "1":
+            self.log("[LEGACY BBSC] Experimental Win64 bbnet20.dll requested; "
+                     "NOT certified CLS 0.0.2 gameplay compatibility.")
         if warper:
             self.log(f"World warper: building the shader cache on a copy of the save ({env['BB_USER_DIR']}); "
                      f"progress file {env['BB_WORLD_WARPER_STATE']}")
@@ -4599,6 +5915,13 @@ class BloodborneLauncher(tk.Tk):
             self.log(f"Launch Error: {ex}")
             self.proc = None
             self.close_log_file()
+            redirect = getattr(self, "_legacy_override_file", None)
+            self._legacy_override_file = None
+            if redirect:
+                try:
+                    Path(redirect).unlink(missing_ok=True)
+                except OSError:
+                    pass
             return
 
         self.save_settings()
@@ -4645,6 +5968,15 @@ class BloodborneLauncher(tk.Tk):
         crashed = rc != 0 or new_crash_logs(getattr(self, "launch_time", None))
         self.proc = None
         self.close_log_file()
+        # Temporary game server routing file contains no secrets, but remove it
+        # after the process exits to avoid abandoned per-launch artifacts.
+        redirect = getattr(self, "_legacy_override_file", None)
+        self._legacy_override_file = None
+        if redirect:
+            try:
+                Path(redirect).unlink(missing_ok=True)
+            except OSError:
+                self.log("[LEGACY BBSC] Could not remove temporary HTTP routing file.")
         if crashed and self.auto_support_bundle.get() and not getattr(self, "_stop_requested", False):
             self.write_support_bundle(None, note=f"automatic: the game ended with code {code}")
         self.launch_btn.config(state="normal")

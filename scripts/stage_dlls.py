@@ -7,6 +7,10 @@ from pathlib import Path
 # --out <dir>: stage another out folder (a release's) instead of .\out.
 out = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else Path("out")
 out.mkdir(parents=True, exist_ok=True)
+include_bbsc_candidate = "--candidate-bbnet20" in sys.argv
+bbsc_candidate = out / "gpu" / "bbnet20.dll"
+if include_bbsc_candidate and (not bbsc_candidate.is_file() or bbsc_candidate.is_symlink()):
+    raise SystemExit("Explicit CLS BBSC candidate DLL is missing or linked")
 
 search_dirs = [
     Path(os.environ.get("MINGW_BIN", r"C:\msys64\mingw64\bin")),
@@ -63,6 +67,8 @@ def find_objdump():
     return None
 
 objdump = find_objdump()
+if include_bbsc_candidate and objdump is None:
+    raise SystemExit("Cannot verify native BBSC DLL dependencies: objdump not installed")
 
 def get_imported_dlls(filepath):
     if not objdump:
@@ -130,6 +136,8 @@ if objdump:
     while changed:
         changed = False
         scan_files = list(out.glob('*.exe')) + list(out.glob('*.dll'))
+        if include_bbsc_candidate:
+            scan_files.append(bbsc_candidate)
         for f in scan_files:
             for imp in get_imported_dlls(f):
                 imp_lower = imp.lower()
@@ -161,7 +169,10 @@ removed = []
 while True:  # until nothing more goes: a removed DLL may have been the only importer of another
     imported = set()
     if objdump:
-        for f in list(out.glob('*.exe')) + list(out.glob('*.dll')):
+        scan_files = list(out.glob('*.exe')) + list(out.glob('*.dll'))
+        if include_bbsc_candidate:
+            scan_files.append(bbsc_candidate)
+        for f in scan_files:
             imported.update(i.lower() for i in get_imported_dlls(f))
     gone = []
     for f in sorted(out.glob('*.dll')):

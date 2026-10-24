@@ -9,6 +9,7 @@
 #include "runtime.h"
 #include "gpu/bbgpu.h"
 #include "gpu/bbnet.h"
+#include "runtime_legacy_net.h"
 #if !defined(__x86_64__) || !defined(__GNUC__)
 #error This prototype requires x86-64 GCC or Clang (including MinGW).
 #endif
@@ -1894,12 +1895,14 @@ int main(int argc, char **argv) {
     if (fread(image, 1, size, f) != size || fgetc(f) != EOF) fail("incorrect memory image size");
     fclose(f);
     if (!cpu_only) {
-        char title[128]="Bloodborne", serial[16]="UNKNOWN", sfo[4096];
+        char title[128]="Bloodborne", serial[16]="UNKNOWN", version[16]="1.09", sfo[4096];
         uint32_t attributes=0;
         snprintf(sfo,sizeof(sfo),"%s/sce_sys/param.sfo",app0 ? app0 : ".");
         sfo_value(sfo,"TITLE",title,sizeof(title),NULL);
         sfo_value(sfo,"TITLE_ID",serial,sizeof(serial),NULL);
+        sfo_value(sfo,"APP_VER",version,sizeof(version),NULL);
         sfo_value(sfo,"ATTRIBUTE",NULL,0,&attributes);
+        runtime_legacy_net_configure(app0 ? app0 : ".",serial,title,version);
         uint64_t sdk=0;
         if (procparam) memcpy(&sdk,image+procparam+16,8); /* procparam: size, magic, count, sdk_version */
         BbGpuConfig gpu={title,serial,user_dir ? user_dir : "user",(uint32_t)sdk,attributes,1920,1080};
@@ -1979,8 +1982,15 @@ int main(int argc, char **argv) {
         }
         memcpy(image + relocs[i].target, &value, 8);
     }
+    if (!cpu_only) runtime_legacy_net_image_mapped(image,size);
     if (patch_file) apply_patches(patch_file, segments, ns, relocs, nr);
-    if (!cpu_only) bbgpu_patch_image(image, size);
+    if (!cpu_only) {
+        bbgpu_patch_image(image, size);
+        /* Install legacy BBSC hooks only after the rest of the game's patches,
+         * while the image is still writable. No-op unless explicitly enabled.
+         */
+        runtime_legacy_net_image_ready((uint64_t)(uintptr_t)image,size);
+    }
     protect(thunks, round_page((import_count + 1) * 32), 5);
     protect(image, round_page(size), 0);
     int executable_entry = 0;
@@ -2012,6 +2022,10 @@ int main(int argc, char **argv) {
             if (result) fail("module initializer failed");
         }
     }
+    /* Start shadNet and BBSC only after guest TLS and linked modules are initialized.
+     * Plain BB_PARTY sessions never load or start this separate online backend.
+     */
+    runtime_legacy_net_start();
     printf("Entering original x86-64 code at guest offset 0x%" PRIx64 "\n", entry);
     entered_game=1;
     struct { uint64_t argc; const char *argv[2]; } params = {1, {"/app0/eboot.bin", NULL}};

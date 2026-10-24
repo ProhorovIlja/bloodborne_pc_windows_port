@@ -83,12 +83,17 @@ find_package(Vulkan REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Boost REQUIRED)
 if (WIN32)
+    # MSYS2 does not package magic_enum. The pinned upstream headers are
+    # provisioned by tools/setup_windows_deps.sh for a fresh Windows build.
     if (NOT TARGET magic_enum::magic_enum)
-        add_library(magic_enum::magic_enum INTERFACE IMPORTED)
-        find_path(MAGIC_ENUM_INC NAMES magic_enum/magic_enum.hpp PATHS "$ENV{MINGW_PREFIX}/include" "C:/msys64/mingw64/include")
-        if (MAGIC_ENUM_INC)
-            target_include_directories(magic_enum::magic_enum INTERFACE "${MAGIC_ENUM_INC}")
+        find_path(MAGIC_ENUM_INC NAMES magic_enum/magic_enum.hpp
+            PATHS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/magic_enum/include"
+                  "$ENV{MINGW_PREFIX}/include" "C:/msys64/mingw64/include")
+        if (NOT MAGIC_ENUM_INC)
+            message(FATAL_ERROR "magic_enum is required: run tools/setup_windows_deps.sh before building")
         endif()
+        add_library(magic_enum::magic_enum INTERFACE IMPORTED)
+        target_include_directories(magic_enum::magic_enum INTERFACE "${MAGIC_ENUM_INC}")
     endif()
 else()
     find_package(magic_enum REQUIRED)
@@ -96,10 +101,13 @@ endif()
 find_package(tsl-robin-map REQUIRED)
 if (NOT TARGET GPUOpen::VulkanMemoryAllocator)
     add_library(GPUOpen::VulkanMemoryAllocator INTERFACE IMPORTED)
-    find_path(VMA_INC NAMES vk_mem_alloc.h PATHS "$ENV{MINGW_PREFIX}/include" "C:/msys64/mingw64/include")
-    if (VMA_INC)
-        target_include_directories(GPUOpen::VulkanMemoryAllocator INTERFACE "${VMA_INC}")
+    find_path(VMA_INC NAMES vk_mem_alloc.h
+        PATHS "$ENV{MINGW_PREFIX}/include" "C:/msys64/mingw64/include"
+        PATH_SUFFIXES "" vma VulkanMemoryAllocator)
+    if (NOT VMA_INC)
+        message(FATAL_ERROR "Vulkan Memory Allocator header not found. Install the MSYS2 VMA headers.")
     endif()
+    target_include_directories(GPUOpen::VulkanMemoryAllocator INTERFACE "${VMA_INC}")
 endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
@@ -124,15 +132,25 @@ else()
     pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
 endif()
 if (WIN32)
+    # miniz is not in the MSYS2 CLANG64 repository. Build pinned source as
+    # a static library instead of silently creating an interface target.
     if (NOT TARGET miniz::miniz)
-        add_library(miniz::miniz INTERFACE IMPORTED)
-        find_path(MINIZ_INC NAMES miniz.h PATHS "$ENV{MINGW_PREFIX}/include" "C:/msys64/mingw64/include")
-        if (MINIZ_INC)
+        find_path(MINIZ_INC NAMES miniz.h
+            PATHS "$ENV{MINGW_PREFIX}/include" "C:/msys64/mingw64/include")
+        find_library(MINIZ_LIB NAMES miniz libminiz.a
+            PATHS "$ENV{MINGW_PREFIX}/lib" "C:/msys64/mingw64/lib")
+        if (MINIZ_INC AND MINIZ_LIB)
+            add_library(miniz::miniz INTERFACE IMPORTED)
             target_include_directories(miniz::miniz INTERFACE "${MINIZ_INC}")
-        endif()
-        find_library(MINIZ_LIB NAMES miniz libminiz.a PATHS "$ENV{MINGW_PREFIX}/lib" "C:/msys64/mingw64/lib")
-        if (MINIZ_LIB)
             target_link_libraries(miniz::miniz INTERFACE "${MINIZ_LIB}")
+        elseif (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz/CMakeLists.txt")
+            set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+            set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+            set(INSTALL_PROJECT OFF CACHE BOOL "" FORCE)
+            add_subdirectory(third_party/miniz EXCLUDE_FROM_ALL)
+            add_library(miniz::miniz ALIAS miniz)
+        else()
+            message(FATAL_ERROR "miniz is required: run tools/setup_windows_deps.sh before building")
         endif()
     endif()
 else()
@@ -143,6 +161,12 @@ find_program(GLSLANG_COMPILER NAMES glslang glslangValidator PATHS "C:/msys64/mi
 
 set(SIRIT_USE_SYSTEM_SPIRV_HEADERS OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/sirit EXCLUDE_FROM_ALL)
+# Upstream sirit/src/stream.h invokes std::abort without <cstdlib>.
+# Keep the platform compatibility include scoped to this dependency.
+if (WIN32 AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU") AND TARGET sirit)
+    target_compile_options(sirit PRIVATE
+        -include "${CMAKE_CURRENT_SOURCE_DIR}/shim/win_sirit_compat.h")
+endif()
 
 # bbport: FSR 3.1 temporal upscaling / frame generation, native Vulkan (MIT, FireBurn/FSR-Vulkan).
 set(FFX_VK_PORTABLE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -150,6 +174,20 @@ set(FFX_VK_PORTABLE_BUILD_PROBE OFF CACHE BOOL "" FORCE)
 # FSR 3.1.6 frame generation (from Supermedo/bloodborne_pc PR #69 by FIocker).
 set(FFX_VK_PORTABLE_BUILD_FSR3_3_1_5_SCAFFOLD ON CACHE BOOL "" FORCE)
 add_subdirectory(third_party/fsr-vulkan EXCLUDE_FROM_ALL)
+
+# The FSR 1.1.4 host library assumes MSVC's _countof macro. Keep the
+# compatibility definition private to this target instead of polluting
+# Bloodborne's game/runtime compilation or patching the vendor checkout.
+if (WIN32 AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU"))
+    if (TARGET ffx_vulkan_fsr3_host_1_1_4)
+        target_compile_options(ffx_vulkan_fsr3_host_1_1_4 PRIVATE
+            -include "${CMAKE_CURRENT_SOURCE_DIR}/shim/win_fsr_countof_compat.h")
+    endif()
+    if (TARGET ffx_vulkan_fsr3_vk_backend_1_1_4)
+        target_compile_options(ffx_vulkan_fsr3_vk_backend_1_1_4 PRIVATE
+            -include "${CMAKE_CURRENT_SOURCE_DIR}/shim/win_fsr_countof_compat.h")
+    endif()
+endif()
 
 # Host shaders -> headers (same scheme as shadPS4's host_shaders/CMakeLists.txt).
 set(SHADER_SRC ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/host_shaders)
@@ -214,6 +252,11 @@ set(COMMON
 file(GLOB AVPLAYER CONFIGURE_DEPENDS shadps4/core/libraries/avplayer/*.cpp)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswscale libswresample)
 file(GLOB SHIM_SOURCES CONFIGURE_DEPENDS shim/*.cpp shim/*/*.cpp)
+# This *plugin-only* Win64 PE bridge must NOT be linked into bbgpu itself:
+# bbgpu is STATIC inside bbport.exe, whereas bbnet20 DLL dynamically looks
+# up these exact host exports. A duplicate bridge in the renderer would hide
+# the actual boundary we are trying to test and inflate every default build.
+list(FILTER SHIM_SOURCES EXCLUDE REGEX "bbnet20_gpu_host_bridge[.]cpp$")
 # The layer's own modules (independent of the shadPS4 code): layer/.
 file(GLOB LAYER_SOURCES CONFIGURE_DEPENDS layer/*.cpp)
 # Game profiles (what the translator knows about one game, out of its core): games/.
@@ -283,6 +326,14 @@ set_source_files_properties(shim/party/party_fourp.cpp PROPERTIES COMPILE_OPTION
 set_source_files_properties(shim/bbport_ribbons.cpp PROPERTIES COMPILE_OPTIONS
     "-mno-red-zone;-ffp-contract=off;-fno-fast-math")
 target_include_directories(bbgpu PRIVATE shim layer games cp shadps4 ${SHADER_INCLUDE} third_party/gcn/include third_party/half/include)
+# Header-only JIT assembler used by flatten_extended_userdata_pass.cpp.
+# Keep this Windows-specific: Linux builds have their own dependency setup.
+if (WIN32)
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/xbyak/xbyak/xbyak.h")
+        message(FATAL_ERROR "xbyak missing: run tools/setup_windows_deps.sh")
+    endif()
+    target_include_directories(bbgpu PRIVATE third_party/xbyak)
+endif()
 target_compile_definitions(bbgpu PRIVATE BOOST_ASIO_STANDALONE NDEBUG)
 if (WIN32)
     target_compile_definitions(bbgpu PRIVATE VK_USE_PLATFORM_WIN32_KHR)
@@ -307,6 +358,11 @@ else()
 endif()
 
 # Explicit test targets; neither launches the game nor needs a Vulkan device.
+# Native upstream visy VRAM collector policy: fixed budgets, gradual eviction
+# and per-presented-frame limits; no Vulkan device/game required for this test.
+add_executable(gc-policy-test EXCLUDE_FROM_ALL ../tests/test_gc_policy.cpp)
+target_compile_options(gc-policy-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+target_include_directories(gc-policy-test PRIVATE ..)
 add_executable(shader-user-data-test EXCLUDE_FROM_ALL ../tests/test_shader_user_data.cpp)
 target_compile_options(shader-user-data-test PRIVATE -UNDEBUG)
 target_include_directories(shader-user-data-test PRIVATE shim shadps4 third_party/gcn/include)
@@ -422,7 +478,15 @@ endif()
 file(GLOB PARTY_NET_SOURCES CONFIGURE_DEPENDS shim/net/*.cpp)
 add_executable(party-net-test EXCLUDE_FROM_ALL ../tests/test_party_net.cpp ${PARTY_NET_SOURCES})
 target_compile_options(party-net-test PRIVATE -UNDEBUG -Wall -Wextra)
-target_include_directories(party-net-test PRIVATE shim/net ..)
+target_include_directories(party-net-test PRIVATE shim/net)
+if (WIN32)
+    # Windows has a case-insensitive repo root VERSION file, which shadows
+    # libc++ <version> when the repository root is placed in -I. Limit the
+    # project root to quoted includes ("gpu/bbnet.h"), never angle includes.
+    target_compile_options(party-net-test PRIVATE -iquote "${CMAKE_CURRENT_SOURCE_DIR}/..")
+else()
+    target_include_directories(party-net-test PRIVATE ..)
+endif()
 set_target_properties(party-net-test PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
 if (WIN32)
     target_link_libraries(party-net-test PRIVATE ws2_32 iphlpapi synchronization)
@@ -432,7 +496,15 @@ endif()
 # sceHttp, Matching2/Signaling over LocalHost. ninja -C out/gpu party-host-test
 add_executable(party-host-test EXCLUDE_FROM_ALL ../tests/test_party_host.cpp ${PARTY_NET_SOURCES})
 target_compile_options(party-host-test PRIVATE -UNDEBUG -Wall -Wextra)
-target_include_directories(party-host-test PRIVATE shim/net ..)
+target_include_directories(party-host-test PRIVATE shim/net)
+if (WIN32)
+    # Windows has a case-insensitive repo root VERSION file, which shadows
+    # libc++ <version> when the repository root is placed in -I. Limit the
+    # project root to quoted includes ("gpu/bbnet.h"), never angle includes.
+    target_compile_options(party-host-test PRIVATE -iquote "${CMAKE_CURRENT_SOURCE_DIR}/..")
+else()
+    target_include_directories(party-host-test PRIVATE ..)
+endif()
 set_target_properties(party-host-test PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
 if (WIN32)
     target_link_libraries(party-host-test PRIVATE ws2_32 iphlpapi synchronization)
@@ -475,10 +547,78 @@ endif()
 target_include_directories(bbport PRIVATE .. ../src)
 target_link_libraries(bbport PRIVATE bbgpu "${CMAKE_CURRENT_SOURCE_DIR}/../out/libatrac9.a" Vulkan::Vulkan)
 if (WIN32)
-    target_link_libraries(bbport PRIVATE ws2_32 iphlpapi synchronization dbghelp ntdll winmm)
+    # CLANG64's pthread, nanosleep64 and clock_gettime64 shims are in
+    # winpthreads; Clang does not implicitly link them from Windows CRT.
+    # Without this, all 406 objects compile but bbport.exe fails to link.
+    target_link_libraries(bbport PRIVATE ws2_32 iphlpapi synchronization dbghelp ntdll winmm pthread)
     target_link_options(bbport PRIVATE "-Wl,--disable-dynamicbase" "-Wl,--disable-high-entropy-va")
 endif()
 set_target_properties(bbport PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BB_OUT_DIR}")
+
+# Candidate only: build the *real* pinned native bbnet20 shadNet/NP/BBSC sources
+# as an independent Windows DLL. Kept OFF in the ordinary Windows/party build
+# until the port is complete and live CLS 0.0.2 cross-play is verified.
+# CI first calls tools/interop/stage_bbnet20.py followed by
+# tools/interop/prepare_bbnet20_windows.py with audited source fingerprints.
+option(BB_BBSC20_WINDOWS_CANDIDATE "Experimental real bbnet20 Win64 DLL compilation" OFF)
+if (BB_BBSC20_WINDOWS_CANDIDATE)
+    if (NOT WIN32)
+        message(FATAL_ERROR "BB_BBSC20_WINDOWS_CANDIDATE is specifically the Win64 port")
+    endif()
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bbnet20/bbnet_glue.cpp" OR
+        NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib/LICENSE")
+        message(FATAL_ERROR "Missing pinned, license-audited bbnet20 native sources: run tools/interop/prepare_bbnet20_windows.py")
+    endif()
+    find_package(Protobuf CONFIG REQUIRED)
+    find_package(nlohmann_json CONFIG REQUIRED)
+    find_package(OpenSSL REQUIRED)
+    find_package(ZLIB REQUIRED)
+    find_path(MINIUPNPC_INCLUDE NAMES miniupnpc.h PATH_SUFFIXES miniupnpc REQUIRED)
+    find_library(MINIUPNPC_LIBRARY NAMES miniupnpc REQUIRED)
+    if (NOT TARGET protobuf::protoc OR NOT TARGET protobuf::libprotobuf)
+        message(FATAL_ERROR "Native candidate requires a matching protoc and libprotobuf")
+    endif()
+    # shadPS4's Windows host_net.cpp uses <wepoll.h> and its epoll_* API.
+    # Require the exact pinned BSD-licensed C implementation, not a shim.
+    set(BBSC_WEPOLL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/ext-wepoll")
+    if (NOT EXISTS "${BBSC_WEPOLL_ROOT}/wepoll.c" OR
+        NOT EXISTS "${BBSC_WEPOLL_ROOT}/wepoll.h" OR
+        NOT EXISTS "${BBSC_WEPOLL_ROOT}/LICENSE")
+        message(FATAL_ERROR "Missing licensed, pinned shadPS4 ext-wepoll sources")
+    endif()
+    add_subdirectory("${BBSC_WEPOLL_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/bbsc-ext-wepoll" EXCLUDE_FROM_ALL)
+    add_subdirectory(bbnet20 EXCLUDE_FROM_ALL)
+    target_link_libraries(bbnet20 PRIVATE wepoll)
+    # Windows bbgpu is STATIC in bbport.exe, unlike the shared Linux GPU.
+    # Without this explicit EXE/DLL bridge the native BBSC module registers
+    # its cinematic input into a *second* private SDL filter array, while its
+    # loading banner is never drawn by the real game's Vulkan presenter.
+    # Export only the two stable C host callbacks in the candidate EXE; the
+    # candidate DLL forwards to them via its own tiny adapter.
+    target_compile_definitions(bbgpu PRIVATE BBGPU_BBSC_CANDIDATE_HOST=1)
+    target_sources(bbport PRIVATE shim/bbnet20_host_exports.cpp)
+    target_sources(bbnet20 PRIVATE shim/bbnet20_gpu_host_bridge.cpp)
+    # Real upstream CLS guest byte-checked JIT hooks, Win32 memory manager.
+    # Not a fake hook: callbacks run in the native game's SysV guest threads.
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/shim/bbport_guest_code_hooks.h")
+        message(FATAL_ERROR "Native Windows guest hook API missing")
+    endif()
+    target_sources(bbnet20 PRIVATE shim/bbport_guest_code_hooks_win.cpp)
+    target_include_directories(bbnet20 PRIVATE third_party/xbyak)
+    # Upstream's Linux source assumes its httplib headers live at a different
+    # location. Keep their MIT notice and add the exact verified source tree.
+    # The shadPS4 networking sources reuse the native port's smaller logging
+    # adapter, whose public header includes common/logging/classes.h from
+    # gpu/shadps4. Upstream Linux exports that include directory transitively;
+    # Windows' static bbgpu does not. Preserve the genuine logging classes.
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/shadps4/common/logging/classes.h")
+        message(FATAL_ERROR "Native logging classes required by BBSC are missing")
+    endif()
+    target_include_directories(bbnet20 PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/httplib"
+        "${CMAKE_CURRENT_SOURCE_DIR}/shadps4")
+    message(STATUS "BBSC native Win64 candidate target enabled: not release-ready, no launcher opt-in")
+endif()
 
 # Runtime unit tests (tests/test_sema.c, tests/test_content.c) for tests/test_sema.py and
 # tests/test_content.py, which run out/sema-test and out/content-test (build.sh --test builds them
@@ -494,7 +634,7 @@ target_compile_options(content-test PRIVATE -UNDEBUG -Wall -Wextra)
 set_source_files_properties(../tests/test_content.c PROPERTIES COMPILE_OPTIONS -Werror)
 target_compile_definitions(content-test PRIVATE _GNU_SOURCE)
 if (WIN32)
-    target_link_libraries(sema-test PRIVATE ws2_32 iphlpapi synchronization dbghelp ntdll winmm)
+    target_link_libraries(sema-test PRIVATE ws2_32 iphlpapi synchronization dbghelp ntdll winmm pthread)
     target_sources(content-test PRIVATE ../src/win32_compat.c)
     target_link_libraries(content-test PRIVATE ws2_32)
 endif()

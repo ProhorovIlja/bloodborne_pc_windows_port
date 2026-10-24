@@ -20,7 +20,7 @@ def answer(obj):
     return opener
 
 
-RELEASE = {"tag_name": "v0.6.3", "html_url": "https://github.com/visy/bloodborne_pc_windows_port/releases/tag/v0.6.3",
+RELEASE = {"tag_name": "v0.6.3", "html_url": "https://github.com/ProhorovIlja/bloodborne_pc_windows_port/releases/tag/v0.6.3",
            "draft": False, "prerelease": False}
 
 
@@ -52,6 +52,31 @@ class UpdateCheckTests(unittest.TestCase):
         # a link elsewhere is never shown: the release page instead
         self.assertEqual(uc.fetch(opener=answer(dict(RELEASE, html_url="https://evil.example/x")))["url"],
                          uc.RELEASES_PAGE)
+        # A different GitHub repository, a prefix-trick URL or credentials
+        # must NEVER be used as a clickable update destination.
+        for bad_url in (
+            "https://github.com/visy/bloodborne_pc_windows_port/releases/tag/v9.0.0",
+            "https://github.com/ProhorovIlja/bloodborne_pc_windows_port-evil/releases/tag/v9",
+            "https://github.com@evil.example/ProhorovIlja/bloodborne_pc_windows_port/releases",
+            "http://github.com/ProhorovIlja/bloodborne_pc_windows_port/releases",
+            "https://github.com/ProhorovIlja/bloodborne_pc_windows_port/releases?download=https://bad",
+        ):
+            with self.subTest(bad_url=bad_url):
+                self.assertEqual(uc.fetch(opener=answer(dict(RELEASE, html_url=bad_url)))["url"],
+                                 uc.RELEASES_PAGE)
+                self.assertEqual(uc.safe_release_url(bad_url), uc.RELEASES_PAGE)
+
+    def test_cached_update_does_not_link_to_old_upstream(self):
+        self.cache.write_text(json.dumps({
+            "checked": 100.0,
+            "latest": {
+                "tag": "v0.9.9",
+                "url": "https://github.com/visy/bloodborne_pc_windows_port/releases/tag/v0.9.9"
+            }
+        }), encoding="utf-8")
+        notice = uc.check("0.7.2", self.cache, now=200.0)
+        self.assertIsNotNone(notice)
+        self.assertEqual(notice.url, uc.RELEASES_PAGE)
 
     def test_notice_and_cache(self):
         calls = []
