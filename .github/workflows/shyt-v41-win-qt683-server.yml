@@ -41,6 +41,11 @@ jobs:
           $manifest = Get-Content "$out/SEAMLESS-HUNT-COMPOSE-MANIFEST.json" -Raw | ConvertFrom-Json
           if ($manifest.upstream_pin -ne $env:PIN -or $manifest.public_release_ready -ne $false) { throw 'Unsafe composition' }
           Copy-Item "$out/*" pinned-upstream -Recurse -Force
+          python tools/poc/yharnam/server-relay-perf-v45/patch_server_hotpath.py pinned-upstream/server/src/server_link.cpp
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned C++ server UDP hotpath optimization rejected' }
+          if (-not (Select-String -Path pinned-upstream/server/src/server_link.cpp -Pattern SHYT-SERVER-RELAY-PERF-V45 -Quiet)) {
+            throw 'Native C++ UDP hotpath optimization missing'
+          }
       - name: Capture real parity reference backend stderr if it disconnects
         shell: pwsh
         run: |
