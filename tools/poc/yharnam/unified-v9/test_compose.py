@@ -198,7 +198,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
         self.assertIn(b'ShResumeMode()',result['emulator/src/core/bloodborne_server_world.cpp'])
-        self.assertIn(b'SeamlessHunt::Resume::Mode',result['emulator/src/core/last_session_policy.hpp'])
+        self.assertIn(b'namespace SeamlessHunt::Resume',result['emulator/src/core/last_session_policy.hpp'])
         self.assertIn(b'sh_spectator_frame(camera)',result['bbport/src/runtime_camhook.c'])
         self.assertIn(b'runtime_camhook_spectator',result[compose.OVERLAY])
         self.assertIn(b'sh-quit-desktop',result[compose.OVERLAY])
@@ -266,7 +266,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SH-MAP-DATA-V19',result[compose.MAPART])
         self.assertIn(b'MaxFloorCells',result[compose.MAPART])
         self.assertIn(b'vmaDestroyBuffer(allocator, out.buffer, out.allocation);',result[compose.MAP3D])
-        self.assertIn(b'SeamlessHunt::Spectate::State',result['bbport/gpu/shim/spectator_policy.hpp'])
+        self.assertIn(b'namespace SeamlessHunt::Spectate',result['bbport/gpu/shim/spectator_policy.hpp'])
         for path,needle in [
             ("server/coop/coop.proto",b"PROTOCOL_CURRENT = 8"),
             ("server/coop/team_lobby.cpp",b"SET_DBNO"),
