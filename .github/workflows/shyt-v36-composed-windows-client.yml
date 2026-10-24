@@ -135,6 +135,17 @@ jobs:
             pinned-upstream/bbport/dist/bbport-windows.zip.sha256
           if-no-files-found: error
           retention-days: 7
+      - name: Preserve build failure evidence without publishing a client
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-v36-native-windows-compiler-failure
+          path: |
+            pinned-upstream/bbport/out/gpu-build.log
+            pinned-upstream/bbport/out/gpu/CMakeCache.txt
+            pinned-upstream/bbport/out/gpu/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: ignore
+          retention-days: 7
       - name: No proprietary assets and no untested public release
         shell: pwsh
         run: |
