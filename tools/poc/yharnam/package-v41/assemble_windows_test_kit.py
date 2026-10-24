@@ -15,6 +15,9 @@ import stat
 import sys
 import zipfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from source_identity import NAME as IDENTITY_NAME, SourceIdentityError, validate as validate_identity
+
 ROOT = "bbport-windows/"
 SERVER_FILES = {
     "server/shadnet.exe", "server/shadnet.cfg",
@@ -26,7 +29,7 @@ SERVER_FILES = {
     "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",
     "server/licenses/LGPL-3.0.txt",
     "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt",
-    "NOT-RELEASE-READY.txt",
+    "NOT-RELEASE-READY.txt", "SHYT-SOURCE-IDENTITY.json",
 }
 PRIVATE_PARTS = {"user", "savedata", "secrets", "dvdroot_ps4", "sce_module",
                  "sce_sys", "game", "coop-game", "db", ".git"}
@@ -119,6 +122,17 @@ def assemble(game: Path, server: Path, target: Path,
     with zipfile.ZipFile(game) as gz, zipfile.ZipFile(server) as sz:
         games = scan(gz, ROOT)
         servers = scan(sz, "")
+        # The two independent build archives must originate at the exact
+        # same Seamless Hunt commit, not merely share an upstream pin. A game
+        # from a previous CI run can otherwise silently mix with newer server
+        # patches and crash/desync during live multiplayer.
+        try:
+            game_id = validate_identity(gz.read(ROOT + IDENTITY_NAME), "game")
+            server_id = validate_identity(sz.read(IDENTITY_NAME), "server")
+        except (KeyError, SourceIdentityError) as exc:
+            raise InvalidCandidate("missing/invalid matched native source identity") from exc
+        if game_id["source_commit"] != server_id["source_commit"]:
+            raise InvalidCandidate("client/server source commit mismatch")
         for required in SERVER_FILES:
             if required not in servers:
                 raise InvalidCandidate("Windows server or Qt dependency missing: " + required)
@@ -161,6 +175,7 @@ def assemble(game: Path, server: Path, target: Path,
         metadata = {
             "release_ready": False, "game_zip_sha256": src_game_sha,
             "server_zip_sha256": src_server_sha,
+            "seamless_hunt_source_commit": game_id["source_commit"],
             "upstream_pinned_revision": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
             "server_abi": "Windows x86_64, Qt 6.8.3 MSVC 2022",
         }

@@ -156,6 +156,11 @@ jobs:
           bash packaging/windows/package.sh
           test -s dist/bbport-windows.zip
           echo WINDOWS_PORTABLE_PACKAGE_BUILT_NOT_GAME_TESTED
+      - name: Stamp game ZIP with exact mainline source identity
+        shell: pwsh
+        run: |
+          python tools/poc/yharnam/package-v41/source_identity.py --game-zip pinned-upstream/bbport/dist/bbport-windows.zip --commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Native client provenance stamping failed' }
       - name: Validate portable game launcher archive and reject private/retail data
         shell: pwsh
         run: |

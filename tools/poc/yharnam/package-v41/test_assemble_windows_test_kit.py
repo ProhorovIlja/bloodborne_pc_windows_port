@@ -17,7 +17,7 @@ TOOLS = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe", "bin/bb-gpu-capabilities.exe",
     "run.py", "README.md", "LICENSE", "tools/party_boss_events.py",
     "tools/SeamlessHunt-network-profile.example.json",
-    "CREDITS.txt", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+    "CREDITS.txt", "SHYT-SOURCE-IDENTITY.json", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
     "licenses/AMD-FidelityFX-SDK-LICENSE.txt", "licenses/Intel-XeSS-LICENSE.txt",
     "licenses/PkgTool-LICENSE.txt",
 }
@@ -42,6 +42,12 @@ class CoupledKitTests(unittest.TestCase):
                     data = EVENT
                 elif name == "tools/SeamlessHunt-network-profile.example.json":
                     data = b'{"schema":1,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}'
+                elif name == "SHYT-SOURCE-IDENTITY.json":
+                    data = (json.dumps({
+                        "schema": 1, "component": "game",
+                        "source_commit": "1" * 40,
+                        "upstream_pin": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
+                        "release_ready": False}) + "\n").encode("utf-8")
                 elif name == "CREDITS.txt":
                     data = (b"SEAMLESS HUNT NOT a public release Yharnam Together "
                             b"deadinside28 Supermedo shadPS4 Wozzardman 0xCydral "
@@ -56,7 +62,12 @@ class CoupledKitTests(unittest.TestCase):
     def make_server(self, missing=None, added=None):
         with zipfile.ZipFile(self.server, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name in sorted(mod.SERVER_FILES - ({missing} if missing else set())):
-                if name == "server/CREDITS.txt":
+                if name == "SHYT-SOURCE-IDENTITY.json":
+                    data = (json.dumps({"schema": 1, "component": "server",
+                                        "source_commit": "1" * 40,
+                                        "upstream_pin": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
+                                        "release_ready": False}) + "\n").encode("utf-8")
+                elif name == "server/CREDITS.txt":
                     data = (b"Yharnam Together deadinside28 Supermedo "
                             b"original contributor author copyright and license " * 8)
                 elif name == "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt":
@@ -81,6 +92,7 @@ class CoupledKitTests(unittest.TestCase):
             meta = json.loads(z.read("bbport-windows/SHYT-INTERNAL-CANDIDATE-MANIFEST.json"))
             self.assertFalse(meta["release_ready"])
             self.assertEqual(meta["game_zip_sha256"], mod.digest(self.game))
+            self.assertEqual(meta["seamless_hunt_source_commit"], "1" * 40)
             self.assertIn(b"INTERNAL", z.read("bbport-windows/NOT-FOR-PUBLIC-RELEASE.txt"))
             self.assertNotIn("bbport-windows/eboot.bin", files)
 
@@ -96,6 +108,46 @@ class CoupledKitTests(unittest.TestCase):
                 self.make_server(missing=missing)
                 with self.assertRaisesRegex(mod.InvalidCandidate, "missing"):
                     mod.assemble(self.game, self.server, self.out)
+
+    def test_rejects_server_from_a_different_seamless_hunt_commit(self):
+        with zipfile.ZipFile(self.server) as z:
+            entries = {x.filename: z.read(x) for x in z.infolist()}
+        mismatched = json.loads(entries["SHYT-SOURCE-IDENTITY.json"])
+        mismatched["source_commit"] = "2" * 40
+        entries["SHYT-SOURCE-IDENTITY.json"] = json.dumps(mismatched).encode("utf-8")
+        with zipfile.ZipFile(self.server, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            for name, data in entries.items():
+                z.writestr(name, data)
+        with self.assertRaisesRegex(mod.InvalidCandidate, "source commit mismatch"):
+            mod.assemble(self.game, self.server, self.out)
+
+    def test_rejects_missing_or_forged_source_identity(self):
+        for component in ("game", "server"):
+            archive = self.game if component == "game" else self.server
+            self.make_game()
+            self.make_server()
+            with zipfile.ZipFile(archive) as z:
+                entries = {x.filename: z.read(x) for x in z.infolist()}
+            member = ("bbport-windows/" if component == "game" else "") + "SHYT-SOURCE-IDENTITY.json"
+            for variant in ("missing", "schema_boolean", "wrong_pin"):
+                modified = dict(entries)
+                if variant == "missing":
+                    modified.pop(member)
+                else:
+                    identity = json.loads(modified[member])
+                    if variant == "schema_boolean":
+                        identity["schema"] = True
+                    else:
+                        identity["upstream_pin"] = "0" * 40
+                    modified[member] = json.dumps(identity).encode("utf-8")
+                with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                    for name, data in modified.items():
+                        z.writestr(name, data)
+                with self.subTest(component=component, variant=variant):
+                    with self.assertRaisesRegex((mod.InvalidCandidate, ValueError), "source identity"):
+                        mod.assemble(self.game, self.server, self.out)
+            self.make_game()
+            self.make_server()
 
     def test_qt_concurrent_is_optional_in_real_native_server(self):
         self.assertNotIn("server/Qt6Concurrent.dll", mod.SERVER_FILES)
