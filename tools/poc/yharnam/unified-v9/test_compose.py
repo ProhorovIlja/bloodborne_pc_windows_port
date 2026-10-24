@@ -74,7 +74,7 @@ def originals():
 ''',
         compose.SERVER_LINK_H: LOGIN_H_FIXTURE +
             '        QList<Endpoint> gone; // links forgotten\n',
-        compose.LINK_SERVER_CPP: RPC_CPP_FIXTURE.replace(
+        compose.LINK_SERVER_CPP: '#include "link_server.h"\n' + RPC_CPP_FIXTURE.replace(
             '    m_signedIn.insert(online_id, hash);',
             '''    const auto known = m_signedIn.constFind(online_id);
     if (known != m_signedIn.constEnd())
