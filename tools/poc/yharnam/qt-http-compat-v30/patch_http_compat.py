@@ -182,3 +182,63 @@ def transform_backend(s):
     }
 #endif''', 'backend HTTP binding')
     return s
+
+
+BLOODBORNE_ROUTES_PATH = "server/src/webapi_routes_bloodborne.cpp"
+
+def transform_bloodborne(s):
+    """Preserve summon placement headers on Qt 6.4-6.7 and Qt 6.8+.
+
+    Qt 6.4 QHttpServerResponse has setHeader(), but not QHttpHeaders /
+    response.headers() / response.setHeaders(). Do not discard this header:
+    older PS4/BBSC-compatible cross-area placements rely on it.
+    """
+    if "SH-QT-BLOODBORNE-PLACEMENT" in s:
+        raise ValueError("Qt Bloodborne header compatibility already applied")
+    s = one(s, "#include <QHttpHeaders>",
+        """#include <QtGlobal> // SH-QT-BLOODBORNE-PLACEMENT
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+#include <QHttpHeaders>
+#endif""", "summon Qt header include")
+    after_party = """QByteArray Party(const QHttpServerRequest& request) {
+    return Bloodborne::NormalizePartyKey(request.value(PartyHeader));
+}
+"""
+    with_helper = after_party + """
+void AddPlacementHeader(QHttpServerResponse& response, const QByteArray& value) {
+    if (value.isEmpty())
+        return;
+#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    // Qt 6.4-6.7 exposes setHeader(), not QHttpHeaders.
+    response.setHeader(QByteArray(HostPlacementHeader), value);
+#else
+    QHttpHeaders headers = response.headers();
+    if (headers.append(HostPlacementHeader, value))
+        response.setHeaders(std::move(headers));
+#endif
+}
+"""
+    s = one(s, after_party, with_helper, "summon helper")
+    two_responses = """    if (!hostPlacement.isEmpty()) {
+        QHttpHeaders headers = response.headers();
+        if (headers.append(HostPlacementHeader, hostPlacement)) {
+            response.setHeaders(std::move(headers));
+        }
+    }"""
+    if s.count(two_responses) != 2:
+        raise ValueError("Qt summon helper expects two return-paths")
+    s = s.replace(two_responses, "    AddPlacementHeader(response, hostPlacement);", 2)
+    delete_response = """                   if (result.pendingHostPlacement.isEmpty()) {
+                       return response;
+                   }
+                   QHttpHeaders headers = response.headers();
+                   if (headers.append(HostPlacementHeader, result.pendingHostPlacement)) {
+                       response.setHeaders(std::move(headers));
+                   }
+                   return response;"""
+    s = one(s, delete_response,
+        """                   AddPlacementHeader(response, result.pendingHostPlacement);
+                   return response;""", "summon remove placement")
+    if s.count("AddPlacementHeader(response, ") != 3:
+        raise ValueError("Qt summon compat lost a placement path")
+    return s
