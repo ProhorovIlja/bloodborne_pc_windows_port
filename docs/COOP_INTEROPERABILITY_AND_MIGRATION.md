@@ -72,6 +72,30 @@ Our compatibility tests must distinguish all four layers:
 for a single compatible party, and keep the existing production CLS realm
 unmodified. Do not expose a fake global player pool.
 
+## ShadNet transport and minimal server bandwidth
+
+Pinned Yharnam Together's **team network mode is server-relayed UDP**:
+gameplay datagrams pass through shadNet, which also owns the shared world.
+See upstream [SERVER_COOP_PLAN.md](https://github.com/lKaniel/bloodborne-server/blob/77e350743a7cb4524cfcc1782fb6e3af64e25b15/docs/SERVER_COOP_PLAN.md).
+This differs from early direct-P2P architecture and from CLS's network
+transport. The current client/server build **does not guarantee direct
+P2P or a low relay bandwidth bill**.
+
+The target of low server load is legitimate, but **direct game-data P2P
+is a future compatibility-reviewed design**, not a switch to toggle.
+Safely offloading peer packets requires NAT traversal, capability
+negotiation, game-world authority, privacy/consent to reveal endpoints,
+reliable fallback relay, join/leave handling and validated game events.
+Server-side world and lobby messages cannot vanish just because movement
+uses P2P.
+
+For capacity planning, use the tested, assumption-only
+[`game_traffic_capacity.py`](../tools/diagnostics/game_traffic_capacity.py)
+to estimate the `N - 1` relay fanout in rooms of N hunters. It does NOT
+measure real game bandwidth, server memory, CPU or network latency. **All
+publication claims must follow instrumented two-PC and Fornex staging
+tests**, including adverse packet loss/jitter.
+
 ## Compatible provider selection, not vendor lock-in
 
 A future launcher can present an **explicit, opt-in** list of supported
