@@ -105,6 +105,31 @@ def check_transport_feature_policy(policy: dict) -> None:
             or invasion.get("version_and_protocol_compatibility_tested") is not False
             or invasion.get("adversarial_join_tested") is not False):
         raise SourceDrift("unverified PvP invasion mode must be off and require explicit consent")
+    social = policy.get("friend_list", {})
+    if (social.get("status") != "server_existing_api_confirmed; native_game_ui_not_wired"
+            or social.get("in_game_friend_ui_status") != "design_only_not_integrated"
+            or social.get("invasion_ui_status") != "design_only_not_integrated"
+            or social.get("five_player_limit") !=
+            "existing live limit 4; fifth player asked by maintainers but not game verified"):
+        raise SourceDrift("friend list, in-game UI and fifth slot are not yet game verified")
+    required_friend_api = {
+        "GET /v1/users/me/friendList with privacy-aware presence filter and offline status",
+        "GET /v1/users/me/friends/sessions (visible games of mutual friends)",
+        "POST /v1/sessions/{id}/invitations for explicit invitations",
+    }
+    if not required_friend_api.issubset(set(social.get("existing_pinned_server_features", []))):
+        raise SourceDrift("existing Yharnam Together friendship APIs must be retained")
+    social_safety = set(social.get("enforcement", []))
+    for gate in ("server-authoritative access and friend/block state, not GUI-only",
+                 "no unsolicited invasion of PvE-only, offline or private worlds",
+                 "no password bypass or private session lookup by guessed ID",
+                 "no peer endpoint or location disclosure without both sides consent"):
+        if gate not in social_safety:
+            raise SourceDrift("Friends/privacy permission gate missing: " + gate)
+    for feature in ("in_game_friend_list_and_presence", "friend_invite_and_authorized_join",
+                    "mutual_friend_invasion_opt_in", "friend_block_and_privacy_controls"):
+        if feature not in stages[1].get("features", []):
+            raise SourceDrift("Friends UX requirement missing: " + feature)
     if policy.get("no_unreviewed_external_source_code") is not True or (
             policy.get("requires_license_and_original_author_credit") is not True
             or policy.get("release_ready") is not False):
