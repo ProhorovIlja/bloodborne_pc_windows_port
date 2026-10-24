@@ -33,8 +33,10 @@ jobs:
           node-version: '22'
       - name: Public presence privacy, lifetime, and no-fake-data tests
         run: python -m unittest discover -s tools/poc/yharnam/web-portal-v33 -p 'test_*.py' -v
+      - name: Static portal and privacy-safe site HTML tests
+        run: python -m unittest discover -s tools/poc/yharnam/web-portal-v33/site -p 'test_*.py' -v
       - name: Shareable challenges deterministic and no external dependencies
-        run: node tools/poc/yharnam/web-portal-v33/test_challenges.mjs
+        run: node tools/poc/yharnam/web-portal-v33/site/test_challenges.mjs
       - name: Static portal contains no bundled game data, credential forms, or external scripts
         shell: bash
         run: |
