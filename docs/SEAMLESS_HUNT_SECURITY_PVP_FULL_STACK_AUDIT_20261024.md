@@ -94,3 +94,15 @@ V29 was integrated into the V3–V29 compositor, the native Qt build workflow an
 
 Implementation: `tools/poc/yharnam/rpc-budget-v29/`.
 
+
+## V30: verified live account status on cached reauthentication
+
+**Confirmed security flaw:** On a hot `LinkServer::SignIn` cache hit, the source compared `SHA256(client_secret)` against a persistent in-memory hash without checking `Database`. The V29 cache-size bound did not remove this vulnerability. A prior successful login could therefore keep accepting credentials which had since been changed or an account which had been banned/deleted, until its cache entry disappeared.
+
+V30 changes cached auth entries to hold two stamps: the cached SHA-256 client secret and the salted password hash returned by the authoritative SQLite account record at sign-in. Every cached reauthentication does a **cheap indexed** `SELECT username,hash,banned` (no 100,000-round password KDF). Banned, deleted, inaccessible or invalid database rows fail closed. A changed password hash removes the old cache entry and falls back to normal DB verification of the newly supplied secret. Cached unchanged accounts with a wrong secret are immediately refused without password KDF. Newly verified banned accounts are refused too. Existing V29 2048-entry eviction still applies.
+
+The branch includes portable C++20 policy tests, pinned-source Python transform tests, and a new real Qt/SQLite account regression in `server/tests/test_accounts.cpp` exercising ban, hash change and deletion. The native Qt-server workflow now builds/runs `test_accounts` alongside `test_server_link` and `test_bloodborne_world`. The portable C++20 test passed locally with strict warnings and UndefinedBehaviorSanitizer. **Qt/SQLite integration is not verified until a workflow or equivalent build actually runs.**
+
+Note: this corrects **new login decisions**, not instantaneous expulsion of already connected sessions. Server-initiated session revocation after an admin ban still needs a proper authenticated control channel. The current UDP Hello secret is not itself encrypted; future public service should add a secure transport or secure admission handshake.
+
+Implementation: `tools/poc/yharnam/auth-revocation-v30/`. Working Fornex/CLS not modified.
