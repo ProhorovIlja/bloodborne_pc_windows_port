@@ -20,6 +20,7 @@ on:
       - tools/poc/yharnam/login-admission-v28/**
       - tools/poc/yharnam/rpc-budget-v29/**
       - tools/poc/yharnam/auth-revocation-v30/**
+      - tools/poc/yharnam/qt-http-compat-v30/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -41,6 +42,7 @@ on:
       - tools/poc/yharnam/login-admission-v28/**
       - tools/poc/yharnam/rpc-budget-v29/**
       - tools/poc/yharnam/auth-revocation-v30/**
+      - tools/poc/yharnam/qt-http-compat-v30/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -157,6 +159,8 @@ jobs:
           cmake -S tools/poc/yharnam/auth-revocation-v30 -B /tmp/shyt-v30-auth -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v30-auth --parallel 2
           ctest --test-dir /tmp/shyt-v30-auth --output-on-failure
+      - name: Test Qt6.4 and modern Qt WebAPI compatibility source anchors
+        run: python -m unittest discover -s tools/poc/yharnam/qt-http-compat-v30 -p 'test_*.py' -v
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -281,6 +285,13 @@ jobs:
           assert 'CurrentCredentialStatus' in transformed[v30.DB_CPP]
           assert 'if (!user || user->banned)' in transformed[v30.LINK_CPP]
           assert 'RevokedDatabaseCredentialsAreVisible' in transformed[v30.ACCOUNT_TEST]
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_server.cpp" -o /tmp/sh-v30-webapi.cpp
+          qp=Path('tools/poc/yharnam/qt-http-compat-v30/patch_http_compat.py')
+          spec=importlib.util.spec_from_file_location('qthttpcompat',qp)
+          qt=importlib.util.module_from_spec(spec); spec.loader.exec_module(qt)
+          patched_qt=qt.transform(Path('/tmp/sh-v30-webapi.cpp').read_text('utf-8'))
+          assert 'QT_VERSION_CHECK(6, 8, 0)' in patched_qt
+          assert 'responder.write(QJsonDocument(body)' in patched_qt
           assert 'ChangedAccountOnSameEndpoint()' in patched[v27.TEST]
           qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
           spec=importlib.util.spec_from_file_location('v26',qs)
