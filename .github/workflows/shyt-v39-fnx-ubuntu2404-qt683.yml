@@ -84,6 +84,8 @@ jobs:
             --out "$OUT_ROOT/overlay"
           test -s "$OUT_ROOT/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json"
           rsync -a "$OUT_ROOT/overlay/" "$OUT_ROOT/upstream/"
+          python3 tools/poc/yharnam/server-relay-perf-v45/patch_server_hotpath.py "$OUT_ROOT/upstream/server/src/server_link.cpp"
+          grep -q SHYT-SERVER-RELAY-PERF-V45 "$OUT_ROOT/upstream/server/src/server_link.cpp"
 
       - name: Configure actual native Qt server
         shell: bash
