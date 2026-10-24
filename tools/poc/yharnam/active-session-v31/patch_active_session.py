@@ -5,6 +5,7 @@ from pathlib import Path
 LINK_CPP='server/src/server_link.cpp'
 LINK_H='server/src/server_link.h'
 SERVER_CPP='server/src/link_server.cpp'
+SERVER_H='server/src/link_server.h'
 QT_TEST='server/tests/test_server_link.cpp'
 POLICY='server/src/sh_active_session.hpp'
 HERE=Path(__file__).resolve().parent
@@ -78,6 +79,16 @@ Hub::Result Hub::Tick(qint64 now_ms) {''','tick marker')
         result.retired_online_ids.append(link.online_id);''','normal logout matchmaking')
     return s
 
+def server_header(s):
+    if 'SH-ACTIVE-SESSION-V31' in s: raise ValueError('V31 already applied LinkServer header')
+    return one(s,
+        '    QHash<QByteArray, VerifiedCredential> m_signedIn;',
+        '''    QHash<QByteArray, VerifiedCredential> m_signedIn;
+    // Active link credential stamps survive eviction from V30's bounded
+    // login cache and are removed together with the retired linked account.
+    QHash<QByteArray, QByteArray> m_activeDbStamps;''',
+        'per-active-link account snapshot')
+
 def server_cpp(s):
     if 'SH-ACTIVE-SESSION-V31' in s: raise ValueError('V31 already applied LinkServer cpp')
     return one(s,
@@ -93,11 +104,26 @@ def server_cpp(s):
         m_link.SetActiveAccountAllowed([this](const QByteArray& id) {
             const auto current = m_db.CurrentCredentialStatus(QString::fromUtf8(id));
             if (!current || current->banned) return false;
-            const auto known = m_signedIn.constFind(id);
-            return known == m_signedIn.constEnd() ||
-                   known->db_hash_at_signin == current->db_hash;
+            const auto linked = m_activeDbStamps.constFind(id);
+            // Absence of an active stamp is not proof of a clean session.
+            return linked != m_activeDbStamps.constEnd() &&
+                   *linked == current->db_hash;
         });
     }''', 'bounded live DB callback')
+    s=one(s,
+'''        m_shared->matching.udpExt.remove(QString::fromUtf8(retired));''',
+'''        m_shared->matching.udpExt.remove(QString::fromUtf8(retired));
+        m_activeDbStamps.remove(retired); // drop revoked/left-session fingerprint''',
+        'retire active credential on disconnect')
+    s=one(s,
+'''    for (const auto& linked : result.linked) {''',
+'''    for (const auto& linked : result.linked) {
+        // OnHello has already authenticated this online_id via V30 SignIn.
+        const auto auth = m_signedIn.constFind(linked.online_id);
+        if (auth != m_signedIn.constEnd())
+            m_activeDbStamps.insert(linked.online_id, auth->db_hash_at_signin);''',
+        'pin credential stamp at authenticated link')
+    return s
 
 def tests(s):
     if 'SH-ACTIVE-SESSION-V31' in s: raise ValueError('V31 already applied Qt Hub test')
@@ -134,5 +160,6 @@ def transform(src):
     return {LINK_H:header(src[LINK_H]),
             LINK_CPP:hub_cpp(src[LINK_CPP]),
             SERVER_CPP:server_cpp(src[SERVER_CPP]),
+            SERVER_H:server_header(src[SERVER_H]),
             QT_TEST:tests(src[QT_TEST]),
             POLICY:(HERE/'sh_active_session.hpp').read_text('utf-8')}
