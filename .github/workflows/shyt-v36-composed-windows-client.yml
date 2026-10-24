@@ -104,6 +104,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $eventTool = 'pinned-upstream/tools/re/party_boss_events.py'
           if (-not (Test-Path $eventTool)) { throw 'Co-op event patcher missing from pinned upstream' }
+          $creditSource = 'tools/poc/yharnam/attribution-v42/CREDITS.txt'
+          $creditTarget = 'pinned-upstream/tools/release/kit/Seamless-Hunt-CREDITS.txt'
+          if (-not (Test-Path $creditSource)) { throw 'Project attribution notice missing' }
+          Copy-Item -LiteralPath $creditSource -Destination $creditTarget -Force
+          if (-not (Test-Path $creditTarget)) { throw 'Failed to stage author attribution' }
           python tools/poc/yharnam/package-v40/patch_windows_package.py pinned-upstream/bbport/packaging/windows/package.sh
           if ($LASTEXITCODE -ne 0) { throw 'Pinned native package script drifted' }
           Write-Host 'COOP_EVENT_PATCHER_STAGED; NPC summons still require live verification'
