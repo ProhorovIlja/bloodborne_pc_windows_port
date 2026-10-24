@@ -2,7 +2,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import unittest
 
-HERE=Path(__file__).parent/"site"
+HERE=Path(__file__).parent
 class HtmlAudit(HTMLParser):
     def __init__(self):
         super().__init__()
