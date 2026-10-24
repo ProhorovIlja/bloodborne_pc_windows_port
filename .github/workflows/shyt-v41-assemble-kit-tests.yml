@@ -1,0 +1,33 @@
+name: Seamless Hunt V41 combined Windows client-server artifact safety
+on:
+  push:
+    branches: [feature/yharnam-v41-win-qt683-server-kit]
+    paths:
+      - tools/poc/yharnam/package-v41/**
+      - .github/workflows/shyt-v41-assemble-kit-tests.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/package-v41/**
+      - .github/workflows/shyt-v41-assemble-kit-tests.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  archive-safety:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check source Python syntax
+        run: python -m py_compile tools/poc/yharnam/package-v41/assemble_windows_test_kit.py tools/poc/yharnam/package-v41/test_assemble_windows_test_kit.py
+      - name: Check combined Windows shadnet and launcher archive contracts
+        run: python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_assemble_windows_test_kit.py' -v
