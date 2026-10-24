@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V27
+name: Seamless Hunt native source integrity V14–V28
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -17,6 +17,7 @@ on:
       - tools/poc/yharnam/member-identity-v25/**
       - tools/poc/yharnam/ingress-quota-v26/**
       - tools/poc/yharnam/endpoint-rebind-v27/**
+      - tools/poc/yharnam/login-admission-v28/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -35,6 +36,7 @@ on:
       - tools/poc/yharnam/member-identity-v25/**
       - tools/poc/yharnam/ingress-quota-v26/**
       - tools/poc/yharnam/endpoint-rebind-v27/**
+      - tools/poc/yharnam/login-admission-v28/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -127,6 +129,14 @@ jobs:
           cmake -S tools/poc/yharnam/endpoint-rebind-v27 -B /tmp/shyt-v27-rebind -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v27-rebind --parallel 2
           ctest --test-dir /tmp/shyt-v27-rebind --output-on-failure
+      - name: Test V28 pre-database login flood admission source guards
+        run: python -m unittest discover -s tools/poc/yharnam/login-admission-v28 -p 'test_*.py' -v
+      - name: Compile and test V28 constant-memory login gate
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/login-admission-v28 -B /tmp/shyt-v28-login -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v28-login --parallel 2
+          ctest --test-dir /tmp/shyt-v28-login --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -216,6 +226,15 @@ jobs:
           assert 'TellOthers(prior, MemberState::Gone, 0, result)' in patched[v27.LINK]
           assert 'retired_online_ids' in patched[v27.LINK_H]
           assert 'udpExt.remove(' in patched[v27.LINK_SERVER]
+          ap=Path('tools/poc/yharnam/login-admission-v28/patch_login_admission.py')
+          spec=importlib.util.spec_from_file_location('v28',ap)
+          v28=importlib.util.module_from_spec(spec); spec.loader.exec_module(v28)
+          hub=v28.patch_link_cpp(v27.transform(m.patch_link(base)))
+          hdr=v28.patch_link_h(patched[v27.LINK_H])
+          qt=v28.patch_test(patched[v27.TEST])
+          assert 'hello_admission.Allow(from.ipv4, now_ms)' in hub
+          assert 'LoginAdmission::Gate hello_admission;' in hdr
+          assert 'HelloAdmissionLimitsDbCalls' in qt
           assert 'ChangedAccountOnSameEndpoint()' in patched[v27.TEST]
           qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
           spec=importlib.util.spec_from_file_location('v26',qs)
