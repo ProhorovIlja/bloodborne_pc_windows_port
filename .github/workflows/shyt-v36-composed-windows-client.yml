@@ -1,9 +1,9 @@
 name: Seamless Hunt V36 composed native Windows game client
 on:
+  workflow_call:
   push:
     branches: [feature/seamless-hunt-mainline]
     paths:
-      - tools/poc/yharnam/**
       - .github/workflows/shyt-v36-composed-windows-client.yml
   pull_request:
     paths:
