@@ -1,0 +1,68 @@
+SEAMLESS HUNT: BLOODBORNE PC
+ORIGINAL CREATORS, THIRD-PARTY ACKNOWLEDGEMENTS AND LICENSE SCOPE
+========================================================================
+
+UNOFFICIAL COMMUNITY DEVELOPMENT BUILD. NOT A PUBLIC PLAYER RELEASE.
+No endorsement by Sony Interactive Entertainment, FromSoftware, Yharnam
+Together, or any of the named contributors is implied.
+
+PRIMARY UPSTREAM:
+  Yharnam Together / Bloodborne Seamless Co-op
+  https://github.com/lKaniel/bloodborne-server
+  Pinned upstream revision: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+  Game, co-op, BLauncher, shadNet server and the event patching tools are
+  based on this upstream. Upstream README identifies GPL-2.0-or-later.
+  Original author notices, revision history and licenses remain in force.
+
+UPSTREAM COMPONENTS AND CONTRIBUTORS ACKNOWLEDGED BY YHARNAM TOGETHER:
+  shadPS4 team: https://github.com/shadps4-emu/shadPS4
+  Wozzardman/shadp2p: https://github.com/Wozzardman/shadp2p
+  Wozzardman/shadnet-p2p: https://github.com/Wozzardman/shadnet-p2p
+  deadinside28/bloodborne_pc: https://github.com/deadinside28/bloodborne_pc
+  Supermedo/bloodborne_pc: https://github.com/Supermedo/bloodborne_pc
+  0xCydral/bloodborne_pc (formerly AdrianCsT):
+      https://github.com/0xCydral/bloodborne_pc
+  Original 1.09 patch research: Kyo, Lance McDonald, auser1337,
+      illusion, emoose, and other original contributors.
+  The Hunter's Dream, by droogie: upstream service behavior/reference,
+      NOT a source of copied website art or live player data.
+  LukeYui's Seamless Co-op and Nightreign: design inspiration only.
+
+RELEASE-SPECIFIC THIRD-PARTY PACKAGES:
+  FireBurn FSR-Vulkan, AMD FidelityFX, Qt 6, Intel XeSS, NVIDIA DLSS,
+  ReShade, PkgTool/LibOrbisPkg, SDL3, FFmpeg, ImGui, LibAtrac9, MSYS2 and
+  various Vulkan/graphics/multimedia libraries may be part of the port.
+  IMPORTANT: Qt 6.8 HTTP Server is GPL-3.0 under the Qt open-source terms,
+  unlike Qt Core/Network/Sql modules that may offer LGPL-3.0 terms.
+  Their actual licenses are preserved separately in LICENSE and
+  licenses/; the list of bundled components can change between builds.
+  A complete third-party library/license audit is required before release.
+
+SEAMLESS HUNT DEVELOPMENT CHANGES:
+  Our source-checked overlays improve client UI and safety, optional
+  spectator camera, performance diagnostics, matchmaking/server admission,
+  network hardening, backend interoperability and packaging. These are
+  modifications of existing systems, NOT a claim to their original
+  authorship. Some modifications are unfinished or not game-tested.
+
+  Maintained project: https://github.com/ProhorovIlja/bloodborne_pc_windows_port
+  Canonical branch: feature/seamless-hunt-mainline
+  Full authors, source URLs and license notes: CREDITS.md and
+      THIRD_PARTY_NOTICES.md in this same public repository.
+  Import requirements: CONTRIBUTING.md
+
+LICENSE AND RIGHTS:
+  The Yharnam Together upstream declares GPL-2.0-or-later. The historical
+  root LICENSE in our older repository contains GPLv3 text; neither
+  document erases any third-party per-file rights. Different shared
+  libraries and binaries have different licenses and obligations.
+  Public source on GitHub is NOT automatically licensed for copying.
+  Actual combined binary distribution requires a compatibility and
+  corresponding-source review; it has not been approved for release.
+
+No copyrighted Bloodborne game assets, game executable, save files or
+private account credentials are included or authorized for redistribution.
+Bloodborne and related marks belong to their respective holders.
+For missing or incorrect attributions, open an issue with the upstream
+author, source path, revision and license so the record can be corrected.
+========================================================================

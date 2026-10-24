@@ -16,6 +16,10 @@ spec.loader.exec_module(mod)
 TOOLS = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe", "bin/bb-gpu-capabilities.exe",
     "run.py", "README.md", "LICENSE", "tools/party_boss_events.py",
+    "tools/SeamlessHunt-network-profile.example.json",
+    "CREDITS.txt", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+    "licenses/AMD-FidelityFX-SDK-LICENSE.txt", "licenses/Intel-XeSS-LICENSE.txt",
+    "licenses/PkgTool-LICENSE.txt",
 }
 EVENT = b"HOST_DOOR_EFFECT = {'m29.emevd.dcx': 9920, 'm35_00_00_00.emevd.dcx': 9920}\ndef patch_host_door_effect(x): return x\n"
 
@@ -34,9 +38,17 @@ class CoupledKitTests(unittest.TestCase):
     def make_game(self, added=None):
         with zipfile.ZipFile(self.game, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name in sorted(TOOLS):
-                data = EVENT if name.endswith("party_boss_events.py") else (
-                    b"Executable" * 200 if name.endswith(".exe") else b"Open source only"
-                )
+                if name.endswith("party_boss_events.py"):
+                    data = EVENT
+                elif name == "tools/SeamlessHunt-network-profile.example.json":
+                    data = b'{"schema":1,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}'
+                elif name == "CREDITS.txt":
+                    data = (b"SEAMLESS HUNT NOT a public release Yharnam Together "
+                            b"deadinside28 Supermedo shadPS4 Wozzardman 0xCydral "
+                            b"GPL-2.0-or-later")
+                else:
+                    data = (b"Executable" * 200 if name.endswith(".exe")
+                            else b"Original open-source library licensing notices " * 3)
                 z.writestr("bbport-windows/" + name, data)
             if added:
                 z.writestr("bbport-windows/" + added, b"test")
@@ -44,7 +56,16 @@ class CoupledKitTests(unittest.TestCase):
     def make_server(self, missing=None, added=None):
         with zipfile.ZipFile(self.server, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name in sorted(mod.SERVER_FILES - ({missing} if missing else set())):
-                data = b"Native qt or shadnet" * 110 if name.endswith((".dll", ".exe")) else b"test config"
+                if name == "server/CREDITS.txt":
+                    data = (b"Yharnam Together deadinside28 Supermedo "
+                            b"original contributor author copyright and license " * 8)
+                elif name == "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt":
+                    data = (b"Qt HTTP Server GPL v3; not LGPL v3; "
+                            b"source, redistribution, corresponding license review " * 8)
+                elif name.endswith(".txt"):
+                    data = b"Original license rights and conditions reproduced for testing " * 8
+                else:
+                    data = b"Native qt or shadnet" * 110 if name.endswith((".dll", ".exe")) else b"test config"
                 z.writestr(name, data)
             if added:
                 z.writestr(added, b"test")
@@ -65,7 +86,11 @@ class CoupledKitTests(unittest.TestCase):
 
     def test_missing_native_server_library_cannot_be_distributed(self):
         for missing in ("server/shadnet.exe", "server/Qt6Core.dll",
-                        "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py"):
+                        "server/Qt6Concurrent.dll", "server/Qt6HttpServer.dll",
+                        "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py",
+                        "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",
+                        "server/licenses/LGPL-3.0.txt",
+                        "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt"):
             with self.subTest(missing=missing):
                 self.make_server(missing=missing)
                 with self.assertRaisesRegex(mod.InvalidCandidate, "missing"):

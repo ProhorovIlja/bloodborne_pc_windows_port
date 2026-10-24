@@ -1,14 +1,6 @@
 name: Seamless Hunt V36 composed native Windows game client
 on:
-  push:
-    branches: [feature/yharnam-v36-windows-composed-client-ci]
-    paths:
-      - tools/poc/yharnam/**
-      - .github/workflows/shyt-v36-composed-windows-client.yml
-  pull_request:
-    paths:
-      - tools/poc/yharnam/**
-      - .github/workflows/shyt-v36-composed-windows-client.yml
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
@@ -74,7 +66,7 @@ jobs:
           pacman --noconfirm --disable-download-timeout -Sy
           pacman --noconfirm --disable-download-timeout -S --needed \
             git patch \
-            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld \
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-ccache \
             mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-cmake \
             mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-pkgconf \
             mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-vulkan-loader \
@@ -87,13 +79,38 @@ jobs:
             mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
             mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
             mingw-w64-clang-x86_64-nlohmann-json
+      - name: Restore incremental CLANG64 compilation even after a failed build
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: shyt-native-gpu-ccache-v2-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            shyt-native-gpu-ccache-v2-${{ runner.os }}-
+      - name: Inject source-checked ccache launcher for pinned native game build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = 'pinned-upstream/bbport/build.sh'
+          $source = [IO.File]::ReadAllText((Resolve-Path $script))
+          $old = '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null'
+          $new = '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache >/dev/null'
+          if (($source.Split($old).Count - 1) -ne 1) {
+            throw 'Pinned game build.sh has changed; refusing non-reviewed incremental compiler injection'
+          }
+          [IO.File]::WriteAllText((Resolve-Path $script), $source.Replace($old, $new))
       - name: Compile real native Windows renderer and game loader
+        id: native_build
         shell: msys2 {0}
         run: |
           set -euo pipefail
           export CC=clang CXX=clang++
+          export CCACHE_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/.ccache"
+          mkdir -p "$CCACHE_DIR"
+          ccache --max-size 1600M
+          ccache --show-stats
           cd pinned-upstream/bbport
           bash build.sh
+          ccache --show-stats
           test -s out/bb-probe.exe
           test -s out/bb-gpu-capabilities.exe
           test -s out/bb-play.exe
@@ -104,6 +121,12 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $eventTool = 'pinned-upstream/tools/re/party_boss_events.py'
           if (-not (Test-Path $eventTool)) { throw 'Co-op event patcher missing from pinned upstream' }
+          $creditSource = 'tools/poc/yharnam/attribution-v42/CREDITS.txt'
+          $creditTarget = 'pinned-upstream/tools/release/kit/Seamless-Hunt-CREDITS.txt'
+          if (-not (Test-Path $creditSource)) { throw 'Project attribution notice missing' }
+          Copy-Item -LiteralPath $creditSource -Destination $creditTarget -Force
+          Copy-Item -LiteralPath tools/poc/yharnam/remote-profile-v46/SeamlessHunt-network-profile.example.json -Destination pinned-upstream/tools/release/kit/SeamlessHunt-network-profile.example.json -Force
+          if (-not (Test-Path $creditTarget)) { throw 'Failed to stage author attribution' }
           python tools/poc/yharnam/package-v40/patch_windows_package.py pinned-upstream/bbport/packaging/windows/package.sh
           if ($LASTEXITCODE -ne 0) { throw 'Pinned native package script drifted' }
           Write-Host 'COOP_EVENT_PATCHER_STAGED; NPC summons still require live verification'
@@ -155,6 +178,12 @@ jobs:
             pinned-upstream/bbport/out/gpu/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: ignore
           retention-days: 7
+      - name: Save bounded incremental compiler cache even on C++ build failure
+        if: always() && steps.native_build.outcome != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: shyt-native-gpu-ccache-v2-${{ runner.os }}-${{ github.run_id }}
       - name: No proprietary assets and no untested public release
         shell: pwsh
         run: |

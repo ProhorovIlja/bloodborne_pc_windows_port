@@ -1,12 +1,7 @@
 name: Seamless Hunt long-session resource trend diagnostics
 on:
-  push:
-    branches:
-      - feature/yharnam-v36-windows-composed-client-ci
-    paths:
-      - tools/diagnostics/**
-      - .github/workflows/shyt-resource-trend-tests.yml
   pull_request:
+    branches: [feature/yharnam-v36-windows-composed-client-ci]
     paths:
       - tools/diagnostics/**
       - .github/workflows/shyt-resource-trend-tests.yml
