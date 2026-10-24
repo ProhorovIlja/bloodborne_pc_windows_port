@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - feature/yharnam-dedicated-server-poc
+      - feature/yharnam-v31-ci-candidate
+      - feature/yharnam-v31-1-active-credential-epoch
     paths:
       - tools/poc/yharnam/**
       - .github/workflows/shyt-v28-native-server-build.yml
