@@ -231,6 +231,7 @@ jobs:
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v27-link-server.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_server_link.cpp" -o /tmp/sh-v27-hub-tests.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_server.cpp" -o /tmp/sh-v30-webapi.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_routes_session.cpp" -o /tmp/sh-v30-http-session.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v29-link-server.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.h" -o /tmp/sh-v29-link-server.h
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.h" -o /tmp/sh-v30-database.h
@@ -292,6 +293,9 @@ jobs:
           patched_qt=qt.transform(Path('/tmp/sh-v30-webapi.cpp').read_text('utf-8'))
           assert 'QT_VERSION_CHECK(6, 8, 0)' in patched_qt
           assert 'responder.write(QJsonDocument(body)' in patched_qt
+          patched_utc=qt.transform_session(Path('/tmp/sh-v30-http-session.cpp').read_text('utf-8'))
+          assert 'SH-QT-SESSION-UTC' in patched_utc
+          assert 'fromMSecsSinceEpoch(ms, Qt::UTC)' in patched_utc
           assert 'ChangedAccountOnSameEndpoint()' in patched[v27.TEST]
           qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
           spec=importlib.util.spec_from_file_location('v26',qs)
