@@ -54,7 +54,9 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
         if not infos or len(infos) > MAX_ENTRIES:
             raise UnsafeBundle("invalid candidate ZIP item count")
         for info in infos:
-            raw = info.filename
+            # On Windows zipfile normalizes backslashes in .filename.
+            # .orig_filename preserves the untrusted ZIP entry spelling.
+            raw = info.orig_filename
             if not raw or "\\" in raw or "\x00" in raw or raw.startswith("/") or ":" in raw:
                 raise UnsafeBundle("invalid or ambiguous ZIP filename")
             name = raw.rstrip("/")
