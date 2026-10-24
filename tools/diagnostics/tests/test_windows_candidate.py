@@ -22,7 +22,10 @@ class CandidateTests(unittest.TestCase):
     def write(self, extra=(), *, missing=(), extra_info=()):
         with zipfile.ZipFile(self.archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name in sorted(m.REQUIRED - set(missing)):
-                data = (b"Exe data " * 200) if name.endswith(".exe") else b"sample document"
+                if name == "tools/party_boss_events.py":
+                    data = b"HOST_DOOR_EFFECT = {'m29.emevd.dcx': 9920, 'm35_00_00_00.emevd.dcx': 9920}; def patch_host_door_effect(): pass"
+                else:
+                    data = (b"Exe data " * 200) if name.endswith(".exe") else b"sample document"
                 z.writestr(m.ROOT + name, data)
             for name in extra:
                 # zipfile.ZipInfo converts backslashes to slashes on Windows
@@ -76,6 +79,17 @@ class CandidateTests(unittest.TestCase):
     def test_duplicate_member_rejected(self):
         self.write(extra=(m.ROOT + "README.md",))
         with self.assertRaisesRegex(m.UnsafeBundle, "duplicate"):
+            m.check(self.archive)
+
+    def test_guest_door_patcher_is_a_hard_release_requirement(self):
+        self.write(missing=("tools/party_boss_events.py",))
+        with self.assertRaisesRegex(m.UnsafeBundle, "missing required"):
+            m.check(self.archive)
+        with zipfile.ZipFile(self.archive, "w") as z:
+            for name in sorted(m.REQUIRED):
+                data = b"fake event script" if name == "tools/party_boss_events.py" else b"Exe data " * 200
+                z.writestr(m.ROOT + name, data)
+        with self.assertRaisesRegex(m.UnsafeBundle, "co-op door event patch missing"):
             m.check(self.archive)
 
     def test_checksum_corruption_rejected(self):
