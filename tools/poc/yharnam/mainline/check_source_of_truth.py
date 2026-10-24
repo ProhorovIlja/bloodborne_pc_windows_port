@@ -173,6 +173,38 @@ def check_policy(meta: dict) -> None:
             raise SourceDrift("unsafe or invalid mainline workflow path")
 
 
+def check_workflow_wiring(meta: dict, workflows: dict[str, str], orchestrator: str) -> None:
+    """Verify native reusable jobs are *called* by the canonical, protected entry point.
+
+    A reusable workflow has 'on: workflow_call' and intentionally has no branch
+    filter of its own. Requiring CANONICAL in each helper silently blocks all
+    builds before Windows or Ubuntu compilation ever starts.
+    """
+    if (f"branches: [{CANONICAL}]" not in orchestrator
+            or "needs: source-contract" not in orchestrator
+            or "name: Seamless Hunt native Yharnam Together unified candidate" not in orchestrator):
+        raise SourceDrift("canonical mainline entry point or source-contract gate missing")
+    for key in ("windows_game", "windows_server", "linux_server"):
+        relative = meta["mainline_workflows"][key]
+        source = workflows[key]
+        if (f"uses: ./{relative}" not in orchestrator
+                or "workflow_call:" not in source):
+            raise SourceDrift(f"native {key} reusable job disconnected from canonical mainline")
+        if PIN not in source:
+            raise SourceDrift(f"native {key} no longer pins Yharnam Together")
+    # These historical dedicated CI workflows do not have to declare our branch:
+    # their actual tests and packaging are explicitly executed by the new caller.
+    if ("test_patch_windows_package.py" not in orchestrator
+            or "test_windows_candidate.py" not in orchestrator
+            or "test_patch_windows_package.py" not in workflows["event_patch"]
+            or "test_assemble_windows_test_kit.py" not in orchestrator
+            or "assemble_windows_test_kit.py" not in orchestrator
+            or "test_assemble_windows_test_kit.py" not in workflows["package_gate"]):
+        raise SourceDrift("event/kit safety checks disconnected from canonical candidate")
+    if "needs: [windows-game, windows-coop-host, fornex-ubuntu-staging]" not in orchestrator:
+        raise SourceDrift("candidate can assemble before native Windows and Ubuntu kits pass")
+
+
 def check_workspace(root: Path, meta: dict) -> None:
     check_policy(meta)
     transport_file = POLICY.with_name("transport_and_feature_priorities.json")
@@ -202,12 +234,13 @@ def check_workspace(root: Path, meta: dict) -> None:
     if (f'PIN="{PIN}"' not in release
             or "SH_RELEASE_PREFIX = 'shyt-v'" not in release):
         raise SourceDrift("launcher updater could target an unrelated project")
-    for key, relative in meta["mainline_workflows"].items():
-        data = (root / relative).read_text("utf-8")
-        if CANONICAL not in data:
-            raise SourceDrift(f"workflow for {key} does not build canonical mainline")
-        if key in {"windows_game", "windows_server", "linux_server"} and PIN not in data:
-            raise SourceDrift(f"workflow for {key} compiles unpinned upstream")
+    workflow_sources = {
+        key: (root / relative).read_text("utf-8")
+        for key, relative in meta["mainline_workflows"].items()
+    }
+    orchestrator = (root / ".github/workflows/shyt-mainline-candidate.yml").read_text("utf-8")
+    check_workflow_wiring(meta, workflow_sources, orchestrator)
+    for key, data in workflow_sources.items():
         if "runs-on: windows-2022" not in data and key in {"windows_game", "windows_server"}:
             raise SourceDrift("native Windows builds must actually run on Windows")
         if key == "linux_server" and ("runs-on: ubuntu-24.04" not in data or "'6.8.3'" not in data):
