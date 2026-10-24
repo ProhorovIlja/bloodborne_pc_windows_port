@@ -39,6 +39,8 @@ sys.path.insert(0, str(HERE.parent/"rpc-budget-v29"))
 from test_patch_rpc_budget import CPP as RPC_CPP_FIXTURE, H as RPC_H_FIXTURE
 sys.path.insert(0, str(HERE.parent/"auth-revocation-v30"))
 from test_patch_auth_revocation import DBH as AUTH_DB_H, DBC as AUTH_DB_CPP, ACCOUNT as AUTH_ACCOUNT_TEST
+sys.path.insert(0,str(HERE.parent/"qt-http-compat-v30"))
+from test_patch_http_compat import SOURCE as HTTP_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -91,6 +93,7 @@ def originals():
         compose.DATABASE_H: AUTH_DB_H,
         compose.DATABASE_CPP: AUTH_DB_CPP,
         compose.ACCOUNT_TEST_CPP: AUTH_ACCOUNT_TEST,
+        compose.HTTP_CPP: HTTP_FIXTURE,
         compose.SERVER_LINK_TEST: """int Relays() {
   if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
 """,
@@ -258,6 +261,9 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'if (!user || user->banned)',result[compose.LINK_SERVER_CPP])
         self.assertIn(b'int RevokedDatabaseCredentialsAreVisible(const QString &folder)',result[compose.ACCOUNT_TEST_CPP])
         self.assertIn(b'CanTrustCache',result['server/src/sh_auth_revocation.hpp'])
+        self.assertIn(b'SH-QT-HTTP-COMPAT-V30',result[compose.HTTP_CPP])
+        self.assertIn(b'QT_VERSION_CHECK(6, 8, 0)',result[compose.HTTP_CPP])
+        self.assertIn(b'QHttpServerResponder::StatusCode::NotFound',result[compose.HTTP_CPP])
         self.assertIn(b'ChangedAccountOnSameEndpoint()',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'retired_online_ids.size() == 1',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
@@ -291,6 +297,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V28 opt-in bounded pre-database Hello admission", " ".join(manifest["applied"]))
         self.assertIn("V29 bounded local RPC backpressure", " ".join(manifest["applied"]))
         self.assertIn("V30 live DB verification", " ".join(manifest["applied"]))
+        self.assertIn("Qt 6.4 / modern WebAPI ABI compatibility", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -382,6 +389,12 @@ class AllPatches(unittest.TestCase):
         source[compose.LINK_SERVER_H]=source[compose.LINK_SERVER_H].replace(
             "QHash<QByteArray, QByteArray> m_signedIn", "QMap<QByteArray, QByteArray> m_signedIn")
         with self.assertRaisesRegex(ValueError,"cached credential representation"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_qt_webapi_compat_anchor_drift_rejected(self):
+        source=originals()
+        source[compose.HTTP_CPP]=source[compose.HTTP_CPP].replace(
+            'if (!m_http->bind(m_tcp.get()))','if (!m_http->bind(nullptr))')
+        with self.assertRaisesRegex(ValueError,"bind signature"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
