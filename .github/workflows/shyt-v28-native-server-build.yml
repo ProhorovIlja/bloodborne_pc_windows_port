@@ -1,4 +1,4 @@
-name: Seamless Hunt V28 composed native Qt server build
+name: Seamless Hunt V29 composed native Qt server build
 on:
   push:
     branches:
@@ -47,7 +47,7 @@ jobs:
           git -C "$OUT_ROOT/upstream" checkout --detach FETCH_HEAD
           test "$(git -C "$OUT_ROOT/upstream" rev-parse HEAD)" = "$PIN"
           git -C "$OUT_ROOT/upstream" submodule update --init --recursive --depth=1
-      - name: Compose pinned V3-V28 source overlay, fail closed on anchor changes
+      - name: Compose pinned V3-V29 source overlay, fail closed on anchor changes
         shell: bash
         run: |
           set -euo pipefail
