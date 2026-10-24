@@ -85,7 +85,7 @@ class PinAndIntegrityTests(unittest.TestCase):
         self.payload["sha256"][stager.SOURCE] = hashlib.sha256(self.source.read_bytes()).hexdigest()
         self.save()
         manifest = self.manifest.read_bytes()
-        with self.assertRaisesRegex(ValueError, "anchor changed"):
+        with self.assertRaisesRegex(ValueError, "Relay data path changed"):
             stager.stage(self.overlay)
         self.assertEqual(self.manifest.read_bytes(), manifest)
 
