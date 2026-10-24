@@ -103,6 +103,23 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
                          "licenses/PkgTool-LICENSE.txt"):
             if z.getinfo(ROOT + filename).file_size < 32:
                 raise UnsafeBundle("missing or truncated original license: " + filename)
+        # This portable profile is a dummy template; never distribute a real
+        # player's endpoint profile or account data inside the launcher ZIP.
+        profile_name = ROOT + "tools/SeamlessHunt-network-profile.example.json"
+        if z.getinfo(profile_name).file_size > 2048:
+            raise UnsafeBundle("oversized remote server profile example")
+        try:
+            example = json.loads(z.read(profile_name))
+        except (ValueError, UnicodeError):
+            raise UnsafeBundle("invalid example for private Fornex profile")
+        if not isinstance(example, dict) or set(example) != {
+            "schema", "opt_in", "server_ipv4",
+            "udp_game_port", "webapi_tcp_port", "backend_tcp_port"
+        } or (example.get("schema") != 1 or example.get("opt_in") is not True
+               or example.get("server_ipv4") != "198.51.100.24"
+               or (example.get("udp_game_port"), example.get("webapi_tcp_port"),
+                   example.get("backend_tcp_port")) != (32314, 32315, 21443)):
+            raise UnsafeBundle("remote server profile example must be sanitized and schema-pinned")
         # The standalone Windows port package is NOT a seamless co-op kit
         # unless the user-owned game's event patcher is present and supports
         # guest door interactions. Don't release a port that silently lacks it.
