@@ -26,7 +26,24 @@ class TestPresence(unittest.TestCase):
     def test_lone_hunter_cannot_be_publicly_tracked(self):
         self.p.mark_server_alive(10)
         self.p.observe(Observation("only","fishing_hamlet",10,True),10)
-        self.assertEqual(self.p.snapshot(10)["areas"][0]["hunters"],None)
+        snapshot = self.p.snapshot(10)
+        self.assertEqual(snapshot["areas"], [])
+        self.assertNotIn("fishing_hamlet", str(snapshot))
+    def test_two_hunters_location_stays_private_until_threshold(self):
+        self.p.mark_server_alive(10)
+        for i in range(2):
+            self.assertTrue(self.p.observe(
+                Observation(f"single-{i}", "old_yharnam", 10, True), 10))
+        before = self.p.snapshot(10)
+        self.assertEqual(before["online"], 2)
+        self.assertEqual(before["areas"], [])
+        self.assertNotIn("old_yharnam", str(before))
+        self.assertTrue(self.p.observe(
+            Observation("third", "old_yharnam", 10, True), 10))
+        after = self.p.snapshot(10)
+        self.assertEqual(after["areas"], [
+            {"key": "old_yharnam", "hunters": 3, "suppressed": False}
+        ])
     def test_expiration_departure_and_reordered_updates(self):
         self.p.mark_server_alive(0)
         self.assertTrue(self.p.observe(Observation("a","cathedral_ward",0),0))
