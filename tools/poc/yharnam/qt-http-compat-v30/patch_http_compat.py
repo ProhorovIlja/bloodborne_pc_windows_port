@@ -148,14 +148,37 @@ def transform_backend(s):
         }
         responder.sendResponse(response);''',
 '''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
-        // Qt 6.4 has no QHttpHeaders/setHeaders, but supports HeaderList.
-        // Preserve Content-Type, status and every backend-defined header.
-        QHttpServerResponder::HeaderList headers;
-        headers.append({QByteArrayLiteral("Content-Type"), reply.contentType});
-        for (const auto& [name, value] : reply.headers)
-            headers.append({name, value});
-        responder.write(reply.body, headers,
-                        static_cast<QHttpServerResponder::StatusCode>(reply.status));
+        // Qt 6.4's HeaderList is std::initializer_list, NOT QList.
+        // We must construct it directly. All current backend responses
+        // carry 0 or 1 extra header (sp-res-kind). Support two without
+        // silently discarding an unexpected future protocol header.
+        const auto status = static_cast<QHttpServerResponder::StatusCode>(reply.status);
+        switch (reply.headers.size()) {
+        case 0:
+            responder.write(reply.body,
+                            {{QByteArrayLiteral("Content-Type"), reply.contentType}},
+                            status);
+            break;
+        case 1:
+            responder.write(reply.body,
+                            {{QByteArrayLiteral("Content-Type"), reply.contentType},
+                             reply.headers.at(0)},
+                            status);
+            break;
+        case 2:
+            responder.write(reply.body,
+                            {{QByteArrayLiteral("Content-Type"), reply.contentType},
+                             reply.headers.at(0), reply.headers.at(1)},
+                            status);
+            break;
+        default:
+            // Never quietly lose protocol headers in the old Qt fallback.
+            qWarning() << "Backend: too many response headers for Qt 6.4";
+            responder.write(QByteArrayLiteral("Unsupported backend response"),
+                            {{QByteArrayLiteral("Content-Type"), QByteArrayLiteral("text/plain")}},
+                            QHttpServerResponder::StatusCode::InternalServerError);
+            break;
+        }
 #else
         QHttpServerResponse response(reply.contentType, reply.body,
                                      static_cast<QHttpServerResponse::StatusCode>(reply.status));
@@ -168,6 +191,33 @@ def transform_backend(s):
         }
         responder.sendResponse(response);
 #endif''', 'backend HTTP response headers')
+    # Qt 6.4 request.value("Host") is the old documented header API;
+    # headers()/localAddress() were introduced in later Qt.
+    s = one(s,
+'''    const QByteArray host =
+        request.headers().value(QHttpHeaders::WellKnownHeader::Host).toByteArray();''',
+'''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    const QByteArray host = request.value(QByteArrayLiteral("Host"));
+#else
+    const QByteArray host =
+        request.headers().value(QHttpHeaders::WellKnownHeader::Host).toByteArray();
+#endif''', 'backend request Host header')
+    s = one(s,
+'''    QHostAddress local = request.localAddress();''',
+'''#if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
+    // Qt 6.4 does not expose the socket's per-request localAddress().
+    // Prefer the validated request Host above or explicitly configured
+    // SHADNET_BACKEND_ADDRESS; only then use the listener's bind address.
+    QHostAddress local = m_tcp ? m_tcp->serverAddress() : QHostAddress();
+#else
+    QHostAddress local = request.localAddress();
+#endif
+    if (local.isNull() ||
+        local == QHostAddress(QHostAddress::Any) ||
+        local == QHostAddress(QHostAddress::AnyIPv4) ||
+        local == QHostAddress(QHostAddress::AnyIPv6)) {
+        return QStringLiteral("127.0.0.1");
+    }''', 'backend local socket address')
     s = one(s,
 '''    if (!m_http->bind(m_tcp.get())) {
         qCritical() << "Backend: QHttpServer failed to attach to listener";
