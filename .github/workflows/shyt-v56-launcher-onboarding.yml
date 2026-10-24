@@ -4,6 +4,7 @@ on:
     branches: [feature/shyt-launcher-onboarding-v56]
     paths:
       - tools/poc/yharnam/launcher-ux-v56/**
+      - tools/poc/yharnam/remote-profile-v46/**
       - tools/poc/yharnam/mainline/**
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v56-launcher-onboarding.yml
@@ -11,6 +12,7 @@ on:
     branches: [feature/seamless-hunt-mainline]
     paths:
       - tools/poc/yharnam/launcher-ux-v56/**
+      - tools/poc/yharnam/remote-profile-v46/**
       - tools/poc/yharnam/mainline/**
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v56-launcher-onboarding.yml
@@ -45,6 +47,8 @@ jobs:
         run: |
           python -m py_compile tools/poc/yharnam/launcher-ux-v56/patch_onboarding.py tools/poc/yharnam/launcher-ux-v56/pinned_coop_onboarding_fixture.py
           python -m unittest discover -s tools/poc/yharnam/launcher-ux-v56 -p 'test_*.py' -v
+      - name: Regression-test preserved V46 staging ports and valid launcher syntax
+        run: python -m unittest discover -s tools/poc/yharnam/remote-profile-v46 -p 'test_patch_remote_ports.py' -v
       - name: Validate V46 + V56 against real pinned Yharnam Together Tkinter source
         run: python tools/poc/yharnam/launcher-ux-v56/verify_pinned_launcher.py pinned-launcher/bbport/launcher/bbport_launcher_win.py
       - name: Enforce single Yharnam Together protocol and never replace live CLS
