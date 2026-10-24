@@ -1,0 +1,177 @@
+name: Seamless Hunt V39 Fornex Ubuntu 24.04 Qt 6.8.3 native server
+on:
+  push:
+    branches:
+      - feature/seamless-hunt-mainline
+    paths:
+      - tools/poc/yharnam/**
+      - .github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/**
+      - .github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shyt-v39-fnx-qt683-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fornex-qt683-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+      OUT_ROOT: /tmp/shyt-native-qt683
+    steps:
+      - name: Check out maintained changes
+        uses: actions/checkout@v4
+
+      - name: Install native Qt6 and C++ build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake ninja-build git rsync ccache \
+            python3 pkg-config libgl1 libopengl0 libxkbcommon0
+
+      - name: Install exact Qt 6.8.3 used by Ubuntu Fornex staging
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: desktop
+          arch: linux_gcc_64
+          modules: 'qthttpserver qtwebsockets'
+          cache: true
+      - name: Enforce exact Qt 6.8.3 runtime and SQLite driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$QT_ROOT_DIR/lib/cmake/Qt6"
+          test -f "$QT_ROOT_DIR/plugins/sqldrivers/libqsqlite.so"
+          actual="$(PKG_CONFIG_PATH="$QT_ROOT_DIR/lib/pkgconfig" pkg-config --modversion Qt6Core)"
+          test "$actual" = '6.8.3' || { echo "Qt mismatch: $actual" >&2; exit 1; }
+          echo FORNEX_UBUNTU2404_QT683_HEADERS_READY
+          echo "QT_PLUGIN_PATH=$QT_ROOT_DIR/plugins" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$QT_ROOT_DIR/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
+      # Ccache validates each source and command; never skips compilation tests.
+      - name: Restore compiler object cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: shyt-native-qt683-ubuntu24-${{ hashFiles('tools/poc/yharnam/unified-v9/compose_sources.py', 'tools/poc/yharnam/qt-http-compat-v30/patch_http_compat.py') }}
+          restore-keys: |
+            shyt-native-qt683-ubuntu24-
+      - name: Prepare bounded compiler cache
+        run: |
+          ccache --max-size=850M
+          ccache --zero-stats
+
+      - name: Fetch immutable upstream and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT_ROOT"
+          git init "$OUT_ROOT/upstream"
+          git -C "$OUT_ROOT/upstream" remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C "$OUT_ROOT/upstream" fetch --depth=1 origin "$PIN"
+          git -C "$OUT_ROOT/upstream" checkout --detach FETCH_HEAD
+          test "$(git -C "$OUT_ROOT/upstream" rev-parse HEAD)" = "$PIN"
+          git -C "$OUT_ROOT/upstream" submodule update --init --depth=1 server/externals/protobuf
+          test -f "$OUT_ROOT/upstream/server/externals/protobuf/CMakeLists.txt"
+
+      - name: Compose immutable V3-V30 source overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream "$OUT_ROOT/upstream" \
+            --repo "$GITHUB_WORKSPACE" \
+            --out "$OUT_ROOT/overlay"
+          test -s "$OUT_ROOT/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json"
+          rsync -a "$OUT_ROOT/overlay/" "$OUT_ROOT/upstream/"
+
+      - name: Configure actual native Qt server
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$OUT_ROOT/upstream/server" -B "$OUT_ROOT/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Compile actual server, network and database integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$OUT_ROOT/build" --target \
+            test_server_link test_bloodborne_world test_accounts shadnet --parallel 2 \
+            2>&1 | tee "$OUT_ROOT/server-build.log"
+
+      - name: Run Qt network, world and SQLite account tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ccache --show-stats
+          ctest --test-dir "$OUT_ROOT/build" \
+            --output-on-failure -R '^(server_link|bloodborne_world|accounts|bloodborne_backend_parity)$' \
+            2>&1 | tee "$OUT_ROOT/server-ctest.log"
+
+      - name: Stage tested exact Qt 6.8.3 Fornex Linux server candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg="$OUT_ROOT/shyt-internal-linux-server"
+          mkdir -p "$pkg/bin" "$pkg/licenses" "$pkg/config-reference"
+          install -m 755 "$OUT_ROOT/build/shadnet" "$pkg/bin/shadnet"
+          install -m 644 "$OUT_ROOT/upstream/server/LICENSES/GPL-2.0-or-later.txt" "$pkg/licenses/GPL-2.0-or-later.txt"
+          # These are configuration references, NOT live production settings.
+          for file in worlds.cfg scoreboards.cfg; do
+            if [[ -f "$OUT_ROOT/build/$file" ]]; then
+              install -m 644 "$OUT_ROOT/build/$file" "$pkg/config-reference/$file"
+            else
+              install -m 644 "$OUT_ROOT/upstream/server/$file" "$pkg/config-reference/$file"
+            fi
+          done
+          ldd "$pkg/bin/shadnet" > "$pkg/SHADNET-RUNTIME-LIBS.txt"
+          if ! grep -F "libQt6Core.so.6 => $QT_ROOT_DIR/lib/" "$pkg/SHADNET-RUNTIME-LIBS.txt"; then
+            echo 'Qt mismatch: staging candidate is not linked to Qt 6.8.3' >&2
+            exit 1
+          fi
+          if grep -Fq 'not found' "$pkg/SHADNET-RUNTIME-LIBS.txt"; then
+            echo "Bundled server links against a missing library" >&2
+            exit 1
+          fi
+          printf 'INTERNAL CI CANDIDATE; never copy into live production without staging validation.\nPinned upstream: %s\nSource revision: %s\nBuild OS: Ubuntu 24.04 x86_64, Qt 6.8.3 runtime REQUIRED.\nNetwork/protocol: legacy cross-client and login not game-tested.\nRelease approved: NO\n' \
+            "$PIN" "$GITHUB_SHA" > "$pkg/NOT-READY-FOR-PRODUCTION.txt"
+          (cd "$pkg" && sha256sum bin/shadnet config-reference/* > SHA256SUMS)
+          tar -czf "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
+            -C "$OUT_ROOT" shyt-internal-linux-server
+          sha256sum "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
+            > "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz.sha256"
+          test -s "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz"
+      - name: Preserve tested Linux server candidate (NOT a live update)
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL
+          path: |
+            /tmp/shyt-native-qt683/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz
+            /tmp/shyt-native-qt683/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Preserve manifest and failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-v39-qt683-build-diagnostics
+          path: |
+            /tmp/shyt-native-qt683/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json
+            /tmp/shyt-native-qt683/server-build.log
+            /tmp/shyt-native-qt683/server-ctest.log
+            /tmp/shyt-native-qt683/build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
