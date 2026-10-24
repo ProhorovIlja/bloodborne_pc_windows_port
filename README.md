@@ -52,6 +52,24 @@ The older `master` branch is based on earlier deadinside28/Mrsuss60 native Windo
 
 Yharnam Together already incorporates upstream work from deadinside28, Supermedo, parts of the shadPS4 rendering stack and others. Further BBHost, Visy, deadinside, FireBurn, Supermedo, shadPS4 and CLS fixes are **review candidates**, not blind bulk merges. Every import needs original authorship/license attribution, a pinned commit, gameplay/online version compatibility, before/after performance measurements and a rollback.
 
+## Community interoperability and responsible comparisons
+
+Seamless Hunt is a **temporary, optional proof of concept** and is not intended
+to force anyone away from CLS BBSC, Nightwatch, Visy, Yharnam Together
+upstream, The Hunter's Dream or other communities. We credit original
+authors and assess co-op fixes on their technical merits, without
+unsupported claims that another team copied code, that one project is
+unplayable, or that different networking protocols already cross-play.
+
+**Different servers and co-op implementations are not interchangeable just
+because they have the same game UI.** We will only advertise cross-client
+support after compatible two-PC tests, not combine incompatible public
+player counts or migrate logins, saves and passwords automatically. If a
+better-maintained option becomes available, a voluntary, staged and
+reversible migration is preferable to permanent lock-in.
+
+[Independent co-op approaches, evidence rules and migration plan](docs/COOP_INTEROPERABILITY_AND_MIGRATION.md).
+
 ## Game/launcher/server gates
 
 The components that **must** become one complete, usable test bundle are:
