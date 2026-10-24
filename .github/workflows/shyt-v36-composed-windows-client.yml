@@ -108,31 +108,24 @@ jobs:
           bash packaging/windows/package.sh
           test -s dist/bbport-windows.zip
           echo WINDOWS_PORTABLE_PACKAGE_BUILT_NOT_GAME_TESTED
-      - name: Validate archive content and private/game-file exclusions
+      - name: Validate portable game launcher archive and reject private/retail data
         shell: pwsh
         run: |
-          @'
-          import hashlib, json, pathlib, zipfile
-          root = pathlib.Path('pinned-upstream/bbport/dist')
-          src = root / 'bbport-windows.zip'
-          with zipfile.ZipFile(src) as z:
-              names = z.namelist()
-              assert z.testzip() is None
-              for required in ('bbport-windows/BLauncher.exe', 'bbport-windows/Bloodborne.exe',
-                               'bbport-windows/bin/bb-probe.exe', 'bbport-windows/run.py',
-                               'bbport-windows/LICENSE'):
-                  assert required in names, 'missing file '+required
-              excluded = ('eboot.bin', '.pkg', '.sav', 'shadnet.db',
-                          'user/coop.json', 'bbport.ini')
-              for raw in names:
-                  name = raw.replace('\\', '/').lower()
-                  assert not any(name.endswith('/'+x) for x in excluded), 'private/game file '+name
-          digest = hashlib.sha256(src.read_bytes()).hexdigest()
-          (root / 'bbport-windows.zip.sha256').write_text(
-              digest + '  bbport-windows.zip\n', encoding='ascii')
-          print('INTERNAL_WINDOWS_ARCHIVE_VERIFIED_SHA256', digest)
-          '@ | python -
-          if ($LASTEXITCODE -ne 0) { throw 'Unsafe Windows bundle or corrupted archive' }
+          $ErrorActionPreference = 'Stop'
+          $root = 'pinned-upstream/bbport/dist'
+          $name = 'bbport-windows.zip'
+          $zip = Join-Path $root $name
+          python tools/diagnostics/check_windows_candidate.py $zip
+          if ($LASTEXITCODE -ne 0) { throw 'Unsafe or incomplete native Windows package' }
+          $sum = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText(
+            (Join-Path $root "$name.sha256"),
+            "$sum  $name`n",
+            [Text.Encoding]::ASCII
+          )
+          python tools/diagnostics/check_windows_candidate.py $zip --sha256 (Join-Path $root "$name.sha256")
+          if ($LASTEXITCODE -ne 0) { throw 'Windows artifact checksum and safety gate rejected' }
+          Write-Host 'SIGNED_MANIFEST_NOT_YET_AVAILABLE_RELEASE_BLOCKED'
       - name: Preserve only INTERNAL Windows development candidate
         uses: actions/upload-artifact@v4
         with:
