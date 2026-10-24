@@ -66,7 +66,7 @@ jobs:
           pacman --noconfirm --disable-download-timeout -Sy
           pacman --noconfirm --disable-download-timeout -S --needed \
             git patch \
-            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld \
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-ccache \
             mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-cmake \
             mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-pkgconf \
             mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-vulkan-loader \
@@ -79,13 +79,37 @@ jobs:
             mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
             mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
             mingw-w64-clang-x86_64-nlohmann-json
+      - name: Restore incremental CLANG64 compiler cache for native Windows GPU library
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: seamless-hunt-native-windows-gpu-ccache-v1-77e3507-${{ runner.os }}
+          restore-keys: |
+            seamless-hunt-native-windows-gpu-ccache-v1-
+      - name: Inject source-checked ccache launcher for pinned native game build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = 'pinned-upstream/bbport/build.sh'
+          $source = [IO.File]::ReadAllText((Resolve-Path $script))
+          $old = '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null'
+          $new = '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache >/dev/null'
+          if (($source.Split($old).Count - 1) -ne 1) {
+            throw 'Pinned game build.sh has changed; refusing non-reviewed incremental compiler injection'
+          }
+          [IO.File]::WriteAllText((Resolve-Path $script), $source.Replace($old, $new))
       - name: Compile real native Windows renderer and game loader
         shell: msys2 {0}
         run: |
           set -euo pipefail
           export CC=clang CXX=clang++
+          export CCACHE_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/.ccache"
+          mkdir -p "$CCACHE_DIR"
+          ccache --max-size 1600M
+          ccache --show-stats
           cd pinned-upstream/bbport
           bash build.sh
+          ccache --show-stats
           test -s out/bb-probe.exe
           test -s out/bb-gpu-capabilities.exe
           test -s out/bb-play.exe
