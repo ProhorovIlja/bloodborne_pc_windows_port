@@ -41,6 +41,7 @@ DATABASE_CPP = "server/src/database.cpp"
 DATABASE_H = "server/src/database.h"
 ACCOUNT_TEST_CPP = "server/tests/test_accounts.cpp"
 HTTP_CPP = "server/src/webapi_server.cpp"
+HTTP_SESSION_CPP = "server/src/webapi_routes_session.cpp"
 SERVER_LINK_TEST = "server/tests/test_server_link.cpp"
 NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 COOP = "bbport/launcher/bbport_coop.py"
@@ -339,6 +340,10 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     exec(compile(qt_script.read_text("utf-8"),str(qt_script),"exec"),qt_module.__dict__)
     qt_src=output[HTTP_CPP].decode("utf-8") if HTTP_CPP in output else source[HTTP_CPP]
     output[HTTP_CPP]=qt_module.transform(qt_src).encode("utf-8")
+    # Native Linux CI on Qt6.4 revealed another modern-only Qt API in
+    # invitation timestamp serialization, separate from WebApiServer.
+    utc_src=output[HTTP_SESSION_CPP].decode("utf-8") if HTTP_SESSION_CPP in output else source[HTTP_SESSION_CPP]
+    output[HTTP_SESSION_CPP]=qt_module.transform_session(utc_src).encode("utf-8")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -363,7 +368,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V28 opt-in bounded pre-database Hello admission",
                    "V29 bounded local RPC backpressure and signed-in credential cache",
                    "V30 live DB verification of cached account password and ban status",
-                   "Qt 6.4 / modern WebAPI ABI compatibility from full server build"],
+                   "Qt 6.4 / modern WebAPI ABI compatibility from full server build",
+                   "Qt 6.4 / modern WebAPI session invitation UTC timestamp compatibility"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
@@ -386,7 +392,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8.__file__=str(patch_path)
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,HTTP_SESSION_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # All source anchors and input hashes are checked before writing anything.
