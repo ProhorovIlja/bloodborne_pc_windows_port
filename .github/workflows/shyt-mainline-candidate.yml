@@ -35,6 +35,7 @@ jobs:
           python3 -m unittest discover -s tools/poc/yharnam/parity-diagnostics-v43 -p 'test_smoke_python_backend.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/parity-diagnostics-v43 -p 'test_patch_parity_diag.py' -v
+          python3 -m unittest discover -s tools/poc/yharnam/server-relay-perf-v45 -p 'test_patch_server_hotpath.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/package-v40 -p 'test_patch_windows_package.py' -v
           python3 -m unittest discover -s tools/diagnostics/tests -p 'test_windows_candidate.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_assemble_windows_test_kit.py' -v
