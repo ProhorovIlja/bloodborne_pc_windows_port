@@ -125,6 +125,7 @@ jobs:
           $creditTarget = 'pinned-upstream/tools/release/kit/Seamless-Hunt-CREDITS.txt'
           if (-not (Test-Path $creditSource)) { throw 'Project attribution notice missing' }
           Copy-Item -LiteralPath $creditSource -Destination $creditTarget -Force
+          Copy-Item -LiteralPath tools/poc/yharnam/remote-profile-v46/SeamlessHunt-network-profile.example.json -Destination pinned-upstream/tools/release/kit/SeamlessHunt-network-profile.example.json -Force
           if (-not (Test-Path $creditTarget)) { throw 'Failed to stage author attribution' }
           python tools/poc/yharnam/package-v40/patch_windows_package.py pinned-upstream/bbport/packaging/windows/package.sh
           if ($LASTEXITCODE -ne 0) { throw 'Pinned native package script drifted' }
