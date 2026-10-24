@@ -109,7 +109,6 @@ jobs:
                   'bbport-windows/tools/party_boss_events.py',
                   'bbport-windows/server/shadnet.exe',
                   'bbport-windows/server/Qt6Core.dll',
-                  'bbport-windows/server/Qt6Concurrent.dll',
                   'bbport-windows/server/Qt6HttpServer.dll',
                   'bbport-windows/backend/bb_dummy_server.py',
               )

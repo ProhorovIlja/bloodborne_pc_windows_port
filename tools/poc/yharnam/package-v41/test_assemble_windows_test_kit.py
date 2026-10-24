@@ -86,7 +86,8 @@ class CoupledKitTests(unittest.TestCase):
 
     def test_missing_native_server_library_cannot_be_distributed(self):
         for missing in ("server/shadnet.exe", "server/Qt6Core.dll",
-                        "server/Qt6Concurrent.dll", "server/Qt6HttpServer.dll",
+                        "server/Qt6Network.dll", "server/Qt6Sql.dll",
+                        "server/Qt6HttpServer.dll",
                         "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py",
                         "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",
                         "server/licenses/LGPL-3.0.txt",
@@ -95,6 +96,15 @@ class CoupledKitTests(unittest.TestCase):
                 self.make_server(missing=missing)
                 with self.assertRaisesRegex(mod.InvalidCandidate, "missing"):
                     mod.assemble(self.game, self.server, self.out)
+
+    def test_qt_concurrent_is_optional_in_real_native_server(self):
+        self.assertNotIn("server/Qt6Concurrent.dll", mod.SERVER_FILES)
+        result = mod.assemble(self.game, self.server, self.out)
+        self.assertFalse(result["release_ready"])
+        with zipfile.ZipFile(self.out) as z:
+            self.assertNotIn("bbport-windows/server/Qt6Concurrent.dll", z.namelist())
+            for dll in ("Qt6Core.dll", "Qt6Network.dll", "Qt6Sql.dll", "Qt6HttpServer.dll"):
+                self.assertIn("bbport-windows/server/" + dll, z.namelist())
 
     def test_windows_archive_containing_saves_or_keys_is_rejected(self):
         for name in ("server/shadnet.db", "backend/.env",

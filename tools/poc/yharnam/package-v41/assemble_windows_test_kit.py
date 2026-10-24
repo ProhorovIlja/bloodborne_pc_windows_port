@@ -18,8 +18,9 @@ import zipfile
 ROOT = "bbport-windows/"
 SERVER_FILES = {
     "server/shadnet.exe", "server/shadnet.cfg",
+    # Qt6Concurrent is not linked by shadnet; windeployqt does not require it.
     "server/Qt6Core.dll", "server/Qt6Network.dll", "server/Qt6Sql.dll",
-    "server/Qt6Concurrent.dll", "server/Qt6HttpServer.dll",
+    "server/Qt6HttpServer.dll",
     "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py",
     "backend/ss_info_template.xml", "licenses/GPL-2.0-or-later.txt",
     "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",

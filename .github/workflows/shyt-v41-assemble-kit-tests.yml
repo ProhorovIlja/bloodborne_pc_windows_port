@@ -1,9 +1,16 @@
 name: Seamless Hunt V41 combined Windows client-server artifact safety
 on:
-  pull_request:
-    branches: [feature/yharnam-v36-windows-composed-client-ci]
+  push:
+    branches: [fix/shyt-assembly-required-runtime]
     paths:
       - tools/poc/yharnam/package-v41/**
+      - .github/workflows/shyt-v41-assemble-kit-tests.yml
+      - .github/workflows/shyt-mainline-candidate.yml
+  pull_request:
+    branches: [feature/yharnam-v36-windows-composed-client-ci, feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/package-v41/**
+      - .github/workflows/shyt-mainline-candidate.yml
       - .github/workflows/shyt-v41-assemble-kit-tests.yml
   workflow_dispatch:
 permissions:
@@ -25,5 +32,7 @@ jobs:
           python-version: '3.12'
       - name: Check source Python syntax
         run: python -m py_compile tools/poc/yharnam/package-v41/assemble_windows_test_kit.py tools/poc/yharnam/package-v41/test_assemble_windows_test_kit.py
+      - name: Verify unified bundle requires only deployed Qt server dependencies
+        run: python -c "from pathlib import Path; s=Path('.github/workflows/shyt-mainline-candidate.yml').read_text(); assert 'server/Qt6Concurrent.dll' not in s; assert 'bbport-windows/server/Qt6Core.dll' in s; print('NATIVE_QT_ASSEMBLY_DEPENDENCIES_PASS')"
       - name: Check combined Windows shadnet and launcher archive contracts
         run: python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_assemble_windows_test_kit.py' -v
