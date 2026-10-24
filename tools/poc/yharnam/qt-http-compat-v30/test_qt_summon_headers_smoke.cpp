@@ -3,6 +3,7 @@
 // by the full shadnet native CMake job. This tests the versioned Qt API itself.
 #include <QtGlobal>
 #include <QByteArray>
+#include <QList>
 #include <QHttpServerResponse>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
 #include <QHttpHeaders>
