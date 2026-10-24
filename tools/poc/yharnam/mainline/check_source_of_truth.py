@@ -185,6 +185,19 @@ def check_workspace(root: Path, meta: dict) -> None:
             or 'dest[LAUNCHER]=v8patch.patch_launcher(source[LAUNCHER])' not in composer
             or '"public_release_ready":False' not in composer):
         raise SourceDrift("composed Yharnam Together client, launcher or server not pinned")
+    # A game pointing at Fornex staging MUST be able to select its actual
+    # isolated ports without swapping away from upstream BLauncher or touching
+    # the production CLS 31314/31315/20443 network.
+    profile_patch = (root / "tools/poc/yharnam/remote-profile-v46/patch_remote_ports.py").read_text("utf-8")
+    if ('"SHYT-V46-EXPLICIT-REMOTE-PORTS"' not in profile_patch
+            or '"SHADNET_PORT, WEBAPI_PORT, MATCHING_PORT, BACKEND_PORT = 31313, 31315, 31314, 20443"' not in profile_patch
+            or "remote-profile-v46/patch_remote_ports.py" not in composer
+            or "V46 explicit guest-only remote staging UDP/WebAPI/backend ports" not in composer):
+        raise SourceDrift("missing opt-in real Fornex IPv4 guest endpoints from original Yharnam launcher")
+    game_package = (root / "tools/poc/yharnam/package-v40/patch_windows_package.py").read_text("utf-8")
+    if ('SeamlessHunt-network-profile.example.json' not in game_package
+            or "Missing example for isolated remote co-op ports" not in game_package):
+        raise SourceDrift("portable game kit cannot show safe alternate server profile")
     release = (root / "tools/poc/yharnam/release-v8/patch_update_channel.py").read_text("utf-8")
     if (f'PIN="{PIN}"' not in release
             or "SH_RELEASE_PREFIX = 'shyt-v'" not in release):
