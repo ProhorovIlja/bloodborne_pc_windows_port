@@ -57,6 +57,26 @@ class MainlineContracts(unittest.TestCase):
         with self.assertRaisesRegex(p.SourceDrift, "npc_summon_signs"):
             p.check_policy(altered)
 
+    def test_qt_http_server_gplv3_cannot_be_mislabelled_lgpl(self):
+        altered = copy.deepcopy(self.good)
+        altered["attribution_and_licenses"]["qt_httpserver_6_8_3_open_source_license"] = "LGPL-3.0"
+        with self.assertRaisesRegex(p.SourceDrift, "GPL"):
+            p.check_policy(altered)
+
+    def test_no_distribution_without_complete_license_audit(self):
+        for key in ("redistribution_approved", "release_license_audit_completed"):
+            altered = copy.deepcopy(self.good)
+            altered["attribution_and_licenses"][key] = True
+            with self.subTest(key=key), self.assertRaises(p.SourceDrift):
+                p.check_policy(altered)
+
+    def test_downstream_author_and_upstream_license_docs_required(self):
+        for name in ("README.md", "CREDITS.md", "THIRD_PARTY_NOTICES.md"):
+            altered = copy.deepcopy(self.good)
+            altered["attribution_and_licenses"]["english_docs"].remove(name)
+            with self.subTest(name=name), self.assertRaises(p.SourceDrift):
+                p.check_policy(altered)
+
     def test_cannot_drop_client_host_server_or_event_check(self):
         for name in list(self.good["mainline_workflows"]):
             altered = copy.deepcopy(self.good)
