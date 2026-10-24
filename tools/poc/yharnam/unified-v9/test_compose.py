@@ -35,6 +35,8 @@ sys.path.insert(0, str(HERE.parent/"endpoint-rebind-v27"))
 from test_patch_rebind import SOURCE as LINK_REBIND_FIXTURE
 sys.path.insert(0, str(HERE.parent/"login-admission-v28"))
 from test_patch_login_admission import CPP as LOGIN_CPP_FIXTURE, HEADER as LOGIN_H_FIXTURE
+sys.path.insert(0, str(HERE.parent/"rpc-budget-v29"))
+from test_patch_rpc_budget import CPP as RPC_CPP_FIXTURE, H as RPC_H_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -70,10 +72,11 @@ def originals():
 ''',
         compose.SERVER_LINK_H: LOGIN_H_FIXTURE +
             '        QList<Endpoint> gone; // links forgotten\n',
-        compose.LINK_SERVER_CPP: (
+        compose.LINK_SERVER_CPP: RPC_CPP_FIXTURE + (
             "    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from\n"
             "    // its hello.\n"
             "    for (const auto& linked : result.linked) {\n"),
+        compose.LINK_SERVER_H: RPC_H_FIXTURE,
         compose.SERVER_LINK_TEST: """int Relays() {
   if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
 """,
@@ -173,7 +176,7 @@ class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
         result,manifest=compose.compose(source,ARCHIVES,v8)
-        self.assertEqual(len(result),len(source)+17)  # V28 adds fixed-memory login admission header
+        self.assertEqual(len(result),len(source)+18)  # V29 adds one bounded-RPC policy header
         self.assertIn(b'DirectSafeGameFrame',result['emulator/src/core/libraries/network/native_shlk_adapter.hpp'])
         self.assertIn(b'IsStaticallyDirectSafe',result['emulator/src/core/libraries/network/native_direct_filter.hpp'])
         self.assertIn(b'sh-resume-mode',result[compose.OVERLAY])
@@ -228,6 +231,10 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'LoginAdmission::Gate hello_admission',result[compose.SERVER_LINK_H])
         self.assertIn(b'HelloAdmissionLimitsDbCalls()',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'class Gate',result['server/src/sh_login_admission.hpp'])
+        self.assertIn(b'blocked = true',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'MustEvictAuthCache(',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'bool blocked = false',result[compose.LINK_SERVER_H])
+        self.assertIn(b'MaxBufferedRpcBytes',result['server/src/sh_rpc_budget.hpp'])
         self.assertIn(b'ChangedAccountOnSameEndpoint()',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'retired_online_ids.size() == 1',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'MaxRangeBytes',result['bbport/gpu/shim/sh_map_range_io.hpp'])
@@ -259,6 +266,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn("V26 opt-in co-op ingress quotas", " ".join(manifest["applied"]))
         self.assertIn("V27 stale virtual-address cleanup", " ".join(manifest["applied"]))
         self.assertIn("V28 opt-in bounded pre-database Hello admission", " ".join(manifest["applied"]))
+        self.assertIn("V29 bounded local RPC backpressure", " ".join(manifest["applied"]))
         self.assertEqual(set(manifest["sha256"]),set(result))
         self.assertEqual(source,originals())
     def test_missing_anchor_rejected(self):
@@ -338,6 +346,12 @@ class AllPatches(unittest.TestCase):
             "const auto hello = DecodeHello(datagram);",
             "const auto hello = DecodeHello(payload);")
         with self.assertRaisesRegex(ValueError,"before SignIn"):
+            compose.compose(source,ARCHIVES,v8)
+    def test_v29_broken_rpc_buffer_anchor_rejected(self):
+        source=originals()
+        source[compose.LINK_SERVER_CPP]=source[compose.LINK_SERVER_CPP].replace(
+            "end.pending.append(data)", "end.pending.push_back(data)")
+        with self.assertRaisesRegex(ValueError,"bounded rpc data and socket write"):
             compose.compose(source,ARCHIVES,v8)
     def test_tampered_archive_rejected(self):
         with tempfile.TemporaryDirectory() as d:
