@@ -1,0 +1,166 @@
+name: Seamless Hunt V36 composed native Windows game client
+on:
+  push:
+    branches: [feature/yharnam-v36-windows-composed-client-ci]
+    paths:
+      - tools/poc/yharnam/**
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/**
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-game-client:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+      BB_LTO: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enable long Win32 Git paths before checking out nested shader submodules
+        shell: pwsh
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          submodules: false
+          persist-credentials: false
+      - name: Initialize only required native bbport GPU third-party submodules
+        shell: pwsh
+        run: |
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
+          if ($LASTEXITCODE -ne 0) { throw "Pinned native GPU submodule checkout failed" }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compose all native source overlays against immutable upstream
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git -C pinned-upstream rev-parse HEAD).Trim() -ne $env:PIN) {
+            throw 'Wrong pinned source SHA'
+          }
+          $out = Join-Path $env:RUNNER_TEMP 'shyt-v36-overlay'
+          python tools/poc/yharnam/unified-v9/compose_sources.py --upstream pinned-upstream --repo . --out "$out"
+          if ($LASTEXITCODE -ne 0) { throw 'Native composition failed' }
+          $meta = Get-Content "$out/SEAMLESS-HUNT-COMPOSE-MANIFEST.json" -Raw | ConvertFrom-Json
+          if ($meta.upstream_pin -ne $env:PIN -or $meta.public_release_ready -ne $false) {
+            throw 'Unsafe patch manifest'
+          }
+          Copy-Item -Path "$out/*" -Destination pinned-upstream -Recurse -Force
+          $ui = Get-Content pinned-upstream/bbport/gpu/shim/bbport_overlay.cpp -Raw
+          if ($ui -notmatch 'sh-quit-desktop' -or $ui -notmatch 'SH-HUNTER-TOOLS-V21') {
+            throw 'Native game UI patch missing'
+          }
+          Write-Host 'COMPOSED_NATIVE_SOURCE_PASS'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - name: Install native Windows CLANG64 build dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed \
+            git patch \
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld \
+            mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-cmake \
+            mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-pkgconf \
+            mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-vulkan-loader \
+            mingw-w64-clang-x86_64-vulkan-memory-allocator \
+            mingw-w64-clang-x86_64-glslang mingw-w64-clang-x86_64-sdl3 \
+            mingw-w64-clang-x86_64-fmt mingw-w64-clang-x86_64-boost \
+            mingw-w64-clang-x86_64-robin-map mingw-w64-clang-x86_64-xxhash \
+            mingw-w64-clang-x86_64-ffmpeg mingw-w64-clang-x86_64-zydis \
+            mingw-w64-clang-x86_64-spirv-tools mingw-w64-clang-x86_64-spirv-headers \
+            mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
+            mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
+            mingw-w64-clang-x86_64-nlohmann-json
+      - name: Compile real native Windows renderer and game loader
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export CC=clang CXX=clang++
+          cd pinned-upstream/bbport
+          bash build.sh
+          test -s out/bb-probe.exe
+          test -s out/bb-gpu-capabilities.exe
+          test -s out/bb-play.exe
+          echo REAL_NATIVE_WINDOWS_EXE_BUILT_NO_GAMEPLAY_CLAIM
+      - name: Enable pinned Yharnam Together guest door and event compatibility in package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $eventTool = 'pinned-upstream/tools/re/party_boss_events.py'
+          if (-not (Test-Path $eventTool)) { throw 'Co-op event patcher missing from pinned upstream' }
+          python tools/poc/yharnam/package-v40/patch_windows_package.py pinned-upstream/bbport/packaging/windows/package.sh
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned native package script drifted' }
+          Write-Host 'COOP_EVENT_PATCHER_STAGED; NPC summons still require live verification'
+      - name: Package complete portable native Windows launcher and DLL dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export CC=clang CXX=clang++
+          cd pinned-upstream/bbport
+          export WINPYTHON="$pythonLocation/python.exe"
+          bash packaging/windows/package.sh
+          test -s dist/bbport-windows.zip
+          echo WINDOWS_PORTABLE_PACKAGE_BUILT_NOT_GAME_TESTED
+      - name: Validate portable game launcher archive and reject private/retail data
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = 'pinned-upstream/bbport/dist'
+          $name = 'bbport-windows.zip'
+          $zip = Join-Path $root $name
+          python tools/diagnostics/check_windows_candidate.py $zip
+          if ($LASTEXITCODE -ne 0) { throw 'Unsafe or incomplete native Windows package' }
+          $sum = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText(
+            (Join-Path $root "$name.sha256"),
+            "$sum  $name`n",
+            [Text.Encoding]::ASCII
+          )
+          python tools/diagnostics/check_windows_candidate.py $zip --sha256 (Join-Path $root "$name.sha256")
+          if ($LASTEXITCODE -ne 0) { throw 'Windows artifact checksum and safety gate rejected' }
+          Write-Host 'SIGNED_MANIFEST_NOT_YET_AVAILABLE_RELEASE_BLOCKED'
+      - name: Preserve only INTERNAL Windows development candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-V36-native-windows-INTERNAL
+          path: |
+            pinned-upstream/bbport/dist/bbport-windows.zip
+            pinned-upstream/bbport/dist/bbport-windows.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve build failure evidence without publishing a client
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-v36-native-windows-compiler-failure
+          path: |
+            pinned-upstream/bbport/out/gpu-build.log
+            pinned-upstream/bbport/out/gpu/CMakeCache.txt
+            pinned-upstream/bbport/out/gpu/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: No proprietary assets and no untested public release
+        shell: pwsh
+        run: |
+          if (Test-Path pinned-upstream/CUSA03173) { throw 'Retail assets detected' }
+          if (Test-Path pinned-upstream/bbport/CUSA03173) { throw 'Retail assets detected' }
+          if (-not (Test-Path pinned-upstream/bbport/out/bb-probe.exe)) {
+            throw 'Native game EXE missing'
+          }
+          Write-Host 'CI-only native Windows build, not released to players.'
