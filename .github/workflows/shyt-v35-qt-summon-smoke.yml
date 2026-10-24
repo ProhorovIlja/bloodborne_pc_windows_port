@@ -1,0 +1,39 @@
+name: Seamless Hunt V35 Qt summon placement header ABI smoke
+on:
+  push:
+    branches:
+      - feature/yharnam-v33-hunter-web-portal
+    paths:
+      - tools/poc/yharnam/qt-http-compat-v30/**
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v35-qt-summon-smoke.yml
+  pull_request:
+    paths:
+      - tools/poc/yharnam/qt-http-compat-v30/**
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v35-qt-summon-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qt-api-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt HTTP Server SDK and compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends g++ pkg-config qt6-base-dev qt6-httpserver-dev
+      - name: Fail-closed pinned source compatibility tests
+        run: python3 -m unittest discover -s tools/poc/yharnam/qt-http-compat-v30 -p 'test_bloodborne_headers.py' -v
+      - name: Compile and run real Qt HTTP server header smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg-config --modversion Qt6HttpServer
+          c++ -std=c++20 -fPIC \
+            tools/poc/yharnam/qt-http-compat-v30/test_qt_summon_headers_smoke.cpp \
+            -o /tmp/shyt-qt-summon-smoke \
+            $(pkg-config --cflags --libs Qt6HttpServer)
+          /tmp/shyt-qt-summon-smoke
