@@ -392,6 +392,22 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     output[v47_module.HEADER]=(v47_dir/"sh_friends_permissions.hpp").read_bytes()
     if not output[v47_module.HEADER]:
         raise ValueError("V47 private-session policy header missing")
+    # V48: bind both the native co-op world identity and the team lobby
+    # identity to the UDP link's signed-in account. Character labels are not
+    # identities. Native LinkServer enables this before receiving game traffic;
+    # standalone upstream world fixtures keep their legacy test setup.
+    v48_dir=Path(__file__).resolve().parent.parent/"friends-privacy-v47"
+    v48_script=v48_dir/"patch_lobby_identity.py"
+    v48_module=types.ModuleType("sh_v48_authenticated_member")
+    v48_module.__file__=str(v48_script)
+    exec(compile(v48_script.read_text("utf-8"),str(v48_script),"exec"),v48_module.__dict__)
+    v48_input={name:output[name].decode("utf-8")
+               for name in (SERVER_WORLD,SERVER_WORLD_H,LINK_SERVER_CPP)}
+    for name,body in v48_module.transform(v48_input).items():
+        output[name]=body.encode("utf-8")
+    output[v48_module.HEADER]=(v48_dir/"sh_lobby_identity.hpp").read_bytes()
+    if not output[v48_module.HEADER]:
+        raise ValueError("V48 identity policy header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -422,7 +438,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "Qt 6.4 / modern Bloodborne cross-area summon HTTP header compatibility",
                    "V32 WebAPI bearer rejects banned users, indexed SQLite token lookup; no web login yet",
                     "V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher",
-                    "V47 private session join and invitation authorization (existing friend APIs)"],
+                    "V47 private session join and invitation authorization (existing friend APIs)",
+                    "V48 bind native lobby and co-op player to authenticated link account"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
