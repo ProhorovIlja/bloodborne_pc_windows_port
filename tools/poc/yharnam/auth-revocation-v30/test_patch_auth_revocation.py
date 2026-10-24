@@ -1,9 +1,12 @@
 import unittest
-from patch_auth_revocation import database_header,database_cpp,link_header,link_cpp
+from patch_auth_revocation import database_header,database_cpp,link_header,link_cpp,accounts_test
 DBH='''    std::optional<UserRecord> CheckUser(const QString& npid, const QString& password,
                                         const QString& token, bool checkToken);'''
 DBC='''std::optional<UserRecord> Database::CheckUser(const QString& npid, const QString& password,'''
 LH='''    QHash<QByteArray, QByteArray> m_signedIn; // player id -> its secret's hash, once signed in'''
+ACCOUNT='''int AnOldAccountSignsInAsBefore(const QString &folder) {
+       {AFirstSignInMakesTheAccount, WithoutMakingAnUnknownIdIsRefused,
+        AnOldAccountSignsInAsBefore}) {'''
 LC='''#include "link_server.h"
     const auto known = m_signedIn.constFind(online_id);
     if (known != m_signedIn.constEnd())
@@ -30,6 +33,12 @@ class TestV30(unittest.TestCase):
     def test_cached_wrong_secret_no_kdf(self):
         s=link_cpp(LC)
         self.assertLess(s.index('if (unchanged)'),s.index('const bool make ='))
+    def test_sqlite_integration_test_inserted(self):
+        t=accounts_test(ACCOUNT)
+        self.assertIn('RevokedDatabaseCredentialsAreVisible',t)
+        self.assertIn('db.BanUser(',t)
+        self.assertIn('db.DeleteUser(',t)
+        self.assertIn('changed_hash',t)
     def test_drift_fail_closed(self):
         with self.assertRaisesRegex(ValueError,'cached credential representation'):
             link_header(LH.replace('QHash<QByteArray, QByteArray>','QMap<QByteArray, QByteArray>'))
