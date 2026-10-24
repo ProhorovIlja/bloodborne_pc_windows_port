@@ -347,7 +347,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v31_script=v31_dir/"patch_active_session.py"
     v31_module.__file__=str(v31_script)
     exec(compile(v31_script.read_text("utf-8"),str(v31_script),"exec"),v31_module.__dict__)
-    v31_paths=(v31_module.LINK_H,v31_module.LINK_CPP,v31_module.SERVER_CPP,v31_module.QT_TEST)
+    v31_paths=(v31_module.LINK_H,v31_module.LINK_CPP,v31_module.SERVER_CPP,v31_module.SERVER_H,v31_module.QT_TEST)
     v31_sources={p:(output[p].decode("utf-8") if p in output else source[p]) for p in v31_paths}
     for name,contents in v31_module.transform(v31_sources).items():
         output[name]=contents.encode("utf-8")
@@ -378,7 +378,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V29 bounded local RPC backpressure and signed-in credential cache",
                    "V30 live DB verification of cached account password and ban status",
                    "Qt 6.4 / modern WebAPI ABI compatibility from full server build",
-                   "V31 staging: opt-in active account revocation and complete matchmaking departure cleanup"],
+                   "V31.1 staging: pin active credential fingerprint to linked session regardless of cache eviction"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
