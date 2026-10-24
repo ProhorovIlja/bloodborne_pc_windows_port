@@ -41,6 +41,8 @@ class ReleaseCenterTests(unittest.TestCase):
         self.assertEqual(rc.normalize_release(r)["url"], rc.RELEASES_PAGE)
         self.assertIsNone(rc.normalize_release(release(tag="v99.0.0")))
         self.assertIsNone(rc.normalize_release(release(tag="bbport-v99.0.0")))
+        self.assertIsNone(rc.normalize_release(release(tag="shyt-v0.7.5-rc.1", preview=False)))
+        self.assertIsNone(rc.normalize_release(release(tag="shyt-v0.7.5", preview=True)))
         self.assertIsNone(rc.normalize_release(release(tag="../../update.exe")))
         self.assertIsNone(rc.normalize_release(dict(release(), draft=True)))
         self.assertIsNone(rc.normalize_release(dict(release(), tag_name="bad")))
