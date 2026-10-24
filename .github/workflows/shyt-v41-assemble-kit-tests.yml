@@ -1,7 +1,7 @@
 name: Seamless Hunt V41 combined Windows client-server artifact safety
 on:
   push:
-    branches: [feature/yharnam-v41-win-qt683-server-kit]
+    branches: [feature/seamless-hunt-mainline]
     paths:
       - tools/poc/yharnam/package-v41/**
       - .github/workflows/shyt-v41-assemble-kit-tests.yml
