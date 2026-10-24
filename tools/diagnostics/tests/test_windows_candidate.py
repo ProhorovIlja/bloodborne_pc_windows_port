@@ -13,6 +13,11 @@ sys.modules[spec.name] = m
 spec.loader.exec_module(m)
 
 
+CREDITS = (b"SEAMLESS HUNT INTERNAL NOT a public player release\\n"
+           b"Yharnam Together deadinside28 Supermedo shadPS4 Wozzardman "
+           b"0xCydral GPL-2.0-or-later")
+
+
 class CandidateTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -24,8 +29,10 @@ class CandidateTests(unittest.TestCase):
             for name in sorted(m.REQUIRED - set(missing)):
                 if name == "tools/party_boss_events.py":
                     data = b"HOST_DOOR_EFFECT = {'m29.emevd.dcx': 9920, 'm35_00_00_00.emevd.dcx': 9920}; def patch_host_door_effect(): pass"
+                elif name == "CREDITS.txt":
+                    data = CREDITS
                 else:
-                    data = (b"Exe data " * 200) if name.endswith(".exe") else b"sample document"
+                    data = (b"Exe data " * 200) if name.endswith(".exe") else (b"sample license document and notices " * 3)
                 z.writestr(m.ROOT + name, data)
             for name in extra:
                 # zipfile.ZipInfo converts backslashes to slashes on Windows
@@ -81,13 +88,31 @@ class CandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(m.UnsafeBundle, "duplicate"):
             m.check(self.archive)
 
+    def test_credits_and_redistributable_licenses_are_required(self):
+        for name in ("CREDITS.txt", "LICENSE",
+                     "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+                     "licenses/AMD-FidelityFX-SDK-LICENSE.txt",
+                     "licenses/Intel-XeSS-LICENSE.txt",
+                     "licenses/PkgTool-LICENSE.txt"):
+            with self.subTest(name=name):
+                self.write(missing=(name,))
+                with self.assertRaisesRegex(m.UnsafeBundle, "missing required"):
+                    m.check(self.archive)
+        self.write()
+        with zipfile.ZipFile(self.archive, "a") as z:
+            z.writestr(m.ROOT + "CREDITS.txt", b"fake notices")
+        with self.assertRaises(m.UnsafeBundle):
+            m.check(self.archive)
+
     def test_guest_door_patcher_is_a_hard_release_requirement(self):
         self.write(missing=("tools/party_boss_events.py",))
         with self.assertRaisesRegex(m.UnsafeBundle, "missing required"):
             m.check(self.archive)
         with zipfile.ZipFile(self.archive, "w") as z:
             for name in sorted(m.REQUIRED):
-                data = b"fake event script" if name == "tools/party_boss_events.py" else b"Exe data " * 200
+                data = (b"fake event script" if name == "tools/party_boss_events.py"
+                        else CREDITS if name == "CREDITS.txt"
+                        else b"Exe data " * 200)
                 z.writestr(m.ROOT + name, data)
         with self.assertRaisesRegex(m.UnsafeBundle, "co-op door event patch missing"):
             m.check(self.archive)
