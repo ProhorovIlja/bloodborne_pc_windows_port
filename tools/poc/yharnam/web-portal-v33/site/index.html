@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Seamless Hunt: native Bloodborne PC, direct co-op, future public realms, maps and hunter tools.">
+<title>Seamless Hunt • The Hunter Portal</title>
+<style>
+:root{--bg:#0c0d0e;--surface:#171719;--surface2:#1d1c1c;--line:#34302d;--ink:#e9e0d4;--muted:#a6a097;--gold:#c8a978;--blood:#9c4644}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{background:radial-gradient(ellipse at 80% 1%,#30221e 0,transparent 39%),linear-gradient(160deg,#0e1113 0%,#0b0b0b 65%);color:var(--ink);font:15px/1.65 system-ui,"Segoe UI",sans-serif;margin:0;min-height:100vh}
+a{color:var(--gold);text-underline-offset:3px}a:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:4px}
+.wrap{max-width:1160px;margin:auto;padding:0 26px}nav{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);min-height:83px;gap:16px;flex-wrap:wrap}
+.brand{font:600 21px/1.2 Georgia,serif;color:var(--ink);text-decoration:none;letter-spacing:.07em}.brand span{color:var(--blood)}.navlinks{display:flex;gap:22px;flex-wrap:wrap}.navlinks a{text-decoration:none;color:var(--muted);font-size:13px}.navlinks a:hover{color:var(--ink)}
+.hero{padding:95px 0 56px}.eyebrow{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.25em;text-transform:uppercase}h1,h2,h3{font-family:Georgia,"Times New Roman",serif;font-weight:500;line-height:1.15}h1{font-size:clamp(44px,7vw,80px);max-width:840px;letter-spacing:-.035em;margin:18px 0}h2{font-size:clamp(30px,4vw,45px);margin:8px 0 20px}h3{font-size:24px;margin:4px 0 13px}.lead{max-width:650px;color:#c9c0b6;font-size:18px;line-height:1.8}.actions{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap}
+.btn{display:inline-block;padding:13px 21px;background:var(--gold);color:#15110e;border:1px solid var(--gold);text-decoration:none;border-radius:4px;font-weight:650}.btn.outline{color:var(--gold);background:transparent}
+.note{color:var(--muted);font-size:13px;margin-top:16px;max-width:740px}.separator{border:0;border-top:1px solid var(--line);margin:48px 0}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}.panel{background:linear-gradient(140deg,#1d1a19,#131516);border:1px solid var(--line);border-radius:6px;padding:24px}.kpi strong{font:400 38px Georgia,serif;color:var(--gold);display:block}.kpi small,.sub{color:var(--muted)}section{padding:28px 0 45px}
+.split{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(260px,.7fr);gap:22px}.portal-map{min-height:300px;background:radial-gradient(circle at 32% 35%,#2b2421 0%,#1c1a1a 43%,#121313 100%);border:1px solid #484039;display:grid;place-items:center;padding:40px;text-align:center;border-radius:6px}.portal-map svg{width:55px;height:55px;stroke:var(--gold);fill:none;stroke-width:1;opacity:.65}.maphead{font:28px Georgia,serif;margin:10px 0}.maphint{max-width:410px;color:var(--muted);font-size:14px;margin:0}
+#status{font-size:13px;color:var(--gold)}table{border-collapse:collapse;width:100%;color:var(--muted);font-size:14px}th{text-align:left;font-size:11px;letter-spacing:.12em;text-transform:uppercase}td,th{padding:11px 6px;border-bottom:1px solid var(--line)}td:last-child,th:last-child{text-align:right}
+.features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.feature p{color:var(--muted);margin:0}.tag{display:inline-block;border:1px solid #645039;color:var(--gold);border-radius:15px;padding:2px 9px;font-size:11px;margin-bottom:15px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.stepno{color:var(--gold);letter-spacing:.2em;font-size:12px}
+footer{padding:25px 0 45px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+@media(max-width:850px){.split{grid-template-columns:1fr}.features,.steps{grid-template-columns:1fr 1fr}.hero{padding-top:55px}}
+@media(max-width:560px){.features,.steps,.kpi{grid-template-columns:1fr}h1{font-size:44px}nav{padding:16px 0}.portal-map{min-height:230px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav aria-label="Main navigation">
+  <a class="brand" href="#home">SEAMLESS <span>HUNT</span></a>
+  <div class="navlinks">
+    <a href="#world">World activity</a>
+    <a href="#features">Features</a>
+    <a href="#install">Install</a>
+    <a href="https://github.com/ProhorovIlja/bloodborne_pc_windows_port/releases" rel="noopener noreferrer">Releases ↗</a>
+  </div>
+</nav>
+<main id="home">
+<header class="hero">
+  <div class="eyebrow">The Hunter Portal · Experimental preview</div>
+  <h1>A hunter is never alone.</h1>
+  <p class="lead">A native Bloodborne PC experience in development. Your own game, a connected hunt, one launcher. A future home for hunter profiles, world activity and tools.</p>
+  <div class="actions">
+    <a class="btn" href="https://github.com/ProhorovIlja/bloodborne_pc_windows_port/releases" rel="noopener noreferrer">GitHub releases ↗</a>
+    <a class="btn outline" href="#install">Installation guide</a>
+  </div>
+  <p class="note">This is a development preview, not a released public server. No game files are provided. You need your own legitimate game files. Account login and automatic update installation are not available yet.</p>
+</header>
+<hr class="separator">
+<section id="world" aria-labelledby="world-title">
+  <div class="eyebrow">World activity</div>
+  <h2 id="world-title">The hunt beyond the fog</h2>
+  <p class="sub">Actual server data only. When no verified server feed is connected, activity is shown as unavailable, not fabricated.</p>
+  <div class="kpi" aria-live="polite">
+    <div class="panel"><small>Hunters online</small><strong id="hunters">—</strong><small>Authoritative realm total</small></div>
+    <div class="panel"><small>Live areas</small><strong id="areas">—</strong><small>Privacy-safe population only</small></div>
+    <div class="panel"><small>Server feed</small><strong id="feed">—</strong><small>Live / Stale / Unavailable</small></div>
+  </div>
+  <div class="split">
+    <div class="portal-map" aria-label="Map will appear when vetted game-world geometry and live telemetry are available">
+      <div>
+        <svg role="img" aria-label="Stylized compass" viewBox="0 0 50 50"><circle cx="25" cy="25" r="22"/><path d="M25 5v40M5 25h40M25 9l5 16-5 16-5-16z"/></svg>
+        <p class="maphead">Yharnam, unseen</p>
+        <p class="maphint">The full interactive map requires licensed area geometry and a verified live game-server feed. We won't invent player positions.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="eyebrow">Areas at a glance</div>
+      <h3>Hunters abroad</h3>
+      <p id="status" role="status">Checking the public realm feed…</p>
+      <table aria-label="Public area population"><thead><tr><th>Area</th><th>Hunters</th></tr></thead><tbody id="area-rows"><tr><td colspan="2">No verified data available</td></tr></tbody></table>
+      <p class="note">Opt-in area sharing only. Tiny groups and all precise player coordinates remain hidden, especially during PvP.</p>
+    </div>
+  </div>
+</section>
+<hr class="separator">
+<section id="features" aria-labelledby="features-title">
+  <div class="eyebrow">What we're building</div><h2 id="features-title">One hunt. Many tools.</h2>
+  <div class="features">
+    <article class="panel feature"><span class="tag">Native foundation</span><h3>PC performance</h3><p>Vulkan graphics, scalable settings, sensible presets and ongoing fixes for long-session memory and performance.</p></article>
+    <article class="panel feature"><span class="tag">Co-op</span><h3>Play together</h3><p>Direct party play without website login. Dedicated public realms and cross-client interoperability remain separately tested work.</p></article>
+    <article class="panel feature"><span class="tag">Planned</span><h3>Hunter profiles</h3><p>Optional level, build, boss records and session statistics. Privacy settings and consent come first.</p></article>
+    <article class="panel feature"><span class="tag">Planned</span><h3>Build planner</h3><p>Compare starting origins, stats, weapon scaling and gem setups. Share a build without changing your save.</p></article>
+    <article class="panel feature"><span class="tag">Planned · Offline only</span><h3>Save tools</h3><p>Browser-assisted local editing with backups, never uploading raw saves to the public server or modifying active online characters.</p></article>
+    <article class="panel feature"><span class="tag">Planned</span><h3>Challenges</h3><p>Reproducible challenge seeds with shareable rules. Randomizers and gameplay-changing patches stay isolated from public multiplayer.</p></article>
+  </div>
+</section>
+<hr class="separator">
+<section id="install" aria-labelledby="install-title">
+  <div class="eyebrow">First steps</div><h2 id="install-title">From download to the hunt</h2>
+  <div class="steps">
+    <div class="panel"><div class="stepno">01 / OWN THE GAME</div><h3>Prepare Bloodborne</h3><p class="sub">Use your own PS4 Bloodborne game data and update 1.09. Neither this site nor GitHub releases supply copyrighted game files.</p></div>
+    <div class="panel"><div class="stepno">02 / GET THE CLIENT</div><h3>Use GitHub Releases</h3><p class="sub">Download only a verified compatible release. Preview branches are not tested installers. Follow its README for installation and settings.</p></div>
+    <div class="panel"><div class="stepno">03 / UPDATE SAFELY</div><h3>Launcher updates</h3><p class="sub">Release checking and notes exist. Signed automatic download, atomic install, save/mod preservation and rollback are still under development.</p></div>
+  </div>
+</section>
+</main>
+<footer><span>Seamless Hunt · Unofficial fan project. Not affiliated with Sony or FromSoftware.</span><a href="https://github.com/ProhorovIlja/bloodborne_pc_windows_port" rel="noopener noreferrer">Source and issue tracker ↗</a></footer>
+</div>
+<script>
+"use strict";
+(async function loadPublicPresence(){
+  const status=document.getElementById("status");
+  const hunters=document.getElementById("hunters");
+  const areas=document.getElementById("areas");
+  const feed=document.getElementById("feed");
+  const tbody=document.getElementById("area-rows");
+  const unavailable=(label)=>{
+    hunters.textContent="—";areas.textContent="—";feed.textContent="—";
+    tbody.replaceChildren();
+    const tr=document.createElement("tr"),td=document.createElement("td");
+    td.colSpan=2;td.textContent="No verified data available";tr.append(td);tbody.append(tr);
+    status.textContent=label;
+  };
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),4000);
+  try{
+    const response=await fetch("/api/public/v1/presence",{headers:{"Accept":"application/json"},credentials:"same-origin",cache:"no-store",signal:controller.signal});
+    if(!response.ok)throw Error("feed unavailable");
+    const data=await response.json();
+    if(!data||data.source!=="authoritative_server"||data.location_precision!=="area_only"||!["live","stale","unavailable"].includes(data.state))throw Error("invalid feed");
+    if(data.state!=="live"){unavailable("Server feed "+data.state+". Retry later.");return;}
+    if(!Number.isSafeInteger(data.online)||data.online<0||data.online>4096||!Array.isArray(data.areas)||data.areas.length>64)throw Error("invalid counts");
+    const rows=[];
+    for(const item of data.areas){
+      if(!item||typeof item.key!=="string"||!/^[a-z][a-z0-9_]{0,39}$/.test(item.key)||typeof item.suppressed!=="boolean")throw Error("invalid area");
+      if(item.suppressed?item.hunters!==null:(!Number.isSafeInteger(item.hunters)||item.hunters<3||item.hunters>4096))throw Error("invalid population");
+      const tr=document.createElement("tr"),label=document.createElement("td"),value=document.createElement("td");
+      label.textContent=item.key.replaceAll("_"," ");
+      value.textContent=item.suppressed?"Hidden":String(item.hunters);
+      tr.append(label,value);rows.push(tr);
+    }
+    tbody.replaceChildren(...rows);
+    if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=2;td.textContent="No public areas shared";tr.append(td);tbody.append(tr);}
+    hunters.textContent=String(data.online);
+    areas.textContent=String(data.areas.length);
+    feed.textContent="Live";
+    status.textContent="Connected to the verified public realm feed.";
+  }catch(_e){unavailable("Live data is not connected or unavailable.");}
+  finally{clearTimeout(timeout);}
+})();
+</script>
+</body>
+</html>
