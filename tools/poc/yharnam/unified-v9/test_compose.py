@@ -256,7 +256,7 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'CurrentCredentialStatus',result[compose.DATABASE_CPP])
         self.assertIn(b'db_hash_at_signin',result[compose.LINK_SERVER_H])
         self.assertIn(b'if (!user || user->banned)',result[compose.LINK_SERVER_CPP])
-        self.assertIn(b'RevokedDatabaseCredentialsAreVisible()',result[compose.ACCOUNT_TEST_CPP])
+        self.assertIn(b'int RevokedDatabaseCredentialsAreVisible(const QString &folder)',result[compose.ACCOUNT_TEST_CPP])
         self.assertIn(b'CanTrustCache',result['server/src/sh_auth_revocation.hpp'])
         self.assertIn(b'ChangedAccountOnSameEndpoint()',result[compose.SERVER_LINK_TEST])
         self.assertIn(b'retired_online_ids.size() == 1',result[compose.SERVER_LINK_TEST])
