@@ -235,6 +235,9 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'bbport_coop.host_overrides(settings[\'host_ip\'], PORT_DIR)', result[compose.LAUNCHER])
         self.assertIn(b'SHYT_LAUNCHER_ONBOARDING_V56', result[compose.LAUNCHER])
         self.assertIn(b'self.coop_setup_progress.configure(', result[compose.LAUNCHER])
+        self.assertIn(b'SHYT_LAUNCHER_TCP_DIAG_V57', result[compose.LAUNCHER])
+        self.assertIn(b'shyt_tcp_backend_probe', result[compose.LAUNCHER])
+        self.assertIn("V57 opt-in TCP backend/WebAPI diagnostic with no false UDP/P2P green status", manifest["applied"])
         self.assertIn("V56 original Yharnam Together BLauncher first-run guided UX; safe vanilla difficulty default", manifest["applied"])
         # V46 and V56 must compose into syntactically correct Python, not just
         # "contain expected text" (previous V46 wrote invalid write_text()).

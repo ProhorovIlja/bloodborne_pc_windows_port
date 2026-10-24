@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check V46+V56 composition against the full pinned Yharnam Together BLauncher.
+"""Check V46+V56+V57 composition against the full pinned Yharnam Together BLauncher.
 
 Use alongside a sparse GitHub checkout of lKaniel/bloodborne-server at the
 exact SHA pinned by the source-of-truth contract. No game executable needed.
@@ -33,19 +33,22 @@ def run(original: Path) -> None:
     v46 = load("shyt_v46_remote_ports", ROOT / "tools/poc/yharnam/remote-profile-v46/patch_remote_ports.py")
     v56 = load("shyt_v56_ui", ROOT / "tools/poc/yharnam/launcher-ux-v56/patch_onboarding.py")
     with_remote = v46.transform_launcher(raw)
-    polished = v56.transform(with_remote)
+    v57 = load("shyt_v57_tcp_probe", ROOT / "tools/poc/yharnam/launcher-ux-v56/patch_connection_probe.py")
+    polished = v57.transform(v56.transform(with_remote))
     compile(polished, str(original), "exec")
     if (polished.count("SHYT-V46-REMOTE-LAUNCHER-PORTS") != 1 or
-            polished.count("SHYT_LAUNCHER_ONBOARDING_V56") != 1):
+            polished.count("SHYT_LAUNCHER_ONBOARDING_V56") != 1 or
+            polished.count("SHYT_LAUNCHER_TCP_DIAG_V57") != 1):
         raise AssertionError("V46 remote profile or V56 UI missing after source composition")
     for essential in ("self.coop_import_saves", "self.coop_search(None)",
                       "self.coop_changed", "self.coop_ready()",
-                      "self.build_coop_custom", "COOP_TEST = True"):
+                      "self.build_coop_custom", "self.coop_probe_server",
+                      "shyt_tcp_backend_probe", "COOP_TEST = True"):
         if essential not in polished:
             raise AssertionError("required original launcher behavior lost: " + essential)
     if polished.count("bbport_coop.save_settings") != raw.count("bbport_coop.save_settings"):
         raise AssertionError("unexpected change to co-op account / save persistence")
-    print("SHYT_V56_FULL_PINNED_BLAUNCHER_V46_COMPOSITION_PASS")
+    print("SHYT_V57_FULL_PINNED_BLAUNCHER_V46_V56_COMPOSITION_PASS")
 
 
 def main():

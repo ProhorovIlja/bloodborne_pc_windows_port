@@ -390,6 +390,15 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     output[LAUNCHER]=v56_module.transform(output[LAUNCHER].decode("utf-8")).encode("utf-8")
     if b"SHYT_LAUNCHER_ONBOARDING_V56" not in output[LAUNCHER]:
         raise ValueError("V56 pinned BLauncher first-run UX patch missing")
+    # V57: user-triggered TCP-only network diagnostics inside BLauncher.
+    # No credential transfer, auto-network checks or fake Direct P2P badge.
+    v57_script=Path(__file__).resolve().parent.parent/"launcher-ux-v56/patch_connection_probe.py"
+    v57_module=types.ModuleType("sh_v57_blauncher_tcp_diagnostics")
+    v57_module.__file__=str(v57_script)
+    exec(compile(v57_script.read_text("utf-8"),str(v57_script),"exec"),v57_module.__dict__)
+    output[LAUNCHER]=v57_module.transform(output[LAUNCHER].decode("utf-8")).encode("utf-8")
+    if b"SHYT_LAUNCHER_TCP_DIAG_V57" not in output[LAUNCHER]:
+        raise ValueError("V57 original BLauncher manual TCP probe missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -420,7 +429,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "Qt 6.4 / modern Bloodborne cross-area summon HTTP header compatibility",
                    "V32 WebAPI bearer rejects banned users, indexed SQLite token lookup; no web login yet",
                     "V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher",
-                    "V56 original Yharnam Together BLauncher first-run guided UX; safe vanilla difficulty default"],
+                    "V56 original Yharnam Together BLauncher first-run guided UX; safe vanilla difficulty default",
+                    "V57 opt-in TCP backend/WebAPI diagnostic with no false UDP/P2P green status"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",

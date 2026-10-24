@@ -45,11 +45,11 @@ jobs:
           python-version: '3.12'
       - name: Compile the actual transformed Tkinter onboarding source
         run: |
-          python -m py_compile tools/poc/yharnam/launcher-ux-v56/patch_onboarding.py tools/poc/yharnam/launcher-ux-v56/pinned_coop_onboarding_fixture.py
+          python -m py_compile tools/poc/yharnam/launcher-ux-v56/patch_onboarding.py tools/poc/yharnam/launcher-ux-v56/patch_connection_probe.py tools/poc/yharnam/launcher-ux-v56/pinned_coop_onboarding_fixture.py
           python -m unittest discover -s tools/poc/yharnam/launcher-ux-v56 -p 'test_*.py' -v
       - name: Regression-test preserved V46 staging ports and valid launcher syntax
         run: python -m unittest discover -s tools/poc/yharnam/remote-profile-v46 -p 'test_patch_remote_ports.py' -v
-      - name: Validate V46 + V56 against real pinned Yharnam Together Tkinter source
+      - name: Validate V46 + V56 + V57 against real pinned Yharnam Together Tkinter source
         run: python tools/poc/yharnam/launcher-ux-v56/verify_pinned_launcher.py pinned-launcher/bbport/launcher/bbport_launcher_win.py
       - name: Enforce single Yharnam Together protocol and never replace live CLS
         run: |
