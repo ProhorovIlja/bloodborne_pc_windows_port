@@ -380,6 +380,18 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    v46_module.LAUNCHER:output[LAUNCHER].decode("utf-8")}
     for name,body in v46_module.transform(remote_source).items():
         output[name]=body.encode("utf-8")
+    # V47: Friends feature uses existing Yharnam Together account/friend/
+    # presence/session APIs. Secure private invitations and private joins at
+    # the actual Qt WebAPI, before adding in-game Join/Invite/Invade controls.
+    v47_dir=Path(__file__).resolve().parent.parent/"friends-privacy-v47"
+    v47_script=v47_dir/"patch_session_privacy.py"
+    v47_module=types.ModuleType("sh_v47_friends_private_session")
+    v47_module.__file__=str(v47_script)
+    exec(compile(v47_script.read_text("utf-8"),str(v47_script),"exec"),v47_module.__dict__)
+    output[HTTP_SESSION_CPP]=v47_module.transform(output[HTTP_SESSION_CPP].decode("utf-8")).encode("utf-8")
+    output[v47_module.HEADER]=(v47_dir/"sh_friends_permissions.hpp").read_bytes()
+    if not output[v47_module.HEADER]:
+        raise ValueError("V47 private-session policy header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -409,7 +421,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "Qt 6.4 / modern StatsServer and BloodborneBackendServer HTTP API compatibility",
                    "Qt 6.4 / modern Bloodborne cross-area summon HTTP header compatibility",
                    "V32 WebAPI bearer rejects banned users, indexed SQLite token lookup; no web login yet",
-                    "V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher"],
+                    "V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher",
+                    "V47 private session join and invitation authorization (existing friend APIs)"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
