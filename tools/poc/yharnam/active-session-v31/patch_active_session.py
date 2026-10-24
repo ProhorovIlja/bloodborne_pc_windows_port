@@ -91,7 +91,7 @@ def server_header(s):
 
 def server_cpp(s):
     if 'SH-ACTIVE-SESSION-V31' in s: raise ValueError('V31 already applied LinkServer cpp')
-    return one(s,
+    s=one(s,
 '''    m_link.SetSignIn([this](const QByteArray& online_id, const QByteArray& secret) {
         return SignIn(online_id, secret);
     });''',
