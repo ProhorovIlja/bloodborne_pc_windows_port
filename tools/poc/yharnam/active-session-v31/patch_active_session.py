@@ -111,9 +111,15 @@ def server_cpp(s):
         });
     }''', 'bounded live DB callback')
     s=one(s,
-'''        m_shared->matching.udpExt.remove(QString::fromUtf8(retired));''',
-'''        m_shared->matching.udpExt.remove(QString::fromUtf8(retired));
-        m_activeDbStamps.remove(retired); // drop revoked/left-session fingerprint''',
+'''    for (const QByteArray& retired : result.retired_online_ids) {
+        QWriteLocker lk(&m_shared->matching.udpLock);
+        m_shared->matching.udpExt.remove(QString::fromUtf8(retired));
+    }''',
+'''    for (const QByteArray& retired : result.retired_online_ids) {
+        QWriteLocker lk(&m_shared->matching.udpLock);
+        m_shared->matching.udpExt.remove(QString::fromUtf8(retired));
+        m_activeDbStamps.remove(retired); // drop the retired session fingerprint
+    }''',
         'retire active credential on disconnect')
     s=one(s,
 '''    for (const auto& linked : result.linked) {''',
