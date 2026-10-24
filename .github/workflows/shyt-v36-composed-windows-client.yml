@@ -36,7 +36,7 @@ jobs:
       - name: Initialize only required native bbport GPU third-party submodules
         shell: pwsh
         run: |
-          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
           if ($LASTEXITCODE -ne 0) { throw "Pinned native GPU submodule checkout failed" }
       - uses: actions/setup-python@v5
         with:
