@@ -98,6 +98,50 @@ jobs:
           test -s out/bb-gpu-capabilities.exe
           test -s out/bb-play.exe
           echo REAL_NATIVE_WINDOWS_EXE_BUILT_NO_GAMEPLAY_CLAIM
+      - name: Package complete portable native Windows launcher and DLL dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export CC=clang CXX=clang++
+          cd pinned-upstream/bbport
+          export WINPYTHON="$pythonLocation/python.exe"
+          bash packaging/windows/package.sh
+          test -s dist/bbport-windows.zip
+          echo WINDOWS_PORTABLE_PACKAGE_BUILT_NOT_GAME_TESTED
+      - name: Validate archive content and private/game-file exclusions
+        shell: pwsh
+        run: |
+          @'
+          import hashlib, json, pathlib, zipfile
+          root = pathlib.Path('pinned-upstream/bbport/dist')
+          src = root / 'bbport-windows.zip'
+          with zipfile.ZipFile(src) as z:
+              names = z.namelist()
+              assert z.testzip() is None
+              for required in ('bbport-windows/BLauncher.exe', 'bbport-windows/Bloodborne.exe',
+                               'bbport-windows/bin/bb-probe.exe', 'bbport-windows/run.py',
+                               'bbport-windows/LICENSE'):
+                  assert required in names, 'missing file '+required
+              excluded = ('eboot.bin', '.pkg', '.sav', 'shadnet.db',
+                          'user/coop.json', 'bbport.ini')
+              for raw in names:
+                  name = raw.replace('\\', '/').lower()
+                  assert not any(name.endswith('/'+x) for x in excluded), 'private/game file '+name
+          digest = hashlib.sha256(src.read_bytes()).hexdigest()
+          (root / 'bbport-windows.zip.sha256').write_text(
+              digest + '  bbport-windows.zip\n', encoding='ascii')
+          print('INTERNAL_WINDOWS_ARCHIVE_VERIFIED_SHA256', digest)
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Unsafe Windows bundle or corrupted archive' }
+      - name: Preserve only INTERNAL Windows development candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-V36-native-windows-INTERNAL
+          path: |
+            pinned-upstream/bbport/dist/bbport-windows.zip
+            pinned-upstream/bbport/dist/bbport-windows.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
       - name: No proprietary assets and no untested public release
         shell: pwsh
         run: |
