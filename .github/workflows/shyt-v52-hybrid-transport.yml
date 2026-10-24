@@ -45,6 +45,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_hybrid_selector.cpp \
             -o /tmp/shyt-v52-transport-policy
           /tmp/shyt-v52-transport-policy
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_channel_offload.cpp \
+            -o /tmp/shyt-v53-channel-offload
+          /tmp/shyt-v53-channel-offload
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - name: Native MSVC C++ hybrid selector regression (no real P2P claim)
@@ -55,3 +60,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'hybrid transport policy compile failed' }
           ./shyt-v52-selector.exe
           if ($LASTEXITCODE -ne 0) { throw 'hybrid transport policy regression failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_channel_offload.cpp /Fe:shyt-v53-channel-offload.exe
+          if ($LASTEXITCODE -ne 0) { throw 'channel offload compile failed' }
+          ./shyt-v53-channel-offload.exe
+          if ($LASTEXITCODE -ne 0) { throw 'channel offload auth and map tests failed' }
