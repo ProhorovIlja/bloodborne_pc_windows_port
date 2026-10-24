@@ -80,7 +80,10 @@ class StatsBackendQtCompatibility(unittest.TestCase):
     if (!m_http->bind(m_tcp.get())) {
         qCritical() << "Backend: QHttpServer failed to attach to listener";
         return false;
-    }'''
+    }
+    const QByteArray host =
+        request.headers().value(QHttpHeaders::WellKnownHeader::Host).toByteArray();
+    QHostAddress local = request.localAddress();'''
     def test_stats_listener_and_404_both_versions(self):
         s=transform_stats(self.STATS)
         self.assertIn('SH-QT-STATS-PORTABLE',s)
@@ -90,16 +93,29 @@ class StatsBackendQtCompatibility(unittest.TestCase):
     def test_backend_headers_preserved_on_older_qt(self):
         s=transform_backend(self.BACKEND)
         self.assertIn('SH-QT-BACKEND-PORTABLE',s)
-        self.assertIn('QHttpServerResponder::HeaderList headers',s)
+        self.assertIn('Qt 6.4\'s HeaderList is std::initializer_list',s)
         self.assertIn('Content-Type',s)
-        self.assertIn('headers.append({name, value});',s)
-        self.assertIn('responder.write(reply.body, headers,',s)
+        self.assertIn('reply.headers.at(0)',s)
+        self.assertIn('reply.headers.at(1)',s)
+        self.assertIn('case 0:',s)
+        self.assertIn('case 1:',s)
+        self.assertIn('case 2:',s)
+        self.assertIn('responder.write(reply.body,',s)
+        self.assertIn('Unsupported backend response',s)
+        self.assertIn('request.value(QByteArrayLiteral("Host"))',s)
+        self.assertIn('m_tcp ? m_tcp->serverAddress()',s)
+        self.assertIn('QHostAddress(QHostAddress::AnyIPv4)',s)
         self.assertIn('response.setHeaders(std::move(headers));',s)
         self.assertIn('QHttpServerResponder&& responder',s)
         self.assertIn('QHttpServerResponder& responder',s)
     def test_backend_drift_refused(self):
         with self.assertRaisesRegex(ValueError,'backend HTTP response headers'):
             transform_backend(self.BACKEND.replace('response.setHeaders(std::move(headers));','response.setHeader(headers);'))
+    def test_backend_host_address_drift_refused(self):
+        with self.assertRaisesRegex(ValueError,'backend request Host header'):
+            transform_backend(self.BACKEND.replace('request.headers().value', 'request.value'))
+        with self.assertRaisesRegex(ValueError,'backend local socket address'):
+            transform_backend(self.BACKEND.replace('request.localAddress()', 'request.remoteAddress()'))
     def test_backend_repeat_refused(self):
         with self.assertRaisesRegex(ValueError,'already applied'):
             transform_backend(transform_backend(self.BACKEND))
