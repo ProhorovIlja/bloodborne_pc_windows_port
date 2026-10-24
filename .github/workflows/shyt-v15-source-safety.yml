@@ -226,6 +226,11 @@ jobs:
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/server_link.h" -o /tmp/sh-v27-server-link.h
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v27-link-server.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_server_link.cpp" -o /tmp/sh-v27-hub-tests.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v29-link-server.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.h" -o /tmp/sh-v29-link-server.h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.h" -o /tmp/sh-v30-database.h
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.cpp" -o /tmp/sh-v30-database.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_accounts.cpp" -o /tmp/sh-v30-accounts-test.cpp
           python - <<'PY'
           import importlib.util
           from pathlib import Path
@@ -255,8 +260,6 @@ jobs:
           assert 'hello_admission.Allow(from.ipv4, now_ms)' in hub
           assert 'LoginAdmission::Gate hello_admission;' in hdr
           assert 'HelloAdmissionLimitsDbCalls' in qt
-          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v29-link-server.cpp
-          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.h" -o /tmp/sh-v29-link-server.h
           bp=Path('tools/poc/yharnam/rpc-budget-v29/patch_rpc_budget.py')
           spec=importlib.util.spec_from_file_location('v29',bp)
           v29=importlib.util.module_from_spec(spec); spec.loader.exec_module(v29)
@@ -265,9 +268,6 @@ jobs:
           assert 'RpcBudget::Fits(pending, bytes)' in x
           assert 'MustEvictAuthCache' in x
           assert 'bool blocked = false' in h
-          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.h" -o /tmp/sh-v30-database.h
-          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.cpp" -o /tmp/sh-v30-database.cpp
-          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_accounts.cpp" -o /tmp/sh-v30-accounts-test.cpp
           ap=Path('tools/poc/yharnam/auth-revocation-v30/patch_auth_revocation.py')
           spec=importlib.util.spec_from_file_location('v30',ap)
           v30=importlib.util.module_from_spec(spec); spec.loader.exec_module(v30)
