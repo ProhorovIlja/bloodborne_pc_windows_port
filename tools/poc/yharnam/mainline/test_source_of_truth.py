@@ -77,6 +77,37 @@ class MainlineContracts(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(p.SourceDrift):
                 p.check_policy(altered)
 
+    def test_protocols_never_implicitly_crossplay(self):
+        original = json.loads(p.POLICY.with_name("interop_policy.json").read_text("utf-8"))
+        p.check_interop_policy(original)
+        for index in range(4):
+            modified = copy.deepcopy(original)
+            modified["providers"][index]["crossplay_with_cls_verified"] = True
+            with self.subTest(index=index), self.assertRaisesRegex(p.SourceDrift, "cross-client"):
+                p.check_interop_policy(modified)
+
+    def test_no_forced_player_move_or_credentials_or_save_rewrites(self):
+        original = json.loads(p.POLICY.with_name("interop_policy.json").read_text("utf-8"))
+        for key in ("force_user_migration", "replace_live_fornex",
+                    "auto_forward_player_credentials",
+                    "allow_cross_protocol_join_without_live_tests"):
+            modified = copy.deepcopy(original)
+            modified[key] = True
+            with self.subTest(key=key), self.assertRaisesRegex(p.SourceDrift, "Unsafe"):
+                p.check_interop_policy(modified)
+        modified = copy.deepcopy(original)
+        modified["preserve_existing_saves"] = False
+        with self.assertRaisesRegex(p.SourceDrift, "saves"):
+            p.check_interop_policy(modified)
+
+    def test_nightwatch_visy_and_cls_are_research_not_shipped(self):
+        original = json.loads(p.POLICY.with_name("interop_policy.json").read_text("utf-8"))
+        for index in range(1, 4):
+            modified = copy.deepcopy(original)
+            modified["providers"][index]["included"] = True
+            with self.subTest(index=index), self.assertRaisesRegex(p.SourceDrift, "Research-only"):
+                p.check_interop_policy(modified)
+
     def test_cannot_drop_client_host_server_or_event_check(self):
         for name in list(self.good["mainline_workflows"]):
             altered = copy.deepcopy(self.good)
