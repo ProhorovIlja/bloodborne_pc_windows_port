@@ -1,15 +1,6 @@
 name: Seamless Hunt V39 Fornex Ubuntu 24.04 Qt 6.8.3 native server
 on:
   workflow_call:
-  push:
-    branches:
-      - feature/seamless-hunt-mainline
-    paths:
-      - .github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
-  pull_request:
-    paths:
-      - tools/poc/yharnam/**
-      - .github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
   workflow_dispatch:
 
 permissions:
