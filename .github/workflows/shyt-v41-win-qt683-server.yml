@@ -41,6 +41,14 @@ jobs:
           $manifest = Get-Content "$out/SEAMLESS-HUNT-COMPOSE-MANIFEST.json" -Raw | ConvertFrom-Json
           if ($manifest.upstream_pin -ne $env:PIN -or $manifest.public_release_ready -ne $false) { throw 'Unsafe composition' }
           Copy-Item "$out/*" pinned-upstream -Recurse -Force
+      - name: Capture real parity reference backend stderr if it disconnects
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/parity-diagnostics-v43/patch_parity_diag.py pinned-upstream/backend/tests/test_parity.py
+          if ($LASTEXITCODE -ne 0) { throw 'Reference diagnostic patch rejected pinned upstream' }
+          python -m py_compile pinned-upstream/backend/tests/test_parity.py
+          if ($LASTEXITCODE -ne 0) { throw 'Bad Python backend reference diagnostics' }
       - name: Install exact native Qt 6.8.3 MSVC 2022
         uses: jurplel/install-qt-action@v4
         with:
