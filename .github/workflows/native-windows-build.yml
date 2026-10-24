@@ -1,0 +1,193 @@
+# Native Windows developer build: no Bloodborne retail game files.
+# Build is automatically tried when this workflow itself changes, and on manual dispatch.
+# NOT a production release; real game/hardware/network verification remains required.
+name: Native Windows engine build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/seamless-hunt
+    paths:
+      - .github/workflows/native-windows-build.yml
+      - build.bat
+      - launcher.py
+      - scripts/**
+      - gpu/**
+      - src/**
+      - tools/setup_windows_deps.sh
+      - tools/release/stage_seamless_hunt_dev.py
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/native-windows-build.yml
+      - build.bat
+      - launcher.py
+      - scripts/**
+      - gpu/**
+      - src/**
+      - tools/setup_windows_deps.sh
+      - tools/release/stage_seamless_hunt_dev.py
+
+# Keep the CI queue focused on the latest native Windows commit in this PR.
+concurrency:
+  group: native-windows-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native:
+    runs-on: windows-latest
+    timeout-minutes: 80
+    env:
+      BB_BUILD_JOBS: '2'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Allow long Git paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Checkout engine with original source submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Initialize MSYS2 CLANG64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+
+      - name: Install Windows build tools with resilient mirrors
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # Prefer MSYS2's stable primary instead of its geo-redirector;
+          # the initial CI attempt failed with 'Operation too slow'.
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          packages=(
+            git patch
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-lld
+            mingw-w64-clang-x86_64-libc++
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-vulkan-loader
+            mingw-w64-clang-x86_64-vulkan-memory-allocator
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-fmt
+            mingw-w64-clang-x86_64-boost
+            mingw-w64-clang-x86_64-robin-map
+            mingw-w64-clang-x86_64-xxhash
+            mingw-w64-clang-x86_64-zydis
+            mingw-w64-clang-x86_64-glslang
+            mingw-w64-clang-x86_64-ffmpeg
+          )
+          for attempt in 1 2 3; do
+            if pacman --noconfirm --disable-download-timeout -Sy &&
+               pacman --noconfirm --disable-download-timeout -S --needed "${packages[@]}"; then
+              echo "CLANG64 tools installed successfully"
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "ERROR: MSYS2 package mirrors unavailable after three attempts" >&2
+              exit 1
+            fi
+            echo "MSYS2 mirror retry $attempt/3"
+            sleep 10
+          done
+
+      - name: Export active CLANG64 paths for portable runtime and license staging
+        shell: msys2 {0}
+        run: |
+          printf 'MINGW_BIN=%s\n' "$(cygpath -w "$MINGW_PREFIX/bin")" >> "$GITHUB_ENV"
+          printf 'MSYS2_ROOT=%s\n' "$(cygpath -w /)" >> "$GITHUB_ENV"
+          printf 'MSYSTEM=CLANG64\n' >> "$GITHUB_ENV"
+          test -f "$MINGW_PREFIX/bin/SDL3.dll"
+          test -f "$MINGW_PREFIX/bin/objdump.exe"
+
+      - name: Provision pinned upstream header and archive libraries
+        shell: msys2 {0}
+        run: bash tools/setup_windows_deps.sh
+
+      - name: Build native Windows engine
+        shell: msys2 {0}
+        run: |
+          export CC=clang CXX=clang++
+          export BB_CC=clang BB_AR=llvm-ar BB_NM=llvm-nm
+          export MINGW_DIR="$(cygpath -w "$MINGW_PREFIX")"
+          cmd.exe //C "call build.bat" || exit 1
+          # GPU code is statically linked on Windows; no bbgpu.dll exists.
+          test -f out/bbport.exe || { echo "Native Windows executable missing after build"; exit 1; }
+
+      - name: Offline party C++ checks
+        shell: msys2 {0}
+        run: |
+          cmake --build out/gpu --target party-net-test party-nat-test party-death-rules-test -- -j 2
+          out/gpu/party-net-test.exe
+          out/gpu/party-nat-test.exe
+          out/gpu/party-death-rules-test.exe
+
+      - name: Attach source revision and build inventory
+        shell: pwsh
+        run: |
+          $dir = "out"
+          $sha = git rev-parse HEAD
+          Set-Content -Path "$dir/SEAMLESSHUNT-BUILD-REVISION.txt" -Value @(
+            "source: $sha"
+            "branch: feature/seamless-hunt"
+            "status: CI-built only, not game-tested"
+            "requires: your own Bloodborne 1.09 game files"
+          )
+          Get-ChildItem out -File -Recurse | Select-Object FullName, Length |
+            Out-File -FilePath "$dir/SEAMLESSHUNT-FILE-INVENTORY.txt"
+
+      - name: Configure Python 3.12 for staging
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Bundle isolated CPython 3.12/Tcl/Tk for double-click launch
+        shell: pwsh
+        run: |
+          python tools/release/make_python_bundle.py --src "$env:pythonLocation" --out python
+          & .\python\python.exe -I -B -c "import tkinter, json, xml.etree.ElementTree, zipfile, ssl; print('Bundled Python and Tcl/Tk import OK')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Stage Windows runtime libraries
+        shell: pwsh
+        run: python scripts/stage_dlls.py
+
+      - name: Verify launcher Python and settings search before packaging
+        shell: pwsh
+        run: |
+          python -m compileall -q launcher.py scripts
+          python -m unittest discover -s tests -p 'test_settings_index.py' -v
+
+      - name: Build verified developer kit (no game files)
+        shell: pwsh
+        run: |
+          python tools/release/stage_seamless_hunt_dev.py --source . --output out/seamless-hunt-windows-dev.zip --revision $env:GITHUB_SHA
+          python -m unittest discover -s tests -p 'test_seamless_hunt_dev_package.py' -v
+          python tools/release/verify_seamless_hunt_dev.py --zip out/seamless-hunt-windows-dev.zip
+
+      - name: Test extracted portable Windows launcher (Unicode path and actual Tcl/Tk)
+        shell: pwsh
+        run: |
+          & ./tools/release/smoke_portable_windows.ps1 -Archive out/seamless-hunt-windows-dev.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload developer Windows ZIP (not a public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-native-windows-dev
+          path: out/seamless-hunt-windows-dev.zip
+          if-no-files-found: error
+          retention-days: 7

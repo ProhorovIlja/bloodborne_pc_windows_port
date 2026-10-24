@@ -22,6 +22,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MSYS2 = Path(os.environ.get("MSYS2_ROOT", r"C:\msys64"))
+# The standalone Windows engine builds on CLANG64, not the older MINGW64 prefix.
+# Derive the package/license prefix from the actual toolchain being staged.
+MINGW_BIN = Path(os.environ.get("MINGW_BIN", str(MSYS2 / "mingw64" / "bin")))
+PACKAGE_PREFIX = MINGW_BIN.parent.name.lower() if MINGW_BIN.name.lower() == "bin" else "mingw64"
+if PACKAGE_PREFIX not in {"clang64", "mingw64", "ucrt64"}:
+    raise ValueError(f"Unsupported MSYS2 runtime prefix: {PACKAGE_PREFIX}")
 DEPS = Path(os.environ.get("BB_DEPS_DIR", ROOT.parent.parent / "deps"))
 if not DEPS.is_dir():
     DEPS = Path(r"E:\games\bbport\deps")
@@ -78,7 +84,7 @@ def gnu_only(licence):
 
 def resolve(spec):
     if spec.startswith("mingw64:"):
-        return MSYS2 / "mingw64/share/licenses" / spec[len("mingw64:"):]
+        return MSYS2 / PACKAGE_PREFIX / "share/licenses" / spec[len("mingw64:"):]
     if spec.startswith("deps:"):
         return DEPS / spec[len("deps:"):]
     return ROOT / spec
@@ -107,9 +113,9 @@ def stage(out):
     # The MSYS2 package that owns each staged DLL ("<path> is owned by <pkg> <version>").
     dlls = sorted(out.glob("*.dll"), key=lambda p: p.name.lower())
     owner = {}
-    in_msys2 = [d.name for d in dlls if (MSYS2 / "mingw64/bin" / d.name).is_file()]
+    in_msys2 = [d.name for d in dlls if (MSYS2 / PACKAGE_PREFIX / "bin" / d.name).is_file()]
     if in_msys2:
-        for line in pacman("-Qo", *(f"/mingw64/bin/{n}" for n in in_msys2)).splitlines():
+        for line in pacman("-Qo", *(f"/{PACKAGE_PREFIX}/bin/{n}" for n in in_msys2)).splitlines():
             path, sep, rest = line.partition(" is owned by ")
             if sep:
                 owner[path.rsplit("/", 1)[-1]] = rest.split()[0]
@@ -128,11 +134,13 @@ def stage(out):
                 info[name] = (version, value)
         for line in pacman("-Ql", *pkgs).splitlines():
             pkg, _, path = line.partition(" ")
-            if path.startswith("/mingw64/share/licenses/") and not path.endswith("/"):
-                copy(MSYS2 / path.lstrip("/"), lic / "msys2" / path[len("/mingw64/share/licenses/"):])
+            lic_prefix = f"/{PACKAGE_PREFIX}/share/licenses/"
+            if path.startswith(lic_prefix) and not path.endswith("/"):
+                copy(MSYS2 / path.lstrip("/"), lic / "msys2" / path[len(lic_prefix):])
                 with_files.add(pkg)
 
     lines = ["DLLs shipped in out\\ and where their licence texts are.",
+             f"MSYS2 target prefix: {PACKAGE_PREFIX}. Package manifests map to that prefix.",
              "MSYS2 packages: their files are in msys2\\<name>\\; LGPL texts in LGPL-2.1.txt / LGPL-3.0.txt,",
              "GPL-3.0 in LICENSE. Sources: https://repo.msys2.org/mingw/sources/", "",
              f"{'DLL':32} {'package':40} {'version':16} licence"]

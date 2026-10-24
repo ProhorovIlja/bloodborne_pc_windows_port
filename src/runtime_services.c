@@ -8,6 +8,7 @@
 #include "runtime.h"
 #include "gpu/bbgpu.h"
 #include "gpu/bbnet.h"
+#include "runtime_legacy_net.h"
 #include "../gpu/party_env.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -511,6 +512,12 @@ static const RuntimeExport exports[]={
 uintptr_t runtime_services_resolve(const char *name) {
     if (bb_party_enabled()) {
         uintptr_t routed=bbnet_resolve(name);
+        if (routed) return routed;
+    } else if (runtime_legacy_net_requested()) {
+        /* BBSC's NP/HTTP path is opt-in and incompatible with BBP3 wire traffic.
+         * There is never a mixed session; if its DLL is absent, fall back to offline.
+         */
+        uintptr_t routed=runtime_legacy_net_resolve(name);
         if (routed) return routed;
     }
     return RUNTIME_LOOKUP(exports,name);

@@ -126,6 +126,9 @@ extern "C" const unsigned char bb_game_ttf_end[];
 
 extern "C" void runtime_restart(void); // bb-probe (probe.c)
 extern "C" void bbgpu_request_quit(void); // bbgpu.cpp: as the window's close button
+#if defined(_WIN32) && defined(BBGPU_BBSC_CANDIDATE_HOST)
+extern "C" int runtime_legacy_net_requested(void);
+#endif
 
 namespace BbOverlay {
 
@@ -148,6 +151,25 @@ bool focus_request = true; // the menu was opened: its first row takes the focus
 std::atomic<std::uint64_t> toast_seen{0};  // the party event already shown
 std::atomic<std::int64_t> toast_until_ms{0}; // steady clock
 std::string toast_text;                      // present thread (imgui_mutex)
+
+// BBSC's loading/status line (e.g. joining the host's world). Native modules
+// can update it from a network thread; paint remains owned by the presenter.
+// No gameplay text or passwords are persisted; NULL removes it immediately.
+std::mutex module_banner_mutex;
+std::string module_banner_text;
+std::atomic<bool> module_banner_active{false};
+
+// When a player disables experimental BBSC or activates the normal visy
+// transport, a previously set "joining" banner must disappear immediately,
+// not persist across the transition and imply a connection is still running.
+bool ModuleBannerWanted() {
+    if (!module_banner_active.load(std::memory_order_acquire)) return false;
+#if defined(_WIN32) && defined(BBGPU_BBSC_CANDIDATE_HOST)
+    return runtime_legacy_net_requested() != 0;
+#else
+    return true;
+#endif
+}
 
 std::int64_t SteadyMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -3399,6 +3421,29 @@ void ScriptedKeys() {
 
 } // namespace
 
+void SetModuleBanner(const char* message) {
+    std::string safe;
+    if (message) {
+        // Bounded, single-line UI. Do not let packets/control chars inject
+        // format strings or endlessly growing labels into the renderer.
+        for (const unsigned char* p =
+                 reinterpret_cast<const unsigned char*>(message);
+             *p && safe.size() < 180; ++p) {
+            if (*p < 32 || *p == 127) {
+                safe.push_back(' ');
+            } else {
+                safe.push_back(static_cast<char>(*p));
+            }
+        }
+    }
+    {
+        std::scoped_lock lock{module_banner_mutex};
+        module_banner_text = std::move(safe);
+        module_banner_active.store(!module_banner_text.empty(),
+                                   std::memory_order_release);
+    }
+}
+
 void SetTextPrompt(bool active, const std::string& prompt, const std::string& text) {
     {
         std::scoped_lock lock{prompt_mutex};
@@ -3689,7 +3734,8 @@ bool Visible() {
     return initialized &&
            (menu_open || prompt_active || BbSettings::Get().show_fps || BbSettings::Get().show_hud || HdrPatternShown() ||
             CompileIndicatorShown() || coop::warper::Active() || ToastWanted() || AlertWanted() || NpcCaptionWanted() || PartyHudWanted() || PartyTagsWanted() ||
-            PartyPingsWanted() || PartyStainWanted());
+            PartyPingsWanted() || PartyStainWanted() ||
+            ModuleBannerWanted());
 }
 
 bool MenuOpen() {
@@ -3858,6 +3904,30 @@ bool Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent, b
             PartyToast();
             PartyAlert();
             PartyNpcCaption();
+        }
+        // In-game status from a native network module. This is an overlay
+        // only: it never steals focus or consumes any keyboard/gamepad input.
+        if (ModuleBannerWanted() && !party::hud::GameMenu()) {
+            std::string label;
+            {
+                std::scoped_lock banner_lock{module_banner_mutex};
+                label = module_banner_text;
+            }
+            if (!label.empty()) {
+                const ImGuiViewport* view = ImGui::GetMainViewport();
+                ImGui::SetNextWindowPos(
+                    ImVec2(view->WorkPos.x + view->WorkSize.x * 0.5f,
+                           view->WorkPos.y + view->WorkSize.y * 0.16f),
+                    ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                ImGui::SetNextWindowBgAlpha(0.85f);
+                constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize |
+                    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
+                    ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing;
+                if (ImGui::Begin("##seamlesshunt-bbsc-status", nullptr, flags)) {
+                    ImGui::TextUnformatted(label.c_str());
+                }
+                ImGui::End();
+            }
         }
     }
     if (prompt_active && !menu_open) {

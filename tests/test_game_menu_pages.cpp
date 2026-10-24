@@ -601,9 +601,40 @@ static void RulesPages() {
     P::Load();
 }
 
+static void ScaledSlidersShowRealValues() {
+    // The PS4 widget still has eleven positions, but the explanation must
+    // display actual physical values rather than a lookup table to decipher.
+    P::Load();
+    const auto& vol = RowNamed(PageNamed(u"Sound"), u"Volume boost");
+    assert(std::u16string(P::Text(vol.help, false)).find(u"Current: ") == 0);
+    assert(std::u16string(P::Text(vol.help, true)).find(u"Сейчас: ") == 0);
+    *P::Byte(vol.field) = 10;
+    Advance(500);
+    assert(std::u16string(P::Text(vol.help, false)).find(u"3.00x") != std::u16string::npos);
+    *P::Byte(vol.field) = 0;
+    Advance(500);
+    assert(std::u16string(P::Text(vol.help, false)).find(u"1.00x") != std::u16string::npos);
+}
+
+static void ExitIsDiscoverable() {
+    // Everyday PC actions must be on the first new System page, not hidden
+    // behind Game patches. Keep the normal two-press confirmation flow.
+    const auto& pages = P::All();
+    assert(!pages.empty());
+    assert(std::u16string(P::Text(pages.front().name, false)) == u"PC / Exit");
+    assert(std::u16string(P::Text(pages.front().name, true)) == u"ПК / Выход");
+    assert(pages.front().rows.size() == 2);
+    assert(std::u16string(P::Text(pages.front().rows.front().name, false)) == u"Exit to Windows");
+    assert(P::IsButton(pages.front().rows.front().field));
+    for (const auto& row : PageNamed(u"Game patches").rows) {
+        const std::u16string n = P::Text(row.name, false);
+        assert(n != u"Exit to Windows" && n != u"Restart the game");
+    }
+}
+
 static void Restart() {
     P::Load();
-    const P::Row& row = RowNamed(PageNamed(u"Game patches"), u"Restart the game");
+    const P::Row& row = RowNamed(PageNamed(u"PC / Exit"), u"Restart the game");
     Press(row);
     assert(restarts == 0);
     Press(row);
@@ -613,7 +644,7 @@ static void Restart() {
 // Upstream 0.51 (#74, #116): "Quit the game" asks for a second press, as Restart does.
 static void Quit() {
     P::Load();
-    const P::Row& row = RowNamed(PageNamed(u"Game patches"), u"Quit the game");
+    const P::Row& row = RowNamed(PageNamed(u"PC / Exit"), u"Exit to Windows");
     Press(row);
     assert(quits == 0);
     Press(row);
@@ -682,6 +713,8 @@ int main(int argc, char** argv) {
     assert(ReadIni()["key.cross"] == "X, Space"); // the launcher's keys stay
     Party();
     RulesPages();
+    ScaledSlidersShowRealValues();
+    ExitIsDiscoverable();
     Restart();
     Quit();
     std::filesystem::remove(ini);

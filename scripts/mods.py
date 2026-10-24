@@ -163,6 +163,15 @@ def mod_files(folder):
 COSMETIC_FOLDERS = {'adhoc', 'facegen', 'font', 'menu', 'movie', 'msg', 'mtd', 'parts', 'sfx', 'shader', 'sound'}
 COSMETIC_SUFFIXES = ('.tpf', '.tpf.dcx', '.tpfbhd', '.tpfbdt', '.texbnd', '.texbnd.dcx', '.dds')
 PARTY_MODS_FILE = 'party_mods.txt'
+# The supplied MOAL event/talk bundles and DollRebirth status rewrite are
+# untested with CLS/visy multiplayer and must not run in party sessions.
+SOLO_ONLY_COMMUNITY_MODS = frozenset(("moal", "dollrebirth"))
+MOAL_ACTIVE_MARKER = "moal-active.flag"
+
+
+def allowed_community_mod(name, party_active):
+    return not party_active or name.casefold() not in SOLO_ONLY_COMMUNITY_MODS
+
 PARTY_MODS_CACHE = 'party_mods_cache.json'
 # Generated layers (name: stamp), hashed by stamp: scripts/dream_mirror.py LAYER_NAME, STAMP.
 GENERATED_STAMPS = {'Dream mirror (bbhost)': 'dream-mirror 1'}
@@ -438,6 +447,9 @@ def main():
     stale = args.out / PARTY_MODS_FILE  # a failed run leaves none: the game then runs without mods
     if stale.exists():
         stale.unlink()
+    # A failed/disabled launch cannot inherit yesterday's MOAL runtime override.
+    marker = args.out / MOAL_ACTIVE_MARKER
+    marker.unlink(missing_ok=True)
     layers = []
     if args.enabled == '1':
         # shadPS4's loose overlay convention, beside the original game.
@@ -454,6 +466,16 @@ def main():
             # launcher's log shows run.bat's output).
             for name, why in unrecognized(args.mods_dir):
                 print(f'Mods: not a mod: {name}: {why}', file=sys.stderr)
+    from party_env import party_enabled
+    if party_enabled(os.environ):
+        for name, _ in layers:
+            if not allowed_community_mod(name, True):
+                print(f'Mods: {name}: disabled in multiplayer; game-event compatibility is unverified', file=sys.stderr)
+        layers = [(name, root) for name, root in layers if allowed_community_mod(name, True)]
+    if any(name.casefold() == 'moal' for name, _ in layers):
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("MOAL takes ownership of the lantern talk menu; native lamp hook off\n",
+                          encoding="utf-8")
     # The Hunter's Dream mirror (scripts/dream_mirror.py, from bbhost): a generated layer first, so
     # a user mod with its own Dream layout wins. BB_DREAM_MIRROR=0: off.
     import dream_mirror

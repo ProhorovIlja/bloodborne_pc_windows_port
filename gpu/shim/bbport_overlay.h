@@ -47,4 +47,9 @@ bool MenuOpen();
 /// Window thread: the game's text dialog (ImeDialog) state, drawn as a box over the frame.
 void SetTextPrompt(bool active, const std::string& prompt, const std::string& text);
 
+/* BBSC or other native module: non-interactive loading banner. NULL clears.
+ * The network thread may call this while the renderer is drawing.
+ */
+void SetModuleBanner(const char* message);
+
 } // namespace BbOverlay

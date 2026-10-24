@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -85,6 +86,12 @@ struct Field {
     bool debounce = false; ///< applied once the value rests for 0.4 s (re-creates targets)
 };
 std::vector<Field> fields;
+// The game's old System sliders expose only positions 0..10. Record their
+// actual lookup tables to show a live, physical value in the help line.
+struct ScaledField { int field; const float* table; };
+struct ScaledHelp { int field; const float* table; u32 base_help, display_help; };
+std::vector<ScaledField> scaled_fields;
+std::vector<ScaledHelp> scaled_helps;
 std::vector<int> values, defaults, applied, resting;
 std::vector<u8> bytes, default_bytes;
 std::vector<std::int64_t> rested_since, armed_at;
@@ -130,9 +137,11 @@ int Flag(std::atomic<bool> Values::*member) {
 
 /// A 0..10 slider over an 11-entry table of a float setting.
 int Scaled(std::atomic<float> Values::*member, const float* table) {
-    return Setting(
+    const int field = Setting(
         Kind::Slider, [member, table](const Values& v) { return int(NearestPosition(table, (v.*member).load())); },
         [member, table](int i) { (BbSettings::Get().*member) = table[std::clamp(i, 0, 10)]; });
+    scaled_fields.push_back({field, table});
+    return field;
 }
 
 /// A button (Kind::Button): `fn` on every press (Press).
@@ -187,6 +196,15 @@ void AddPage(const char* en, const char* ru, const char* help_en, const char* he
 }
 void AddRow(int field, u32 name, u32 help, std::vector<u32> choices, Kind kind,
             std::function<bool()> visible = nullptr) {
+    if (kind == Kind::Slider) {
+        const auto it = std::find_if(scaled_fields.begin(), scaled_fields.end(),
+                                     [field](const ScaledField& f) { return f.field == field; });
+        if (it != scaled_fields.end()) {
+            const u32 actual_help = AddDynamic(MaxHelpLength);
+            scaled_helps.push_back({field, it->table, help, actual_help});
+            help = actual_help;
+        }
+    }
     pages.back().rows.push_back({field, name, HelpFor(field, help), std::move(choices), kind, std::move(visible)});
 }
 void AddRow(int field, const char* en, const char* ru, const char* help_en, const char* help_ru,
@@ -215,6 +233,7 @@ void RefreshConfirmHelps() {
 }
 
 constexpr float SharpnessStep = 0.2f; // Display's slider: 0 off, 1..10 -> 0.2 .. 2.0
+const float SharpnessActual[11] = {0.0f, 0.2f, 0.4f, 0.6f, 0.8f, 1.0f, 1.2f, 1.4f, 1.6f, 1.8f, 2.0f};
 constexpr int LodValues[] = {0, 1};
 const float OpacityTable[11] = {0.10f, 0.20f, 0.30f, 0.40f, 0.50f, 0.60f, 0.70f, 0.75f, 0.80f, 0.90f, 1.00f};
 const float ScaleTable[11] = {0.50f, 0.60f, 0.70f, 0.80f, 0.90f, 1.00f, 1.20f, 1.40f, 1.60f, 1.80f, 2.00f};
@@ -660,6 +679,27 @@ void DefineAll() {
     auto& s = BbSettings::Get();
     (void)s;
 
+    // ---- PC commands first: do not bury Exit among graphics/game patches. ----
+    // Use the existing confirmed runtime handlers, rather than a hard process kill,
+    // so party peers can be notified and settings are saved.
+    AddPage("PC / Exit", "ПК / Выход", "Exit Bloodborne to Windows or restart the native game",
+            "Выход из Bloodborne в Windows или перезапуск игры");
+    AddRow(Confirmed([] {
+               BbSettings::Save();
+               if (quit_handler) quit_handler();
+           }),
+           "Exit to Windows", "Выйти в Windows",
+           "Press twice to close the game; your party is notified",
+           "Нажмите дважды для выхода из игры; участники группы получат уведомление",
+           {AddText("Exit", "Выход")}, Kind::Button);
+    party.restart_help = AddDynamic(MaxHelpLength);
+    AddRow(Confirmed([] {
+               BbSettings::Save();
+               if (restart_handler) restart_handler();
+           }),
+           AddText("Restart the game", "Перезапуск игры"), party.restart_help,
+           {AddText("Restart", "Перезапуск")}, Kind::Button);
+
     // ---- Display: the picture (sliders and toggles first, the pop-up list last). ----
     AddPage("Display", "Изображение", "Resolution, upscaler, sharpness and model detail (bbport)",
             "Разрешение, апскейлер, резкость и детализация (bbport)");
@@ -677,18 +717,20 @@ void DefineAll() {
                 AddText("Performance", "Performance"), AddText("Ultra Performance", "Ultra Performance")},
                Kind::Steps);
     }
-    AddRow(Setting(
-               Kind::Slider,
-               [](const Values& v) {
-                   return v.sharpen ? std::clamp(int(std::lround(v.sharpness / SharpnessStep)), 1, 10) : 0;
-               },
-               [](int i) {
-                   auto& st = BbSettings::Get();
-                   st.sharpen = i != 0;
-                   if (i != 0) st.sharpness = std::clamp(i, 0, 10) * SharpnessStep;
-               }),
-           "Sharpness", "Резкость", "RCAS after the upscaler: 0 off, 10 strongest",
-           "RCAS после апскейлера: 0 выкл, 10 сильнее всего", {}, Kind::Slider);
+    const int sharpness_field = Setting(
+        Kind::Slider,
+        [](const Values& v) {
+            return v.sharpen ? std::clamp(int(std::lround(v.sharpness / SharpnessStep)), 1, 10) : 0;
+        },
+        [](int i) {
+            auto& st = BbSettings::Get();
+            st.sharpen = i != 0;
+            if (i != 0) st.sharpness = std::clamp(i, 0, 10) * SharpnessStep;
+        });
+    scaled_fields.push_back({sharpness_field, SharpnessActual});
+    AddRow(sharpness_field,
+           "Sharpness", "Резкость", "RCAS after the upscaler: left/right changes intensity",
+           "RCAS после апскейлера: влево/вправо меняет интенсивность", {}, Kind::Slider);
     {
         Field f;
         f.kind = Kind::Steps;
@@ -1016,26 +1058,10 @@ void DefineAll() {
             AddText("Both", "Обе оси")},
            Kind::List);
 
-    // ---- Game patches (after a restart) and the restart itself. ----
-    AddPage("Game patches", "Патчи игры", "The game's own AA, intros, free camera, debug menu, restart, quit (bbport)",
-            "Сглаживание игры, заставки, свободная камера, отладочное меню, перезапуск, выход (bbport)");
+    // ---- Game patches (after a restart). Exit and Restart are on the first PC page. ----
+    AddPage("Game patches", "Патчи игры", "Optional game image/visual patches (apply on restart)",
+            "Дополнительные патчи игры и изображения (после перезапуска)");
     for (const Short& sh : patches) effect_row(sh);
-    party.restart_help = AddDynamic(MaxHelpLength);
-    AddRow(Confirmed([] {
-               BbSettings::Save();
-               if (restart_handler) restart_handler();
-           }),
-           AddText("Restart the game", "Перезапуск игры"), party.restart_help, {AddText("Restart", "Перезапуск")},
-           Kind::Button);
-    // Upstream 0.51 (#74, #116): quit from the menu, as the window's close button.
-    AddRow(Confirmed([] {
-               BbSettings::Save();
-               if (quit_handler) quit_handler();
-           }),
-           "Quit the game", "Выход из игры",
-           "Press twice: closes the game like the window's close button; in a party the others are told",
-           "Нажмите дважды: закрыть игру, как кнопкой окна; группа об этом узнает", {AddText("Quit", "Выйти")},
-           Kind::Button);
 
     // ---- Party (party_status.h): the action table's rows, on two pages: Party (status, codes,
     // rejoin, leave; the solo title's party game rows) and Party mode (switching role, single
@@ -1681,8 +1707,43 @@ void RefreshHdr() {
                "0 = Авто (" + automatic_ru + "), 1-10 = 400 .. 4000 нит; сейчас " + std::to_string(peak));
 }
 
+void RefreshScaledHelps() {
+    for (const ScaledHelp& h : scaled_helps) {
+        const int position = std::clamp(values[std::size_t(h.field)], 0, 10);
+        const float actual = h.table[position];
+        char number[40]{};
+        if (h.table == HdrPeakTable && position == 0) {
+            std::snprintf(number, sizeof(number), "Auto");
+        } else if (h.table == SharpnessActual && position == 0) {
+            std::snprintf(number, sizeof(number), "Off");
+        } else if (h.table == HdrPeakTable || h.table == HdrPaperTable) {
+            std::snprintf(number, sizeof(number), "%.0f nits", double(actual));
+        } else if (h.table == OpacityTable || h.table == DeadTable ||
+                   h.table == TenthsTable || h.table == SmoothTable) {
+            std::snprintf(number, sizeof(number), "%.0f%%", double(actual * 100.0f));
+        } else if (h.table == ScaleTable || h.table == SensTable ||
+                   h.table == BoostTable || h.table == HdrStrengthTable ||
+                   h.table == HdrSaturationTable) {
+            std::snprintf(number, sizeof(number), "%.2fx", double(actual));
+        } else {
+            std::snprintf(number, sizeof(number), "%.2f", double(actual));
+        }
+        const std::u16string value = Utf16(number);
+        const auto summary = [&](bool ru) {
+            const char16_t* text = Text(h.base_help, ru);
+            std::u16string base = text ? text : u"";
+            const std::size_t colon = base.find(u':');
+            if (colon != std::u16string::npos) base.resize(colon);
+            const std::u16string prefix = ru ? u"Сейчас: " : u"Current: ";
+            return prefix + value + u" | " + base;
+        };
+        SetDynamic16(h.display_help, summary(false), summary(true));
+    }
+}
+
 void RefreshDynamic() {
     std::scoped_lock lock{StateMutex()};
+    RefreshScaledHelps();
     RefreshHdr();
     RefreshParty();
     RefreshRestart();

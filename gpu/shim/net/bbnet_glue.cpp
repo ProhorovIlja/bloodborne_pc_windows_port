@@ -315,6 +315,12 @@ void bbnet_set_image(void* image, uint64_t size) {
 
 int bbnet_party_enabled(void) { return bbnet::settings().party ? 1 : 0; }
 
+// The ordinary native party resolver is the only one in bbport.exe. The
+// experimental original CLS DLL defines its own strong bbnet_resolve; weak
+// binding here prevents a duplicate definition without merging protocols.
+#ifdef _WIN32
+__attribute__((weak))
+#endif
 uintptr_t bbnet_resolve(const char* scoped_nid_or_name) {
     if (!scoped_nid_or_name || !bbnet::settings().party) return 0;
     bbnet::runtime_start_once();  // the party runtime comes up with the first routed import

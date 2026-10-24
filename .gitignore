@@ -10,6 +10,13 @@ pgo/
 launcher.log
 launcher_settings.json
 launcher_update_check.json
+seamless_hunt_update_check.json
+# Never commit local session/account state or private server configuration
+.env
+.env.*
+*.secrets.json
+*credentials*.json
+shadnet.cfg
 dist/
 packaging/runtime-paths.nix
 fsr4_411/

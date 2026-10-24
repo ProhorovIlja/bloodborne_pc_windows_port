@@ -2,7 +2,7 @@
 
   check(current_version, cache_file)  -> Notice or None
 
-Asks GitHub's public API (no token) for the latest release of the Windows port, at most once every
+Asks GitHub's public API (no token) for the latest release of THIS Seamless Hunt fork, at most once every
 6 hours (the answer is cached in cache_file), with a 3 s timeout. Offline, a timeout, a rate limit
 or an unexpected answer: no notice, nothing raised (the cached answer is used while it is fresh).
 A party needs the same bbport version on every PC (docs/party/version_check.md), so the notice
@@ -12,13 +12,34 @@ import json
 import re
 import time
 import urllib.request
+from urllib.parse import urlsplit
 from pathlib import Path
 
-LATEST_URL = "https://api.github.com/repos/visy/bloodborne_pc_windows_port/releases/latest"
-RELEASES_PAGE = "https://github.com/visy/bloodborne_pc_windows_port/releases/latest"
+# Seamless Hunt has its own release channel. Upstream visy releases are not
+# automatically compatible with a Seamless Hunt native-client build.
+REPO = "ProhorovIlja/bloodborne_pc_windows_port"
+LATEST_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
+RELEASES_PAGE = f"https://github.com/{REPO}/releases"
 CACHE_SECONDS = 6 * 3600
 FAILED_CACHE_SECONDS = 1800  # offline / no answer: ask again after 30 min, not on every start
 TIMEOUT_S = 3.0
+
+
+def safe_release_url(value):
+    """Accept only tag/release pages in our OWN HTTPS GitHub repository."""
+    if not isinstance(value, str):
+        return RELEASES_PAGE
+    try:
+        url = urlsplit(value)
+    except ValueError:
+        return RELEASES_PAGE
+    allowed_prefix = f"/{REPO}/releases"
+    path = url.path.rstrip("/")
+    if (url.scheme != "https" or url.netloc.lower() != "github.com"
+            or url.username or url.password or url.query or url.fragment
+            or (path != allowed_prefix and not path.startswith(allowed_prefix + "/tag/"))):
+        return RELEASES_PAGE
+    return value
 
 
 class Notice:
@@ -59,9 +80,7 @@ def fetch(url=LATEST_URL, timeout=TIMEOUT_S, opener=None):
     if not isinstance(tag, str) or not parse_version(tag):
         return None
     page = data.get("html_url")
-    if not (isinstance(page, str) and page.startswith("https://github.com/")):
-        page = RELEASES_PAGE
-    return {"tag": tag[:40], "url": page}
+    return {"tag": tag[:40], "url": safe_release_url(page)}
 
 
 def _read_cache(cache_file, now):
@@ -92,7 +111,7 @@ def check(current_version, cache_file, now=None, fetcher=fetch):
                 pass
         if isinstance(latest, dict) and newer(latest.get("tag"), current_version):
             version = ".".join(map(str, parse_version(latest["tag"])))
-            return Notice(version, latest.get("url") or RELEASES_PAGE)
+            return Notice(version, safe_release_url(latest.get("url")))
     except Exception:
         pass
     return None

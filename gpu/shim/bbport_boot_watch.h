@@ -107,6 +107,7 @@ int bbgpu_boot_take_request(char *why, unsigned size);
 }
 
 #include <atomic>
+#include <cstdlib> // std::getenv; <stdlib.h> above only guarantees ::getenv on libc++
 #include <cstdio>
 #include <mutex>
 #include <string>

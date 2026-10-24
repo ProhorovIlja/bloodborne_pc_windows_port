@@ -1,5 +1,8 @@
 // bbport: SDL3 window for the Vulkan swapchain (X11 or Wayland).
 #include "bbport_headless.h"
+#include "../bbgpu.h"
+#include <array>
+#include <atomic>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -13,9 +16,52 @@
 #include "bbport_mouse.h"
 #include "bloodborne_cam.h"
 
+// A module that registered a callback before the player switched to visy or
+// turned BBSC off must not continue intercepting input afterward. Read this
+// once per SDL poll batch, not once per mouse-motion event.
+#if defined(_WIN32) && defined(BBGPU_BBSC_CANDIDATE_HOST)
+extern "C" int runtime_legacy_net_requested(void);
+#endif
+
 namespace Frontend {
 
 namespace {
+
+// The real BBSC module can register SDL input observers for its cinematic
+// camera. Keep callbacks on the window thread, and never hand them a system
+// quit/window-close event. Registration is lock-free and allocates no frames.
+std::array<std::atomic<BbGpuEventFilter>, 4> game_event_filters{};
+bool FilteredByModule(const SDL_Event& event, SDL_Window* window) {
+    if (event.type == SDL_EVENT_QUIT ||
+        event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+        return false;
+    }
+    // Modules may handle cinematic F1 and game inputs, but they never prevent
+    // opening the settings menu, taking an issue marker, showing the HUD or
+    // toggling fullscreen. Protect key-up as well as key-down to avoid a stuck
+    // key in the local input mapper.
+    if ((event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) &&
+        (event.key.key == SDLK_INSERT || event.key.key == SDLK_F9 ||
+         event.key.key == SDLK_F11 ||
+         ((event.key.mod & SDL_KMOD_ALT) &&
+          (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)))) {
+        return false;
+    }
+    // The native overlay can be opened with L3+R3 on a controller.
+    if ((event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
+         event.type == SDL_EVENT_GAMEPAD_BUTTON_UP) &&
+        (event.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK ||
+         event.gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK)) {
+        return false;
+    }
+    for (const auto& slot : game_event_filters) {
+        const auto filter = slot.load(std::memory_order_acquire);
+        if (filter && filter(&event, window)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // ReadMouse's bits: 0 left, 1 right, 2 middle, 3 X1, 4 X2.
 u32 MouseButtonBit(u8 button) {
@@ -75,6 +121,18 @@ SDL_DisplayID ChooseDisplay() {
 }
 
 } // namespace
+
+extern "C" void bbgpu_add_event_filter(BbGpuEventFilter filter) {
+    if (!filter) return;
+    for (auto& slot : game_event_filters) {
+        BbGpuEventFilter expected = nullptr;
+        if (slot.compare_exchange_strong(expected, filter, std::memory_order_acq_rel)) {
+            return;
+        }
+        if (expected == filter) return; // idempotent registration
+    }
+    std::fputs("GPU: module event filter capacity (4) exhausted; ignoring additional listener\n", stderr);
+}
 
 WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}, height{height_} {
     // Gamepads are sampled by runtime_pad.c; their events are pumped here with the window's.
@@ -310,8 +368,21 @@ bool WindowSDL::PollEvents() {
     if (!text_active) {
         BbOverlay::UpdateTextInput(window);
     }
+    // The candidate host exports the event API only when bbnet20 is enabled.
+    // Once user opts out (or visy owns the session), already-registered BBSC
+    // callbacks are dormant, even if the DLL stays loaded until process exit.
+    bool module_input_allowed = true;
+#if defined(_WIN32) && defined(BBGPU_BBSC_CANDIDATE_HOST)
+    module_input_allowed = runtime_legacy_net_requested() != 0;
+#endif
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        // Text entry and settings overlays own their input. Gameplay modules
+        // cannot steal the user's password, dialog responses or menu keys.
+        if (module_input_allowed && !text_active && !BbOverlay::CapturesInput() &&
+            FilteredByModule(event, window)) {
+            continue;
+        }
         if (event.type == SDL_EVENT_MOUSE_MOTION) {
             last_mouse_motion_ms = SDL_GetTicks();
         }
