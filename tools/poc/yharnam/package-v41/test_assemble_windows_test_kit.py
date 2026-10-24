@@ -40,6 +40,8 @@ class CoupledKitTests(unittest.TestCase):
             for name in sorted(TOOLS):
                 if name.endswith("party_boss_events.py"):
                     data = EVENT
+                elif name == "tools/SeamlessHunt-network-profile.example.json":
+                    data = b'{"schema":1,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}'
                 elif name == "CREDITS.txt":
                     data = (b"SEAMLESS HUNT NOT a public release Yharnam Together "
                             b"deadinside28 Supermedo shadPS4 Wozzardman 0xCydral "
