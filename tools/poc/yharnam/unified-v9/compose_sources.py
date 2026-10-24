@@ -37,6 +37,9 @@ SERVER_LINK_CPP = "server/src/server_link.cpp"
 SERVER_LINK_H = "server/src/server_link.h"
 LINK_SERVER_CPP = "server/src/link_server.cpp"
 LINK_SERVER_H = "server/src/link_server.h"
+DATABASE_CPP = "server/src/database.cpp"
+DATABASE_H = "server/src/database.h"
+ACCOUNT_TEST_CPP = "server/tests/test_accounts.cpp"
 SERVER_LINK_TEST = "server/tests/test_server_link.cpp"
 NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 COOP = "bbport/launcher/bbport_coop.py"
@@ -296,6 +299,19 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         output[name]=contents.encode("utf-8")
     if len(output)!=len(dest)+26:
         raise ValueError("V29 bounded RPC and credential-cache header missing")
+    # V30: cached login decisions must observe live database bans/deletions/
+    # password rotations. Check only the indexed status query on cache hits.
+    v30_dir=Path(__file__).resolve().parent.parent/"auth-revocation-v30"
+    v30_module=types.ModuleType("sh_auth_revocation_patch")
+    v30_script=v30_dir/"patch_auth_revocation.py"
+    exec(compile(v30_script.read_text("utf-8"),str(v30_script),"exec"),v30_module.__dict__)
+    v30_paths=(v30_module.DB_H,v30_module.DB_CPP,v30_module.LINK_H,
+               v30_module.LINK_CPP,v30_module.ACCOUNT_TEST)
+    v30_sources={p:output[p].decode("utf-8") for p in v30_paths}
+    for name, contents in v30_module.transform(v30_sources).items():
+        output[name]=contents.encode("utf-8")
+    if len(output)!=len(dest)+27:
+        raise ValueError("V30 auth cache revocation policy header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -318,7 +334,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V26 opt-in co-op ingress quotas (pre-protobuf)",
                    "V27 stale virtual-address cleanup on changed transport identity",
                    "V28 opt-in bounded pre-database Hello admission",
-                   "V29 bounded local RPC backpressure and signed-in credential cache"],
+                   "V29 bounded local RPC backpressure and signed-in credential cache",
+                   "V30 live DB verification of cached account password and ban status"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
@@ -340,7 +357,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8=types.ModuleType("sh_v8")
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # All source anchors and input hashes are checked before writing anything.
