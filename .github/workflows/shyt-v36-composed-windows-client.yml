@@ -79,13 +79,13 @@ jobs:
             mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
             mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
             mingw-w64-clang-x86_64-nlohmann-json
-      - name: Restore incremental CLANG64 compiler cache for native Windows GPU library
-        uses: actions/cache@v4
+      - name: Restore incremental CLANG64 compilation even after a failed build
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: seamless-hunt-native-windows-gpu-ccache-v1-77e3507-${{ runner.os }}
+          key: shyt-native-gpu-ccache-v2-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            seamless-hunt-native-windows-gpu-ccache-v1-
+            shyt-native-gpu-ccache-v2-${{ runner.os }}-
       - name: Inject source-checked ccache launcher for pinned native game build
         shell: pwsh
         run: |
@@ -99,6 +99,7 @@ jobs:
           }
           [IO.File]::WriteAllText((Resolve-Path $script), $source.Replace($old, $new))
       - name: Compile real native Windows renderer and game loader
+        id: native_build
         shell: msys2 {0}
         run: |
           set -euo pipefail
@@ -176,6 +177,12 @@ jobs:
             pinned-upstream/bbport/out/gpu/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: ignore
           retention-days: 7
+      - name: Save bounded incremental compiler cache even on C++ build failure
+        if: always() && steps.native_build.outcome != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: shyt-native-gpu-ccache-v2-${{ runner.os }}-${{ github.run_id }}
       - name: No proprietary assets and no untested public release
         shell: pwsh
         run: |
