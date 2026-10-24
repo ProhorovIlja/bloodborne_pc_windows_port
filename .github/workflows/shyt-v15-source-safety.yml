@@ -27,6 +27,7 @@ on:
       - tools/poc/yharnam/account-gateway-v32/**
       - tools/poc/yharnam/unified-v9/**
       - tools/poc/yharnam/friends-ui-v49/**
+      - tools/poc/yharnam/remote-profile-v46/**
       - tools/poc/yharnam/friends-privacy-v47/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -52,6 +53,7 @@ on:
       - tools/poc/yharnam/account-gateway-v32/**
       - tools/poc/yharnam/unified-v9/**
       - tools/poc/yharnam/friends-ui-v49/**
+      - tools/poc/yharnam/remote-profile-v46/**
       - tools/poc/yharnam/friends-privacy-v47/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -355,6 +357,8 @@ jobs:
           grep -Fq "SH_GC_RECLAIM_DEPTH" /tmp/sh-gc-patched.cpp
           ! cmp -s /tmp/sh-map-original.cpp /tmp/sh-map-patched.cpp
           ! cmp -s /tmp/sh-gc-original.cpp /tmp/sh-gc-patched.cpp
+      - name: Verify explicit remote server profile rejects malformed schema
+        run: python -m unittest discover -s tools/poc/yharnam/remote-profile-v46 -p 'test_patch_remote_ports.py' -v
       - name: Test pinned V14 patch anchor transformation
         run: python -m unittest discover -s tools/poc/yharnam/quit-perf-v14 -p 'test_patch.py' -v
       - name: Configure bounded C++ performance watch tests

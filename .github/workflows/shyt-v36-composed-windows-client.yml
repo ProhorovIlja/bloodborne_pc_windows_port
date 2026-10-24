@@ -7,7 +7,7 @@ permissions:
 jobs:
   native-game-client:
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
       BB_LTO: 'OFF'
@@ -100,6 +100,8 @@ jobs:
           [IO.File]::WriteAllText((Resolve-Path $script), $source.Replace($old, $new))
       - name: Compile real native Windows renderer and game loader
         id: native_build
+        # Reserve job time to upload compiler evidence if GPU compilation stalls.
+        timeout-minutes: 165
         shell: msys2 {0}
         run: |
           set -euo pipefail
@@ -109,7 +111,21 @@ jobs:
           ccache --max-size 1600M
           ccache --show-stats
           cd pinned-upstream/bbport
-          bash build.sh
+          # The upstream build redirects ALL Ninja output to gpu-build.log.
+          # Without a heartbeat GitHub shows nothing for 90 minutes and the
+          # former job limit cancelled, losing the only useful diagnostics.
+          bash build.sh &
+          builder=$!
+          while kill -0 "$builder" 2>/dev/null; do
+            echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            if [[ -f out/gpu-build.log ]]; then
+              tail -n 10 out/gpu-build.log || true
+            else
+              echo "GPU Ninja log not created yet; configuring dependencies"
+            fi
+            sleep 60
+          done
+          wait "$builder"
           ccache --show-stats
           test -s out/bb-probe.exe
           test -s out/bb-gpu-capabilities.exe
@@ -168,7 +184,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Preserve build failure evidence without publishing a client
-        if: failure()
+        # Always upload: cancellation/step timeout need not register as failure().
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: shyt-v36-native-windows-compiler-failure

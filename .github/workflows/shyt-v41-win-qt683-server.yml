@@ -1,5 +1,13 @@
 name: Seamless Hunt V41 native Windows shadnet Qt 6.8.3
 on:
+  # Scope expensive native Qt parity reruns to reviewed hotfixes only;
+  # mainline builds remain orchestrated by shyt-mainline-candidate.yml.
+  push:
+    branches: ['fix/**']
+    paths:
+      - .github/workflows/shyt-v41-win-qt683-server.yml
+      - tools/poc/yharnam/mainline/**
+      - tools/poc/yharnam/parity-diagnostics-v43/**
   workflow_call:
   workflow_dispatch:
 permissions:
@@ -96,6 +104,12 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path build-native-windows/shadnet.exe)) { throw 'Windows shadnet build failed' }
       - name: Validate backend parity, accounts and world
         shell: pwsh
+        # On Windows the reference Python backend otherwise inherits cp1252
+        # when output is piped through CTest. Non-ASCII player names can crash
+        # the reference HTTP request handler while logging a successful login.
+        # Keep the exact same Unicode parity assertions; use UTF-8 for stdout.
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           ctest --test-dir build-native-windows --output-on-failure -R '^(server_link|bloodborne_world|accounts|bloodborne_backend_parity)$'
           if ($LASTEXITCODE -ne 0) { throw 'Windows backend parity tests failed' }
@@ -134,7 +148,7 @@ jobs:
           & $qtDeployer --release --no-translations "$out/server/shadnet.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Qt runtime deployment failed' }
           foreach ($p in @('server/shadnet.exe','server/Qt6Core.dll','server/Qt6Network.dll',
-                           'server/Qt6Sql.dll','server/Qt6Concurrent.dll','server/Qt6HttpServer.dll',
+                           'server/Qt6Sql.dll','server/Qt6HttpServer.dll',
                            'server/sqldrivers/qsqlite.dll',
                            'backend/bb_dummy_server.py','server/shadnet.cfg')) {
             if (-not (Test-Path (Join-Path $out $p))) { throw "Missing server runtime file: $p" }
