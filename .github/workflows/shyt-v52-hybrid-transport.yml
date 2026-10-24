@@ -65,6 +65,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_direct_ingress.cpp \
             -o /tmp/shyt-v59-direct-ingress
           /tmp/shyt-v59-direct-ingress
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_direct_crypto.cpp \
+            -lcrypto -o /tmp/shyt-v60-cryptographic-udp
+          /tmp/shyt-v60-cryptographic-udp
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - name: Native MSVC C++ hybrid selector regression (no real P2P claim)
@@ -91,3 +96,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'direct UDP game ingress compile failed' }
           ./shyt-v59-direct-ingress.exe
           if ($LASTEXITCODE -ne 0) { throw 'direct UDP game ingress authorization regression failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_direct_crypto.cpp bcrypt.lib /Fe:shyt-v60-cryptographic-udp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'native Windows CNG crypto compile failed' }
+          ./shyt-v60-cryptographic-udp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'real HMAC direct UDP auth tests failed' }
