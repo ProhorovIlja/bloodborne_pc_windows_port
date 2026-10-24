@@ -20,6 +20,42 @@ class SourceDrift(ValueError):
     pass
 
 
+def check_interop_policy(policy: dict) -> None:
+    if (policy.get("schema") != 1
+            or policy.get("default_client") != "yharnam_together"
+            or policy.get("default_server") != "experimental_yt_shadnet"
+            or policy.get("default_version") != PIN):
+        raise SourceDrift("An unrelated client or unpinned co-op server became the default")
+    for key in ("force_user_migration", "replace_live_fornex",
+                "auto_forward_player_credentials",
+                "allow_cross_protocol_join_without_live_tests"):
+        if policy.get(key) is not False:
+            raise SourceDrift("Unsafe cross-provider migration toggle: " + key)
+    if policy.get("preserve_existing_saves") is not True:
+        raise SourceDrift("Cannot permit migration that overwrites player saves")
+    providers = policy.get("providers")
+    if not isinstance(providers, list) or len(providers) != 4:
+        raise SourceDrift("Co-op providers require separately documented protocols")
+    ids = {entry.get("id") for entry in providers if isinstance(entry, dict)}
+    if ids != {"yharnam_together", "cls_bbsc", "visy_native_party", "nightwatch"}:
+        raise SourceDrift("Provider identity mismatch: cannot relabel another project's protocol")
+    for provider in providers:
+        if not provider.get("source", "").startswith("https://github.com/"):
+            raise SourceDrift("Independent provider attribution missing")
+        if provider.get("crossplay_with_cls_verified") is not False:
+            raise SourceDrift("Cannot assert cross-client compatibility without game evidence")
+        if provider["id"] == "yharnam_together":
+            if provider.get("included") is not True:
+                raise SourceDrift("Yharnam Together must remain the actual baseline")
+        elif provider.get("included") is not False:
+            raise SourceDrift("Research-only co-op code must not be labelled shipped")
+    essentials = {"pinned_provenance", "account_and_save_backup",
+                  "explicit_player_opt_in", "two_real_pc_gameplay_logs",
+                  "negative_password_isolation_tests", "reversible_cutover"}
+    if not essentials.issubset(set(policy.get("transitions_require", []))):
+        raise SourceDrift("Unsafe or unverified provider replacement plan")
+
+
 def check_policy(meta: dict) -> None:
     if meta.get("schema") != 1 or meta.get("canonical_branch") != CANONICAL:
         raise SourceDrift("not the single Seamless Hunt development branch")
@@ -61,6 +97,14 @@ def check_policy(meta: dict) -> None:
         raise SourceDrift("Windows game must show authorship and provenance")
     if "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt" not in rights.get("server_candidate_notices", []):
         raise SourceDrift("Qt HTTP Server GPLv3 notice missing from Windows host")
+    # Do not manufacture a unified player base by putting different
+    # networking protocols behind the same address or UI label.
+    provider_file = POLICY.with_name("interop_policy.json")
+    try:
+        interop = json.loads(provider_file.read_text("utf-8"))
+    except (ValueError, OSError) as exc:
+        raise SourceDrift("Missing audited co-op provider policy") from exc
+    check_interop_policy(interop)
     paths = meta.get("mainline_workflows", {})
     if set(paths) != {"windows_game", "windows_server", "linux_server",
                       "event_patch", "package_gate"}:
