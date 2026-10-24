@@ -13,14 +13,32 @@
   },
   "target_transport": {
     "mode": "hybrid_direct_p2p_with_relay_fallback",
-    "status": "design_only_not_implemented",
+    "status": "source_only_selector_no_authenticated_rendezvous",
     "matchmaking_and_presence": "server",
     "world_authority": "server_until_explicitly_validated",
     "direct_game_packets": "only_after_negotiated_capability_and_live_validation",
     "relay_fallback": "when NAT/firewall cannot establish an authorized direct path",
     "require_consent_for_network_endpoint_exposure": true,
     "never_forward_account_password_or_auth_token_to_peers": true,
-    "must_not_auto_enable": true
+    "must_not_auto_enable": true,
+    "selector_source": "tools/poc/yharnam/hybrid-transport-v52/sh_hybrid_selector.hpp",
+    "integration_status": {
+      "native_selector_compiled_on_windows_and_ubuntu": "CI pending; no shipping game integration",
+      "authenticated_shadnet_peer_candidates": "not_implemented",
+      "nat_traversal": "not_implemented",
+      "authenticated_direct_packet_exchange": "not_implemented",
+      "validated_dynamic_relay_fallback": "policy_only_not_game_tested",
+      "gameplay_channel_gate": "V10 static Pass-only game packet gate; all stateful channels remain server relay",
+      "game_server_world_authority": "always_server",
+      "privacy_guards": "explicit dual consent and server authorization before any candidate disclosure"
+    },
+    "path_failover": {
+      "minimum_verified_probes": 3,
+      "probe_window_ms": 5000,
+      "stale_path_ms": 2000,
+      "cooldown_ms": 10000,
+      "live_network_validation": false
+    }
   },
   "benchmarks": {
     "verified_live_p2p": false,
@@ -35,7 +53,9 @@
       "optional_invasion",
       "host_disconnect_recovery",
       "two_hour_soak",
-      "bad_network_packet_loss_and_jitter"
+      "bad_network_packet_loss_and_jitter",
+      "nat_symmetric_and_double_nat_relay_fallback",
+      "direct_peer_connection_collapse_without_disconnect"
     ],
     "metrics": [
       "join_success_rate",
@@ -111,7 +131,8 @@
         "stable_death_and_respawn",
         "crash_free_2_hour_sessions",
         "reproducible_windows_and_ubuntu_builds",
-        "measured_network_load"
+        "measured_network_load",
+        "hybrid_direct_p2p_relay_fallback_live_verified"
       ]
     },
     {
@@ -122,7 +143,9 @@
         "direct_connection_nature_and_fallback",
         "advanced_session_browser",
         "privacy_safe_world_presence",
-        "long_session_gpu_memory_regressions"
+        "long_session_gpu_memory_regressions",
+        "authenticated_peer_candidate_rendezvous",
+        "verified_nat_traversal_and_direct_path_recovery"
       ]
     },
     {

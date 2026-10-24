@@ -178,6 +178,25 @@ class MainlineContracts(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(p.SourceDrift, "P2P|load"):
                 p.check_transport_feature_policy(changed)
 
+    def test_hybrid_direct_is_a_release_goal_but_not_falsely_shipped(self):
+        policy = json.loads(p.POLICY.with_name(
+            "transport_and_feature_priorities.json").read_text("utf-8"))
+        p.check_transport_feature_policy(policy)
+        changed = copy.deepcopy(policy)
+        changed["priority_order"][0]["features"].remove(
+            "hybrid_direct_p2p_relay_fallback_live_verified")
+        with self.assertRaisesRegex(p.SourceDrift, "hybrid_direct_p2p"):
+            p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(policy)
+        changed["target_transport"]["integration_status"][
+            "authenticated_shadnet_peer_candidates"] = "implemented"
+        with self.assertRaisesRegex(p.SourceDrift, "unverified authenticated P2P"):
+            p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(policy)
+        changed["target_transport"]["path_failover"]["live_network_validation"] = True
+        with self.assertRaisesRegex(p.SourceDrift, "measured live network"):
+            p.check_transport_feature_policy(changed)
+
     def test_direct_p2p_prototype_requires_consent_and_real_network_data(self):
         config = json.loads(p.POLICY.with_name(
             "transport_and_feature_priorities.json").read_text("utf-8"))

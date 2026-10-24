@@ -74,11 +74,26 @@ def check_transport_feature_policy(policy: dict) -> None:
         raise SourceDrift("cannot advertise untested direct P2P or server load figures")
     target = policy.get("target_transport", {})
     if (target.get("mode") != "hybrid_direct_p2p_with_relay_fallback"
-            or target.get("status") != "design_only_not_implemented"
+            or target.get("status") != "source_only_selector_no_authenticated_rendezvous"
             or target.get("must_not_auto_enable") is not True
             or target.get("require_consent_for_network_endpoint_exposure") is not True
             or target.get("never_forward_account_password_or_auth_token_to_peers") is not True):
         raise SourceDrift("experimental direct P2P must be opt-in and protect credentials")
+    if target.get("selector_source") != "tools/poc/yharnam/hybrid-transport-v52/sh_hybrid_selector.hpp":
+        raise SourceDrift("hybrid Direct P2P selector source missing")
+    stages_now = target.get("integration_status", {})
+    if (stages_now.get("authenticated_shadnet_peer_candidates") != "not_implemented"
+            or stages_now.get("nat_traversal") != "not_implemented"
+            or stages_now.get("authenticated_direct_packet_exchange") != "not_implemented"
+            or stages_now.get("validated_dynamic_relay_fallback") != "policy_only_not_game_tested"
+            or stages_now.get("game_server_world_authority") != "always_server"):
+        raise SourceDrift("cannot claim unverified authenticated P2P rendezvous or NAT traversal")
+    failover = target.get("path_failover", {})
+    if (failover.get("minimum_verified_probes") != 3
+            or failover.get("stale_path_ms") != 2000
+            or failover.get("cooldown_ms") != 10000
+            or failover.get("live_network_validation") is not False):
+        raise SourceDrift("hybrid fallback requires measured live network proof")
     benchmarks = policy.get("benchmarks", {})
     if (benchmarks.get("verified_live_p2p") is not False
             or benchmarks.get("verified_fornex_relay_load") is not False):
@@ -93,7 +108,8 @@ def check_transport_feature_policy(policy: dict) -> None:
             or [s.get("priority") for s in stages] != [0, 1, 2]):
         raise SourceDrift("P0 core stability must precede optional gameplay changes")
     core = set(stages[0].get("features", []))
-    for requirement in ("native_game_boot", "reliable_login_and_discovery",
+    for requirement in ("hybrid_direct_p2p_relay_fallback_live_verified",
+                        "native_game_boot", "reliable_login_and_discovery",
                         "join_and_host_coop", "opt_in_invasions", "safe_save_backups", "doors_and_npc_signs",
                         "crash_free_2_hour_sessions", "measured_network_load"):
         if requirement not in core:
