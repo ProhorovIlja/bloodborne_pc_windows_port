@@ -20,7 +20,7 @@ def response(obj):
     return opener
 
 
-def release(tag="v0.7.3", preview=False, **kw):
+def release(tag="shyt-v0.7.3", preview=False, **kw):
     return {"draft": False, "prerelease": preview, "tag_name": tag,
             "name": "Stability fixes", "body": "Fixed party connection.",
             "html_url": f"https://github.com/{rc.REPO}/releases/tag/{tag}",
@@ -29,16 +29,20 @@ def release(tag="v0.7.3", preview=False, **kw):
 
 class ReleaseCenterTests(unittest.TestCase):
     def test_stable_and_preview_channels(self):
-        payload = [release(), release(tag="v0.7.4-rc.1", preview=True)]
+        payload = [release(), release(tag="shyt-v0.7.4-rc.1", preview=True)]
         stable = rc.fetch_history(opener=response(payload))
         both = rc.fetch_history("preview", opener=response(payload))
-        self.assertEqual([x["tag"] for x in stable], ["v0.7.3"])
+        self.assertEqual([x["tag"] for x in stable], ["shyt-v0.7.3"])
         self.assertEqual(len(both), 2)
         self.assertTrue(both[1]["preview"])
 
     def test_fail_closed_on_bad_url_and_tag(self):
         r = release(html_url="https://evil.example/update.exe")
         self.assertEqual(rc.normalize_release(r)["url"], rc.RELEASES_PAGE)
+        self.assertIsNone(rc.normalize_release(release(tag="v99.0.0")))
+        self.assertIsNone(rc.normalize_release(release(tag="bbport-v99.0.0")))
+        self.assertIsNone(rc.normalize_release(release(tag="shyt-v0.7.5-rc.1", preview=False)))
+        self.assertIsNone(rc.normalize_release(release(tag="shyt-v0.7.5", preview=True)))
         self.assertIsNone(rc.normalize_release(release(tag="../../update.exe")))
         self.assertIsNone(rc.normalize_release(dict(release(), draft=True)))
         self.assertIsNone(rc.normalize_release(dict(release(), tag_name="bad")))

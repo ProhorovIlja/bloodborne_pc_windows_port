@@ -23,7 +23,7 @@ RELEASES_PAGE = update_check.RELEASES_PAGE
 MAX_RESPONSE = 512 * 1024
 MAX_BODY = 12_000
 MAX_LOCAL = 64 * 1024
-TAG_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:[-.](?:alpha|beta|rc)[.-]?\d+)?$", re.I)
+TAG_RE = re.compile(r"^shyt-v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}(?:-(?:alpha|beta|rc)\.[0-9]{1,5})?$", re.I)
 
 
 def _clean_text(value, max_length=MAX_BODY):
@@ -44,8 +44,13 @@ def normalize_release(raw, channel="stable"):
     tag = raw.get("tag_name")
     if not isinstance(tag, str) or not TAG_RE.fullmatch(tag):
         return None
+    # A release marked stable must not carry an RC/beta/alpha tag, or vice versa.
+    if is_preview != bool(re.search(r"-(?:alpha|beta|rc)\.[0-9]+$", tag, re.I)):
+        return None
     # Only this fork's release page can open from the user interface.
-    url = update_check.safe_release_url(raw.get("html_url"))
+    safe_url = update_check.safe_release_url(raw.get("html_url"))
+    expected = f"{RELEASES_PAGE}/tag/{tag}"
+    url = safe_url if safe_url == expected else RELEASES_PAGE
     published = raw.get("published_at")
     if not isinstance(published, str) or not re.fullmatch(
             r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", published):

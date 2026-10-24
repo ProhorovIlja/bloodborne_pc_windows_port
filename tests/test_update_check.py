@@ -16,11 +16,11 @@ def answer(obj):
         assert "Authorization" not in req.headers
         if isinstance(obj, Exception):
             raise obj
-        return io.BytesIO(obj if isinstance(obj, bytes) else json.dumps(obj).encode())
+        return io.BytesIO(obj if isinstance(obj, bytes) else json.dumps([obj] if isinstance(obj, dict) and "tag_name" in obj else obj).encode())
     return opener
 
 
-RELEASE = {"tag_name": "v0.6.3", "html_url": "https://github.com/ProhorovIlja/bloodborne_pc_windows_port/releases/tag/v0.6.3",
+RELEASE = {"tag_name": "shyt-v0.6.3", "html_url": "https://github.com/ProhorovIlja/bloodborne_pc_windows_port/releases/tag/shyt-v0.6.3",
            "draft": False, "prerelease": False}
 
 
@@ -43,7 +43,7 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertFalse(uc.newer("junk", "0.6.1"))
 
     def test_fetch_parses_and_rejects(self):
-        self.assertEqual(uc.fetch(opener=answer(RELEASE)), {"tag": "v0.6.3", "url": RELEASE["html_url"]})
+        self.assertEqual(uc.fetch(opener=answer(RELEASE)), {"tag": "shyt-v0.6.3", "url": RELEASE["html_url"]})
         self.assertIsNone(uc.fetch(opener=answer(dict(RELEASE, prerelease=True))))
         self.assertIsNone(uc.fetch(opener=answer(b"<html>rate limited</html>")))
         self.assertIsNone(uc.fetch(opener=answer(OSError("offline"))))
@@ -66,6 +66,26 @@ class UpdateCheckTests(unittest.TestCase):
                                  uc.RELEASES_PAGE)
                 self.assertEqual(uc.safe_release_url(bad_url), uc.RELEASES_PAGE)
 
+    def test_only_release_channel_tags_and_highest_stable_version(self):
+        # A normal native bbport release can exist in the SAME GitHub repo.
+        generic = dict(RELEASE, tag_name="v99.0.0")
+        older = dict(RELEASE, tag_name="shyt-v0.6.1",
+                     html_url=uc.RELEASES_PAGE + "/tag/shyt-v0.6.1")
+        newer = dict(RELEASE, tag_name="shyt-v0.6.10",
+                     html_url=uc.RELEASES_PAGE + "/tag/shyt-v0.6.10")
+        preview = dict(RELEASE, tag_name="shyt-v7.0.0-rc.1",
+                       prerelease=True)
+        self.assertEqual(uc.fetch(opener=answer([generic, older, preview, newer])),
+                         {"tag": "shyt-v0.6.10", "url": newer["html_url"]})
+        self.assertIsNone(uc.fetch(opener=answer([generic])))
+        self.assertIsNone(uc.fetch(opener=answer(dict(RELEASE, draft=True))))
+        self.assertIsNone(uc.fetch(opener=answer(b"x" * (uc.MAX_RESPONSE + 1))))
+
+    def test_different_tag_same_repo_cannot_redirect(self):
+        url = uc.RELEASES_PAGE + "/tag/shyt-v9.9.9"
+        release = dict(RELEASE, html_url=url)
+        self.assertEqual(uc.fetch(opener=answer(release))["url"], uc.RELEASES_PAGE)
+
     def test_cached_update_does_not_link_to_old_upstream(self):
         self.cache.write_text(json.dumps({
             "checked": 100.0,
@@ -74,9 +94,9 @@ class UpdateCheckTests(unittest.TestCase):
                 "url": "https://github.com/visy/bloodborne_pc_windows_port/releases/tag/v0.9.9"
             }
         }), encoding="utf-8")
+        # Stale caches from the original Windows port are no longer valid.
         notice = uc.check("0.7.2", self.cache, now=200.0)
-        self.assertIsNotNone(notice)
-        self.assertEqual(notice.url, uc.RELEASES_PAGE)
+        self.assertIsNone(notice)
 
     def test_notice_and_cache(self):
         calls = []
@@ -87,7 +107,7 @@ class UpdateCheckTests(unittest.TestCase):
         n = uc.check("0.6.2", self.cache, now=1000.0, fetcher=fetcher)
         self.assertEqual(n.version, "0.6.3")
         self.assertEqual(n.text, "Version 0.6.3 is out — every PC in the party needs the same version")
-        self.assertIn("releases/tag/v0.6.3", n.url)
+        self.assertIn("releases/tag/shyt-v0.6.3", n.url)
         # cached for 6 h: no second request
         self.assertIsNotNone(uc.check("0.6.2", self.cache, now=1000.0 + 5 * 3600, fetcher=fetcher))
         self.assertEqual(len(calls), 1)
@@ -118,7 +138,7 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertIsNone(uc.check("0.6.2", self.cache, now=0.0, fetcher=boom))
         # a cache that cannot be written: the notice still shows
         n = uc.check("0.6.2", Path(self.tmp.name) / "no" / "dir" / "c.json", now=0.0,
-                     fetcher=lambda: {"tag": "v9.0.0", "url": uc.RELEASES_PAGE})
+                     fetcher=lambda: {"tag": "shyt-v9.0.0", "url": uc.RELEASES_PAGE})
         self.assertEqual(n.version, "9.0.0")
 
 
