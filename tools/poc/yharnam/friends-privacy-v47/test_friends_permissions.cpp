@@ -7,6 +7,7 @@ using SeamlessHunt::Friends::MaySendSessionInvite;
 // These predicates are called by the actual V47 patched Qt WebAPI routes.
 // Cover all four caller/recipient combinations, with the restrictive default
 // for private sessions, rather than testing only that a string patch exists.
+// For MaySendSessionInvite, allowed means the sender is the current owner.
 static_assert(MayJoinSession(false, false));
 static_assert(MayJoinSession(false, true));
 static_assert(!MayJoinSession(true, false));

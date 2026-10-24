@@ -15,7 +15,16 @@ spec.loader.exec_module(p)
 # and compiled separately by the actual native Windows/Ubuntu server workflows.
 SOURCE = """#include "webapi_routes_session.h"
 bool HasActiveInvitation(const SharedState& shared, const QString& sessionId, int64_t userId) {
-    return true;
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    for (auto it = shared.invitations.cbegin(); it != shared.invitations.cend(); ++it) {
+        const auto& inv = it.value();
+        if (inv.toUserId != userId || inv.sessionId != sessionId || inv.used)
+            continue;
+        if (inv.validUntil != 0 && nowMs > inv.validUntil)
+            continue;
+        return true;
+    }
+    return false;
 }
 QHttpServerResponse HandleSessionJoin(Database& db, SharedState& shared,
                                       const QString& sessionId, const QHttpServerRequest& req) {
@@ -73,13 +82,24 @@ class PrivateSessionTests(unittest.TestCase):
         # so multiple earlier invitations cannot bypass a removal.
         self.assertNotIn("break;", join.split("SHYT-V50-PRIVATE-INVITE-ONE-SHOT", 1)[1])
 
-    def test_private_invitation_requires_sender_already_in_session(self):
+    def test_only_current_owner_may_invite_to_private_session(self):
         patched = p.transform(SOURCE)
         invite = patched.split("QHttpServerResponse HandleSessionInvite(", 1)[1]
-        self.assertIn("SHYT-V47-FRIENDS-PRIVATE-INVITE", invite)
-        self.assertIn("member.userId == *auth.userId", invite)
+        self.assertIn("SHYT-V51-HOST-ONLY-PRIVATE-INVITE", invite)
+        self.assertIn("sit->ownerUserId == *auth.userId", invite)
         self.assertIn("MaySendSessionInvite(", invite)
-        self.assertIn("Only session members may invite", invite)
+        self.assertIn("Only the session owner may invite", invite)
+        self.assertNotIn("senderIsMember", invite)
+
+    def test_old_owner_invitation_is_revoked_after_migration(self):
+        patched = p.transform(SOURCE)
+        owner = patched.split("bool HasActiveInvitation(", 1)[1].split(
+            "QHttpServerResponse HandleSessionJoin(", 1)[0]
+        self.assertIn("SHYT-V51-INVITE-CURRENT-HOST", owner)
+        self.assertIn("activeSession == shared.sessions.constEnd()", owner)
+        self.assertIn("inv.fromUserId != activeSession->ownerUserId", owner)
+        self.assertIn('activeSession->sessionPrivacy == QStringLiteral("private")', owner)
+        self.assertLess(owner.index("SHYT-V51-INVITE-CURRENT-HOST"), owner.index("for (auto it ="))
 
     def test_nonprivate_behavior_and_existing_member_branch_stay_intact(self):
         patched = p.transform(SOURCE)

@@ -53,21 +53,27 @@ JOIN_CONSUME = """        // SHYT-V50-PRIVATE-INVITE-ONE-SHOT: an accepted priva
             }
         }
 """
-INVITE_GUARD = """        // SHYT-V47-FRIENDS-PRIVATE-INVITE: an unrelated account must not
-        // mint invitations that bypass the private session's access rules.
-        // Public sessions keep the original invitation behavior.
-        bool senderIsMember = false;
-        for (const auto& member : sit->members) {
-            if (member.userId == *auth.userId) {
-                senderIsMember = true;
-                break;
-            }
-        }
+# Authorize outstanding private invites only while the original inviter
+# remains this world's owner. Transfer of host invalidates stale invitations.
+INVITE_OWNER_FN = "bool HasActiveInvitation(const SharedState& shared, const QString& sessionId, int64_t userId) {\n"
+INVITE_OWNER_START = """    // SHYT-V51-INVITE-CURRENT-HOST: fail closed on owner migration.
+    const auto activeSession = shared.sessions.constFind(sessionId);
+    if (activeSession == shared.sessions.constEnd())
+        return false;
+"""
+INVITE_OWNER_LOOP = """        if (activeSession->sessionPrivacy == QStringLiteral("private") &&
+            inv.fromUserId != activeSession->ownerUserId)
+            continue;
+"""
+INVITE_GUARD = """        // SHYT-V51-HOST-ONLY-PRIVATE-INVITE: the owner controls private
+        // guest admission. Other members cannot invite without an explicitly
+        // authorized future host setting. Public sessions are unchanged.
+        const bool senderIsOwner = sit->ownerUserId == *auth.userId;
         if (!SeamlessHunt::Friends::MaySendSessionInvite(
-                sit->sessionPrivacy == QStringLiteral("private"), senderIsMember)) {
+                sit->sessionPrivacy == QStringLiteral("private"), senderIsOwner)) {
             return JsonError(QHttpServerResponse::StatusCode::Forbidden,
                              SESSION_NOT_PERMITTED,
-                             QStringLiteral("Only session members may invite to a private session"));
+                             QStringLiteral("Only the session owner may invite to a private session"));
         }
 """
 
@@ -90,6 +96,12 @@ def transform(source: str) -> str:
     source = once(source, '#include "webapi_routes_session.h"\n',
                   '#include "webapi_routes_session.h"\n#include "sh_friends_permissions.hpp"\n',
                   "include")
+    source = once(source, INVITE_OWNER_FN, INVITE_OWNER_FN + INVITE_OWNER_START,
+                  "validate current session owner for invitations")
+    source = once(source,
+                  "        if (inv.validUntil != 0 && nowMs > inv.validUntil)\n",
+                  INVITE_OWNER_LOOP + "        if (inv.validUntil != 0 && nowMs > inv.validUntil)\n",
+                  "revoke former owner's outstanding private invitations")
     source = once(source, JOIN_ANCHOR, JOIN_GUARD + JOIN_ANCHOR,
                   "private session join")
     source = once(source, INVITE_ANCHOR, INVITE_GUARD + INVITE_ANCHOR,

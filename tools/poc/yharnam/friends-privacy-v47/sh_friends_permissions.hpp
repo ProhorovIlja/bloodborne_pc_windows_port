@@ -8,7 +8,7 @@ namespace SeamlessHunt::Friends {
 constexpr bool MayJoinSession(bool private_session, bool has_live_invite) noexcept {
     return !private_session || has_live_invite;
 }
-constexpr bool MaySendSessionInvite(bool private_session, bool sender_is_member) noexcept {
-    return !private_session || sender_is_member;
+constexpr bool MaySendSessionInvite(bool private_session, bool sender_is_owner) noexcept {
+    return !private_session || sender_is_owner;
 }
 } // namespace SeamlessHunt::Friends
