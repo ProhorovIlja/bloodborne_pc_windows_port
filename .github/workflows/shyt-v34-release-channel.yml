@@ -1,0 +1,39 @@
+name: Seamless Hunt V34 release notice compatibility
+on:
+  push:
+    branches:
+      - feature/yharnam-v34-release-channel-safety
+    paths:
+      - scripts/update_check.py
+      - scripts/release_center.py
+      - tests/test_update_check.py
+      - tests/test_release_center.py
+      - .github/workflows/shyt-v34-release-channel.yml
+  pull_request:
+    paths:
+      - scripts/update_check.py
+      - scripts/release_center.py
+      - tests/test_update_check.py
+      - tests/test_release_center.py
+      - .github/workflows/shyt-v34-release-channel.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-notice-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile release metadata parsers
+        run: python -m py_compile scripts/update_check.py scripts/release_center.py
+      - name: Test launcher update notices without network
+        run: python -m unittest discover -s tests -p 'test_update_check.py' -v
+      - name: Test stable/preview release history without network
+        run: python -m unittest discover -s tests -p 'test_release_center.py' -v
