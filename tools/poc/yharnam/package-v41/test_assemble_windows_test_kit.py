@@ -135,6 +135,15 @@ class CoupledKitTests(unittest.TestCase):
         with self.assertRaises(mod.InvalidCandidate):
             mod.assemble(self.game, self.server, self.out)
 
+    def test_case_insensitive_windows_collision_across_both_bundles(self):
+        self.make_server(added="server/SHADNET.exe")
+        with self.assertRaisesRegex(mod.InvalidCandidate, "case-insensitive"):
+            mod.assemble(self.game, self.server, self.out)
+        self.make_server()
+        self.make_game(added="server/qt6core.dll")
+        with self.assertRaisesRegex(mod.InvalidCandidate, "collision"):
+            mod.assemble(self.game, self.server, self.out)
+
     def test_output_cannot_replace_input_archives(self):
         with self.assertRaisesRegex(mod.InvalidCandidate, "overwrite"):
             mod.assemble(self.game, self.server, self.game)

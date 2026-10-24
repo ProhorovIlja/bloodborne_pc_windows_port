@@ -76,6 +76,7 @@ def allowed(name: str) -> None:
 
 def scan(z: zipfile.ZipFile, prefix: str) -> dict[str, zipfile.ZipInfo]:
     found: dict[str, zipfile.ZipInfo] = {}
+    seen_windows: set[str] = set()
     size = 0
     items = z.infolist()
     if not items or len(items) > CAP_ENTRIES:
@@ -89,6 +90,10 @@ def scan(z: zipfile.ZipFile, prefix: str) -> dict[str, zipfile.ZipInfo]:
             continue
         if raw in found:
             raise InvalidCandidate("duplicate ZIP entry")
+        folded = raw.casefold()
+        if folded in seen_windows:
+            raise InvalidCandidate("case-insensitive Windows ZIP collision")
+        seen_windows.add(folded)
         if stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK:
             raise InvalidCandidate("ZIP symbolic link not allowed")
         size += info.file_size
@@ -137,9 +142,10 @@ def assemble(game: Path, server: Path, target: Path,
         for expected in ("server/shadnet.exe", "server/Qt6Core.dll"):
             if servers[expected].file_size < 1024:
                 raise InvalidCandidate("placeholder Windows native server")
+        game_windows_names = {path.casefold() for path in games}
         for source_path in servers:
-            if (ROOT + source_path in games or
-                    source_path.startswith("bbport-windows/")):
+            if ((ROOT + source_path).casefold() in game_windows_names or
+                    source_path.casefold().startswith("bbport-windows/")):
                 raise InvalidCandidate("game/server file collision")
         total = sum(x.file_size for x in list(games.values()) + list(servers.values()))
         if total > CAP_TOTAL:
