@@ -97,7 +97,7 @@ jobs:
           set -euo pipefail
           ccache --show-stats
           ctest --test-dir "$OUT_ROOT/build" \
-            --output-on-failure -R '^(server_link|bloodborne_world|accounts|bloodborne_backend_parity)
+            --output-on-failure -R '^(server_link|bloodborne_world|accounts|bloodborne_backend_parity)$' \
             2>&1 | tee "$OUT_ROOT/server-ctest.log"
 
       - name: Stage tested native Linux Qt shadnet as INTERNAL candidate
