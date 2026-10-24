@@ -1,0 +1,45 @@
+name: Seamless Hunt V56 original BLauncher onboarding and single-client protocol
+on:
+  push:
+    branches: [feature/shyt-launcher-onboarding-v56]
+    paths:
+      - tools/poc/yharnam/launcher-ux-v56/**
+      - tools/poc/yharnam/mainline/**
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v56-launcher-onboarding.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/launcher-ux-v56/**
+      - tools/poc/yharnam/mainline/**
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v56-launcher-onboarding.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-launcher-source:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile the actual transformed Tkinter onboarding source
+        run: |
+          python -m py_compile tools/poc/yharnam/launcher-ux-v56/patch_onboarding.py tools/poc/yharnam/launcher-ux-v56/pinned_coop_onboarding_fixture.py
+          python -m unittest discover -s tools/poc/yharnam/launcher-ux-v56 -p 'test_*.py' -v
+      - name: Enforce single Yharnam Together protocol and never replace live CLS
+        run: |
+          python tools/poc/yharnam/mainline/check_source_of_truth.py
+          python -m unittest discover -s tools/poc/yharnam/mainline -p 'test_source_of_truth.py' -v
+      - name: Ensure source composition includes the V56 real BLauncher
+        run: |
+          python -c "from pathlib import Path; p=Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text(); assert 'launcher-ux-v56/patch_onboarding.py' in p; assert 'SHYT_LAUNCHER_ONBOARDING_V56' in p; print('SINGLE_YHARNAM_ORIGINAL_BLAUNCHER_COMPOSITION_PASS')"
