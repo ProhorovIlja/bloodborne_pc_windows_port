@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/yharnam-dedicated-server-poc
+      - feature/yharnam-v33-hunter-web-portal
     paths:
       - tools/poc/yharnam/**
       - .github/workflows/shyt-v28-native-server-build.yml
