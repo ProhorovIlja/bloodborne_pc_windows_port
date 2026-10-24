@@ -1,4 +1,4 @@
-name: Seamless Hunt V30 composed native Qt server build
+name: Seamless Hunt V31 composed native Qt server build (staging)
 on:
   push:
     branches:
@@ -50,7 +50,7 @@ jobs:
           git -C "$OUT_ROOT/upstream" submodule update --init --depth=1 server/externals/protobuf
           test -f "$OUT_ROOT/upstream/server/externals/protobuf/CMakeLists.txt"
 
-      - name: Compose immutable V3-V30 source overlay
+      - name: Compose immutable V3-V31 source overlay
         shell: bash
         run: |
           set -euo pipefail
@@ -88,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: seamless-hunt-v30-qt-build-diagnostics
+          name: seamless-hunt-v31-qt-build-diagnostics
           path: |
             /tmp/shyt-${{ github.run_id }}/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json
             /tmp/shyt-${{ github.run_id }}/server-build.log
