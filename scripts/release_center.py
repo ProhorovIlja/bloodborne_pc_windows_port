@@ -45,7 +45,7 @@ def normalize_release(raw, channel="stable"):
     if not isinstance(tag, str) or not TAG_RE.fullmatch(tag):
         return None
     # A release marked stable must not carry an RC/beta/alpha tag, or vice versa.
-    if is_preview != ("-" in tag):
+    if is_preview != bool(re.search(r"-(?:alpha|beta|rc)\.[0-9]+$", tag, re.I)):
         return None
     # Only this fork's release page can open from the user interface.
     safe_url = update_check.safe_release_url(raw.get("html_url"))
