@@ -32,6 +32,8 @@ RELEASE-SPECIFIC THIRD-PARTY PACKAGES:
   FireBurn FSR-Vulkan, AMD FidelityFX, Qt 6, Intel XeSS, NVIDIA DLSS,
   ReShade, PkgTool/LibOrbisPkg, SDL3, FFmpeg, ImGui, LibAtrac9, MSYS2 and
   various Vulkan/graphics/multimedia libraries may be part of the port.
+  IMPORTANT: Qt 6.8 HTTP Server is GPL-3.0 under the Qt open-source terms,
+  unlike Qt Core/Network/Sql modules that may offer LGPL-3.0 terms.
   Their actual licenses are preserved separately in LICENSE and
   licenses/; the list of bundled components can change between builds.
   A complete third-party library/license audit is required before release.
