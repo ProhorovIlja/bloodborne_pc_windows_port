@@ -50,6 +50,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_channel_offload.cpp \
             -o /tmp/shyt-v53-channel-offload
           /tmp/shyt-v53-channel-offload
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_game_frame_offload.cpp \
+            -o /tmp/shyt-v54-game-frame-offload
+          /tmp/shyt-v54-game-frame-offload
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - name: Native MSVC C++ hybrid selector regression (no real P2P claim)
@@ -64,3 +69,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'channel offload compile failed' }
           ./shyt-v53-channel-offload.exe
           if ($LASTEXITCODE -ne 0) { throw 'channel offload auth and map tests failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_game_frame_offload.cpp /Fe:shyt-v54-frame-offload.exe
+          if ($LASTEXITCODE -ne 0) { throw 'SHAD frame offload compile failed' }
+          ./shyt-v54-frame-offload.exe
+          if ($LASTEXITCODE -ne 0) { throw 'SHAD frame offload security tests failed' }

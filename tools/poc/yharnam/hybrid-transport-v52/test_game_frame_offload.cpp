@@ -99,7 +99,7 @@ int main() {
         assert(!Valid(bad,a)); // illegal >80 entries
     }
     {
-        auto bad=Frame(0x06,false);bad[27]=2;
+        auto bad=Frame(0x06,false);bad[26]=2;
         assert(!Valid(bad,a)); // unsupported game packet class
     }
     return 0;
