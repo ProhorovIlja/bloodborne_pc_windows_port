@@ -1,5 +1,13 @@
 name: Seamless Hunt V41 native Windows shadnet Qt 6.8.3
 on:
+  # Scope expensive native Qt parity reruns to reviewed hotfixes only;
+  # mainline builds remain orchestrated by shyt-mainline-candidate.yml.
+  push:
+    branches: ['fix/**']
+    paths:
+      - .github/workflows/shyt-v41-win-qt683-server.yml
+      - tools/poc/yharnam/mainline/**
+      - tools/poc/yharnam/parity-diagnostics-v43/**
   workflow_call:
   workflow_dispatch:
 permissions:
