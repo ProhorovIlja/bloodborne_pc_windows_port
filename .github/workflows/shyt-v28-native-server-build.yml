@@ -1,4 +1,4 @@
-name: Seamless Hunt V29 composed native Qt server build
+name: Seamless Hunt V30 composed native Qt server build
 on:
   push:
     branches:
@@ -47,7 +47,7 @@ jobs:
           git -C "$OUT_ROOT/upstream" checkout --detach FETCH_HEAD
           test "$(git -C "$OUT_ROOT/upstream" rev-parse HEAD)" = "$PIN"
           git -C "$OUT_ROOT/upstream" submodule update --init --recursive --depth=1
-      - name: Compose pinned V3-V29 source overlay, fail closed on anchor changes
+      - name: Compose pinned V3-V30 source overlay, fail closed on anchor changes
         shell: bash
         run: |
           set -euo pipefail
@@ -67,14 +67,28 @@ jobs:
         run: |
           set -euo pipefail
           cmake --build "$OUT_ROOT/build" --target \
-            test_server_link test_bloodborne_world shadnet --parallel 2 \
+            test_server_link test_bloodborne_world test_accounts shadnet --parallel 2 \
             2>&1 | tee "$OUT_ROOT/server-build.log"
       - name: Run real Qt network and multiplayer world tests
         shell: bash
         run: |
           set -euo pipefail
           ctest --test-dir "$OUT_ROOT/build" \
-            --output-on-failure -R '^(server_link|bloodborne_world)$' \
+            --output-on-failure -R '^(server_link|bloodborne_world|accounts) \
+            2>&1 | tee "$OUT_ROOT/server-ctest.log"
+      - name: Preserve inspectable manifest and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seamless-hunt-v28-qt-build-diagnostics
+          path: |
+            \${{ runner.temp }}/yharnam/overlay/SEAMLESS-HUNT-COMPOSE-MANIFEST.json
+            \${{ runner.temp }}/yharnam/server-build.log
+            \${{ runner.temp }}/yharnam/server-ctest.log
+            \${{ runner.temp }}/yharnam/build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
+ \
             2>&1 | tee "$OUT_ROOT/server-ctest.log"
       - name: Preserve inspectable manifest and diagnostics
         if: always()
