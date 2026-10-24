@@ -61,6 +61,21 @@ public:
         return true;
     }
 
+    // An established direct route needs recurring authenticated liveness.
+    // Replayed acknowledgements and callbacks for another match do nothing.
+    bool VerifiedDirectHeartbeat(std::uint64_t session_epoch, std::uint64_t sequence,
+                                 bool authenticated, std::int64_t now_ms) noexcept {
+        if (phase_ != Phase::DirectReady || !authenticated ||
+            !StillGranted(now_ms) || session_epoch != grant_.session_epoch ||
+            sequence == 0 || sequence <= last_sequence_ ||
+            now_ms < last_verified_ms_ ||
+            now_ms - last_verified_ms_ > kPathSilenceMs)
+            return false;
+        last_sequence_ = sequence;
+        last_verified_ms_ = now_ms;
+        return true;
+    }
+
     // The channel predicate must agree with V10's Pass-only native packet gate.
     // Direct can NEVER carry enemy/world owner/map-sensitive game traffic.
     Path Choose(bool entire_frame_is_direct_safe, std::int64_t now_ms) noexcept {
@@ -68,6 +83,11 @@ public:
             Reset();
             return Path::Relay;
         }
+        // An abandoned NAT probe must not remain in Probing indefinitely.
+        if (phase_ == Phase::Probing &&
+            (now_ms < probe_started_ms_ ||
+             now_ms - probe_started_ms_ > kProbeWindowMs))
+            Fallback(now_ms);
         if (phase_ == Phase::DirectReady &&
             (now_ms < last_verified_ms_ ||
              now_ms - last_verified_ms_ > kPathSilenceMs)) {

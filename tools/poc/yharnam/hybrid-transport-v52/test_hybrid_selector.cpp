@@ -49,17 +49,23 @@ int main() {
     assert(peer.phase() == Phase::DirectReady);
     assert(peer.Choose(false, 500) == Path::Relay); // world/map/owner-sensitive
     assert(peer.Choose(true, 500) == Path::Direct);
-    assert(peer.Choose(true, 2401) == Path::Direct);
-    assert(peer.Choose(true, 2402) == Path::Relay); // heartbeat failed
+    assert(peer.Choose(true, 2400) == Path::Direct);
+    assert(peer.Choose(true, 2401) == Path::Relay); // heartbeat failed
     assert(peer.phase() == Phase::Cooldown);
-    assert(!peer.Retry(12401));
-    assert(peer.Retry(12402));
+    assert(!peer.Retry(12400));
+    assert(peer.Retry(12401));
     assert(peer.Choose(true, 12420) == Path::Relay);
     assert(!peer.VerifiedProbe(42, 3, false, 12425));
     assert(peer.VerifiedProbe(42, 10, true, 12430));
     assert(peer.VerifiedProbe(42, 11, true, 12440));
     assert(peer.VerifiedProbe(42, 12, true, 12450));
     assert(peer.Choose(true, 12460) == Path::Direct);
+    assert(!peer.VerifiedDirectHeartbeat(41, 13, true, 12470)); // old match
+    assert(!peer.VerifiedDirectHeartbeat(42, 12, true, 12470)); // replay
+    assert(!peer.VerifiedDirectHeartbeat(42, 13, false, 12470)); // forgery
+    assert(peer.VerifiedDirectHeartbeat(42, 13, true, 12500));
+    assert(peer.Choose(true, 14499) == Path::Direct); // authenticated heartbeat
+    assert(peer.Choose(true, 14501) == Path::Relay);  // stale again
     peer.Reset(); // leave group, ban, password change, new host
     assert(peer.Choose(true, 12470) == Path::Relay);
     assert(!peer.VerifiedProbe(42, 13, true, 12470));
@@ -68,6 +74,13 @@ int main() {
     assert(!peer.VerifiedProbe(42, 1, true, 65001));
     assert(peer.Choose(true, 65001) == Path::Relay);
     assert(peer.phase() == Phase::RelayOnly);
+    // A stalled NAT hole punch must retry only after cooldown.
+    assert(peer.Begin(g, 700));
+    assert(peer.Choose(true, 5701) == Path::Relay);
+    assert(peer.phase() == Phase::Cooldown);
+    assert(!peer.Retry(15700));
+    assert(peer.Retry(15701));
+    peer.Reset();
     // Late probes outside rendezvous window never establish direct.
     assert(peer.Begin(g, 1000));
     assert(!peer.VerifiedProbe(42, 1, true, 6001));
