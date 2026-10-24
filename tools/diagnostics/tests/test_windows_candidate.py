@@ -121,6 +121,28 @@ class CandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(m.UnsafeBundle, "co-op door event patch missing"):
             m.check(self.archive)
 
+    def test_windows_case_collisions_and_ambiguous_profile_version_fail_closed(self):
+        self.write(extra=(m.ROOT + "blauncher.exe",))
+        with self.assertRaisesRegex(m.UnsafeBundle, "case-insensitive"):
+            m.check(self.archive)
+        self.write(extra=(m.ROOT + "TOOLS/party_boss_events.py",))
+        with self.assertRaisesRegex(m.UnsafeBundle, "case-insensitive"):
+            m.check(self.archive)
+        self.write()
+        with zipfile.ZipFile(self.archive) as z:
+            files = {i.filename: z.read(i) for i in z.infolist()}
+        profile = m.ROOT + "tools/SeamlessHunt-network-profile.example.json"
+        for payload in (
+            b'{"schema":true,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}',
+            b'{"schema":1.0,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}',
+        ):
+            with self.subTest(payload=payload):
+                with zipfile.ZipFile(self.archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                    for name, data in files.items():
+                        z.writestr(name, payload if name == profile else data)
+                with self.assertRaisesRegex(m.UnsafeBundle, "schema-pinned"):
+                    m.check(self.archive)
+
     def test_checksum_corruption_rejected(self):
         self.write()
         other = self.archive.with_suffix(".sha256")

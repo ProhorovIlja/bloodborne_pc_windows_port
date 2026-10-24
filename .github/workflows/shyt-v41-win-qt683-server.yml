@@ -154,6 +154,8 @@ jobs:
             if (-not (Test-Path (Join-Path $out $p))) { throw "Missing server runtime file: $p" }
           }
           'INTERNAL TEST ONLY. No game data. Not validated on remote Fornex or with players.' | Set-Content "$out/NOT-RELEASE-READY.txt"
+          python tools/poc/yharnam/package-v41/source_identity.py --server-dir "$out" --commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Native server provenance stamping failed' }
           Compress-Archive -Path "$out/*" -DestinationPath candidate-win-server-qt683.zip
           $sum=(Get-FileHash candidate-win-server-qt683.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           [IO.File]::WriteAllText('candidate-win-server-qt683.zip.sha256', "$sum  candidate-win-server-qt683.zip")

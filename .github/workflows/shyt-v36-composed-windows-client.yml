@@ -98,6 +98,26 @@ jobs:
             throw 'Pinned game build.sh has changed; refusing non-reviewed incremental compiler injection'
           }
           [IO.File]::WriteAllText((Resolve-Path $script), $source.Replace($old, $new))
+      - name: Patch pinned FireBurn FSR Windows CLANG64 wide formatting
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $submodule = 'pinned-upstream/bbport/gpu/third_party/fsr-vulkan'
+          $actual = (git -C $submodule rev-parse HEAD).Trim()
+          if ($actual -ne 'c64f093404125e960813f95f1996c14780f0dd69') {
+            throw "Unreviewed FireBurn FSR Vulkan revision: $actual"
+          }
+          python tools/poc/yharnam/package-v41/patch_fireburn_clang64.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR CLANG64 portability patch failed' }
+      - name: Compile pinned FidelityFX FSR host translation unit before expensive GPU build
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          sdk="pinned-upstream/bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk"
+          clang++ -std=c++17 -fsyntax-only \
+            -I "$sdk/include" \
+            "$sdk/src/shared/ffx_message.cpp"
+          echo SHYT_FSR_CLANG64_SINGLE_FILE_COMPATIBILITY_PASS
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
@@ -114,18 +134,37 @@ jobs:
           # The upstream build redirects ALL Ninja output to gpu-build.log.
           # Without a heartbeat GitHub shows nothing for 90 minutes and the
           # former job limit cancelled, losing the only useful diagnostics.
-          bash build.sh &
+          # kill -0 on an unreaped Windows/MSYS child can remain true even
+          # AFTER Ninja has failed. That previously printed the same FSR
+          # compiler error until the 165-minute timeout. The build now writes
+          # an explicit exit code and stops the heartbeat on first failure.
+          mkdir -p out
+          statusfile="out/shyt-native-build.exit"
+          rm -f "$statusfile"
+          (
+            set +e
+            bash build.sh
+            rc=$?
+            printf '%s\n' "$rc" > "$statusfile"
+            exit "$rc"
+          ) &
           builder=$!
-          while kill -0 "$builder" 2>/dev/null; do
+          while [[ ! -f "$statusfile" ]]; do
             echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             if [[ -f out/gpu-build.log ]]; then
               tail -n 10 out/gpu-build.log || true
             else
               echo "GPU Ninja log not created yet; configuring dependencies"
             fi
-            sleep 60
+            sleep 30
           done
-          wait "$builder"
+          build_status="$(cat "$statusfile")"
+          wait "$builder" || true
+          if [[ "$build_status" != 0 ]]; then
+            echo "SHYT_GPU_BUILD_FAILED_FAST_EXIT=$build_status"
+            tail -n 100 out/gpu-build.log || true
+            exit "$build_status"
+          fi
           ccache --show-stats
           test -s out/bb-probe.exe
           test -s out/bb-gpu-capabilities.exe
@@ -156,6 +195,11 @@ jobs:
           bash packaging/windows/package.sh
           test -s dist/bbport-windows.zip
           echo WINDOWS_PORTABLE_PACKAGE_BUILT_NOT_GAME_TESTED
+      - name: Stamp game ZIP with exact mainline source identity
+        shell: pwsh
+        run: |
+          python tools/poc/yharnam/package-v41/source_identity.py --game-zip pinned-upstream/bbport/dist/bbport-windows.zip --commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Native client provenance stamping failed' }
       - name: Validate portable game launcher archive and reject private/retail data
         shell: pwsh
         run: |

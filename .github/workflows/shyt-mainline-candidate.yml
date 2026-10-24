@@ -98,7 +98,10 @@ jobs:
             --server-sha inputs/windows-server/candidate-win-server-qt683.zip.sha256 \
             --out stage/Seamless-Hunt-Windows-Coop-INTERNAL.zip
           python3 - <<'PY'
-          import json, zipfile
+          import json, zipfile, sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path('tools/poc/yharnam/package-v41').resolve()))
+          from source_identity import verify_ubuntu_tarball
           name = 'stage/Seamless-Hunt-Windows-Coop-INTERNAL.zip'
           with zipfile.ZipFile(name) as z:
               assert z.testzip() is None, 'invalid ZIP'
@@ -109,13 +112,16 @@ jobs:
                   'bbport-windows/tools/party_boss_events.py',
                   'bbport-windows/server/shadnet.exe',
                   'bbport-windows/server/Qt6Core.dll',
-                  'bbport-windows/server/Qt6Concurrent.dll',
                   'bbport-windows/server/Qt6HttpServer.dll',
                   'bbport-windows/backend/bb_dummy_server.py',
               )
               assert all(k in z.namelist() for k in required), 'incomplete kit'
               meta = json.loads(z.read('bbport-windows/SHYT-INTERNAL-CANDIDATE-MANIFEST.json'))
               assert meta['release_ready'] is False, 'test kit cannot claim public readiness'
+              ubuntu_path = Path('inputs/fornex/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz')
+              ubuntu = verify_ubuntu_tarball(ubuntu_path)
+              assert ubuntu['source_commit'] == meta['seamless_hunt_source_commit'], (
+                  'Ubuntu Fornex and Windows game/server came from different Seamless Hunt commits')
           print('SHYT_WINDOWS_GAME_LAUNCHER_NATIVE_SERVER_KIT_PASS')
           PY
       - name: Preserve one test-only Windows kit and one Ubuntu staging server

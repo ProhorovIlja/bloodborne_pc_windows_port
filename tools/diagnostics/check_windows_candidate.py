@@ -53,6 +53,8 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
         if lines != [expected]:
             raise UnsafeBundle("archive SHA-256 checksum mismatch")
     found: set[str] = set()
+    # Windows extracts ZIP paths case-insensitively; reject shadow entries.
+    windows_names: set[str] = set()
     total = 0
     with zipfile.ZipFile(archive, "r") as z:
         infos = z.infolist()
@@ -75,6 +77,10 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
                 raise UnsafeBundle("retail/private file found in package")
             if name in found:
                 raise UnsafeBundle("duplicate ZIP member")
+            folded = name.casefold()
+            if folded in windows_names:
+                raise UnsafeBundle("case-insensitive Windows ZIP collision")
+            windows_names.add(folded)
             found.add(name)
             unix_mode = (info.external_attr >> 16) & 0xFFFF
             if stat.S_IFMT(unix_mode) == stat.S_IFLNK:
@@ -115,7 +121,8 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
         if not isinstance(example, dict) or set(example) != {
             "schema", "opt_in", "server_ipv4",
             "udp_game_port", "webapi_tcp_port", "backend_tcp_port"
-        } or (example.get("schema") != 1 or example.get("opt_in") is not True
+        } or (type(example.get("schema")) is not int or example.get("schema") != 1
+               or example.get("opt_in") is not True
                or example.get("server_ipv4") != "198.51.100.24"
                or (example.get("udp_game_port"), example.get("webapi_tcp_port"),
                    example.get("backend_tcp_port")) != (32314, 32315, 21443)):

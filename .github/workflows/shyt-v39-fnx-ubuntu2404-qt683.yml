@@ -148,7 +148,8 @@ jobs:
           fi
           printf 'INTERNAL CI CANDIDATE; never copy into live production without staging validation.\nPinned upstream: %s\nSource revision: %s\nBuild OS: Ubuntu 24.04 x86_64, Qt 6.8.3 runtime REQUIRED.\nNetwork/protocol: legacy cross-client and login not game-tested.\nRelease approved: NO\n' \
             "$PIN" "$GITHUB_SHA" > "$pkg/NOT-READY-FOR-PRODUCTION.txt"
-          (cd "$pkg" && sha256sum bin/shadnet config-reference/* licenses/* CREDITS.txt > SHA256SUMS)
+          python3 tools/poc/yharnam/package-v41/source_identity.py --linux-dir "$pkg" --commit "$GITHUB_SHA"
+          (cd "$pkg" && sha256sum bin/shadnet config-reference/* licenses/* CREDITS.txt SHYT-UBUNTU-SOURCE-IDENTITY.json > SHA256SUMS)
           tar -czf "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
             -C "$OUT_ROOT" shyt-internal-linux-server
           sha256sum "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
