@@ -230,6 +230,7 @@ jobs:
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/server_link.h" -o /tmp/sh-v27-server-link.h
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v27-link-server.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/tests/test_server_link.cpp" -o /tmp/sh-v27-hub-tests.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_server.cpp" -o /tmp/sh-v30-webapi.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v29-link-server.cpp
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.h" -o /tmp/sh-v29-link-server.h
           curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/database.h" -o /tmp/sh-v30-database.h
@@ -285,7 +286,6 @@ jobs:
           assert 'CurrentCredentialStatus' in transformed[v30.DB_CPP]
           assert 'if (!user || user->banned)' in transformed[v30.LINK_CPP]
           assert 'RevokedDatabaseCredentialsAreVisible' in transformed[v30.ACCOUNT_TEST]
-          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/webapi_server.cpp" -o /tmp/sh-v30-webapi.cpp
           qp=Path('tools/poc/yharnam/qt-http-compat-v30/patch_http_compat.py')
           spec=importlib.util.spec_from_file_location('qthttpcompat',qp)
           qt=importlib.util.module_from_spec(spec); spec.loader.exec_module(qt)
