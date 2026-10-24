@@ -113,8 +113,8 @@ std::string TeamLobbyMember() {
 void TeamLobbyRequest(bbcoop::TeamRequest::Action action, const std::string& id) {
 """,
         "emulator/src/core/bloodborne_party_death.cpp": "void TickPartyDeath() {\n    if (!party_death_hook_installed) {\n",
-        "bbport/gpu/bbcoop.h": "    bbcoop_lobby_world worlds[BBCOOP_LOBBY_WORLDS];\n} bbcoop_lobby;\nvoid bbcoop_lobby_request(int action, const char *id);\n",
-        "bbport/gpu/bbcoop/coop.cpp": "        lobby->started = team.started();\nextern \"C\" int bbcoop_lobby_view(bbcoop_lobby* lobby) {\nextern \"C\" void bbcoop_lobby_request(int action, const char* id) {\n",
+        "bbport/gpu/bbcoop.h": "    uint32_t vials, bullets; /* Kaniel 2026-10-18: beside the name */\n    bbcoop_lobby_world worlds[BBCOOP_LOBBY_WORLDS];\n} bbcoop_lobby;\nvoid bbcoop_lobby_request(int action, const char *id);\n",
+        "bbport/gpu/bbcoop/coop.cpp": "        out.bullets = member.bullets;\n        lobby->started = team.started();\nextern \"C\" int bbcoop_lobby_view(bbcoop_lobby* lobby) {\nextern \"C\" void bbcoop_lobby_request(int action, const char* id) {\n",
         compose.OVERLAY: "\n".join([
             '#include "bbport_settings.h"',v3.OLD_SUBTITLE,
             'status = std::to_string(lobby.member_count) + T(" of 4", " из 4");',
