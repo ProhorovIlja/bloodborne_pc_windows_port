@@ -1,4 +1,4 @@
-name: Seamless Hunt native source integrity V14–V28
+name: Seamless Hunt native source integrity V14–V29
 on:
   push:
     branches: [feature/yharnam-dedicated-server-poc]
@@ -18,6 +18,7 @@ on:
       - tools/poc/yharnam/ingress-quota-v26/**
       - tools/poc/yharnam/endpoint-rebind-v27/**
       - tools/poc/yharnam/login-admission-v28/**
+      - tools/poc/yharnam/rpc-budget-v29/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -37,6 +38,7 @@ on:
       - tools/poc/yharnam/ingress-quota-v26/**
       - tools/poc/yharnam/endpoint-rebind-v27/**
       - tools/poc/yharnam/login-admission-v28/**
+      - tools/poc/yharnam/rpc-budget-v29/**
       - tools/poc/yharnam/unified-v9/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -137,6 +139,14 @@ jobs:
           cmake -S tools/poc/yharnam/login-admission-v28 -B /tmp/shyt-v28-login -DCMAKE_BUILD_TYPE=Release
           cmake --build /tmp/shyt-v28-login --parallel 2
           ctest --test-dir /tmp/shyt-v28-login --output-on-failure
+      - name: V29 bounded RPC and credential cache source regression
+        run: python -m unittest discover -s tools/poc/yharnam/rpc-budget-v29 -p 'test_*.py' -v
+      - name: Compile and test V29 bounded RPC and finite auth cache policy
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/rpc-budget-v29 -B /tmp/shyt-v29-rpc -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/shyt-v29-rpc --parallel 2
+          ctest --test-dir /tmp/shyt-v29-rpc --output-on-failure
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources
@@ -235,6 +245,16 @@ jobs:
           assert 'hello_admission.Allow(from.ipv4, now_ms)' in hub
           assert 'LoginAdmission::Gate hello_admission;' in hdr
           assert 'HelloAdmissionLimitsDbCalls' in qt
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.cpp" -o /tmp/sh-v29-link-server.cpp
+          curl -fsSL --retry 3 "https://raw.githubusercontent.com/lKaniel/bloodborne-server/${PIN}/server/src/link_server.h" -o /tmp/sh-v29-link-server.h
+          bp=Path('tools/poc/yharnam/rpc-budget-v29/patch_rpc_budget.py')
+          spec=importlib.util.spec_from_file_location('v29',bp)
+          v29=importlib.util.module_from_spec(spec); spec.loader.exec_module(v29)
+          x=v29.patch_cpp(Path('/tmp/sh-v29-link-server.cpp').read_text('utf-8'))
+          h=v29.patch_header(Path('/tmp/sh-v29-link-server.h').read_text('utf-8'))
+          assert 'RpcBudget::Fits(pending, bytes)' in x
+          assert 'MustEvictAuthCache' in x
+          assert 'bool blocked = false' in h
           assert 'ChangedAccountOnSameEndpoint()' in patched[v27.TEST]
           qs=Path('tools/poc/yharnam/ingress-quota-v26/patch_ingress_quota.py')
           spec=importlib.util.spec_from_file_location('v26',qs)
