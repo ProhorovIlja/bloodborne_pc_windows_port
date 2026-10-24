@@ -16,7 +16,7 @@ import sys
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from source_identity import NAME as IDENTITY_NAME, SourceIdentityError, validate as validate_identity
+from source_identity import GAME_NAME, SERVER_NAME, SourceIdentityError, validate as validate_identity
 
 ROOT = "bbport-windows/"
 SERVER_FILES = {
@@ -29,7 +29,7 @@ SERVER_FILES = {
     "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",
     "server/licenses/LGPL-3.0.txt",
     "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt",
-    "NOT-RELEASE-READY.txt", "SHYT-SOURCE-IDENTITY.json",
+    "NOT-RELEASE-READY.txt", "SHYT-SERVER-SOURCE-IDENTITY.json",
 }
 PRIVATE_PARTS = {"user", "savedata", "secrets", "dvdroot_ps4", "sce_module",
                  "sce_sys", "game", "coop-game", "db", ".git"}
@@ -127,8 +127,8 @@ def assemble(game: Path, server: Path, target: Path,
         # from a previous CI run can otherwise silently mix with newer server
         # patches and crash/desync during live multiplayer.
         try:
-            game_id = validate_identity(gz.read(ROOT + IDENTITY_NAME), "game")
-            server_id = validate_identity(sz.read(IDENTITY_NAME), "server")
+            game_id = validate_identity(gz.read(ROOT + GAME_NAME), "game")
+            server_id = validate_identity(sz.read(SERVER_NAME), "server")
         except (KeyError, SourceIdentityError) as exc:
             raise InvalidCandidate("missing/invalid matched native source identity") from exc
         if game_id["source_commit"] != server_id["source_commit"]:

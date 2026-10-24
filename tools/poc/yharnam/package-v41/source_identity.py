@@ -11,7 +11,8 @@ from pathlib import Path
 import re
 import zipfile
 
-NAME = "SHYT-SOURCE-IDENTITY.json"
+GAME_NAME = "SHYT-CLIENT-SOURCE-IDENTITY.json"
+SERVER_NAME = "SHYT-SERVER-SOURCE-IDENTITY.json"
 UPSTREAM = "77e350743a7cb4524cfcc1782fb6e3af64e25b15"
 FIELDS = {"schema", "component", "source_commit", "upstream_pin", "release_ready"}
 
@@ -56,7 +57,7 @@ def stamp_file(path: Path, component: str, source_commit: str) -> None:
 
 
 def stamp_game_zip(path: Path, source_commit: str) -> None:
-    member = "bbport-windows/" + NAME
+    member = "bbport-windows/" + GAME_NAME
     if not path.is_file():
         raise SourceIdentityError("native game ZIP missing")
     content = (json.dumps(identity("game", source_commit), sort_keys=True) + "\n").encode("utf-8")
@@ -78,7 +79,7 @@ def main() -> None:
     else:
         if not args.server_dir.is_dir():
             parser.error("native server staging directory missing")
-        stamp_file(args.server_dir / NAME, "server", args.commit)
+        stamp_file(args.server_dir / SERVER_NAME, "server", args.commit)
     print("MATCHED_NATIVE_SOURCE_IDENTITY_STAMPED_INTERNAL_ONLY")
 
 

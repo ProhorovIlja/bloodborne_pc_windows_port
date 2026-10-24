@@ -17,7 +17,7 @@ TOOLS = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe", "bin/bb-gpu-capabilities.exe",
     "run.py", "README.md", "LICENSE", "tools/party_boss_events.py",
     "tools/SeamlessHunt-network-profile.example.json",
-    "CREDITS.txt", "SHYT-SOURCE-IDENTITY.json", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+    "CREDITS.txt", "SHYT-CLIENT-SOURCE-IDENTITY.json", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
     "licenses/AMD-FidelityFX-SDK-LICENSE.txt", "licenses/Intel-XeSS-LICENSE.txt",
     "licenses/PkgTool-LICENSE.txt",
 }
@@ -42,7 +42,7 @@ class CoupledKitTests(unittest.TestCase):
                     data = EVENT
                 elif name == "tools/SeamlessHunt-network-profile.example.json":
                     data = b'{"schema":1,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}'
-                elif name == "SHYT-SOURCE-IDENTITY.json":
+                elif name == "SHYT-CLIENT-SOURCE-IDENTITY.json":
                     data = (json.dumps({
                         "schema": 1, "component": "game",
                         "source_commit": "1" * 40,
@@ -62,7 +62,7 @@ class CoupledKitTests(unittest.TestCase):
     def make_server(self, missing=None, added=None):
         with zipfile.ZipFile(self.server, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name in sorted(mod.SERVER_FILES - ({missing} if missing else set())):
-                if name == "SHYT-SOURCE-IDENTITY.json":
+                if name == "SHYT-SERVER-SOURCE-IDENTITY.json":
                     data = (json.dumps({"schema": 1, "component": "server",
                                         "source_commit": "1" * 40,
                                         "upstream_pin": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
@@ -112,9 +112,9 @@ class CoupledKitTests(unittest.TestCase):
     def test_rejects_server_from_a_different_seamless_hunt_commit(self):
         with zipfile.ZipFile(self.server) as z:
             entries = {x.filename: z.read(x) for x in z.infolist()}
-        mismatched = json.loads(entries["SHYT-SOURCE-IDENTITY.json"])
+        mismatched = json.loads(entries["SHYT-SERVER-SOURCE-IDENTITY.json"])
         mismatched["source_commit"] = "2" * 40
-        entries["SHYT-SOURCE-IDENTITY.json"] = json.dumps(mismatched).encode("utf-8")
+        entries["SHYT-SERVER-SOURCE-IDENTITY.json"] = json.dumps(mismatched).encode("utf-8")
         with zipfile.ZipFile(self.server, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name, data in entries.items():
                 z.writestr(name, data)
@@ -128,7 +128,7 @@ class CoupledKitTests(unittest.TestCase):
             self.make_server()
             with zipfile.ZipFile(archive) as z:
                 entries = {x.filename: z.read(x) for x in z.infolist()}
-            member = ("bbport-windows/" if component == "game" else "") + "SHYT-SOURCE-IDENTITY.json"
+            member = ("bbport-windows/SHYT-CLIENT-SOURCE-IDENTITY.json" if component == "game" else "SHYT-SERVER-SOURCE-IDENTITY.json")
             for variant in ("missing", "schema_boolean", "wrong_pin"):
                 modified = dict(entries)
                 if variant == "missing":
