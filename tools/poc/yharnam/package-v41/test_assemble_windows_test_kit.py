@@ -16,6 +16,7 @@ spec.loader.exec_module(mod)
 TOOLS = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe", "bin/bb-gpu-capabilities.exe",
     "run.py", "README.md", "LICENSE", "tools/party_boss_events.py",
+    "tools/SeamlessHunt-network-profile.example.json",
     "CREDITS.txt", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
     "licenses/AMD-FidelityFX-SDK-LICENSE.txt", "licenses/Intel-XeSS-LICENSE.txt",
     "licenses/PkgTool-LICENSE.txt",
