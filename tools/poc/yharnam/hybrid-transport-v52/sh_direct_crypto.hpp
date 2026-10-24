@@ -165,7 +165,7 @@ public:
         return true;
     }
     bool Encode(DirectKind kind, std::span<const std::uint8_t> payload,
-                std::int64_t now_ms, std::vector<std::uint8_t>& encoded) noexcept {
+                std::int64_t now_ms, std::vector<std::uint8_t>& encoded) {
         encoded.clear();
         if (!mac_ || !mac_->ready() || next_ == 0 ||
             now_ms < started_) return false;
