@@ -135,13 +135,22 @@ class MainlineContracts(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(p.SourceDrift):
                 p.check_policy(altered)
 
-    def test_protocols_never_implicitly_crossplay(self):
+    def test_single_yharnam_together_protocol_only(self):
         original = json.loads(p.POLICY.with_name("interop_policy.json").read_text("utf-8"))
         p.check_interop_policy(original)
-        for index in range(4):
+        self.assertEqual(original["supported_network_clients"], ["yharnam_together"])
+        self.assertFalse(original["third_party_crossplay_enabled"])
+        self.assertEqual([p["id"] for p in original["providers"]], ["yharnam_together"])
+        for mutation in (
+            lambda d: d["supported_network_clients"].append("shadps4"),
+            lambda d: d["providers"].append({"id":"supermedo","included":True}),
+            lambda d: d.update(third_party_crossplay_enabled=True),
+            lambda d: d.update(supported_game_protocol="all_clients"),
+            lambda d: d["providers"][0].update(id="cls_bbsc"),
+        ):
             modified = copy.deepcopy(original)
-            modified["providers"][index]["crossplay_with_cls_verified"] = True
-            with self.subTest(index=index), self.assertRaisesRegex(p.SourceDrift, "cross-client"):
+            mutation(modified)
+            with self.assertRaises(p.SourceDrift):
                 p.check_interop_policy(modified)
 
     def test_no_forced_player_move_or_credentials_or_save_rewrites(self):
@@ -158,12 +167,14 @@ class MainlineContracts(unittest.TestCase):
         with self.assertRaisesRegex(p.SourceDrift, "saves"):
             p.check_interop_policy(modified)
 
-    def test_nightwatch_visy_and_cls_are_research_not_shipped(self):
+    def test_same_protocol_and_hybrid_p2p_acceptance_cannot_be_removed(self):
         original = json.loads(p.POLICY.with_name("interop_policy.json").read_text("utf-8"))
-        for index in range(1, 4):
+        for required in ("same_version_game_and_server_protocol",
+                         "direct_p2p_and_relay_fallback_2pc_tests"):
             modified = copy.deepcopy(original)
-            modified["providers"][index]["included"] = True
-            with self.subTest(index=index), self.assertRaisesRegex(p.SourceDrift, "Research-only"):
+            modified["transitions_require"].remove(required)
+            with self.subTest(required=required), self.assertRaisesRegex(
+                    p.SourceDrift, "same-protocol"):
                 p.check_interop_policy(modified)
 
     def test_current_server_relay_is_not_misrepresented_as_direct_p2p(self):

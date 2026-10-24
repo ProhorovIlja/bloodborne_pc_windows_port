@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "goal": "Temporary Seamless Hunt proof of concept; enable voluntary migration or removal when verified maintained upstream alternatives become available.",
+  "goal": "Seamless Hunt: exactly one Yharnam Together client+launcher+Qt shadNet protocol; no third-party game network interoperability, while external research and permissibly licensed improvements remain available for review.",
   "default_client": "yharnam_together",
   "default_version": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
   "default_server": "experimental_yt_shadnet",
@@ -19,36 +19,6 @@
       "crossplay_with_cls_verified": false,
       "source": "https://github.com/lKaniel/bloodborne-server",
       "license_as_reported": "GPL-2.0-or-later"
-    },
-    {
-      "id": "cls_bbsc",
-      "project": "CLSAMG22/BBSC",
-      "mode": "cls_shadp2p_shadnet",
-      "included": false,
-      "status": "interop_target_unverified",
-      "crossplay_with_cls_verified": false,
-      "source": "https://github.com/CLSAMG22/BBSC",
-      "license_as_reported": "GPL-2.0-or-later"
-    },
-    {
-      "id": "visy_native_party",
-      "project": "visy/bloodborne_pc_windows_port",
-      "mode": "direct_p2p",
-      "included": false,
-      "status": "research_only_no_code_import",
-      "crossplay_with_cls_verified": false,
-      "source": "https://github.com/visy/bloodborne_pc_windows_port",
-      "license_as_reported": "GPL-3.0"
-    },
-    {
-      "id": "nightwatch",
-      "project": "vladtepes22/NightwatchCoop",
-      "mode": "lantern_visy_direct_p2p",
-      "included": false,
-      "status": "research_only_no_code_import",
-      "crossplay_with_cls_verified": false,
-      "source": "https://github.com/vladtepes22/NightwatchCoop",
-      "license_as_reported": "GPL-3.0 with Lantern Engine NOTICE and extra conditions"
     }
   ],
   "transitions_require": [
@@ -59,6 +29,13 @@
     "explicit_player_opt_in",
     "two_real_pc_gameplay_logs",
     "negative_password_isolation_tests",
-    "reversible_cutover"
-  ]
+    "same_version_game_and_server_protocol",
+    "direct_p2p_and_relay_fallback_2pc_tests"
+  ],
+  "supported_network_clients": [
+    "yharnam_together"
+  ],
+  "supported_game_protocol": "yharnam_together_only",
+  "third_party_crossplay_enabled": false,
+  "external_projects_ideas_only": true
 }
