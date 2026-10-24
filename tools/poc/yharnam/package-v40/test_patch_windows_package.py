@@ -24,6 +24,12 @@ class PackagerTests(unittest.TestCase):
         result = pkg.transform(FIXTURE)
         self.assertIn("event_patcher=../tools/re/party_boss_events.py", result)
         self.assertIn('cp "$event_patcher" "$dest/tools/party_boss_events.py"', result)
+        self.assertIn('cp "$credits" "$dest/CREDITS.txt"', result)
+        self.assertIn('Missing downstream author and copyright notices', result)
+        self.assertIn('Missing upstream GPL or required redistributed third-party notice', result)
+        for required in ('FireBurn-FSR-Vulkan-LICENSE.txt', 'AMD-FidelityFX-SDK-LICENSE.txt',
+                         'Intel-XeSS-LICENSE.txt', 'PkgTool-LICENSE.txt'):
+            self.assertIn(required, result)
         self.assertLess(result.index(pkg.MARKER), result.index(pkg.ANCHOR))
         self.assertLess(result.index(pkg.MARKER), result.index("packaging/windows/make_zip.py"))
         self.assertIn('exit 1', result)
