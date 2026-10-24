@@ -16,6 +16,9 @@ spec.loader.exec_module(mod)
 TOOLS = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe", "bin/bb-gpu-capabilities.exe",
     "run.py", "README.md", "LICENSE", "tools/party_boss_events.py",
+    "CREDITS.txt", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+    "licenses/AMD-FidelityFX-SDK-LICENSE.txt", "licenses/Intel-XeSS-LICENSE.txt",
+    "licenses/PkgTool-LICENSE.txt",
 }
 EVENT = b"HOST_DOOR_EFFECT = {'m29.emevd.dcx': 9920, 'm35_00_00_00.emevd.dcx': 9920}\ndef patch_host_door_effect(x): return x\n"
 
@@ -34,9 +37,15 @@ class CoupledKitTests(unittest.TestCase):
     def make_game(self, added=None):
         with zipfile.ZipFile(self.game, "w", compression=zipfile.ZIP_DEFLATED) as z:
             for name in sorted(TOOLS):
-                data = EVENT if name.endswith("party_boss_events.py") else (
-                    b"Executable" * 200 if name.endswith(".exe") else b"Open source only"
-                )
+                if name.endswith("party_boss_events.py"):
+                    data = EVENT
+                elif name == "CREDITS.txt":
+                    data = (b"SEAMLESS HUNT NOT a public release Yharnam Together "
+                            b"deadinside28 Supermedo shadPS4 Wozzardman 0xCydral "
+                            b"GPL-2.0-or-later")
+                else:
+                    data = (b"Executable" * 200 if name.endswith(".exe")
+                            else b"Original open-source library licensing notices " * 3)
                 z.writestr("bbport-windows/" + name, data)
             if added:
                 z.writestr("bbport-windows/" + added, b"test")
