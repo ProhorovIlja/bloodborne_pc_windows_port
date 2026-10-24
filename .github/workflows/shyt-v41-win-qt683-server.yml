@@ -105,7 +105,8 @@ jobs:
           & "$env:QT_ROOT_DIR/bin/windeployqt6.exe" --release --no-translations "$out/server/shadnet.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Qt runtime deployment failed' }
           foreach ($p in @('server/shadnet.exe','server/Qt6Core.dll','server/Qt6Network.dll',
-                           'server/Qt6Sql.dll','server/sqldrivers/qsqlite.dll',
+                           'server/Qt6Sql.dll','server/Qt6Concurrent.dll','server/Qt6HttpServer.dll',
+                           'server/sqldrivers/qsqlite.dll',
                            'backend/bb_dummy_server.py','server/shadnet.cfg')) {
             if (-not (Test-Path (Join-Path $out $p))) { throw "Missing server runtime file: $p" }
           }
