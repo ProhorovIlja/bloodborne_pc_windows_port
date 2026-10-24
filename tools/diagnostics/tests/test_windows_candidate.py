@@ -31,6 +31,8 @@ class CandidateTests(unittest.TestCase):
                     data = b"HOST_DOOR_EFFECT = {'m29.emevd.dcx': 9920, 'm35_00_00_00.emevd.dcx': 9920}; def patch_host_door_effect(): pass"
                 elif name == "CREDITS.txt":
                     data = CREDITS
+                elif name == "tools/SeamlessHunt-network-profile.example.json":
+                    data = b'{"schema":1,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}'
                 else:
                     data = (b"Exe data " * 200) if name.endswith(".exe") else (b"sample license document and notices " * 3)
                 z.writestr(m.ROOT + name, data)
