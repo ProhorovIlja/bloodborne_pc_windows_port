@@ -1,7 +1,10 @@
 name: Seamless Hunt native source integrity V14–V31
 on:
   push:
-    branches: [feature/yharnam-dedicated-server-poc]
+    branches:
+      - feature/yharnam-dedicated-server-poc
+      - feature/yharnam-v31-ci-candidate
+      - feature/yharnam-v31-1-active-credential-epoch
     paths:
       - tools/poc/yharnam/quit-perf-v14/**
       - tools/poc/yharnam/patch-safety-v15/**
