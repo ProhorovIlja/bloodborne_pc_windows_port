@@ -91,6 +91,21 @@ jobs:
           Copy-Item pinned-upstream/backend/ss_info_template.xml "$out/backend/"
           Copy-Item pinned-upstream/backend/README.txt "$out/backend/"
           Copy-Item pinned-upstream/server/LICENSES/GPL-2.0-or-later.txt "$out/licenses/"
+          New-Item -ItemType Directory -Force "$out/server/licenses" | Out-Null
+          Copy-Item LICENSE "$out/server/licenses/GPL-3.0.txt"
+          Copy-Item licenses/LGPL-3.0.txt "$out/server/licenses/LGPL-3.0.txt"
+          Copy-Item tools/poc/yharnam/attribution-v42/Qt-6.8.3-LICENSE-SCOPE.txt "$out/server/licenses/"
+          Copy-Item tools/poc/yharnam/attribution-v42/CREDITS.txt "$out/server/CREDITS.txt"
+          foreach ($legal in @('server/licenses/GPL-3.0.txt',
+                               'server/licenses/LGPL-3.0.txt',
+                               'server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt',
+                               'server/CREDITS.txt',
+                               'licenses/GPL-2.0-or-later.txt')) {
+            $file = Join-Path $out $legal
+            if (-not (Test-Path $file) -or (Get-Item $file).Length -lt 200) {
+              throw "Required author/Qt license notice absent or truncated: $legal"
+            }
+          }
           & "$env:QT_ROOT_DIR/bin/windeployqt6.exe" --release --no-translations "$out/server/shadnet.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Qt runtime deployment failed' }
           foreach ($p in @('server/shadnet.exe','server/Qt6Core.dll','server/Qt6Network.dll',
