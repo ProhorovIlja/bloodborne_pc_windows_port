@@ -339,6 +339,20 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     exec(compile(qt_script.read_text("utf-8"),str(qt_script),"exec"),qt_module.__dict__)
     qt_src=output[HTTP_CPP].decode("utf-8") if HTTP_CPP in output else source[HTTP_CPP]
     output[HTTP_CPP]=qt_module.transform(qt_src).encode("utf-8")
+    # V31 is isolated from the production daemon: only an explicit setting
+    # enables bounded active-account rechecks. Normal disconnect cleanup is
+    # handled by the existing Hub::Tick -> Result.gone path.
+    v31_dir=Path(__file__).resolve().parent.parent/"active-session-v31"
+    v31_module=types.ModuleType("sh_active_session_patch")
+    v31_script=v31_dir/"patch_active_session.py"
+    v31_module.__file__=str(v31_script)
+    exec(compile(v31_script.read_text("utf-8"),str(v31_script),"exec"),v31_module.__dict__)
+    v31_paths=(v31_module.LINK_H,v31_module.LINK_CPP,v31_module.SERVER_CPP,v31_module.QT_TEST)
+    v31_sources={p:(output[p].decode("utf-8") if p in output else source[p]) for p in v31_paths}
+    for name,contents in v31_module.transform(v31_sources).items():
+        output[name]=contents.encode("utf-8")
+    if v31_module.POLICY not in output or not output[v31_module.POLICY]:
+        raise ValueError("V31 active-account bounded status policy missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -363,7 +377,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V28 opt-in bounded pre-database Hello admission",
                    "V29 bounded local RPC backpressure and signed-in credential cache",
                    "V30 live DB verification of cached account password and ban status",
-                   "Qt 6.4 / modern WebAPI ABI compatibility from full server build"],
+                   "Qt 6.4 / modern WebAPI ABI compatibility from full server build",
+                   "V31 staging: opt-in active account revocation and complete matchmaking departure cleanup"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
