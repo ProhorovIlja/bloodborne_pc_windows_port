@@ -368,6 +368,18 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
              v32_module.DATABASE:output[DATABASE_CPP].decode("utf-8") if DATABASE_CPP in output else source[DATABASE_CPP]}
     for name, contents in v32_module.transform(v32_src).items():
         output[name]=contents.encode("utf-8")
+    # V46: Yharnam Together BLauncher remains the *only* launcher.
+    # Opt-in remote GUEST profiles can use separate staging Fornex ports
+    # (UDP 32314, WebAPI 32315, game backend 21443). Ordinary/local host
+    # clients remain on the original 31314/31315/20443 defaults.
+    v46_script=Path(__file__).resolve().parent.parent/"remote-profile-v46/patch_remote_ports.py"
+    v46_module=types.ModuleType("sh_v46_launcher_remote_ports")
+    v46_module.__file__=str(v46_script)
+    exec(compile(v46_script.read_text("utf-8"),str(v46_script),"exec"),v46_module.__dict__)
+    remote_source={v46_module.COOP:output[COOP].decode("utf-8"),
+                   v46_module.LAUNCHER:output[LAUNCHER].decode("utf-8")}
+    for name,body in v46_module.transform(remote_source).items():
+        output[name]=body.encode("utf-8")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -396,10 +408,12 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "Qt 6.4 / modern WebAPI session invitation UTC timestamp compatibility",
                    "Qt 6.4 / modern StatsServer and BloodborneBackendServer HTTP API compatibility",
                    "Qt 6.4 / modern Bloodborne cross-area summon HTTP header compatibility",
-                   "V32 WebAPI bearer rejects banned users, indexed SQLite token lookup; no web login yet"],
+                   "V32 WebAPI bearer rejects banned users, indexed SQLite token lookup; no web login yet",
+                    "V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",
+        "remote_fornex_staging_ports":"OPT-IN guest-only profile; defaults untouched; no game connection tested",
         "public_release_ready":False,
         "sha256":{k:sha(v) for k,v in sorted(output.items())},
     }

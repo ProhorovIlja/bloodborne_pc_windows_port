@@ -1,10 +1,14 @@
 name: Seamless Hunt V41 native Windows shadnet Qt 6.8.3
 on:
+  # Scope expensive native Qt parity reruns to reviewed hotfixes only;
+  # mainline builds remain orchestrated by shyt-mainline-candidate.yml.
   push:
-    branches: [feature/yharnam-v41-win-qt683-server-kit]
+    branches: ['fix/**']
     paths:
       - .github/workflows/shyt-v41-win-qt683-server.yml
-      - tools/poc/yharnam/**
+      - tools/poc/yharnam/mainline/**
+      - tools/poc/yharnam/parity-diagnostics-v43/**
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,6 +37,7 @@ jobs:
           git -C pinned-upstream submodule update --init --depth 1 -- server/externals/protobuf
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path pinned-upstream/server/externals/protobuf/CMakeLists.txt)) { throw 'No protobuf' }
       - uses: actions/setup-python@v5
+        id: py312
         with:
           python-version: '3.12'
       - name: Compose unchanged pinned native source plus verified patches
@@ -43,7 +48,32 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Composition failed' }
           $manifest = Get-Content "$out/SEAMLESS-HUNT-COMPOSE-MANIFEST.json" -Raw | ConvertFrom-Json
           if ($manifest.upstream_pin -ne $env:PIN -or $manifest.public_release_ready -ne $false) { throw 'Unsafe composition' }
+          python tools/poc/yharnam/server-relay-perf-v45/stage_hotpath.py --overlay "$out"
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned C++ UDP relay optimization/hash verification rejected' }
           Copy-Item "$out/*" pinned-upstream -Recurse -Force
+          if ((Get-FileHash "$out/server/src/server_link.cpp" -Algorithm SHA256).Hash -ne
+              (Get-FileHash pinned-upstream/server/src/server_link.cpp -Algorithm SHA256).Hash) {
+            throw 'Pinned UDP overlay differs from staged server source'
+          }
+          if (-not (Select-String -Path pinned-upstream/server/src/server_link.cpp -Pattern SHYT-SERVER-RELAY-PERF-V45 -Quiet)) {
+            throw 'Native C++ UDP hotpath optimization missing'
+          }
+      - name: Capture real parity reference backend stderr if it disconnects
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/parity-diagnostics-v43/patch_parity_diag.py pinned-upstream/backend/tests/test_parity.py
+          if ($LASTEXITCODE -ne 0) { throw 'Reference diagnostic patch rejected pinned upstream' }
+          python -m py_compile pinned-upstream/backend/tests/test_parity.py
+          if ($LASTEXITCODE -ne 0) { throw 'Bad Python backend reference diagnostics' }
+      - name: Verify real pinned reference Python backend before expensive native compilation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $python = '${{ steps.py312.outputs.python-path }}'
+          if (-not (Test-Path $python)) { throw 'Expected Python 3.12 setup-python interpreter missing' }
+          & $python tools/poc/yharnam/parity-diagnostics-v43/smoke_python_backend.py --backend pinned-upstream/backend/bb_dummy_server.py --python $python
+          if ($LASTEXITCODE -ne 0) { throw 'Python backend cannot answer real Bloodborne login or ss.info' }
       - name: Install exact native Qt 6.8.3 MSVC 2022
         uses: jurplel/install-qt-action@v4
         with:
@@ -60,12 +90,26 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "$env:QT_ROOT_DIR/lib/cmake/Qt6/Qt6Config.cmake")) { throw 'Qt 6.8.3 kit missing' }
-          cmake -S pinned-upstream/server -B build-native-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" -Dprotobuf_BUILD_TESTS=OFF
+          # Qt install action can replace PATH's Python with 3.14.x.
+          # The pinned backend parity fixtures are certified on Python 3.12:
+          # explicitly pass that interpreter to FindPython3, never skip parity.
+          $testPython = '${{ steps.py312.outputs.python-path }}'
+          & $testPython --version
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $testPython)) {
+            throw 'Missing verified Python 3.12 for backend parity tests'
+          }
+          cmake -S pinned-upstream/server -B build-native-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" "-DPython3_EXECUTABLE=$testPython" -Dprotobuf_BUILD_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { throw 'Qt server configuration failed' }
           cmake --build build-native-windows --parallel 2 --target shadnet test_server_link test_bloodborne_world test_accounts
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path build-native-windows/shadnet.exe)) { throw 'Windows shadnet build failed' }
       - name: Validate backend parity, accounts and world
         shell: pwsh
+        # On Windows the reference Python backend otherwise inherits cp1252
+        # when output is piped through CTest. Non-ASCII player names can crash
+        # the reference HTTP request handler while logging a successful login.
+        # Keep the exact same Unicode parity assertions; use UTF-8 for stdout.
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           ctest --test-dir build-native-windows --output-on-failure -R '^(server_link|bloodborne_world|accounts|bloodborne_backend_parity)$'
           if ($LASTEXITCODE -ne 0) { throw 'Windows backend parity tests failed' }
@@ -82,14 +126,36 @@ jobs:
           Copy-Item pinned-upstream/backend/ss_info_template.xml "$out/backend/"
           Copy-Item pinned-upstream/backend/README.txt "$out/backend/"
           Copy-Item pinned-upstream/server/LICENSES/GPL-2.0-or-later.txt "$out/licenses/"
-          & "$env:QT_ROOT_DIR/bin/windeployqt6.exe" --release --no-translations "$out/server/shadnet.exe"
+          New-Item -ItemType Directory -Force "$out/server/licenses" | Out-Null
+          Copy-Item LICENSE "$out/server/licenses/GPL-3.0.txt"
+          Copy-Item licenses/LGPL-3.0.txt "$out/server/licenses/LGPL-3.0.txt"
+          Copy-Item tools/poc/yharnam/attribution-v42/Qt-6.8.3-LICENSE-SCOPE.txt "$out/server/licenses/"
+          Copy-Item tools/poc/yharnam/attribution-v42/CREDITS.txt "$out/server/CREDITS.txt"
+          foreach ($legal in @('server/licenses/GPL-3.0.txt',
+                               'server/licenses/LGPL-3.0.txt',
+                               'server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt',
+                               'server/CREDITS.txt',
+                               'licenses/GPL-2.0-or-later.txt')) {
+            $file = Join-Path $out $legal
+            if (-not (Test-Path $file) -or (Get-Item $file).Length -lt 200) {
+              throw "Required author/Qt license notice absent or truncated: $legal"
+            }
+          }
+          $qtDeployer = @("$env:QT_ROOT_DIR/bin/windeployqt.exe",
+                          "$env:QT_ROOT_DIR/bin/windeployqt6.exe") |
+                        Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $qtDeployer) { throw 'Qt 6.8.3 native deployment tool not found' }
+          & $qtDeployer --release --no-translations "$out/server/shadnet.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Qt runtime deployment failed' }
           foreach ($p in @('server/shadnet.exe','server/Qt6Core.dll','server/Qt6Network.dll',
-                           'server/Qt6Sql.dll','server/sqldrivers/qsqlite.dll',
+                           'server/Qt6Sql.dll','server/Qt6HttpServer.dll',
+                           'server/sqldrivers/qsqlite.dll',
                            'backend/bb_dummy_server.py','server/shadnet.cfg')) {
             if (-not (Test-Path (Join-Path $out $p))) { throw "Missing server runtime file: $p" }
           }
           'INTERNAL TEST ONLY. No game data. Not validated on remote Fornex or with players.' | Set-Content "$out/NOT-RELEASE-READY.txt"
+          python tools/poc/yharnam/package-v41/source_identity.py --server-dir "$out" --commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Native server provenance stamping failed' }
           Compress-Archive -Path "$out/*" -DestinationPath candidate-win-server-qt683.zip
           $sum=(Get-FileHash candidate-win-server-qt683.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           [IO.File]::WriteAllText('candidate-win-server-qt683.zip.sha256', "$sum  candidate-win-server-qt683.zip")

@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "goal": "Temporary Seamless Hunt proof of concept; enable voluntary migration or removal when verified maintained upstream alternatives become available.",
+  "default_client": "yharnam_together",
+  "default_version": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
+  "default_server": "experimental_yt_shadnet",
+  "force_user_migration": false,
+  "replace_live_fornex": false,
+  "auto_forward_player_credentials": false,
+  "preserve_existing_saves": true,
+  "allow_cross_protocol_join_without_live_tests": false,
+  "providers": [
+    {
+      "id": "yharnam_together",
+      "project": "lKaniel/bloodborne-server",
+      "mode": "qt_shadnet_party_server",
+      "included": true,
+      "status": "pinned_source_only",
+      "crossplay_with_cls_verified": false,
+      "source": "https://github.com/lKaniel/bloodborne-server",
+      "license_as_reported": "GPL-2.0-or-later"
+    },
+    {
+      "id": "cls_bbsc",
+      "project": "CLSAMG22/BBSC",
+      "mode": "cls_shadp2p_shadnet",
+      "included": false,
+      "status": "interop_target_unverified",
+      "crossplay_with_cls_verified": false,
+      "source": "https://github.com/CLSAMG22/BBSC",
+      "license_as_reported": "GPL-2.0-or-later"
+    },
+    {
+      "id": "visy_native_party",
+      "project": "visy/bloodborne_pc_windows_port",
+      "mode": "direct_p2p",
+      "included": false,
+      "status": "research_only_no_code_import",
+      "crossplay_with_cls_verified": false,
+      "source": "https://github.com/visy/bloodborne_pc_windows_port",
+      "license_as_reported": "GPL-3.0"
+    },
+    {
+      "id": "nightwatch",
+      "project": "vladtepes22/NightwatchCoop",
+      "mode": "lantern_visy_direct_p2p",
+      "included": false,
+      "status": "research_only_no_code_import",
+      "crossplay_with_cls_verified": false,
+      "source": "https://github.com/vladtepes22/NightwatchCoop",
+      "license_as_reported": "GPL-3.0 with Lantern Engine NOTICE and extra conditions"
+    }
+  ],
+  "transitions_require": [
+    "reviewed_license_and_author_notices",
+    "pinned_provenance",
+    "disposable_staging",
+    "account_and_save_backup",
+    "explicit_player_opt_in",
+    "two_real_pc_gameplay_logs",
+    "negative_password_isolation_tests",
+    "reversible_cutover"
+  ]
+}

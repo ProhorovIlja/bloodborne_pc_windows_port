@@ -17,7 +17,11 @@ ROOT = "bbport-windows/"
 REQUIRED = {
     "BLauncher.exe", "Bloodborne.exe", "bin/bb-probe.exe",
     "bin/bb-gpu-capabilities.exe", "run.py", "README.md", "LICENSE",
-    "tools/party_boss_events.py",
+    "tools/party_boss_events.py", "CREDITS.txt",
+    "tools/SeamlessHunt-network-profile.example.json",
+    "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+    "licenses/AMD-FidelityFX-SDK-LICENSE.txt",
+    "licenses/Intel-XeSS-LICENSE.txt", "licenses/PkgTool-LICENSE.txt",
 }
 FATAL_EXACT = {
     "eboot.bin", "shadnet.db", "shadnet.cfg", "coop.json",
@@ -49,6 +53,8 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
         if lines != [expected]:
             raise UnsafeBundle("archive SHA-256 checksum mismatch")
     found: set[str] = set()
+    # Windows extracts ZIP paths case-insensitively; reject shadow entries.
+    windows_names: set[str] = set()
     total = 0
     with zipfile.ZipFile(archive, "r") as z:
         infos = z.infolist()
@@ -71,6 +77,10 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
                 raise UnsafeBundle("retail/private file found in package")
             if name in found:
                 raise UnsafeBundle("duplicate ZIP member")
+            folded = name.casefold()
+            if folded in windows_names:
+                raise UnsafeBundle("case-insensitive Windows ZIP collision")
+            windows_names.add(folded)
             found.add(name)
             unix_mode = (info.external_attr >> 16) & 0xFFFF
             if stat.S_IFMT(unix_mode) == stat.S_IFLNK:
@@ -83,6 +93,40 @@ def check(archive: Path, *, sha_path: Path | None = None) -> dict:
         missing = sorted(ROOT + req for req in REQUIRED if ROOT + req not in found)
         if missing:
             raise UnsafeBundle("missing required native runtime or launcher: " + ", ".join(missing))
+        # A valid archive MUST acknowledge its original developers and carry
+        # upstream redistributable notices, not only the Seamless Hunt name.
+        credits = z.read(ROOT + "CREDITS.txt")
+        if len(credits) > 128 * 1024:
+            raise UnsafeBundle("oversized credits notice")
+        for author in (b"Yharnam Together", b"deadinside28", b"Supermedo",
+                       b"shadPS4", b"Wozzardman", b"0xCydral",
+                       b"NOT a public", b"GPL-2.0-or-later"):
+            if author.lower() not in credits.lower():
+                raise UnsafeBundle("author attribution missing: " + author.decode())
+        for filename in ("LICENSE", "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+                         "licenses/AMD-FidelityFX-SDK-LICENSE.txt",
+                         "licenses/Intel-XeSS-LICENSE.txt",
+                         "licenses/PkgTool-LICENSE.txt"):
+            if z.getinfo(ROOT + filename).file_size < 32:
+                raise UnsafeBundle("missing or truncated original license: " + filename)
+        # This portable profile is a dummy template; never distribute a real
+        # player's endpoint profile or account data inside the launcher ZIP.
+        profile_name = ROOT + "tools/SeamlessHunt-network-profile.example.json"
+        if z.getinfo(profile_name).file_size > 2048:
+            raise UnsafeBundle("oversized remote server profile example")
+        try:
+            example = json.loads(z.read(profile_name))
+        except (ValueError, UnicodeError):
+            raise UnsafeBundle("invalid example for private Fornex profile")
+        if not isinstance(example, dict) or set(example) != {
+            "schema", "opt_in", "server_ipv4",
+            "udp_game_port", "webapi_tcp_port", "backend_tcp_port"
+        } or (type(example.get("schema")) is not int or example.get("schema") != 1
+               or example.get("opt_in") is not True
+               or example.get("server_ipv4") != "198.51.100.24"
+               or (example.get("udp_game_port"), example.get("webapi_tcp_port"),
+                   example.get("backend_tcp_port")) != (32314, 32315, 21443)):
+            raise UnsafeBundle("remote server profile example must be sanitized and schema-pinned")
         # The standalone Windows port package is NOT a seamless co-op kit
         # unless the user-owned game's event patcher is present and supports
         # guest door interactions. Don't release a port that silently lacks it.

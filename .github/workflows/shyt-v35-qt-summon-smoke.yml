@@ -8,6 +8,7 @@ on:
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v35-qt-summon-smoke.yml
   pull_request:
+    branches: [feature/yharnam-v33-hunter-web-portal]
     paths:
       - tools/poc/yharnam/qt-http-compat-v30/**
       - tools/poc/yharnam/unified-v9/compose_sources.py

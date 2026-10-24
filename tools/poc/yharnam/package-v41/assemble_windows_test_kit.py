@@ -15,13 +15,21 @@ import stat
 import sys
 import zipfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from source_identity import GAME_NAME, SERVER_NAME, SourceIdentityError, validate as validate_identity
+
 ROOT = "bbport-windows/"
 SERVER_FILES = {
     "server/shadnet.exe", "server/shadnet.cfg",
+    # Qt6Concurrent is not linked by shadnet; windeployqt does not require it.
     "server/Qt6Core.dll", "server/Qt6Network.dll", "server/Qt6Sql.dll",
+    "server/Qt6HttpServer.dll",
     "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py",
     "backend/ss_info_template.xml", "licenses/GPL-2.0-or-later.txt",
-    "NOT-RELEASE-READY.txt",
+    "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",
+    "server/licenses/LGPL-3.0.txt",
+    "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt",
+    "NOT-RELEASE-READY.txt", "SHYT-SERVER-SOURCE-IDENTITY.json",
 }
 PRIVATE_PARTS = {"user", "savedata", "secrets", "dvdroot_ps4", "sce_module",
                  "sce_sys", "game", "coop-game", "db", ".git"}
@@ -71,6 +79,7 @@ def allowed(name: str) -> None:
 
 def scan(z: zipfile.ZipFile, prefix: str) -> dict[str, zipfile.ZipInfo]:
     found: dict[str, zipfile.ZipInfo] = {}
+    seen_windows: set[str] = set()
     size = 0
     items = z.infolist()
     if not items or len(items) > CAP_ENTRIES:
@@ -84,6 +93,10 @@ def scan(z: zipfile.ZipFile, prefix: str) -> dict[str, zipfile.ZipInfo]:
             continue
         if raw in found:
             raise InvalidCandidate("duplicate ZIP entry")
+        folded = raw.casefold()
+        if folded in seen_windows:
+            raise InvalidCandidate("case-insensitive Windows ZIP collision")
+        seen_windows.add(folded)
         if stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK:
             raise InvalidCandidate("ZIP symbolic link not allowed")
         size += info.file_size
@@ -109,15 +122,44 @@ def assemble(game: Path, server: Path, target: Path,
     with zipfile.ZipFile(game) as gz, zipfile.ZipFile(server) as sz:
         games = scan(gz, ROOT)
         servers = scan(sz, "")
+        # The two independent build archives must originate at the exact
+        # same Seamless Hunt commit, not merely share an upstream pin. A game
+        # from a previous CI run can otherwise silently mix with newer server
+        # patches and crash/desync during live multiplayer.
+        try:
+            game_id = validate_identity(gz.read(ROOT + GAME_NAME), "game")
+            server_id = validate_identity(sz.read(SERVER_NAME), "server")
+        except (KeyError, SourceIdentityError) as exc:
+            raise InvalidCandidate("missing/invalid matched native source identity") from exc
+        if game_id["source_commit"] != server_id["source_commit"]:
+            raise InvalidCandidate("client/server source commit mismatch")
         for required in SERVER_FILES:
             if required not in servers:
                 raise InvalidCandidate("Windows server or Qt dependency missing: " + required)
+        # Linkage to Qt HTTP Server 6.8 introduces GPLv3 obligations.
+        # Require the original license texts and acknowledgement of the
+        # non-LGPL QtHttpServer component rather than falsely labelling it LGPL.
+        for legal in ("server/CREDITS.txt",
+                      "server/licenses/GPL-3.0.txt",
+                      "server/licenses/LGPL-3.0.txt",
+                      "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt",
+                      "licenses/GPL-2.0-or-later.txt"):
+            if servers[legal].file_size < 200:
+                raise InvalidCandidate("missing or truncated Qt/author license notice: " + legal)
+        scope_text = sz.read("server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt")
+        if not (b"Qt HTTP Server" in scope_text and b"GPL v3" in scope_text):
+            raise InvalidCandidate("Qt HTTP Server GPL v3 status not disclosed")
+        credits_text = sz.read("server/CREDITS.txt")
+        for name in (b"Yharnam Together", b"deadinside28", b"Supermedo"):
+            if name not in credits_text:
+                raise InvalidCandidate("original author missing from server attribution")
         for expected in ("server/shadnet.exe", "server/Qt6Core.dll"):
             if servers[expected].file_size < 1024:
                 raise InvalidCandidate("placeholder Windows native server")
+        game_windows_names = {path.casefold() for path in games}
         for source_path in servers:
-            if (ROOT + source_path in games or
-                    source_path.startswith("bbport-windows/")):
+            if ((ROOT + source_path).casefold() in game_windows_names or
+                    source_path.casefold().startswith("bbport-windows/")):
                 raise InvalidCandidate("game/server file collision")
         total = sum(x.file_size for x in list(games.values()) + list(servers.values()))
         if total > CAP_TOTAL:
@@ -133,6 +175,7 @@ def assemble(game: Path, server: Path, target: Path,
         metadata = {
             "release_ready": False, "game_zip_sha256": src_game_sha,
             "server_zip_sha256": src_server_sha,
+            "seamless_hunt_source_commit": game_id["source_commit"],
             "upstream_pinned_revision": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
             "server_abi": "Windows x86_64, Qt 6.8.3 MSVC 2022",
         }

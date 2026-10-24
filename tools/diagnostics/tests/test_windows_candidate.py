@@ -13,6 +13,11 @@ sys.modules[spec.name] = m
 spec.loader.exec_module(m)
 
 
+CREDITS = (b"SEAMLESS HUNT INTERNAL NOT a public player release\\n"
+           b"Yharnam Together deadinside28 Supermedo shadPS4 Wozzardman "
+           b"0xCydral GPL-2.0-or-later")
+
+
 class CandidateTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -24,8 +29,12 @@ class CandidateTests(unittest.TestCase):
             for name in sorted(m.REQUIRED - set(missing)):
                 if name == "tools/party_boss_events.py":
                     data = b"HOST_DOOR_EFFECT = {'m29.emevd.dcx': 9920, 'm35_00_00_00.emevd.dcx': 9920}; def patch_host_door_effect(): pass"
+                elif name == "CREDITS.txt":
+                    data = CREDITS
+                elif name == "tools/SeamlessHunt-network-profile.example.json":
+                    data = b'{"schema":1,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}'
                 else:
-                    data = (b"Exe data " * 200) if name.endswith(".exe") else b"sample document"
+                    data = (b"Exe data " * 200) if name.endswith(".exe") else (b"sample license document and notices " * 3)
                 z.writestr(m.ROOT + name, data)
             for name in extra:
                 # zipfile.ZipInfo converts backslashes to slashes on Windows
@@ -81,16 +90,58 @@ class CandidateTests(unittest.TestCase):
         with self.assertRaisesRegex(m.UnsafeBundle, "duplicate"):
             m.check(self.archive)
 
+    def test_credits_and_redistributable_licenses_are_required(self):
+        for name in ("CREDITS.txt", "LICENSE",
+                     "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+                     "licenses/AMD-FidelityFX-SDK-LICENSE.txt",
+                     "licenses/Intel-XeSS-LICENSE.txt",
+                     "licenses/PkgTool-LICENSE.txt"):
+            with self.subTest(name=name):
+                self.write(missing=(name,))
+                with self.assertRaisesRegex(m.UnsafeBundle, "missing required"):
+                    m.check(self.archive)
+        self.write()
+        with zipfile.ZipFile(self.archive, "a") as z:
+            z.writestr(m.ROOT + "CREDITS.txt", b"fake notices")
+        with self.assertRaises(m.UnsafeBundle):
+            m.check(self.archive)
+
     def test_guest_door_patcher_is_a_hard_release_requirement(self):
         self.write(missing=("tools/party_boss_events.py",))
         with self.assertRaisesRegex(m.UnsafeBundle, "missing required"):
             m.check(self.archive)
         with zipfile.ZipFile(self.archive, "w") as z:
             for name in sorted(m.REQUIRED):
-                data = b"fake event script" if name == "tools/party_boss_events.py" else b"Exe data " * 200
+                data = (b"fake event script" if name == "tools/party_boss_events.py"
+                        else CREDITS if name == "CREDITS.txt"
+                        else b'{"schema":1,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}'
+                        if name == "tools/SeamlessHunt-network-profile.example.json"
+                        else b"Exe data " * 200)
                 z.writestr(m.ROOT + name, data)
         with self.assertRaisesRegex(m.UnsafeBundle, "co-op door event patch missing"):
             m.check(self.archive)
+
+    def test_windows_case_collisions_and_ambiguous_profile_version_fail_closed(self):
+        self.write(extra=(m.ROOT + "blauncher.exe",))
+        with self.assertRaisesRegex(m.UnsafeBundle, "case-insensitive"):
+            m.check(self.archive)
+        self.write(extra=(m.ROOT + "TOOLS/party_boss_events.py",))
+        with self.assertRaisesRegex(m.UnsafeBundle, "case-insensitive"):
+            m.check(self.archive)
+        self.write()
+        with zipfile.ZipFile(self.archive) as z:
+            files = {i.filename: z.read(i) for i in z.infolist()}
+        profile = m.ROOT + "tools/SeamlessHunt-network-profile.example.json"
+        for payload in (
+            b'{"schema":true,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}',
+            b'{"schema":1.0,"opt_in":true,"server_ipv4":"198.51.100.24","udp_game_port":32314,"webapi_tcp_port":32315,"backend_tcp_port":21443}',
+        ):
+            with self.subTest(payload=payload):
+                with zipfile.ZipFile(self.archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                    for name, data in files.items():
+                        z.writestr(name, payload if name == profile else data)
+                with self.assertRaisesRegex(m.UnsafeBundle, "schema-pinned"):
+                    m.check(self.archive)
 
     def test_checksum_corruption_rejected(self):
         self.write()

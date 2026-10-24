@@ -8,6 +8,7 @@ on:
       - docs/SEAMLESS_HUNT_HUNTER_PORTAL_V33.md
       - .github/workflows/shyt-v33-hunter-portal.yml
   pull_request:
+    branches: [feature/yharnam-v33-hunter-web-portal]
     paths:
       - tools/poc/yharnam/web-portal-v33/**
       - docs/SEAMLESS_HUNT_HUNTER_PORTAL_V33.md

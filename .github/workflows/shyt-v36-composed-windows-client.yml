@@ -1,21 +1,13 @@
 name: Seamless Hunt V36 composed native Windows game client
 on:
-  push:
-    branches: [feature/yharnam-v36-windows-composed-client-ci]
-    paths:
-      - tools/poc/yharnam/**
-      - .github/workflows/shyt-v36-composed-windows-client.yml
-  pull_request:
-    paths:
-      - tools/poc/yharnam/**
-      - .github/workflows/shyt-v36-composed-windows-client.yml
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   native-game-client:
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
       BB_LTO: 'OFF'
@@ -74,7 +66,7 @@ jobs:
           pacman --noconfirm --disable-download-timeout -Sy
           pacman --noconfirm --disable-download-timeout -S --needed \
             git patch \
-            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld \
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-ccache \
             mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-cmake \
             mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-pkgconf \
             mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-vulkan-loader \
@@ -87,13 +79,93 @@ jobs:
             mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
             mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
             mingw-w64-clang-x86_64-nlohmann-json
+      - name: Restore incremental CLANG64 compilation even after a failed build
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: shyt-native-gpu-ccache-v2-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            shyt-native-gpu-ccache-v2-${{ runner.os }}-
+      - name: Inject source-checked ccache launcher for pinned native game build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = 'pinned-upstream/bbport/build.sh'
+          $source = [IO.File]::ReadAllText((Resolve-Path $script))
+          $old = '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null'
+          $new = '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache >/dev/null'
+          if (($source.Split($old).Count - 1) -ne 1) {
+            throw 'Pinned game build.sh has changed; refusing non-reviewed incremental compiler injection'
+          }
+          [IO.File]::WriteAllText((Resolve-Path $script), $source.Replace($old, $new))
+      - name: Patch pinned FireBurn FSR Windows CLANG64 wide formatting
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $submodule = 'pinned-upstream/bbport/gpu/third_party/fsr-vulkan'
+          $actual = (git -C $submodule rev-parse HEAD).Trim()
+          if ($actual -ne 'c64f093404125e960813f95f1996c14780f0dd69') {
+            throw "Unreviewed FireBurn FSR Vulkan revision: $actual"
+          }
+          python tools/poc/yharnam/package-v41/patch_fireburn_clang64.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR CLANG64 portability patch failed' }
+      - name: Compile pinned FidelityFX FSR host translation unit before expensive GPU build
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          sdk="pinned-upstream/bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk"
+          clang++ -std=c++17 -fsyntax-only \
+            -I "$sdk/include" \
+            "$sdk/src/shared/ffx_message.cpp"
+          echo SHYT_FSR_CLANG64_SINGLE_FILE_COMPATIBILITY_PASS
       - name: Compile real native Windows renderer and game loader
+        id: native_build
+        # Reserve job time to upload compiler evidence if GPU compilation stalls.
+        timeout-minutes: 165
         shell: msys2 {0}
         run: |
           set -euo pipefail
           export CC=clang CXX=clang++
+          export CCACHE_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/.ccache"
+          mkdir -p "$CCACHE_DIR"
+          ccache --max-size 1600M
+          ccache --show-stats
           cd pinned-upstream/bbport
-          bash build.sh
+          # The upstream build redirects ALL Ninja output to gpu-build.log.
+          # Without a heartbeat GitHub shows nothing for 90 minutes and the
+          # former job limit cancelled, losing the only useful diagnostics.
+          # kill -0 on an unreaped Windows/MSYS child can remain true even
+          # AFTER Ninja has failed. That previously printed the same FSR
+          # compiler error until the 165-minute timeout. The build now writes
+          # an explicit exit code and stops the heartbeat on first failure.
+          mkdir -p out
+          statusfile="out/shyt-native-build.exit"
+          rm -f "$statusfile"
+          (
+            set +e
+            bash build.sh
+            rc=$?
+            printf '%s\n' "$rc" > "$statusfile"
+            exit "$rc"
+          ) &
+          builder=$!
+          while [[ ! -f "$statusfile" ]]; do
+            echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            if [[ -f out/gpu-build.log ]]; then
+              tail -n 10 out/gpu-build.log || true
+            else
+              echo "GPU Ninja log not created yet; configuring dependencies"
+            fi
+            sleep 30
+          done
+          build_status="$(cat "$statusfile")"
+          wait "$builder" || true
+          if [[ "$build_status" != 0 ]]; then
+            echo "SHYT_GPU_BUILD_FAILED_FAST_EXIT=$build_status"
+            tail -n 100 out/gpu-build.log || true
+            exit "$build_status"
+          fi
+          ccache --show-stats
           test -s out/bb-probe.exe
           test -s out/bb-gpu-capabilities.exe
           test -s out/bb-play.exe
@@ -104,6 +176,12 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $eventTool = 'pinned-upstream/tools/re/party_boss_events.py'
           if (-not (Test-Path $eventTool)) { throw 'Co-op event patcher missing from pinned upstream' }
+          $creditSource = 'tools/poc/yharnam/attribution-v42/CREDITS.txt'
+          $creditTarget = 'pinned-upstream/tools/release/kit/Seamless-Hunt-CREDITS.txt'
+          if (-not (Test-Path $creditSource)) { throw 'Project attribution notice missing' }
+          Copy-Item -LiteralPath $creditSource -Destination $creditTarget -Force
+          Copy-Item -LiteralPath tools/poc/yharnam/remote-profile-v46/SeamlessHunt-network-profile.example.json -Destination pinned-upstream/tools/release/kit/SeamlessHunt-network-profile.example.json -Force
+          if (-not (Test-Path $creditTarget)) { throw 'Failed to stage author attribution' }
           python tools/poc/yharnam/package-v40/patch_windows_package.py pinned-upstream/bbport/packaging/windows/package.sh
           if ($LASTEXITCODE -ne 0) { throw 'Pinned native package script drifted' }
           Write-Host 'COOP_EVENT_PATCHER_STAGED; NPC summons still require live verification'
@@ -117,6 +195,11 @@ jobs:
           bash packaging/windows/package.sh
           test -s dist/bbport-windows.zip
           echo WINDOWS_PORTABLE_PACKAGE_BUILT_NOT_GAME_TESTED
+      - name: Stamp game ZIP with exact mainline source identity
+        shell: pwsh
+        run: |
+          python tools/poc/yharnam/package-v41/source_identity.py --game-zip pinned-upstream/bbport/dist/bbport-windows.zip --commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Native client provenance stamping failed' }
       - name: Validate portable game launcher archive and reject private/retail data
         shell: pwsh
         run: |
@@ -145,7 +228,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Preserve build failure evidence without publishing a client
-        if: failure()
+        # Always upload: cancellation/step timeout need not register as failure().
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: shyt-v36-native-windows-compiler-failure
@@ -155,6 +239,12 @@ jobs:
             pinned-upstream/bbport/out/gpu/CMakeFiles/CMakeConfigureLog.yaml
           if-no-files-found: ignore
           retention-days: 7
+      - name: Save bounded incremental compiler cache even on C++ build failure
+        if: always() && steps.native_build.outcome != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: shyt-native-gpu-ccache-v2-${{ runner.os }}-${{ github.run_id }}
       - name: No proprietary assets and no untested public release
         shell: pwsh
         run: |

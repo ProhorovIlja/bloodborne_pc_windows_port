@@ -1,13 +1,7 @@
 name: Seamless Hunt V40 guest-door event package compatibility
 on:
-  push:
-    branches: [feature/yharnam-v36-windows-composed-client-ci]
-    paths:
-      - tools/poc/yharnam/package-v40/**
-      - tools/diagnostics/check_windows_candidate.py
-      - tools/diagnostics/tests/test_windows_candidate.py
-      - .github/workflows/shyt-v40-coop-event-package.yml
   pull_request:
+    branches: [feature/yharnam-v36-windows-composed-client-ci]
     paths:
       - tools/poc/yharnam/package-v40/**
       - tools/diagnostics/check_windows_candidate.py
