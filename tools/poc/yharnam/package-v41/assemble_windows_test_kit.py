@@ -21,6 +21,9 @@ SERVER_FILES = {
     "server/Qt6Core.dll", "server/Qt6Network.dll", "server/Qt6Sql.dll",
     "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py",
     "backend/ss_info_template.xml", "licenses/GPL-2.0-or-later.txt",
+    "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",
+    "server/licenses/LGPL-3.0.txt",
+    "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt",
     "NOT-RELEASE-READY.txt",
 }
 PRIVATE_PARTS = {"user", "savedata", "secrets", "dvdroot_ps4", "sce_module",
@@ -112,6 +115,23 @@ def assemble(game: Path, server: Path, target: Path,
         for required in SERVER_FILES:
             if required not in servers:
                 raise InvalidCandidate("Windows server or Qt dependency missing: " + required)
+        # Linkage to Qt HTTP Server 6.8 introduces GPLv3 obligations.
+        # Require the original license texts and acknowledgement of the
+        # non-LGPL QtHttpServer component rather than falsely labelling it LGPL.
+        for legal in ("server/CREDITS.txt",
+                      "server/licenses/GPL-3.0.txt",
+                      "server/licenses/LGPL-3.0.txt",
+                      "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt",
+                      "licenses/GPL-2.0-or-later.txt"):
+            if servers[legal].file_size < 200:
+                raise InvalidCandidate("missing or truncated Qt/author license notice: " + legal)
+        scope_text = sz.read("server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt")
+        if not (b"Qt HTTP Server" in scope_text and b"GPL v3" in scope_text):
+            raise InvalidCandidate("Qt HTTP Server GPL v3 status not disclosed")
+        credits_text = sz.read("server/CREDITS.txt")
+        for name in (b"Yharnam Together", b"deadinside28", b"Supermedo"):
+            if name not in credits_text:
+                raise InvalidCandidate("original author missing from server attribution")
         for expected in ("server/shadnet.exe", "server/Qt6Core.dll"):
             if servers[expected].file_size < 1024:
                 raise InvalidCandidate("placeholder Windows native server")
