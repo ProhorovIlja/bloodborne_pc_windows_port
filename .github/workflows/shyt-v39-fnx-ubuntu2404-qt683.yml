@@ -128,6 +128,13 @@ jobs:
           mkdir -p "$pkg/bin" "$pkg/licenses" "$pkg/config-reference"
           install -m 755 "$OUT_ROOT/build/shadnet" "$pkg/bin/shadnet"
           install -m 644 "$OUT_ROOT/upstream/server/LICENSES/GPL-2.0-or-later.txt" "$pkg/licenses/GPL-2.0-or-later.txt"
+          install -m 644 "$GITHUB_WORKSPACE/LICENSE" "$pkg/licenses/GPL-3.0.txt"
+          install -m 644 "$GITHUB_WORKSPACE/licenses/LGPL-3.0.txt" "$pkg/licenses/LGPL-3.0.txt"
+          install -m 644 "$GITHUB_WORKSPACE/tools/poc/yharnam/attribution-v42/Qt-6.8.3-LICENSE-SCOPE.txt" "$pkg/licenses/Qt-6.8.3-LICENSE-SCOPE.txt"
+          install -m 644 "$GITHUB_WORKSPACE/tools/poc/yharnam/attribution-v42/CREDITS.txt" "$pkg/CREDITS.txt"
+          for notice in "$pkg"/licenses/*.txt "$pkg/CREDITS.txt"; do
+            if [[ ! -s "$notice" ]]; then echo "missing original author or GPLv3 Qt license notice" >&2; exit 1; fi
+          done
           # These are configuration references, NOT live production settings.
           for file in worlds.cfg scoreboards.cfg; do
             if [[ -f "$OUT_ROOT/build/$file" ]]; then
@@ -147,7 +154,7 @@ jobs:
           fi
           printf 'INTERNAL CI CANDIDATE; never copy into live production without staging validation.\nPinned upstream: %s\nSource revision: %s\nBuild OS: Ubuntu 24.04 x86_64, Qt 6.8.3 runtime REQUIRED.\nNetwork/protocol: legacy cross-client and login not game-tested.\nRelease approved: NO\n' \
             "$PIN" "$GITHUB_SHA" > "$pkg/NOT-READY-FOR-PRODUCTION.txt"
-          (cd "$pkg" && sha256sum bin/shadnet config-reference/* > SHA256SUMS)
+          (cd "$pkg" && sha256sum bin/shadnet config-reference/* licenses/* CREDITS.txt > SHA256SUMS)
           tar -czf "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
             -C "$OUT_ROOT" shyt-internal-linux-server
           sha256sum "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
