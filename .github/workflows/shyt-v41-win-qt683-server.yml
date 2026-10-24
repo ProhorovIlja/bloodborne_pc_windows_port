@@ -1,0 +1,114 @@
+name: Seamless Hunt V41 native Windows shadnet Qt 6.8.3
+on:
+  push:
+    branches: [feature/yharnam-v41-win-qt683-server-kit]
+    paths:
+      - .github/workflows/shyt-v41-win-qt683-server.yml
+      - tools/poc/yharnam/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-server-kit:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+      - name: Obtain only pinned protobuf
+        shell: pwsh
+        run: |
+          if ((git -C pinned-upstream rev-parse HEAD).Trim() -ne $env:PIN) { throw 'Wrong source SHA' }
+          git -C pinned-upstream submodule update --init --depth 1 -- server/externals/protobuf
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path pinned-upstream/server/externals/protobuf/CMakeLists.txt)) { throw 'No protobuf' }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compose unchanged pinned native source plus verified patches
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'native-overlay'
+          python tools/poc/yharnam/unified-v9/compose_sources.py --upstream pinned-upstream --repo . --out "$out"
+          if ($LASTEXITCODE -ne 0) { throw 'Composition failed' }
+          $manifest = Get-Content "$out/SEAMLESS-HUNT-COMPOSE-MANIFEST.json" -Raw | ConvertFrom-Json
+          if ($manifest.upstream_pin -ne $env:PIN -or $manifest.public_release_ready -ne $false) { throw 'Unsafe composition' }
+          Copy-Item "$out/*" pinned-upstream -Recurse -Force
+      - name: Install exact native Qt 6.8.3 MSVC 2022
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: 'qthttpserver qtwebsockets'
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+      - name: Build real native Windows server
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "$env:QT_ROOT_DIR/lib/cmake/Qt6/Qt6Config.cmake")) { throw 'Qt 6.8.3 kit missing' }
+          cmake -S pinned-upstream/server -B build-native-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" -Dprotobuf_BUILD_TESTS=OFF
+          if ($LASTEXITCODE -ne 0) { throw 'Qt server configuration failed' }
+          cmake --build build-native-windows --parallel 2 --target shadnet test_server_link test_bloodborne_world test_accounts
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path build-native-windows/shadnet.exe)) { throw 'Windows shadnet build failed' }
+      - name: Validate backend parity, accounts and world
+        shell: pwsh
+        run: |
+          ctest --test-dir build-native-windows --output-on-failure -R '^(server_link|bloodborne_world|accounts|bloodborne_backend_parity)$'
+          if ($LASTEXITCODE -ne 0) { throw 'Windows backend parity tests failed' }
+      - name: Stage complete local Windows Qt server candidate
+        shell: pwsh
+        run: |
+          $out = 'candidate-win-server'
+          New-Item -ItemType Directory -Force "$out/server","$out/backend","$out/licenses" | Out-Null
+          Copy-Item build-native-windows/shadnet.exe "$out/server/"
+          Copy-Item pinned-upstream/tools/release/kit/server/shadnet.cfg "$out/server/"
+          Copy-Item pinned-upstream/server/worlds.cfg "$out/server/"
+          Copy-Item pinned-upstream/server/scoreboards.cfg "$out/server/"
+          Copy-Item pinned-upstream/backend/bb_dummy_server.py "$out/backend/"
+          Copy-Item pinned-upstream/backend/ss_info_template.xml "$out/backend/"
+          Copy-Item pinned-upstream/backend/README.txt "$out/backend/"
+          Copy-Item pinned-upstream/server/LICENSES/GPL-2.0-or-later.txt "$out/licenses/"
+          & "$env:QT_ROOT_DIR/bin/windeployqt6.exe" --release --no-translations "$out/server/shadnet.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Qt runtime deployment failed' }
+          foreach ($p in @('server/shadnet.exe','server/Qt6Core.dll','server/Qt6Network.dll',
+                           'server/Qt6Sql.dll','server/sqldrivers/qsqlite.dll',
+                           'backend/bb_dummy_server.py','server/shadnet.cfg')) {
+            if (-not (Test-Path (Join-Path $out $p))) { throw "Missing server runtime file: $p" }
+          }
+          'INTERNAL TEST ONLY. No game data. Not validated on remote Fornex or with players.' | Set-Content "$out/NOT-RELEASE-READY.txt"
+          Compress-Archive -Path "$out/*" -DestinationPath candidate-win-server-qt683.zip
+          $sum=(Get-FileHash candidate-win-server-qt683.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText('candidate-win-server-qt683.zip.sha256', "$sum  candidate-win-server-qt683.zip")
+      - name: Store internal server candidate, not a player release
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-v41-native-windows-qt683-INTERNAL
+          path: |
+            candidate-win-server-qt683.zip
+            candidate-win-server-qt683.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve failed Windows CMake diagnostic
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-v41-windows-cmake-failure
+          path: |
+            build-native-windows/CMakeCache.txt
+            build-native-windows/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: ignore
+          retention-days: 7
