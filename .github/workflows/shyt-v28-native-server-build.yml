@@ -7,6 +7,7 @@ on:
       - tools/poc/yharnam/**
       - .github/workflows/shyt-v28-native-server-build.yml
   pull_request:
+    branches: [feature/yharnam-dedicated-server-poc]
     paths:
       - tools/poc/yharnam/**
       - .github/workflows/shyt-v28-native-server-build.yml
