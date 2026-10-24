@@ -56,6 +56,58 @@ def check_interop_policy(policy: dict) -> None:
         raise SourceDrift("Unsafe or unverified provider replacement plan")
 
 
+def check_transport_feature_policy(policy: dict) -> None:
+    # The pinned Yharnam Together team runtime currently uses one UDP link
+    # per client and relays game frames through the server. The old P2P
+    # description in NATIVE_NETCODE.md predates SERVER_COOP_PLAN.md.
+    if (policy.get("schema") != 1
+            or policy.get("source") != "lKaniel/bloodborne-server"
+            or policy.get("source_commit") != PIN
+            or policy.get("documented_source") != "docs/SERVER_COOP_PLAN.md"):
+        raise SourceDrift("network transport policy no longer matches pinned upstream")
+    current = policy.get("current_transport", {})
+    if (current.get("mode") != "server_relay_udp"
+            or current.get("client_peer_direct_game_packets") is not False
+            or current.get("central_server_owns_shared_world") is not True
+            or current.get("game_net_packets_forwarded_by_shadnet") is not True
+            or current.get("server_memory_and_egress_measured") is not False):
+        raise SourceDrift("cannot advertise untested direct P2P or server load figures")
+    target = policy.get("target_transport", {})
+    if (target.get("mode") != "hybrid_direct_p2p_with_relay_fallback"
+            or target.get("status") != "design_only_not_implemented"
+            or target.get("must_not_auto_enable") is not True
+            or target.get("require_consent_for_network_endpoint_exposure") is not True
+            or target.get("never_forward_account_password_or_auth_token_to_peers") is not True):
+        raise SourceDrift("experimental direct P2P must be opt-in and protect credentials")
+    benchmarks = policy.get("benchmarks", {})
+    if (benchmarks.get("verified_live_p2p") is not False
+            or benchmarks.get("verified_fornex_relay_load") is not False):
+        raise SourceDrift("cannot mark P2P or production bandwidth measured without a real test")
+    required = {"two_clients_one_host", "guest_door_interaction", "npc_summon_sign",
+                "optional_invasion", "host_disconnect_recovery", "two_hour_soak",
+                "bad_network_packet_loss_and_jitter"}
+    if not required.issubset(set(benchmarks.get("required_real_sessions", []))):
+        raise SourceDrift("network benchmark lacks critical actual Bloodborne scenarios")
+    stages = policy.get("priority_order", [])
+    if (not isinstance(stages, list)
+            or [s.get("priority") for s in stages] != [0, 1, 2]):
+        raise SourceDrift("P0 core stability must precede optional gameplay changes")
+    core = set(stages[0].get("features", []))
+    for requirement in ("native_game_boot", "reliable_login_and_discovery",
+                        "join_and_host_coop", "safe_save_backups", "doors_and_npc_signs",
+                        "crash_free_2_hour_sessions", "measured_network_load"):
+        if requirement not in core:
+            raise SourceDrift("missing core release gate: " + requirement)
+    if policy.get("no_unreviewed_external_source_code") is not True or (
+            policy.get("requires_license_and_original_author_credit") is not True
+            or policy.get("release_ready") is not False):
+        raise SourceDrift("fork inspirations are not licensed code or a finished release")
+    for source in policy.get("design_references", []):
+        if source.get("status") not in ("design_ideas_only", "gameplay_concepts_only",
+                                        "test_verified_code_only"):
+            raise SourceDrift("design inspiration cannot be silently labelled copied code")
+
+
 def check_policy(meta: dict) -> None:
     if meta.get("schema") != 1 or meta.get("canonical_branch") != CANONICAL:
         raise SourceDrift("not the single Seamless Hunt development branch")
@@ -116,6 +168,8 @@ def check_policy(meta: dict) -> None:
 
 def check_workspace(root: Path, meta: dict) -> None:
     check_policy(meta)
+    transport_file = POLICY.with_name("transport_and_feature_priorities.json")
+    check_transport_feature_policy(json.loads(transport_file.read_text("utf-8")))
     composer = (root / meta["overlay_builder"]).read_text("utf-8")
     if (f'PIN = "{PIN}"' not in composer
             or 'LAUNCHER = "bbport/launcher/bbport_launcher_win.py"' not in composer
