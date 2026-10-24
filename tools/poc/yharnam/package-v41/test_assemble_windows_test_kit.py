@@ -83,6 +83,7 @@ class CoupledKitTests(unittest.TestCase):
 
     def test_missing_native_server_library_cannot_be_distributed(self):
         for missing in ("server/shadnet.exe", "server/Qt6Core.dll",
+                        "server/Qt6Concurrent.dll", "server/Qt6HttpServer.dll",
                         "server/sqldrivers/qsqlite.dll", "backend/bb_dummy_server.py",
                         "server/CREDITS.txt", "server/licenses/GPL-3.0.txt",
                         "server/licenses/LGPL-3.0.txt",
