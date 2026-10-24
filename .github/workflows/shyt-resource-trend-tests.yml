@@ -1,0 +1,41 @@
+name: Seamless Hunt long-session resource trend diagnostics
+on:
+  push:
+    branches:
+      - feature/yharnam-v36-windows-composed-client-ci
+    paths:
+      - tools/diagnostics/**
+      - .github/workflows/shyt-resource-trend-tests.yml
+  pull_request:
+    paths:
+      - tools/diagnostics/**
+      - .github/workflows/shyt-resource-trend-tests.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-host-resource-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax validation
+        run: python -m py_compile tools/diagnostics/process_memory_report.py tools/diagnostics/tests/test_process_memory_report.py
+      - name: Cross-platform isolated trend regression tests
+        run: python -m unittest discover -s tools/diagnostics/tests -p 'test_process_memory_report.py' -v
+      - name: Validate Windows PowerShell syntax without running game
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $file = (Resolve-Path tools/diagnostics/collect_process_memory.ps1).Path
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) { throw 'PowerShell syntax regression' }
