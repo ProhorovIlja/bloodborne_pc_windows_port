@@ -105,6 +105,7 @@
         "yarnham_together_launcher",
         "reliable_login_and_discovery",
         "join_and_host_coop",
+        "opt_in_invasions",
         "safe_save_backups",
         "doors_and_npc_signs",
         "stable_death_and_respawn",
@@ -117,7 +118,6 @@
       "priority": 1,
       "scope": "after_core_stable",
       "features": [
-        "opt_in_invasions",
         "hybrid_p2p_prototype",
         "direct_connection_nature_and_fallback",
         "advanced_session_browser",
@@ -139,5 +139,13 @@
   ],
   "no_unreviewed_external_source_code": true,
   "requires_license_and_original_author_credit": true,
-  "release_ready": false
+  "release_ready": false,
+  "invasion_policy": {
+    "enabled_by_default": false,
+    "require_explicit_match_opt_in": true,
+    "session_permissions_tested": false,
+    "version_and_protocol_compatibility_tested": false,
+    "adversarial_join_tested": false,
+    "description": "Invasion is a core end-state acceptance criterion, never silently enabled for a PvE-only party."
+  }
 }
