@@ -65,6 +65,20 @@ class MainlineContracts(unittest.TestCase):
         self.assertIn("bloodborne_backend_parity", parity)
         self.assertIn("Windows backend parity tests failed", parity)
 
+    def test_windows_qt_packaging_requires_only_actual_deployed_dependencies(self):
+        workflow = (p.REPO_ROOT / self.good["mainline_workflows"]["windows_server"]).read_text("utf-8")
+        stage = workflow.split("      - name: Stage complete local Windows Qt server candidate", 1)
+        self.assertEqual(len(stage), 2)
+        package = stage[1].split("      - name: Store internal server candidate", 1)[0]
+        # windeployqt resolves direct and transitive dependencies of shadnet.exe.
+        # It does not deploy Qt6Concurrent.dll when there is no dependency.
+        for required in ("server/Qt6Core.dll", "server/Qt6Network.dll",
+                         "server/Qt6Sql.dll", "server/Qt6HttpServer.dll",
+                         "server/sqldrivers/qsqlite.dll"):
+            self.assertIn(required, package)
+        self.assertNotIn("server/Qt6Concurrent.dll", package)
+        self.assertIn("windeployqt", package)
+
     def test_v1_2_cannot_enter_without_pinned_review(self):
         changed = copy.deepcopy(self.good)
         changed["source_of_truth"]["commit"] = changed["source_of_truth"]["newer_upstream_review"]["commit"]
