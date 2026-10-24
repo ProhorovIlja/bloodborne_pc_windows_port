@@ -37,3 +37,29 @@ jobs:
             -o /tmp/shyt-qt-summon-smoke \
             $(pkg-config --cflags --libs Qt6HttpServer)
           /tmp/shyt-qt-summon-smoke
+      - name: Syntax-check actual pinned backend C++ against real Qt 6.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          PIN=77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          git init /tmp/shyt-pinned
+          git -C /tmp/shyt-pinned remote add origin https://github.com/lKaniel/bloodborne-server.git
+          git -C /tmp/shyt-pinned sparse-checkout init --cone
+          git -C /tmp/shyt-pinned sparse-checkout set server/src
+          git -C /tmp/shyt-pinned fetch --depth 1 origin "$PIN"
+          git -C /tmp/shyt-pinned checkout --detach FETCH_HEAD
+          test "$(git -C /tmp/shyt-pinned rev-parse HEAD)" = "$PIN"
+          python3 - <<'PY'
+          from pathlib import Path
+          import runpy
+          patch = runpy.run_path('tools/poc/yharnam/qt-http-compat-v30/patch_http_compat.py')
+          src = Path('/tmp/shyt-pinned/server/src/bloodborne_backend_server.cpp')
+          src.write_text(patch['transform_backend'](src.read_text('utf-8')), encoding='utf-8')
+          print('PINNED_BACKEND_QT_PATCH_APPLIED')
+          PY
+          c++ -std=c++20 -fPIC -fsyntax-only \
+            -I/tmp/shyt-pinned/server/src \
+            /tmp/shyt-pinned/server/src/bloodborne_backend_server.cpp \
+            $(pkg-config --cflags Qt6HttpServer)
+          echo PINNED_BACKEND_QT64_SYNTAX_PASS
+
