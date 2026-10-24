@@ -1,5 +1,11 @@
 name: Seamless Hunt V39 Fornex Ubuntu 24.04 Qt 6.8.3 native server
 on:
+  push:
+    branches: [fix/shyt-friends-private-session-gate]
+    paths:
+      - tools/poc/yharnam/friends-privacy-v47/**
+      - tools/poc/yharnam/unified-v9/**
+      - .github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
   workflow_call:
   workflow_dispatch:
 
