@@ -108,6 +108,49 @@ class MainlineContracts(unittest.TestCase):
             with self.subTest(index=index), self.assertRaisesRegex(p.SourceDrift, "Research-only"):
                 p.check_interop_policy(modified)
 
+    def test_current_server_relay_is_not_misrepresented_as_direct_p2p(self):
+        config = json.loads(p.POLICY.with_name(
+            "transport_and_feature_priorities.json").read_text("utf-8"))
+        p.check_transport_feature_policy(config)
+        for field, wrong in (("mode", "direct_p2p"),
+                             ("client_peer_direct_game_packets", True),
+                             ("server_memory_and_egress_measured", True)):
+            changed = copy.deepcopy(config)
+            changed["current_transport"][field] = wrong
+            with self.subTest(field=field), self.assertRaisesRegex(p.SourceDrift, "P2P|load"):
+                p.check_transport_feature_policy(changed)
+
+    def test_direct_p2p_prototype_requires_consent_and_real_network_data(self):
+        config = json.loads(p.POLICY.with_name(
+            "transport_and_feature_priorities.json").read_text("utf-8"))
+        for field in ("must_not_auto_enable",
+                      "require_consent_for_network_endpoint_exposure",
+                      "never_forward_account_password_or_auth_token_to_peers"):
+            changed = copy.deepcopy(config)
+            changed["target_transport"][field] = False
+            with self.subTest(field=field), self.assertRaises(p.SourceDrift):
+                p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(config)
+        changed["benchmarks"]["verified_live_p2p"] = True
+        with self.assertRaisesRegex(p.SourceDrift, "measured"):
+            p.check_transport_feature_policy(changed)
+
+    def test_souls_features_cannot_bypass_core_client_and_save_requirements(self):
+        config = json.loads(p.POLICY.with_name(
+            "transport_and_feature_priorities.json").read_text("utf-8"))
+        changed = copy.deepcopy(config)
+        changed["priority_order"][0]["features"].remove("safe_save_backups")
+        with self.assertRaisesRegex(p.SourceDrift, "safe_save_backups"):
+            p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(config)
+        changed["priority_order"][0]["priority"] = 2
+        with self.assertRaisesRegex(p.SourceDrift, "P0"):
+            p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(config)
+        changed["design_references"][0]["status"] = "source_code_imported"
+        with self.assertRaisesRegex(p.SourceDrift, "inspiration"):
+            p.check_transport_feature_policy(changed)
+
     def test_cannot_drop_client_host_server_or_event_check(self):
         for name in list(self.good["mainline_workflows"]):
             altered = copy.deepcopy(self.good)
