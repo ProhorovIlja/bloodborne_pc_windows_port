@@ -166,6 +166,26 @@ class MainlineContracts(unittest.TestCase):
         with self.assertRaisesRegex(p.SourceDrift, "measured"):
             p.check_transport_feature_policy(changed)
 
+    def test_friends_are_a_real_api_but_not_an_unverified_in_game_feature(self):
+        policy = json.loads(p.POLICY.with_name(
+            "transport_and_feature_priorities.json").read_text("utf-8"))
+        p.check_transport_feature_policy(policy)
+        for field in ("in_game_friend_ui_status", "invasion_ui_status"):
+            changed = copy.deepcopy(policy)
+            changed["friend_list"][field] = "fully_game_verified"
+            with self.subTest(field=field), self.assertRaisesRegex(p.SourceDrift, "friend"):
+                p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(policy)
+        changed["friend_list"]["enforcement"].remove(
+            "no password bypass or private session lookup by guessed ID")
+        with self.assertRaisesRegex(p.SourceDrift, "Friends/privacy"):
+            p.check_transport_feature_policy(changed)
+        changed = copy.deepcopy(policy)
+        changed["priority_order"][1]["features"].remove(
+            "friend_invite_and_authorized_join")
+        with self.assertRaisesRegex(p.SourceDrift, "Friends UX"):
+            p.check_transport_feature_policy(changed)
+
     def test_souls_features_cannot_bypass_core_client_and_save_requirements(self):
         config = json.loads(p.POLICY.with_name(
             "transport_and_feature_priorities.json").read_text("utf-8"))
