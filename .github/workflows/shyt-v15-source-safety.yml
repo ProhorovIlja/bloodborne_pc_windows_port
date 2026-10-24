@@ -307,7 +307,9 @@ jobs:
           assert 'fromMSecsSinceEpoch(ms, Qt::UTC)' in patched_utc
           patched_stats=qt.transform_stats(Path('/tmp/sh-v30-stats-server.cpp').read_text('utf-8'))
           patched_backend=qt.transform_backend(Path('/tmp/sh-v30-bb-backend.cpp').read_text('utf-8'))
-          assert 'QHttpServerResponder::HeaderList headers' in patched_backend
+          assert 'switch (reply.headers.size())' in patched_backend
+          assert 'request.value(QByteArrayLiteral("Host"))' in patched_backend
+          assert 'm_tcp ? m_tcp->serverAddress()' in patched_backend
           assert 'SH-QT-STATS-PORTABLE' in patched_stats
           ap=Path('tools/poc/yharnam/account-gateway-v32/patch_bearer_auth.py')
           spec=importlib.util.spec_from_file_location('authv32',ap)
