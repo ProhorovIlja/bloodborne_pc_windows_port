@@ -1,10 +1,6 @@
 name: Seamless Hunt V41 native Windows shadnet Qt 6.8.3
 on:
   workflow_call:
-  push:
-    branches: [feature/seamless-hunt-mainline]
-    paths:
-      - .github/workflows/shyt-v41-win-qt683-server.yml
   workflow_dispatch:
 permissions:
   contents: read
