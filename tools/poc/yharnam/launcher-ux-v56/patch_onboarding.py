@@ -111,10 +111,10 @@ def transform(source: str) -> str:
                           'Команду собирают в игре: «Продолжить», «Загрузить» или «Новая игра» открывают экран '
                           'команды. Windows один раз спросит разрешение для брандмауэра.'), top=16)
 """,
-        """        self.note(card, _('Friends and teams are managed inside the Yharnam Together game. '
+        """        self.note(card, _('Create or join co-op teams inside the Yharnam Together game. '
                           'Your local account identity stays in this installation. '
                           'Continue, Load Game or New Game opens the team screen.',
-                          'Друзья и команды управляются внутри Yharnam Together. '
+                          'Создавайте команды и вступайте в них внутри Yharnam Together. '
                           'Локальная учётная запись остаётся в этой установке. '
                           '«Продолжить», «Загрузить» и «Новая игра» открывают экран команды.'), top=16)
 """,
