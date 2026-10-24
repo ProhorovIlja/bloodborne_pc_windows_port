@@ -11,7 +11,8 @@ static const char* tab_en[] = {"Display", "Upscaler", "Game effects", "Controls"
 "Дополнительно", "Сохранение"};
     default: SaveTab(); break;
 '''
-HEADER='''    std::int32_t level = now.level;
+HEADER='''#include <vector>
+    std::int32_t level = now.level;
     for (int i = 0; i < AttributeCount; ++i) {
         level += attributes[i] - now.attributes[i];
     }
