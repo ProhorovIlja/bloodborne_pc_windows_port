@@ -87,7 +87,9 @@ def transform(src: str) -> str:
                     result, color = _(
                         'Backend TCP reachable; WebAPI TCP unreachable.',
                         'TCP сервера игры доступен; WebAPI недоступен.'), CAUTION
-            except (OSError, ValueError):
+            except Exception:
+                # A worker failure must never strand the UI in a disabled state.
+                # Keep exception details (possibly containing private paths) out of the UI.
                 result, color = _(
                     'Server test configuration invalid. Check the selected profile.',
                     'Ошибка конфигурации. Проверьте профиль сервера.'), CAUTION
@@ -104,7 +106,16 @@ def transform(src: str) -> str:
                     return
                 self.coop_probe_line.configure(text=result, fg=color)
             self.ui_calls.put(display)
-        threading.Thread(target=work, daemon=True).start()
+        try:
+            threading.Thread(target=work, daemon=True).start()
+        except RuntimeError:
+            # Thread creation can fail during shutdown or resource exhaustion.
+            self.coop_probe_pending = False
+            self.coop_probe_button.configure(state='normal')
+            self.coop_probe_line.configure(
+                text=_('Unable to start TCP check. Please try again.',
+                       'Не удалось запустить проверку TCP. Повторите попытку.'),
+                fg=CAUTION)
 
 """
     src = exactly(src, "    def coop_changed(self):\n",
