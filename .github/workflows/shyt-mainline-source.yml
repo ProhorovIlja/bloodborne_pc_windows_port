@@ -1,16 +1,5 @@
 name: Seamless Hunt unified Yharnam Together mainline source gate
 on:
-  push:
-    branches: [feature/seamless-hunt-mainline]
-    paths:
-      - tools/poc/yharnam/**
-      - tools/diagnostics/**
-      - .github/workflows/shyt-mainline-source.yml
-      - .github/workflows/shyt-v36-composed-windows-client.yml
-      - .github/workflows/shyt-v41-win-qt683-server.yml
-      - .github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
-      - .github/workflows/shyt-v40-coop-event-package.yml
-      - .github/workflows/shyt-v41-assemble-kit-tests.yml
   pull_request:
     paths:
       - tools/poc/yharnam/mainline/**
