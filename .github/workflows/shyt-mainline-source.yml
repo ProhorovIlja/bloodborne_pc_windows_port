@@ -1,7 +1,12 @@
 name: Seamless Hunt unified Yharnam Together mainline source gate
 on:
+  push:
+    branches: ['fix/**']
+    paths:
+      - tools/poc/yharnam/mainline/**
+      - .github/workflows/shyt-mainline-source.yml
   pull_request:
-    branches: [master]
+    branches: [master, feature/seamless-hunt-mainline]
     paths:
       - tools/poc/yharnam/mainline/**
       - .github/workflows/shyt-mainline-source.yml
