@@ -20,7 +20,7 @@ int main(){
     f.path=PingPath::DirectOnly;f.maximum_ms=90;
     assert(!MatchPing(sample,f,now).matches);
     f.maximum_ms=100;
-    assert(MatchPing(sample,f,now).matches);
+    assert(!MatchPing(sample,f,now).matches);
     // Even with fallback enabled a request for DIRECT-only never accepts relay.
     f.allow_relay_fallback=true;
     f.maximum_ms=100;
