@@ -1,0 +1,57 @@
+name: Seamless Hunt V52 hybrid Direct P2P policy safety
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/**
+      - tools/poc/yharnam/mainline/**
+      - .github/workflows/shyt-v52-hybrid-transport.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/**
+      - tools/poc/yharnam/mainline/**
+      - .github/workflows/shyt-v52-hybrid-transport.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transport-policy:
+    name: hybrid-policy (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Enforce honest release/transport policy and pinned Yharnam source
+        run: |
+          python tools/poc/yharnam/mainline/check_source_of_truth.py
+          python -m unittest discover -s tools/poc/yharnam/mainline -p 'test_source_of_truth.py' -v
+      - name: Native Linux C++ hybrid selector regression (no real P2P claim)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_hybrid_selector.cpp \
+            -o /tmp/shyt-v52-transport-policy
+          /tmp/shyt-v52-transport-policy
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Native MSVC C++ hybrid selector regression (no real P2P claim)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_hybrid_selector.cpp /Fe:shyt-v52-selector.exe
+          if ($LASTEXITCODE -ne 0) { throw 'hybrid transport policy compile failed' }
+          ./shyt-v52-selector.exe
+          if ($LASTEXITCODE -ne 0) { throw 'hybrid transport policy regression failed' }
