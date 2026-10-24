@@ -180,11 +180,12 @@ int main(){
                    &recv_mac,world,game)==IngressStatus::AuthenticatedGame);
         assert(game.size()==payload.size());
         assert(game[8]==0x40);
-        assert(receiver.CurrentPath(2112)==Path::Relay); // no verified heartbeat
-        assert(sender.Encode(DirectKind::GameData,NativeGame(0x06),2113,wire));
+        assert(receiver.CurrentPath(2112)==Path::Direct); // exactly 2s is still valid
+        assert(receiver.CurrentPath(2113)==Path::Relay); // >2s with no heartbeat
+        assert(sender.Encode(DirectKind::GameData,NativeGame(0x06),2114,wire));
         assert(clientA.Send(clientB.port(),wire));
         assert(clientB.Receive(read,clientA.port()));
-        assert(receiver.Receive(read,2113,DirectionMac::VerifyCallback,
+        assert(receiver.Receive(read,2114,DirectionMac::VerifyCallback,
                    &recv_mac,world,game)==IngressStatus::Reject);
         assert(game.empty()); // caller must use relay
     }
