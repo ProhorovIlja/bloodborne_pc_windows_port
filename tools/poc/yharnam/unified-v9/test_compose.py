@@ -57,7 +57,7 @@ compose=load(HERE/"compose_sources.py","sh_compose")
 def originals():
     v3=compose.load_zip_module(ARCHIVES/compose.ARCHIVES["ui"],"PATCH-YHARNAM-TEAM-UI.py","sh_ui_test")
     v7=compose.load_zip_module(ARCHIVES/compose.ARCHIVES["direct"],"PATCH-BBPORT-NATIVE-DIRECT-V7.py","sh_direct_test")
-    return {
+    fixture = {
         compose.MAP3D: MAP_FIXTURE,
         compose.TEXTURE_GC: GC_FIXTURE,
         compose.MAPCHARTS: CHART_CACHE_FIXTURE.replace(
@@ -223,6 +223,65 @@ def run_coop():
 """,
     }
 
+    # The older V3-V8 offline fixtures intentionally include only the
+    # anchors those earlier transforms modify. Supply the unmodified V49
+    # pinned Qt/protobuf/Team UI anchors as additional source excerpts here.
+    fixture[compose.SERVER_WORLD] += (
+        "\nvoid Service::SendLobby(qint64 now_ms) {\n"
+        "    *envelope.mutable_lobby_state() = lobby.StateFor(member.lobby);\n"
+        "    *envelope.mutable_lobby_state() = lobby.StateFor(member.lobby);\n"
+    )
+    fixture[compose.SERVER_WORLD_H] = (
+        "#include <map>\n#include <QList>\n" + fixture[compose.SERVER_WORLD_H]
+    )
+    fixture[compose.LINK_SERVER_CPP] = (
+        "#include <QRandomGenerator>\n" + fixture[compose.LINK_SERVER_CPP]
+    )
+    fixture["server/coop/coop.proto"] = fixture["server/coop/coop.proto"].replace(
+        "    string party = 7;\n",
+        "    string team = 4; // the team it is in, if any\n    string party = 7;\n"
+    )
+    fixture["bbport/gpu/bbcoop.h"] += (
+        "\n    int ready; /* a member's */\n"
+    )
+    fixture["bbport/gpu/bbcoop/coop.cpp"] += (
+        "\n    for (const bbcoop::LobbyPlayer& player : state->players()) {\n"
+        "        const bool mine = state->has_team() && player.team() == state->team().id();\n"
+        "        out.state = LobbyStateOf(player.state());\n"
+        "    }\n"
+        "    for (const bbcoop::TeamInvite& invite : state->invites()) {\n"
+    )
+    ui=fixture[compose.OVERLAY]
+    if "    // The players online (invite) and the invitations.\n" not in ui:
+        ui += "    // The players online (invite) and the invitations.\n"
+    heading='    draw->AddText(ImVec2(left_x, lists_y), Gold(), T("Hunters online", "Охотники в сети"));\n'
+    if heading not in ui: ui += heading
+    can='    const bool can_invite = lobby.in_team && lobby.member_count < BBCOOP_LOBBY_TEAM;\n'
+    if can not in ui: ui += can
+    old_block=(
+        "    if (lobby.player_count == 0) {\n"
+        '        draw->AddText(ImVec2(left_x, y + S(8.0f)), Dim(), T("Nobody else is online", "Больше никого нет в сети"));\n'
+        "    }\n"
+        "    for (int i = 0; i < lobby.player_count && i < rows; ++i, y += row_h) {\n"
+        "        const bbcoop_lobby_entry& p = lobby.players[i];\n"
+    )
+    if old_block not in ui: ui += old_block
+    name_block=(
+        "        draw->AddText(ImVec2(left_x + S(8.0f), y + S(8.0f)), Plain(),\n"
+        "                      Fit(p.name, state_x - left_x - S(24.0f)).c_str());\n"
+    )
+    if name_block not in ui: ui += name_block
+    tail=(
+        "            bbcoop_lobby_request(BBCOOP_TEAM_INVITE, p.id);\n"
+        "        }\n"
+        "    }\n"
+        "    y = lists_y + S(50.0f);\n"
+    )
+    if tail not in ui: ui += tail
+    fixture[compose.OVERLAY]=ui
+    return fixture
+
+
 class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
@@ -309,6 +368,11 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'MaySendSessionInvite(',result[compose.HTTP_SESSION_CPP])
         self.assertEqual(result[compose.SERVER_WORLD].count(b'SHYT-V48-LOBBY-ACCOUNT-BOUND'), 2)
         self.assertIn(b'RequireAuthenticatedIdentity();',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'SHYT-V49-ONLINE-MUTUAL-FRIENDS',result[compose.SERVER_WORLD])
+        self.assertIn(b'SetVisibleFriends',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'mutual_friend = 12;',result['server/coop/coop.proto'])
+        self.assertIn(b'out.mutual_friend = player.mutual_friend()',result['bbport/gpu/bbcoop/coop.cpp'])
+        self.assertIn(b'shyt-mutual-friends-filter',result[compose.OVERLAY])
         self.assertIn(b'require_authenticated_identity = false',result[compose.SERVER_WORLD_H])
         self.assertIn(b'MatchesAuthenticatedMember',result["server/src/sh_lobby_identity.hpp"])
         self.assertIn(b'namespace SeamlessHunt::Friends',result['server/src/sh_friends_permissions.hpp'])

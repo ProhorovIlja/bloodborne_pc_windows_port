@@ -25,6 +25,7 @@ on:
       - tools/poc/yharnam/qt-http-compat-v30/**
       - tools/poc/yharnam/account-gateway-v32/**
       - tools/poc/yharnam/unified-v9/**
+      - tools/poc/yharnam/friends-ui-v49/**
       - tools/poc/yharnam/friends-privacy-v47/**
       - .github/workflows/shyt-v15-source-safety.yml
   pull_request:
@@ -49,6 +50,7 @@ on:
       - tools/poc/yharnam/qt-http-compat-v30/**
       - tools/poc/yharnam/account-gateway-v32/**
       - tools/poc/yharnam/unified-v9/**
+      - tools/poc/yharnam/friends-ui-v49/**
       - tools/poc/yharnam/friends-privacy-v47/**
       - .github/workflows/shyt-v15-source-safety.yml
   workflow_dispatch:
@@ -187,6 +189,8 @@ jobs:
             tools/poc/yharnam/friends-privacy-v47/test_lobby_identity.cpp \
             -o /tmp/shyt-v48-account-binding
           /tmp/shyt-v48-account-binding
+      - name: Check mutual friend filtering uses authenticated account data, not client claims
+        run: python -m unittest discover -s tools/poc/yharnam/friends-ui-v49 -p 'test_online_friend_source.py' -v
       - name: Test unified pinned source composition
         run: python -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
       - name: Patch actual pinned upstream 3D map and texture cache sources

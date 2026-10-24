@@ -153,7 +153,7 @@
     "description": "Invasion is a core end-state acceptance criterion, never silently enabled for a PvE-only party."
   },
   "friend_list": {
-    "status": "server_existing_api_confirmed; native_game_ui_not_wired",
+    "status": "server_existing_api_confirmed; mutual_friend_filter_source_composed_not_game_tested",
     "existing_pinned_server_features": [
       "mutual friend requests and blocks in database and network client_session",
       "GET /v1/users/me/friendList with privacy-aware presence filter and offline status",
@@ -182,8 +182,9 @@
       "do not auto-activate direct P2P or mix CLS and Yharnam protocols"
     ],
     "invasion_ui_status": "design_only_not_integrated",
-    "in_game_friend_ui_status": "design_only_not_integrated",
+    "in_game_friend_ui_status": "online_mutual_filter_source_only_not_game_verified",
     "five_player_limit": "existing live limit 4; fifth player asked by maintainers but not game verified",
-    "upstream_collaboration": "prefer Yharnam Together bbport/shadNet base plus compatible CLS BBSC features, preserve original repos/credits and independent releases"
+    "upstream_collaboration": "prefer Yharnam Together bbport/shadNet base plus compatible CLS BBSC features, preserve original repos/credits and independent releases",
+    "online_only_filter": "V49: mutually confirmed and nonblocked friends flagged by Qt from authenticated accounts; game Team Menu filter and existing Invite; no offline list, Join Friend or Invade Friend"
   }
 }

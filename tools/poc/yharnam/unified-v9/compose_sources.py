@@ -408,6 +408,18 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     output[v48_module.HEADER]=(v48_dir/"sh_lobby_identity.hpp").read_bytes()
     if not output[v48_module.HEADER]:
         raise ValueError("V48 identity policy header missing")
+    # V49: only annotate *online mutual friends* in the native team lobby,
+    # and render a filter in the game's current Team screen. This does not
+    # implement unsolicited joins, invasions or offline friend presence.
+    v49_dir=Path(__file__).resolve().parent.parent/"friends-ui-v49"
+    v49_script=v49_dir/"patch_online_friends.py"
+    v49_module=types.ModuleType("sh_v49_online_mutual_friends")
+    v49_module.__file__=str(v49_script)
+    exec(compile(v49_script.read_text("utf-8"),str(v49_script),"exec"),v49_module.__dict__)
+    v49_paths=v49_module.PATHS
+    v49_sources={name:output[name].decode("utf-8") for name in v49_paths}
+    for name,body in v49_module.transform(v49_sources).items():
+        output[name]=body.encode("utf-8")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -439,7 +451,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V32 WebAPI bearer rejects banned users, indexed SQLite token lookup; no web login yet",
                     "V46 explicit guest-only remote staging UDP/WebAPI/backend ports in original BLauncher",
                     "V47 private session join and invitation authorization (existing friend APIs)",
-                    "V48 bind native lobby and co-op player to authenticated link account"],
+                    "V48 bind native lobby and co-op player to authenticated link account",
+                    "V49 native game Team UI online mutual-friend filter and invite (not game-tested)"],
         "protocol":8,
         "direct_udp":"NOT ENABLED: authenticated server candidates/keys missing",
         "matchmaking":"V4 not wired to Qt or actual game UI",

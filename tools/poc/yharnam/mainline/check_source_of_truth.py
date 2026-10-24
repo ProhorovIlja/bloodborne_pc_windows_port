@@ -106,8 +106,8 @@ def check_transport_feature_policy(policy: dict) -> None:
             or invasion.get("adversarial_join_tested") is not False):
         raise SourceDrift("unverified PvP invasion mode must be off and require explicit consent")
     social = policy.get("friend_list", {})
-    if (social.get("status") != "server_existing_api_confirmed; native_game_ui_not_wired"
-            or social.get("in_game_friend_ui_status") != "design_only_not_integrated"
+    if (social.get("status") != "server_existing_api_confirmed; mutual_friend_filter_source_composed_not_game_tested"
+            or social.get("in_game_friend_ui_status") != "online_mutual_filter_source_only_not_game_verified"
             or social.get("invasion_ui_status") != "design_only_not_integrated"
             or social.get("five_player_limit") !=
             "existing live limit 4; fifth player asked by maintainers but not game verified"):
