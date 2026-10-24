@@ -51,15 +51,9 @@ jobs:
           set -euo pipefail
           test -d "$QT_ROOT_DIR/lib/cmake/Qt6"
           test -f "$QT_ROOT_DIR/plugins/sqldrivers/libqsqlite.so"
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          metadata=(Path(os.environ['QT_ROOT_DIR'])/
-                    'lib/cmake/Qt6Core/Qt6CoreConfigVersion.cmake').read_text()
-          if '6.8.3' not in metadata:
-              raise SystemExit('Qt 6.8.3 exact version not installed')
-          print('FORNEX_UBUNTU2404_QT683_HEADERS_READY')
-          PY
+          actual="$(PKG_CONFIG_PATH="$QT_ROOT_DIR/lib/pkgconfig" pkg-config --modversion Qt6Core)"
+          test "$actual" = '6.8.3' || { echo "Qt mismatch: $actual" >&2; exit 1; }
+          echo FORNEX_UBUNTU2404_QT683_HEADERS_READY
           echo "QT_PLUGIN_PATH=$QT_ROOT_DIR/plugins" >> "$GITHUB_ENV"
           echo "LD_LIBRARY_PATH=$QT_ROOT_DIR/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
 
