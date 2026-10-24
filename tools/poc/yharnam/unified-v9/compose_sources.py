@@ -234,10 +234,10 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v22_module.__file__=str(v22_script)
     exec(compile(v22_script.read_text("utf-8"),str(v22_script),"exec"),v22_module.__dict__)
     v22_paths=(v22_module.BOARDS,v22_module.WORLD,v22_module.WORLD_H)
-    v22_sources={name:output[name].decode("utf-8") for name in v22_paths}
+    v22_sources={name:(output[name].decode("utf-8") if name in output else source[name]) for name in v22_paths}
     for name, contents in v22_module.transform(v22_sources).items():
         output[name]=contents.encode("utf-8")
-    if len(output)!=len(dest)+20:
+    if v22_module.GUARD not in output or not output[v22_module.GUARD]:
         raise ValueError("V22 dedicated co-op server sanity header missing")
     # V24: cap partially-received protobuf envelopes for both game and server.
     # Stage as source only; NEVER restart or reconfigure the production daemon.
@@ -246,9 +246,9 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v24_script=v24_dir/"patch_stream.py"
     v24_module.__file__=str(v24_script)
     exec(compile(v24_script.read_text("utf-8"),str(v24_script),"exec"),v24_module.__dict__)
-    output[COOP_STREAM]=v24_module.transform(output[COOP_STREAM].decode("utf-8")).encode("utf-8")
+    output[COOP_STREAM]=v24_module.transform(output[COOP_STREAM].decode("utf-8") if COOP_STREAM in output else source[COOP_STREAM]).encode("utf-8")
     output["server/coop/sh_message_bounds.hpp"]=(v24_dir/"sh_message_bounds.hpp").read_bytes()
-    if len(output)!=len(dest)+21:
+    if "server/coop/sh_message_bounds.hpp" not in output or not output["server/coop/sh_message_bounds.hpp"]:
         raise ValueError("V24 bounded stream assembler header missing")
     # V25: strict public rooms may opt in to binding Hello.member and
     # LobbyHello.member to the separately verified network-link online ID.
@@ -259,10 +259,10 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v25_module.__file__=str(v25_script)
     exec(compile(v25_script.read_text("utf-8"),str(v25_script),"exec"),v25_module.__dict__)
     v25_sources={v25_module.WORLD:output[SERVER_WORLD].decode("utf-8"),
-                 v25_module.LINK:output[SERVER_LINK_CPP].decode("utf-8")}
+                 v25_module.LINK:output[SERVER_LINK_CPP].decode("utf-8") if SERVER_LINK_CPP in output else source[SERVER_LINK_CPP]}
     for name, contents in v25_module.transform(v25_sources).items():
         output[name]=contents.encode("utf-8")
-    if len(output)!=len(dest)+22:
+    if v25_module.HEADER not in output or not output[v25_module.HEADER]:
         raise ValueError("V25 authenticated member identity header missing")
     # V26: per-connection admission of complete co-op messages before
     # protobuf deserialization; strict rooms only, old PvE unchanged.
@@ -275,7 +275,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                  v26_module.WORLD_H:output[SERVER_WORLD_H].decode("utf-8")}
     for name, contents in v26_module.transform(v26_sources).items():
         output[name]=contents.encode("utf-8")
-    if len(output)!=len(dest)+23:
+    if v26_module.HEADER not in output or not output[v26_module.HEADER]:
         raise ValueError("V26 pre-protobuf rate-limiting header missing")
     # V27: a same-endpoint account switch must retire stale virtual-address
     # routes and notify the old game session before registering the new ID.
@@ -285,10 +285,10 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v27_module.__file__=str(v27_script)
     exec(compile(v27_script.read_text("utf-8"),str(v27_script),"exec"),v27_module.__dict__)
     v27_paths=(v27_module.LINK,v27_module.LINK_H,v27_module.LINK_SERVER,v27_module.TEST)
-    v27_sources={p:output[p].decode("utf-8") for p in v27_paths}
+    v27_sources={p:(output[p].decode("utf-8") if p in output else source[p]) for p in v27_paths}
     for name, contents in v27_module.transform_all(v27_sources).items():
         output[name]=contents.encode("utf-8")
-    if len(output)!=len(dest)+24:
+    if v27_module.HEADER not in output or not output[v27_module.HEADER]:
         raise ValueError("V27 endpoint rebind policy header missing")
     # V28: inexpensive admission BEFORE database/KDF login checks.
     # Must run AFTER V27, since both update server_link.cpp/h and the Qt test.
@@ -298,10 +298,10 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v28_module.__file__=str(v28_script)
     exec(compile(v28_script.read_text("utf-8"),str(v28_script),"exec"),v28_module.__dict__)
     v28_paths=(v28_module.LINK_CPP,v28_module.LINK_H,v28_module.QT_TEST)
-    v28_sources={p:output[p].decode("utf-8") for p in v28_paths}
+    v28_sources={p:(output[p].decode("utf-8") if p in output else source[p]) for p in v28_paths}
     for name, contents in v28_module.transform(v28_sources).items():
         output[name]=contents.encode("utf-8")
-    if len(output)!=len(dest)+25:
+    if v28_module.HEADER not in output or not output[v28_module.HEADER]:
         raise ValueError("V28 bounded pre-database auth admission header missing")
     # V29: bound local RPC pre-connect and socket output buffers. Bound cached
     # authenticated accounts to avoid memory growth under account churn.
@@ -310,11 +310,11 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v29_script=v29_dir/"patch_rpc_budget.py"
     v29_module.__file__=str(v29_script)
     exec(compile(v29_script.read_text("utf-8"),str(v29_script),"exec"),v29_module.__dict__)
-    v29_sources={v29_module.LINK:output[LINK_SERVER_CPP].decode("utf-8"),
-                 v29_module.HEADER:output[LINK_SERVER_H].decode("utf-8")}
+    v29_sources={v29_module.LINK:output[LINK_SERVER_CPP].decode("utf-8") if LINK_SERVER_CPP in output else source[LINK_SERVER_CPP],
+                 v29_module.HEADER:output[LINK_SERVER_H].decode("utf-8") if LINK_SERVER_H in output else source[LINK_SERVER_H]}
     for name, contents in v29_module.transform(v29_sources).items():
         output[name]=contents.encode("utf-8")
-    if len(output)!=len(dest)+26:
+    if v29_module.GUARD not in output or not output[v29_module.GUARD]:
         raise ValueError("V29 bounded RPC and credential-cache header missing")
     # V30: cached login decisions must observe live database bans/deletions/
     # password rotations. Check only the indexed status query on cache hits.
@@ -325,10 +325,10 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     exec(compile(v30_script.read_text("utf-8"),str(v30_script),"exec"),v30_module.__dict__)
     v30_paths=(v30_module.DB_H,v30_module.DB_CPP,v30_module.LINK_H,
                v30_module.LINK_CPP,v30_module.ACCOUNT_TEST)
-    v30_sources={p:output[p].decode("utf-8") for p in v30_paths}
+    v30_sources={p:(output[p].decode("utf-8") if p in output else source[p]) for p in v30_paths}
     for name, contents in v30_module.transform(v30_sources).items():
         output[name]=contents.encode("utf-8")
-    if len(output)!=len(dest)+27:
+    if v30_module.POLICY not in output or not output[v30_module.POLICY]:
         raise ValueError("V30 auth cache revocation policy header missing")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
