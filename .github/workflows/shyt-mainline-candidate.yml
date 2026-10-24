@@ -33,6 +33,7 @@ jobs:
           python3 -m unittest discover -s tools/diagnostics/tests -p 'test_game_traffic_capacity.py' -v
           python3 -m unittest discover -s tools/diagnostics/tests -p 'test_shadnet_relay_load.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/parity-diagnostics-v43 -p 'test_smoke_python_backend.py' -v
+          python3 -m unittest discover -s tools/poc/yharnam/remote-profile-v46 -p 'test_patch_remote_ports.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/unified-v9 -p 'test_compose.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/parity-diagnostics-v43 -p 'test_patch_parity_diag.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/server-relay-perf-v45 -p 'test_patch_server_hotpath.py' -v
