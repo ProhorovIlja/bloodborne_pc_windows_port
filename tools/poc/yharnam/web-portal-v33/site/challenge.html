@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hunt Challenges • Seamless Hunt</title>
+<meta name="description" content="Generate reproducible offline Bloodborne challenge runs. Share a challenge seed without modifying game files.">
+<style>
+:root{color-scheme:dark;--bg:#101112;--gold:#cbb080;--fg:#e8e1d5;--muted:#bab0a1;--edge:#403936}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0,#34231f,transparent 50%),var(--bg);color:var(--fg);font:16px/1.6 system-ui,"Segoe UI",sans-serif}.wrap{max-width:840px;margin:auto;padding:30px 22px 70px}a{color:var(--gold)}header{display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid var(--edge);padding-bottom:20px;font-size:13px}h1,h2{font-family:Georgia,serif;font-weight:500;line-height:1.2}h1{font-size:clamp(38px,7vw,65px);margin:65px 0 12px}p{color:var(--muted)}.card{border:1px solid var(--edge);background:#1b1a19;border-radius:5px;padding:25px;margin-top:28px}.form{display:grid;grid-template-columns:1fr 1fr;gap:16px}.form label{display:block;color:var(--muted);font-size:13px;margin-bottom:8px}input,select{width:100%;border:1px solid #6a5948;padding:12px;color:var(--fg);background:#242120;border-radius:4px;font:inherit}button{border:1px solid var(--gold);background:var(--gold);color:#17120d;padding:11px 19px;border-radius:4px;font-weight:700;cursor:pointer}button.ghost{background:transparent;color:var(--gold)}.buttons{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.label{color:var(--gold);font-size:11px;text-transform:uppercase;letter-spacing:.18em}.goal{font:31px Georgia,serif;margin:9px 0 25px}li{padding:5px 0}.foot{font-size:13px;margin-top:26px}#error{color:#e8a6a0}.hidden{display:none}@media(max-width:560px){.form{grid-template-columns:1fr}h1{margin-top:35px}}
+</style></head>
+<body><div class="wrap"><header><strong>SEAMLESS HUNT / CHALLENGES</strong><a href="./index.html">← Back to portal</a></header>
+<main>
+<div style="color:var(--gold);font-size:11px;letter-spacing:.2em;margin-top:40px">SOLO CHALLENGE GENERATOR · v1</div>
+<h1>Let the night choose.</h1>
+<p>Pick a difficulty, enter a seed and receive a repeatable Bloodborne challenge. Everyone using the same seed and difficulty gets identical rules.</p>
+<div class="card">
+  <div class="form">
+    <div><label for="seed">Shareable seed</label><input id="seed" maxlength="24" autocomplete="off" spellcheck="false" value="YHARNAM-01"></div>
+    <div><label for="tier">Difficulty</label><select id="tier"><option value="normal">Normal</option><option value="hard">Hard</option><option value="nightmare">Nightmare</option></select></div>
+  </div>
+  <div class="buttons"><button id="generate">Generate hunt</button><button class="ghost" id="new-seed">New seed</button><button class="ghost" id="share">Copy share link</button></div>
+  <p id="error" role="alert"></p>
+</div>
+<section class="card" id="result" aria-live="polite">
+  <div class="label" id="ruleset">Hunt generated</div>
+  <h2 class="goal" id="goal">Choose a seed and begin.</h2>
+  <div class="label">Restrictions</div><ol id="rules"></ol>
+</section>
+<p class="foot">This is a rule generator, not a game randomizer or save editor. It does not access your files, change your game or make any server requests. Challenges are intended for solo/offline play. Some goals require access to optional bosses or Chalice Dungeons; reroll if unavailable.</p>
+</main></div>
+<script type="module">
+import {generateChallenge} from "./challenges.mjs";
+const seed=document.getElementById("seed"),tier=document.getElementById("tier"),error=document.getElementById("error");
+const goal=document.getElementById("goal"),rules=document.getElementById("rules"),ruleset=document.getElementById("ruleset");
+const qp=new URLSearchParams(location.search);
+const supplied=qp.get("seed"),difficulty=qp.get("tier");
+if(supplied&&/^[A-Za-z0-9_-]{1,24}$/.test(supplied))seed.value=supplied;
+if(["normal","hard","nightmare"].includes(difficulty))tier.value=difficulty;
+function generate(){
+  try{
+    const item=generateChallenge(seed.value,tier.value);
+    rules.replaceChildren();
+    item.rules.forEach(text=>{const li=document.createElement("li");li.textContent=text;rules.append(li)});
+    goal.textContent=item.goal;ruleset.textContent="SEED "+item.seed+" · "+item.tier.toUpperCase();error.textContent="";
+    const u=new URL(location.href);u.search=new URLSearchParams({seed:item.seed,tier:item.tier}).toString();
+    history.replaceState(null,"",u);
+  }catch(ex){error.textContent=ex.message;goal.textContent="Invalid challenge seed";rules.replaceChildren();}
+}
+document.getElementById("generate").addEventListener("click",generate);
+document.getElementById("new-seed").addEventListener("click",()=>{
+  const v=new Uint32Array(1);
+  if(globalThis.crypto?.getRandomValues){globalThis.crypto.getRandomValues(v);seed.value="HUNT-"+v[0].toString(36).toUpperCase()}
+  else seed.value="HUNT-"+Date.now().toString(36).toUpperCase();
+  generate();
+});
+document.getElementById("share").addEventListener("click",async()=>{
+  if(error.textContent)return;
+  try{await navigator.clipboard.writeText(location.href);error.textContent="Share link copied.";}
+  catch(_){error.textContent="Copy the address from your browser.";}
+});
+generate();
+</script></body></html>
