@@ -109,5 +109,35 @@
     ]
   },
   "release_ready": false,
-  "fornex_deployment_authorized": false
+  "fornex_deployment_authorized": false,
+  "attribution_and_licenses": {
+    "primary_upstream": "Yharnam Together / lKaniel/bloodborne-server",
+    "primary_license_as_documented_upstream": "GPL-2.0-or-later",
+    "legacy_repo_root_license": "GPL-3.0",
+    "qt_httpserver_6_8_3_open_source_license": "GPL-3.0 (NOT LGPL-3.0)",
+    "qt_base_modules": "component-specific LGPL-3.0 / GPL and third-party terms",
+    "release_license_audit_completed": false,
+    "redistribution_approved": false,
+    "english_docs": [
+      "README.md",
+      "CREDITS.md",
+      "THIRD_PARTY_NOTICES.md",
+      "CONTRIBUTING.md"
+    ],
+    "game_candidate_notices": [
+      "CREDITS.txt",
+      "LICENSE",
+      "licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+      "licenses/AMD-FidelityFX-SDK-LICENSE.txt",
+      "licenses/Intel-XeSS-LICENSE.txt",
+      "licenses/PkgTool-LICENSE.txt"
+    ],
+    "server_candidate_notices": [
+      "server/CREDITS.txt",
+      "server/licenses/GPL-3.0.txt",
+      "server/licenses/LGPL-3.0.txt",
+      "server/licenses/Qt-6.8.3-LICENSE-SCOPE.txt",
+      "licenses/GPL-2.0-or-later.txt"
+    ]
+  }
 }
