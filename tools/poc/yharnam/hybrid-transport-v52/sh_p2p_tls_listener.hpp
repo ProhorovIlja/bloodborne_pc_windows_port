@@ -17,6 +17,7 @@
 #include <QTimer>
 #include <memory>
 #include "sh_p2p_tls_identity.hpp" // V79 pinned cert/account
+#include "sh_p2p_tls_key_session.hpp" // V80 per TLS connection ephemeral key
 
 namespace SeamlessHunt::Hybrid {
 class P2PTlsListener final : public QTcpServer {
@@ -79,6 +80,7 @@ protected:
         clients_.insert(s);
         s->setSslConfiguration(ssl_);
         const auto pending=std::make_shared<QByteArray>();
+        const auto session=std::make_shared<P2PTlsKeySession>();
         QObject::connect(s,&QSslSocket::disconnected,this,[this,s] {
             clients_.remove(s);
             s->deleteLater();
@@ -93,7 +95,7 @@ protected:
                 s->sessionProtocol()!=QSsl::TlsV1_3)
                 s->abort();
         });
-        QObject::connect(s,&QSslSocket::readyRead,s,[this,s,pending] {
+        QObject::connect(s,&QSslSocket::readyRead,s,[this,s,pending,session] {
             if(!s->isEncrypted() ||
                s->sslConfiguration().peerCertificate().isNull() ||
                s->sessionProtocol()!=QSsl::TlsV1_3) {
@@ -106,8 +108,8 @@ protected:
             if(pending->size()>kMaxInputBytes) {
                 s->abort();return;
             }
-            // Only a fixed, non-secret probe is supported in V78.
-            // No user names, IPs, game grants, credentials or keys.
+            // Fixed protocol only. V80 application key is protected by
+            // mandatory mTLS 1.3 and never logged. Still no grants or IPs.
             if(!pending->contains('\n'))return;
             if(*pending=="YT-P2P/V78 STATUS\n") {
                 s->write("YT-P2P/V78 TLS_READY NO_GRANTS\n");
@@ -118,6 +120,26 @@ protected:
                 const auto bound=identity_.Resolve(s->peerCertificate());
                 if(!bound) {s->abort();return;}
                 s->write("YT-P2P/V79 SESSION_BOUND NO_GRANTS\n");
+                s->disconnectFromHost();
+            } else if (*pending=="YT-P2P/V80 BEGIN\n") {
+                // V80 key bytes are sent ONLY inside this TLS 1.3 mTLS
+                // connection to a pinned, currently active game account.
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                if(!bound) {s->abort();return;}
+                QByteArray key_reply;
+                if(!session->Begin(*bound,key_reply)) {s->abort();return;}
+                pending->clear();
+                if(s->write(key_reply)!=key_reply.size()) {s->abort();return;}
+                std::fill(key_reply.begin(),key_reply.end(),char(0));
+            } else if (*pending=="YT-P2P/V80 CHECK\n") {
+                // Revocation is re-checked on this SAME TLS session: no
+                // reuse if the game re-Hello/map/team/session epoch changed.
+                if(!session->StillBound(identity_,s->peerCertificate())) {
+                    session->Clear();
+                    s->abort();return;
+                }
+                session->Clear();
+                s->write("YT-P2P/V80 BOUND NO_GRANTS\n");
                 s->disconnectFromHost();
             } else {
                 s->abort();
