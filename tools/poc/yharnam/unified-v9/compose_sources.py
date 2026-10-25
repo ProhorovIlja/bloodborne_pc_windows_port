@@ -571,6 +571,19 @@ def run(checkout:Path, repo:Path, out:Path):
                                (v77.H,v77.CPP,v77.TEST)}).items():
         files[path]=body.encode("utf-8")
     meta["applied"].append("V77 server-only game link epoch rejects old grants after same-map/owner rejoin")
+    # V78: OPTIONAL mutual TLS 1.3 readiness check inside the SAME Qt daemon,
+    # localhost-only even when explicitly enabled, otherwise zero listener.
+    # It intentionally issues NO grants/peer IPs; cannot fall back to SHLK.
+    v78_script=metrics_dir/"patch_tls_local_listener.py"
+    v78=types.ModuleType("sh_v78_mtls_local_listener")
+    v78.__file__=str(v78_script)
+    exec(compile(v78_script.read_text("utf-8"),str(v78_script),"exec"),v78.__dict__)
+    main_path=v78.MAIN
+    files[main_path]=v78.patch(
+        (files[main_path] if main_path in files else (checkout/main_path).read_bytes())
+        .decode("utf-8")).encode("utf-8")
+    files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
+    meta["applied"].append("V78 disabled-by-default loopback-only mTLS 1.3 Qt readiness, NO grants")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
