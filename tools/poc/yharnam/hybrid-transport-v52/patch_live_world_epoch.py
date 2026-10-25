@@ -12,6 +12,7 @@ WORLD_H="server/src/bloodborne_world.h"
 WORLD_CPP="server/src/bloodborne_world.cpp"
 LINK_CPP="server/src/link_server.cpp"
 REVISION_H="server/src/sh_world_revision.hpp"
+WORLD_TEST="server/tests/test_bloodborne_world.cpp"
 
 def one(s: str, before: str, after: str, label: str)->str:
     n=s.count(before)
@@ -89,3 +90,45 @@ bool Service::RoutesPacket(const ServerLink::Endpoint& from, const ServerLink::E
     });
 ''',"Qt LinkServer wires real game-world version")
     return {WORLD_H:h,WORLD_CPP:cpp,LINK_CPP:link}
+
+def transform_test(test: str)->str:
+    if "SHYT_V72_WORLD_AUTHORITY_TEST" in test:
+        raise ValueError("V72 test already applied")
+    test=one(test,
+'''  // No map said yet: what the game does on its own.
+  CHECK(routes(host, guest, 0x06) && routes(host, guest, 0x04));
+''',
+'''  // SHYT_V72_WORLD_AUTHORITY_TEST: no active map = no P2P snapshot.
+  CHECK(service.DirectWorldEpoch(host.endpoint,guest.endpoint)==0);
+  // No map said yet: what the game does on its own.
+  CHECK(routes(host, guest, 0x06) && routes(host, guest, 0x04));
+''',"real world test before map")
+    test=one(test,
+'''  CHECK(routes(host, guest, 0x06) && routes(guest, host, 0x06));
+  CHECK(!routes(host, guest2, 0x06) && !routes(guest2, guest, 0x31));
+''',
+'''  CHECK(routes(host, guest, 0x06) && routes(guest, host, 0x06));
+  const quint64 current_epoch=service.DirectWorldEpoch(host.endpoint,guest.endpoint);
+  CHECK(current_epoch!=0);
+  CHECK(service.DirectWorldEpoch(guest.endpoint,host.endpoint)==current_epoch);
+  CHECK(service.DirectWorldEpoch(host.endpoint,guest2.endpoint)==0);
+  CHECK(service.DirectWorldEpoch(host.endpoint,host.endpoint)==0);
+  CHECK(!routes(host, guest2, 0x06) && !routes(guest2, guest, 0x31));
+''',"real map owner world test")
+    test=one(test,
+'''  CHECK(!service.RoutesPacket(stranger, host.endpoint, 0x06));
+  CHECK(service.RoutesPacket(stranger, host.endpoint, 0x10));
+''',
+'''  CHECK(!service.RoutesPacket(stranger, host.endpoint, 0x06));
+  CHECK(service.RoutesPacket(stranger, host.endpoint, 0x10));
+  CHECK(service.DirectWorldEpoch(stranger,host.endpoint)==0);
+''',"unknown socket never P2P granted")
+    test=one(test,
+'''  CHECK(service.PartyOf(b.endpoint).isEmpty());
+  CHECK(a.map_board.members_size() == 1 &&
+''',
+'''  CHECK(service.PartyOf(b.endpoint).isEmpty());
+  CHECK(service.DirectWorldEpoch(a.endpoint,b.endpoint)==0);
+  CHECK(a.map_board.members_size() == 1 &&
+''',"removed team invalidates grant")
+    return test
