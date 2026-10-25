@@ -1,4 +1,4 @@
-name: Seamless Hunt V72-V74 real world authority and mutual consent
+name: Seamless Hunt V72-V77 real world authority, mutual consent and peer scope
 on:
   push:
     branches: [feature/shyt-hybrid-p2p-v52]
@@ -7,6 +7,8 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_live_world_epoch.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_mutual_p2p_consent.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_authoritative_pair_scope.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_p2p_session_generation.py
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v72-live-world-epoch.yml
   pull_request:
@@ -16,6 +18,8 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_live_world_epoch.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_mutual_p2p_consent.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_authoritative_pair_scope.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_p2p_session_generation.py
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v72-live-world-epoch.yml
 permissions:
@@ -95,6 +99,11 @@ jobs:
           assert "bool direct_p2p_opt_in = 7;" in (root/"server/coop/coop.proto").read_text()
           assert "SHYT_DIRECT_P2P_OPT_IN" in (root/"emulator/src/core/bloodborne_server_world.cpp").read_text()
           assert "PairDirectConsent(" in (root/"server/src/bloodborne_world.cpp").read_text()
+          assert "CaptureDirectPairScope(" in (root/"server/src/bloodborne_world.cpp").read_text()
+          assert "direct_next_serial" in (root/"server/src/bloodborne_world.h").read_text()
+          assert "world_revision!=captured->world_revision" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
+          assert "world_revision!=returned->world_revision" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
+          assert "V77 server-only game link epoch rejects old grants after same-map/owner rejoin" in manifest["applied"]
           assert "DirectP2PConsentRequiresTwoCurrentPlayers" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
           assert "DirectWorldEpoch(host.endpoint,guest.endpoint)" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
           print("SHYT_V72_QT_LIVE_WORLD_EPOCH_SOURCE_PASS")
