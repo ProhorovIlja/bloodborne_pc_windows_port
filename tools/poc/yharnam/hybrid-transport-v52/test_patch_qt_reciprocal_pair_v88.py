@@ -39,7 +39,9 @@ class V88Patch(unittest.TestCase):
     def test_pin_sensitive_drift_denied(self):
         for key,value in SOURCES.items():
             altered=dict(SOURCES)
-            altered[key]=value.replace("CaptureLocalP2POffer","CaptureLocalPeerInfo")
+            altered[key]=(value.replace("CaptureLocalP2POffer","CaptureLocalPeerInfo")
+                          if key.endswith(".h") else
+                          value.replace("CurrentDirectAccountEpoch","ChangedEpoch"))
             with self.subTest(file=key):
                 with self.assertRaises(ValueError):
                     patch.patch(altered)
