@@ -1,0 +1,51 @@
+name: Seamless Hunt V86 native game-owned SHG2 lifecycle regression
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_shg2_owner_v86.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_shg2_owner_v86.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v86-native-shg2-owner.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_shg2_owner_v86.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_shg2_owner_v86.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v86-native-shg2-owner.yml
+permissions:
+  contents: read
+jobs:
+  lifecycle-guard:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify V86 native game-owned full-ID inbox and revocation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_native_shg2_owner_v86.py' -v
+          python - <<'PY'
+          from pathlib import Path
+          code=Path("tools/poc/yharnam/unified-v9/compose_sources.py").read_text()
+          assert 'v86.patch_game(files[v86.NETWORK]' in code
+          assert 'SHG2 inbox, DEV-only OFF' in code
+          native=Path("tools/poc/yharnam/hybrid-transport-v52/patch_native_shg2_owner_v86.py").read_text()
+          assert native.count('native_grant_inbox_v84.Revoke();') == 2
+          assert 'SHYT_ENABLE_TEST_LOCAL_MTLS' in native
+          assert 'direct_egress.Arm(' not in native
+          assert 'SendFrame(' not in native
+          print("SHYT_V86_PINNED_GAME_OWNER_LIFECYCLE_PASS")
+          PY
