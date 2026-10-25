@@ -2,6 +2,7 @@
 // V70: same-game-socket incoming SHP1 demux, real CNG/OpenSSL HMAC,
 // current world permission, virtual peer mapping and default-deny.
 #include "sh_native_direct_rx.hpp"
+#include "sh_direct_crypto.hpp"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -97,15 +98,14 @@ int main(){
     assert(r.Receive(physical,shlk,101).status==NativeRxStatus::NotDirect);
     assert(r.Receive(physical,std::span<const std::uint8_t>{},101).status
            ==NativeRxStatus::NotDirect);
-    assert(!r.Arm(999,ticket,grant,Key(),physical,virtual_peer,"A",Refresh,&world,100));
+    assert(!r.Arm(999,ticket,grant,DirectionMac::VerifyCallback,&sender,physical,virtual_peer,"A",Refresh,&world,100));
     auto badticket=ticket; badticket.server_grant_verified=false;
-    assert(!r.Arm(0,badticket,grant,Key(),physical,virtual_peer,"A",Refresh,&world,100));
-    assert(!r.Arm(0,ticket,grant,Key(),{},virtual_peer,"A",Refresh,&world,100));
-    assert(!r.Arm(0,ticket,grant,Key(),physical,{},"A",Refresh,&world,100));
-    assert(!r.Arm(0,ticket,grant,Key(),physical,virtual_peer,"A",nullptr,&world,100));
-    const std::array<std::uint8_t,32> zero{};
-    assert(!r.Arm(0,ticket,grant,zero,physical,virtual_peer,"A",Refresh,&world,100));
-    assert(r.Arm(0,ticket,grant,Key(),physical,virtual_peer,"A",Refresh,&world,100));
+    assert(!r.Arm(0,badticket,grant,DirectionMac::VerifyCallback,&sender,physical,virtual_peer,"A",Refresh,&world,100));
+    assert(!r.Arm(0,ticket,grant,DirectionMac::VerifyCallback,&sender,{},virtual_peer,"A",Refresh,&world,100));
+    assert(!r.Arm(0,ticket,grant,DirectionMac::VerifyCallback,&sender,physical,{},"A",Refresh,&world,100));
+    assert(!r.Arm(0,ticket,grant,DirectionMac::VerifyCallback,&sender,physical,virtual_peer,"A",nullptr,&world,100));
+    assert(!r.Arm(0,ticket,grant,nullptr,&sender,physical,virtual_peer,"A",Refresh,&world,100));
+    assert(r.Arm(0,ticket,grant,DirectionMac::VerifyCallback,&sender,physical,virtual_peer,"A",Refresh,&world,100));
     // Bad MAC must not corrupt replay window: next correct seq packet works.
     DirectionMac impostor;auto altered=Key();altered[5]^=7;
     assert(impostor.InstallKey(altered));
