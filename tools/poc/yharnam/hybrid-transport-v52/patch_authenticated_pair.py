@@ -163,11 +163,8 @@ Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint6
 int HelloAndBuilds() {
 ''',"native server link pair regression")
     test = replace_exact(test,
-'''if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
-''',
-'''if (Contracts() != 0 || HelloAndBuilds() != 0 || DirectPairAdmission() != 0 ||
-      Relays() != 0 ||
-''',"native server test invocation")
+'''HelloAndBuilds() != 0 ||''',
+'''HelloAndBuilds() != 0 || DirectPairAdmission() != 0 ||''',"native server test invocation")
     return {HEADER:h,SOURCE:cpp,TEST:test}
 
 
