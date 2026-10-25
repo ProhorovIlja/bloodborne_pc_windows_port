@@ -1,0 +1,95 @@
+name: Seamless Hunt V73 game reliable ACK stays on shadNet
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_game_frame_offload.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_direct_ingress.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_direct_tx.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_game_frame_offload.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_direct_tx.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_direct_rx.cpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v73-reliable-relay-safety.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  native-game-stream-safety:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Compile and execute complete native GameLink HMAC and ACK path tests Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=tools/poc/yharnam/hybrid-transport-v52
+          for suite in test_game_frame_offload test_native_direct_tx test_native_direct_rx; do
+            c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I "$ROOT" \
+              "$ROOT/$suite.cpp" -lcrypto -o "/tmp/shyt-v73-$suite"
+            "/tmp/shyt-v73-$suite"
+          done
+          echo SHYT_V73_LINUX_ACK_ONLY_RELIABLE_MIXED_RELAY_PASS
+      - name: Compile and execute complete native GameLink HMAC and ACK path tests Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $root = 'tools/poc/yharnam/hybrid-transport-v52'
+          foreach ($suite in @('test_game_frame_offload','test_native_direct_tx','test_native_direct_rx')) {
+            cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I $root "$root/$suite.cpp" bcrypt.lib "/Fe:shyt-v73-$suite.exe"
+            if ($LASTEXITCODE -ne 0) { throw "V73 MSVC compilation failed: $suite" }
+            & "./shyt-v73-$suite.exe"
+            if ($LASTEXITCODE -ne 0) { throw "V73 native GameLink regression failed: $suite" }
+          }
+          echo SHYT_V73_WINDOWS_ACK_ONLY_RELIABLE_MIXED_RELAY_PASS
+  actual-native-client-server-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Validate actual fully composed original game and server use conservative GameLink boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v73-pinned
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path('/tmp/shyt-v73-pinned')
+          p='emulator/src/core/libraries/network/'
+          manifest=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          for filename in ('sh_game_frame_offload.hpp','sh_direct_ingress.hpp','sh_native_direct_tx.hpp'):
+              full=p+filename
+              data=(root/full).read_text()
+              assert 'native_reliable_handover_proven' in (root/p+'sh_game_frame_offload.hpp').read_text()
+              assert manifest['sha256'][full]==hashlib.sha256((root/full).read_bytes()).hexdigest(),full
+          rx=(root/p+'sh_direct_ingress.hpp').read_text()
+          tx=(root/p+'sh_native_direct_tx.hpp').read_text()
+          assert 'false /* GameLink reliable migration not wired */' in rx
+          assert 'false /* no actual reliable stream handover */' in tx
+          assert rx.count('EligibleNativeWireFrame(')==1
+          assert tx.count('EligibleNativeWireFrame(')==1
+          assert 'V73 native Direct allows only ACK-free unreliable game frames until reliable GameLink migration' in manifest['applied']
+          assert 'framed = Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed);' in (root/p+'p2p_sockets.cpp').read_text()
+          print('SHYT_V73_REAL_PINNED_CLIENT_DIRECT_ACK_GUARD_PASS')
+          PY
