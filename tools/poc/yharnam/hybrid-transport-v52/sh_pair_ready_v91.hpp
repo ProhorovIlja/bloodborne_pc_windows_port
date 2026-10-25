@@ -107,6 +107,11 @@ public:
         return ready_ && active_ && now_ms>=issued_ && now_ms<expires_;
     }
     std::uint64_t PairBinding() const noexcept{return active_?pair_:0;}
+    // A granted but not-yet-received pair cannot be silently overwritten.
+    // Only an explicitly expired generation may be replaced by operator.
+    bool Outstanding(std::uint64_t now_ms) const noexcept {
+        return active_ && now_ms>=issued_ && now_ms<expires_;
+    }
     void Clear() noexcept {
         CryptoDetail::Erase(proof_a_);CryptoDetail::Erase(proof_b_);
         proof_a_={};proof_b_={};
