@@ -1,4 +1,4 @@
-name: Seamless Hunt V78-V80 Qt TLS1.3 authenticated per-session keys (no grants)
+name: Seamless Hunt V78-V81 Qt TLS1.3 authenticated sealed local peer offers
 on:
   push:
     branches: [feature/shyt-hybrid-p2p-v52]
@@ -10,6 +10,9 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_tls_local_identity.cpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_key_session.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_tls_local_key_session.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_tls_local_offer.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_issuer.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_tls_local_offer.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_tls_local_listener.cpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v78-mtls-local-control.yml
@@ -75,6 +78,16 @@ jobs:
             /tmp/shyt-v78-certs/ca.pem /tmp/shyt-v78-certs/client.pem \
             /tmp/shyt-v78-certs/client.key
           echo SHYT_V80_TLS13_UNIQUE_SESSION_KEY_REVOCATION_PASS
+          # V81 uses the actual V75 AES-256-GCM EVP implementation.
+          c++ -std=c++20 -O0 -g0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$ROOT" "$ROOT/test_tls_local_offer.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) -lcrypto \
+            -o /tmp/shyt-v81-qt-offer
+          /tmp/shyt-v81-qt-offer \
+            /tmp/shyt-v78-certs/server.pem /tmp/shyt-v78-certs/server.key \
+            /tmp/shyt-v78-certs/ca.pem /tmp/shyt-v78-certs/client.pem \
+            /tmp/shyt-v78-certs/client.key
+          echo SHYT_V81_ACTUAL_TLS13_AES256_GCM_ONE_TIME_PEER_OFFER_PASS
   actual-single-qt-server:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -106,6 +119,8 @@ jobs:
           for p in ('server/src/main.cpp','server/src/sh_p2p_tls_listener.hpp',
                     'server/src/sh_p2p_tls_identity.hpp',
                     'server/src/sh_p2p_tls_key_session.hpp',
+                    'server/src/sh_p2p_tls_offer_issuer.hpp',
+                    'server/CMakeLists.txt',
                     'server/src/server.h','server/src/server.cpp',
                     'server/src/link_server.h','server/src/link_server.cpp',
                     'server/src/bloodborne_world.h','server/src/bloodborne_world.cpp',
@@ -131,6 +146,16 @@ jobs:
           assert 'YT-P2P/V80 BEGIN' in header
           assert 'YT-P2P/V80 CHECK' in header
           assert 'V80 per mTLS connection fresh wrapping key and live epoch recheck, NO peer offers' in manifest['applied']
+          assert 'V81 loopback mTLS peer offer from current mutually consenting Qt links, sealed SHG1 once' in manifest['applied']
+          assert 'YT-P2P/V81 OFFER' in header
+          assert 'ConfigureLocalOfferPeer' in header
+          assert 'SHYT_P2P_TLS_OFFER_PEER_ID' in main
+          assert 'server.CaptureLocalP2POffer(account,selected_peer)' in main
+          assert 'm_world.CaptureDirectPairScope(recipient,peer)' in (root/'server/src/link_server.cpp').read_text()
+          assert 'm_signedIn.contains(recipient)' in (root/'server/src/link_server.cpp').read_text()
+          assert 'V81_AES_GCM_CRYPTO_LINK' in (root/'server/CMakeLists.txt').read_text()
+          assert 'OpenSSL::Crypto' in (root/'server/CMakeLists.txt').read_text()
+          assert 'direct_egress.Arm(' not in (root/'emulator/src/core/libraries/network/p2p_sockets.cpp').read_text()
           key_header=(root/'server/src/sh_p2p_tls_key_session.hpp').read_text()
           assert 'QRandomGenerator::system()->generate()' in key_header
           assert 'current->current_epoch==epoch_' in key_header
@@ -171,4 +196,4 @@ jobs:
             /tmp/shyt-v78-full/server/src/server.cpp \
             /tmp/shyt-v78-full/server/src/link_server.cpp \
             /tmp/shyt-v78-full/server/src/bloodborne_world.cpp
-          echo SHYT_V79_REAL_SHADNET_GAME_TLS_IDENTITY_COMPILES_PASS
+          echo SHYT_V81_REAL_SHADNET_GAME_TLS_GRANT_ISSUER_COMPILES_PASS
