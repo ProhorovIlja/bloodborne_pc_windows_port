@@ -216,8 +216,8 @@ int main(){
                &amac,world,game)==IngressStatus::AuthenticatedGame);
         assert(game.size()==valid.size());
         assert(std::equal(game.begin(),game.end(),valid.begin()));
-        assert(!bin.Receive(frame,120,DirectionMac::VerifyCallback,
-                &amac,world,game)); // replay blocked
+        assert(bin.Receive(frame,120,DirectionMac::VerifyCallback,
+                &amac,world,game)==IngressStatus::Reject); // replay blocked
         assert(a.stats().direct_frames==1 && a.stats().relay_frames==1);
         assert(relay.count==1); // no duplicate server forwarding
         // Spoofed inner sender, map epoch, unsafe owner and native server
