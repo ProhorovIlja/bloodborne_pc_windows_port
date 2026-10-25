@@ -2,6 +2,7 @@
 // V70: same-game-socket incoming SHP1 demux, real CNG/OpenSSL HMAC,
 // current world permission, virtual peer mapping and default-deny.
 #include "sh_native_direct_rx.hpp"
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
@@ -68,14 +69,18 @@ static NativeRxStatus Send(DirectEncoder& encoder,NativeDirectReceiver& recv,
     std::vector<std::uint8_t> wire;
     assert(encoder.Encode(kind,payload,now,wire));
     auto out=recv.Receive(physical,wire,now);
-    if(result)*result=out;
+    if(out.status==NativeRxStatus::Game) {
+        assert(out.native_game_frame.size()==payload.size());
+        assert(std::equal(out.native_game_frame.begin(),out.native_game_frame.end(),payload.begin()));
+    }
+    if(result) { result->status=out.status;result->sender=out.sender; } // no dangling span
     return out.status;
 }
 int main(){
     const auto ticket=Ticket();
     const auto grant=ServerGrant();
-    const auto physical=PhysicalV4{0x0100007fU,htons(42677)};
-    const auto virtual_peer=VirtualV4{0x0a000010U,htons(30000)};
+    const auto physical=PhysicalV4{0x0100007fU,0xa6b5U};
+    const auto virtual_peer=VirtualV4{0x0a000010U,0x7530U};
     Current world{};world.authority=Allowed();
     NativeDirectReceiver r;
     DirectionMac sender;
@@ -110,13 +115,12 @@ int main(){
     assert(Send(encoder,r,DirectKind::Probe,{},physical,103)==NativeRxStatus::Control);
     assert(Send(encoder,r,DirectKind::Probe,{},physical,104)==NativeRxStatus::Control);
     assert(Send(encoder,r,DirectKind::GameData,wire,
-                PhysicalV4{physical.addr_nbo,htons(46666)},105)==NativeRxStatus::Dropped);
+                PhysicalV4{physical.addr_nbo,0xb64aU},105)==NativeRxStatus::Dropped);
     NativeRxResult game{};
     assert(Send(encoder,r,DirectKind::GameData,wire,physical,105,&game)
            ==NativeRxStatus::Game);
     assert(game.sender.addr_nbo==virtual_peer.addr_nbo &&
            game.sender.port_nbo==virtual_peer.port_nbo);
-    assert(game.native_game_frame.size()==wire.size());
     // No dependency on physical IP for visible in-game virtual identity.
     auto authority=world.authority;world.authority.map_epoch_verified=false;
     assert(Send(encoder,r,DirectKind::GameData,wire,physical,106)==NativeRxStatus::Dropped);
