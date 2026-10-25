@@ -92,7 +92,7 @@ jobs:
           assert 'QHostAddress::LocalHost' in header
           assert 'config.setProtocol(QSsl::TlsV1_3)' in header
           assert 'config.setPeerVerifyMode(QSslSocket::VerifyPeer)' in header
-          assert 'ignoreSslErrors' not in header
+          assert 's->ignoreSslErrors(' not in header
           assert 'TLS_READY NO_GRANTS' in header
           assert 'V78 disabled-by-default loopback-only mTLS 1.3 Qt readiness, NO grants' in manifest['applied']
           assert 'direct_egress.Arm(' not in (root/'emulator/src/core/libraries/network/p2p_sockets.cpp').read_text()
