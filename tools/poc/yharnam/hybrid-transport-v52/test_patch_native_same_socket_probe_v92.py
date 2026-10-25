@@ -60,8 +60,10 @@ class V92Tests(unittest.TestCase):
         # A blocking TLS call MUST run outside native_grant_mutex, which
         # the ORIGINAL game UDP receive thread also uses for signed SHN1.
         call=result.index("if(!SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV91::Request(")
-        before=result[:call].rfind("std::lock_guard lock(native_grant_mutex);")
-        self.assertNotIn("std::lock_guard lock(native_grant_mutex);",result[before:call])
+        scope_end=result.rfind("        }\n        // TLS I/O must never block",0,call)
+        self.assertGreaterEqual(scope_end,0)
+        self.assertNotIn("std::lock_guard lock(native_grant_mutex);",
+                         result[scope_end+9:call])
         self.assertIn("std::lock_guard lock(native_grant_mutex);",result[call:])
         self.assertIn("nat_paired_tls_generation_v92!=generation",result)
         self.assertIn("nat_paired_tls_binding_v92!=grant->pair_binding",result)
