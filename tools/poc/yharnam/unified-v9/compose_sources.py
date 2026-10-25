@@ -97,16 +97,6 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         with zipfile.ZipFile(archive) as z:
             output[path]=z.read(member)
     if len(output)!=len(dest)+4: raise ValueError("missing header outputs")
-    # V69: observe REAL UDP traffic submitted by P2PTransport, with strict
-    # no-routing-change semantics. Disabled unless SHYT_ROUTE_METRICS=1.
-    # Profiling uses only aggregate bytes/packets, no personal data.
-    v69_dir=Path(__file__).resolve().parent.parent/"hybrid-transport-v52"
-    v69_file=v69_dir/"patch_native_route_metrics.py"
-    v69_mod=types.ModuleType("sh_v69_route_metrics")
-    v69_mod.__file__=str(v69_file)
-    exec(compile(v69_file.read_text("utf-8"),str(v69_file),"exec"),v69_mod.__dict__)
-    output[NETWORK]=v69_mod.patch(output[NETWORK].decode("utf-8")).encode("utf-8")
-    output[v69_mod.HEADER]=(v69_dir/"sh_route_metrics.hpp").read_bytes()
     # V10: patch V7 adapter in BOTH directions. Never deliver map/owner-sensitive
     # gameplay channels directly, even if a pairwise MAC is otherwise valid.
     v10_dir=Path(__file__).resolve().parent.parent/"direct-channel-v10"
@@ -439,7 +429,6 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V30 live DB verification of cached account password and ban status",
                    "V66 signed-in same-party, build, liveness and bidirectional consent gate (default deny)",
                    "V67 ephemeral Qt Hub pair snapshot revoked by re-hello, world epoch and consent",
-                   "V69 opt-in original-game UDP relay volume counters without network behavior changes",
                    "Qt 6.4 / modern WebAPI ABI compatibility from full server build",
                    "Qt 6.4 / modern WebAPI session invitation UTC timestamp compatibility",
                    "Qt 6.4 / modern StatsServer and BloodborneBackendServer HTTP API compatibility",
@@ -472,6 +461,20 @@ def run(checkout:Path, repo:Path, out:Path):
     required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,HTTP_SESSION_CPP,HTTP_STATS_CPP,HTTP_BACKEND_CPP,HTTP_BLOODBORNE_CPP,WEB_AUTH_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
+    # V69: apply runtime-only optional byte/packet counters to the ENTIRE
+    # original p2p_sockets.cpp after the pinned source has been composed.
+    # Strict anchor matching ensures a changed V7 transport is never silently
+    # patched. The source-only synthetic unit fixtures intentionally do not
+    # approximate the whole 1,600-line native game socket translation unit.
+    metrics_dir=repo/"tools/poc/yharnam/hybrid-transport-v52"
+    metrics_script=metrics_dir/"patch_native_route_metrics.py"
+    metrics=types.ModuleType("sh_v69_native_metrics")
+    metrics.__file__=str(metrics_script)
+    exec(compile(metrics_script.read_text("utf-8"),str(metrics_script),"exec"),metrics.__dict__)
+    files[NETWORK]=metrics.patch(files[NETWORK].decode("utf-8")).encode("utf-8")
+    files[metrics.HEADER]=(metrics_dir/"sh_route_metrics.hpp").read_bytes()
+    meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
+    meta["applied"].append("V69 opt-in real native P2PTransport relay volume counters")
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
     for path, data in files.items():
