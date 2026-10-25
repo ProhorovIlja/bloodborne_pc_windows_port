@@ -16,6 +16,7 @@
 #include <QTcpServer>
 #include <QTimer>
 #include <memory>
+#include "sh_p2p_tls_identity.hpp" // V79 pinned cert/account
 
 namespace SeamlessHunt::Hybrid {
 class P2PTlsListener final : public QTcpServer {
@@ -23,6 +24,13 @@ public:
     explicit P2PTlsListener(QObject* parent=nullptr) : QTcpServer(parent) {}
     static constexpr int kMaxSessions=32;
     static constexpr int kMaxInputBytes=64;
+    bool ConfigureLocalIdentity(const QByteArray& pin_sha256_hex,
+                                const QByteArray& account,
+                                P2PTlsIdentity::LiveEpoch live) {
+        if (!live || !identity_.AddLocalPin(pin_sha256_hex,account)) return false;
+        identity_.SetLiveEpochResolver(std::move(live));
+        return true;
+    }
 
     // An explicitly enabled, isolated loopback smoke-test endpoint. Production
     // Internet listening requires an audited certificate-to-current-account
@@ -85,7 +93,7 @@ protected:
                 s->sessionProtocol()!=QSsl::TlsV1_3)
                 s->abort();
         });
-        QObject::connect(s,&QSslSocket::readyRead,s,[s,pending] {
+        QObject::connect(s,&QSslSocket::readyRead,s,[this,s,pending] {
             if(!s->isEncrypted() ||
                s->sslConfiguration().peerCertificate().isNull() ||
                s->sessionProtocol()!=QSsl::TlsV1_3) {
@@ -104,6 +112,13 @@ protected:
             if(*pending=="YT-P2P/V78 STATUS\n") {
                 s->write("YT-P2P/V78 TLS_READY NO_GRANTS\n");
                 s->disconnectFromHost();
+            } else if (*pending=="YT-P2P/V79 BIND\n") {
+                // A CA-signed client certificate alone is not a game login.
+                // No client-provided account or certificate common name trusted.
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                if(!bound) {s->abort();return;}
+                s->write("YT-P2P/V79 SESSION_BOUND NO_GRANTS\n");
+                s->disconnectFromHost();
             } else {
                 s->abort();
             }
@@ -114,6 +129,7 @@ protected:
         s->startServerEncryption();
     }
 private:
+    P2PTlsIdentity identity_{};
     QSslConfiguration ssl_{};
     QSet<QSslSocket*> clients_{};
 };
