@@ -162,6 +162,28 @@ protected:
                 pending->clear();
                 if(s->write(reply)!=reply.size()) {session->Clear();s->abort();return;}
                 std::fill(reply.begin(),reply.end(),char(0));
+            } else if (*pending=="YT-P2P/V84 OFFER\n") {
+                // V85: current world and mutual P2P consent are always
+                // rechecked server-side. SHG2 and legacy SHG1 cannot both
+                // be issued by one V80 TLS session (shared offer_sent_).
+                // This listener remains strictly 127.0.0.1 TEST-ONLY.
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                if(!bound || !session->StillBound(identity_,s->peerCertificate()) ||
+                   !offer_scope_ || offer_peer_.isEmpty()) {
+                    session->Clear();s->abort();return;
+                }
+                const auto scoped=offer_scope_(bound->account,offer_peer_);
+                if(!scoped) {session->Clear();s->abort();return;}
+                QByteArray reply;
+                if(!session->SealOneLocalOfferV84(identity_,s->peerCertificate(),
+                                                 *scoped,reply)) {
+                    session->Clear();s->abort();return;
+                }
+                pending->clear();
+                if(s->write(reply)!=reply.size()) {
+                    session->Clear();s->abort();return;
+                }
+                std::fill(reply.begin(),reply.end(),char(0));
             } else if (*pending=="YT-P2P/V80 CHECK\n") {
                 // Revocation is re-checked on this SAME TLS session: no
                 // reuse if the game re-Hello/map/team/session epoch changed.
