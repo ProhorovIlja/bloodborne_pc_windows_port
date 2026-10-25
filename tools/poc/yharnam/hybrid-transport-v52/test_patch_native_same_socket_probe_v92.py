@@ -24,7 +24,12 @@ SOURCE='''// SHYT-V87-TRUSTED-SERVER-LINK
     }
 #ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
 public:
-    bool TryLocalShg2OfferForTest() { const bool received=SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV85::Request( cfg,native_grant_inbox_v84,expected,serial,current, verified_game_state,now_ms); return received; }
+    bool TryLocalShg2OfferForTest() {
+        const bool received=SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV85::Request(
+            cfg,native_grant_inbox_v84,expected,serial,current,
+            verified_game_state,now_ms);
+        return received;
+    }
 private:
 #endif
 private:
