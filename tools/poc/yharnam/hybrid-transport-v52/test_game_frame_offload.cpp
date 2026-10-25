@@ -36,12 +36,30 @@ static ChannelAuthority Good() {
     return a;
 }
 static bool Valid(const std::vector<std::uint8_t>& b, const ChannelAuthority& a,
-                  std::string_view peer="X") {
-    return EligibleNativeWireFrame(b, peer, a).direct_eligible;
+                  std::string_view peer="X",
+                  bool real_reliable_handover=true) {
+    return EligibleNativeWireFrame(b, peer, a, real_reliable_handover).direct_eligible;
 }
 int main() {
     auto a=Good();
     assert(Valid(Frame(0x06,false),a));
+    assert(Valid(Frame(0x06,false),a,"X",false)); // candidate Direct movement
+    assert(!Valid(Frame(0x14,true),a,"X",false)); // reliable is still relay
+    assert(!Valid(Frame(0,true,true),a,"X",false)); // ACK-only is relay
+    {
+        auto has_ack=Frame(0x06,false);
+        has_ack[20]=1; // native GameLink shared ACK header is nonzero
+        assert(Valid(has_ack,a,"X",true)); // hypothetical full stream migration
+        assert(!Valid(has_ack,a,"X",false)); // real native runtime MUST relay
+    }
+    {
+        auto mixed=Frame(0x06,false);
+        auto second=Frame(0x14,true);
+        mixed[24]=2; // two entries
+        mixed.insert(mixed.end(),second.begin()+26,second.end());
+        assert(Valid(mixed,a,"X",true));
+        assert(!Valid(mixed,a,"X",false)); // entire mixed frame relays
+    }
     assert(Valid(Frame(0x04,false),a));
     assert(Valid(Frame(0x14,true),a));
     assert(Valid(Frame(0x05,false),a));
