@@ -33,6 +33,18 @@ public:
         return true;
     }
 
+    // V81 local operator-only selector, never set by a client's request.
+    using OfferScopeResolver=std::function<std::optional<P2PLocalOfferScope>(
+        const QByteArray&,const QByteArray&)>;
+    bool ConfigureLocalOfferPeer(const QByteArray& peer, OfferScopeResolver resolve) {
+        if(peer.isEmpty() || peer.size()>64 || !resolve || !offer_peer_.isEmpty() ||
+           peer.contains('\n') || peer.contains('\r') || peer.contains('\0'))
+            return false;
+        offer_peer_=peer;
+        offer_scope_=std::move(resolve);
+        return true;
+    }
+
     // An explicitly enabled, isolated loopback smoke-test endpoint. Production
     // Internet listening requires an audited certificate-to-current-account
     // mapping, replay-safe grant issuer, throttling and client provisioning.
@@ -131,6 +143,25 @@ protected:
                 pending->clear();
                 if(s->write(key_reply)!=key_reply.size()) {s->abort();return;}
                 std::fill(key_reply.begin(),key_reply.end(),char(0));
+            } else if (*pending=="YT-P2P/V81 OFFER\n") {
+                // Only a server-provisioned peer, both currently signed-in
+                // and opted into the same actual game map/world, may receive
+                // a 10-second recipient-specific encrypted V75 candidate.
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                if(!bound || !session->StillBound(identity_,s->peerCertificate()) ||
+                   !offer_scope_ || offer_peer_.isEmpty()) {
+                    session->Clear();s->abort();return;
+                }
+                const auto scoped=offer_scope_(bound->account,offer_peer_);
+                if(!scoped) {session->Clear();s->abort();return;}
+                QByteArray reply;
+                if(!session->SealOneLocalOffer(identity_,s->peerCertificate(),
+                                              *scoped,reply)) {
+                    session->Clear();s->abort();return;
+                }
+                pending->clear();
+                if(s->write(reply)!=reply.size()) {session->Clear();s->abort();return;}
+                std::fill(reply.begin(),reply.end(),char(0));
             } else if (*pending=="YT-P2P/V80 CHECK\n") {
                 // Revocation is re-checked on this SAME TLS session: no
                 // reuse if the game re-Hello/map/team/session epoch changed.
@@ -151,6 +182,8 @@ protected:
         s->startServerEncryption();
     }
 private:
+    QByteArray offer_peer_{};
+    OfferScopeResolver offer_scope_{};
     P2PTlsIdentity identity_{};
     QSslConfiguration ssl_{};
     QSet<QSslSocket*> clients_{};
