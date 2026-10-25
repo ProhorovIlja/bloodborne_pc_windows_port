@@ -741,6 +741,16 @@ def run(checkout:Path, repo:Path, out:Path):
     files["server/src/sh_pair_key_schedule_v89.hpp"]=kdf_header
     files["emulator/src/core/libraries/network/sh_pair_key_schedule_v89.hpp"]=kdf_header
     meta["applied"].append("V91 original Qt TLS client READY HMAC requires both recipients, native V91 proof; all Direct game routes OFF")
+    # V92: native ORIGINALLY bound host_socket probes. This is under the
+    # existing SHYT_ENABLE_TEST_LOCAL_MTLS default-OFF build opt-in. It
+    # sends only HMAC-SHA256 SHN1 control probes, NEVER game payload,
+    # and never creates a new socket or touches GameLink ACK routing.
+    v92_file=metrics_dir/"patch_native_same_socket_probe_v92.py"
+    v92=types.ModuleType("sh_v92_native_original_socket")
+    v92.__file__=str(v92_file)
+    exec(compile(v92_file.read_text("utf-8"),str(v92_file),"exec"),v92.__dict__)
+    files[v92.NETWORK]=v92.patch_game(files[v92.NETWORK].decode("utf-8")).encode("utf-8")
+    meta["applied"].append("V92 game ORIGINAL UDP host_socket handles optional SHN1 signed control only; fallback remains relay")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
