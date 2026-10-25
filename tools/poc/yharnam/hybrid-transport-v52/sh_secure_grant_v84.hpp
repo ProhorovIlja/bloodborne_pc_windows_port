@@ -22,7 +22,7 @@
 #endif
 
 namespace SeamlessHunt::Hybrid {
-struct SecurePeerOffer {
+struct SecurePeerOfferV84 {
     std::array<std::uint8_t,32> sender_account{}; // full SHA-256 trusted ID
     std::array<std::uint8_t,32> recipient_account{};
     std::uint64_t session_epoch=0;
@@ -40,7 +40,7 @@ namespace SecureOfferV84Detail {
 constexpr std::size_t kPlaintextBytes=148; // 2x256, 5x64, 2x32, 2x16, 32 key
 constexpr std::size_t kNonceBytes=12;
 constexpr std::size_t kTagBytes=16;
-constexpr std::size_t kHeaderBytes=19; // "SHG1", ver, 12-byte random nonce, 2-byte size
+constexpr std::size_t kHeaderBytes=19; // "SHG2", ver, 12-byte nonce, 2-byte size
 constexpr std::size_t kWireBytes=kHeaderBytes+kPlaintextBytes+kTagBytes;
 constexpr std::uint64_t kMaxLifetimeMs=30000;
 constexpr std::array<std::uint8_t,16> kDomain{
@@ -77,7 +77,7 @@ inline bool EqualDigest(std::span<const std::uint8_t> a,
     for(std::size_t i=0;i<32;++i)diff|=a[i]^b[i];
     return diff==0;
 }
-inline bool Valid(const SecurePeerOffer& a,std::uint64_t now) noexcept {
+inline bool Valid(const SecurePeerOfferV84& a,std::uint64_t now) noexcept {
     const auto& k=a.direction_key;
     return Nonzero(a.sender_account) && Nonzero(a.recipient_account) &&
         !EqualDigest(a.sender_account,a.recipient_account) && a.session_epoch &&
@@ -89,7 +89,7 @@ inline bool Valid(const SecurePeerOffer& a,std::uint64_t now) noexcept {
         a.peer_virtual_ipv4_nbo && a.peer_virtual_port_nbo &&
         std::any_of(k.begin(),k.end(),[](std::uint8_t x){return x!=0;});
 }
-inline std::vector<std::uint8_t> Encode(const SecurePeerOffer& a) {
+inline std::vector<std::uint8_t> Encode(const SecurePeerOfferV84& a) {
     std::vector<std::uint8_t> out;
     out.reserve(kPlaintextBytes);
     out.insert(out.end(),a.sender_account.begin(),a.sender_account.end());
@@ -102,7 +102,7 @@ inline std::vector<std::uint8_t> Encode(const SecurePeerOffer& a) {
     out.insert(out.end(),a.direction_key.begin(),a.direction_key.end());
     return out;
 }
-inline bool Decode(std::span<const std::uint8_t> p,SecurePeerOffer& a) noexcept {
+inline bool Decode(std::span<const std::uint8_t> p,SecurePeerOfferV84& a) noexcept {
     a={};
     if(p.size()!=kPlaintextBytes)return false;
     std::size_t at=0;
@@ -211,7 +211,7 @@ public:
         std::copy(tls_exporter_key.begin(),tls_exporter_key.end(),key_.begin());
         ready_=true;return true;
     }
-    bool Seal(const SecurePeerOffer& offer,std::uint64_t now,
+    bool Seal(const SecurePeerOfferV84& offer,std::uint64_t now,
               std::vector<std::uint8_t>& output) const {
         output.clear();
         if(!ready_ || !SecureOfferV84Detail::Valid(offer,now))return false;
@@ -250,7 +250,7 @@ public:
               const std::array<std::uint8_t,32>& recipient,
               const std::array<std::uint8_t,32>& sender,
               std::uint64_t expected_session,std::uint64_t expected_world,
-              std::uint64_t now,SecurePeerOffer& accepted) noexcept {
+              std::uint64_t now,SecurePeerOfferV84& accepted) noexcept {
         accepted={};
         if(!ready_ || !SecureOfferV84Detail::Nonzero(recipient) ||
            !SecureOfferV84Detail::Nonzero(sender) ||
@@ -274,7 +274,7 @@ public:
             wire.subspan(SecureOfferV84Detail::kHeaderBytes,
                          SecureOfferV84Detail::kPlaintextBytes),
             plain,tag);
-        SecurePeerOffer decoded{};
+        SecurePeerOfferV84 decoded{};
         if(ok) (void)SecureOfferV84Detail::Decode(plain,decoded);
         CryptoDetail::Erase(plain);
         CryptoDetail::Erase(tag);
