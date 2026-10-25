@@ -133,6 +133,16 @@ int main(){
            ==NativeRxStatus::Dropped);
     assert(Send(encoder,r,DirectKind::GameData,wire,physical,109)
            ==NativeRxStatus::Game);
+    // V73: even a MAC-valid packet with a claimed "handover verified"
+    // world flag cannot move a reliable GameLink sequence or common ACK
+    // onto Direct until the native stream/ACK handover actually exists.
+    const auto reliable=NativeGame(0x14,"A");
+    assert(Send(encoder,r,DirectKind::GameData,reliable,physical,109)
+           ==NativeRxStatus::Dropped);
+    auto piggyback=wire;
+    piggyback[20]=1; // native SHAD shared ACK field
+    assert(Send(encoder,r,DirectKind::GameData,piggyback,physical,109)
+           ==NativeRxStatus::Dropped);
     // Authentic but duplicated HMAC datagram must fail the replay window,
     // even when both network source IP/port and world authority are valid.
     std::vector<std::uint8_t> replay;
