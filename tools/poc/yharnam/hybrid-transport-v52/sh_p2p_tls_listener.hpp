@@ -15,6 +15,7 @@
 #include <QSslSocket>
 #include <QTcpServer>
 #include <QTimer>
+#include <QThread>
 #include <memory>
 #include "sh_p2p_tls_identity.hpp" // V79 pinned cert/account
 #include "sh_p2p_tls_key_session.hpp" // V80 per TLS connection ephemeral key
@@ -52,7 +53,13 @@ public:
     bool ConfigureLocalReciprocalPairV90(
         const QByteArray& first,const QByteArray& second,
         P2PPairLeaseV90::Resolver authoritative) {
-        if(isListening() || pair_lease_.Active())return false;
+        // The original Qt server can stage a pair AFTER both players
+        // have logged in, while its loopback listener is running.
+        // Never mutate this QObject from the native TLS worker thread,
+        // and never permit staging behind an Internet-facing listener.
+        if(QThread::currentThread()!=thread() || pair_lease_.Active() ||
+           (isListening() && serverAddress()!=QHostAddress::LocalHost))
+            return false;
         const auto now=QDateTime::currentMSecsSinceEpoch();
         return now>0 && pair_lease_.Begin(
             first,second,std::move(authoritative),
