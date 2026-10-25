@@ -5,6 +5,8 @@
 // NEVER identifies an account. Only exact SHA-256 DER pin set by a local
 // privileged operator, plus current server-authoritative live game session
 // can authorize BIND. No direct grants are issued by this component.
+#include <algorithm>
+#include <utility>
 #include <QByteArray>
 #include <QCryptographicHash>
 #include <QHash>
