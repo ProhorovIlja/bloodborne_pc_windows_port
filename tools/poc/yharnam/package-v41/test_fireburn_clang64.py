@@ -110,7 +110,6 @@ class NativeFsrClang64Tests(unittest.TestCase):
             "// This file is part of the FidelityFX SDK.\n"
             "#include <FidelityFX/host/backends/vk/ffx_vk.h>\n"
             + patch.VK_HEADER
-            + "#include <mutex>\n"
             + "struct Backend { std::mutex uniformBufferMutex; };\n"
             + "void construct(Backend* backendContext) { "
             + patch.VK_PLACEMENT + " }\n"
@@ -119,6 +118,7 @@ class NativeFsrClang64Tests(unittest.TestCase):
         )
         fixed = patch.transform_vk_backend(vk)
         self.assertIn("#include <new>", fixed)
+        self.assertIn("#include <mutex>", fixed)
         self.assertIn("#include <cmath>", fixed)
         self.assertEqual(fixed.count("std::floor(std::log2("), 1)
         self.assertEqual(fixed.count(patch.VK_PLACEMENT), 1)
