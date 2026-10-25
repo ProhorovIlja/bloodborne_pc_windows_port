@@ -392,6 +392,17 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
     v66_sources={p:output[p].decode("utf-8") for p in v66_paths}
     for p, contents in v66_module.transform(v66_sources).items():
         output[p]=contents.encode("utf-8")
+    # V67: server-internal ephemeral pair snapshots, validated against
+    # re-hello generation, same party and current authoritative world epoch.
+    # Never serialize snapshots as client grants or distribute keys over SHLK.
+    v67_script=Path(__file__).resolve().parent.parent/"hybrid-transport-v52/patch_pair_snapshot.py"
+    v67_module=types.ModuleType("sh_v67_pair_snapshot")
+    v67_module.__file__=str(v67_script)
+    exec(compile(v67_script.read_text("utf-8"),str(v67_script),"exec"),v67_module.__dict__)
+    v67_paths=(v67_module.HEADER,v67_module.SOURCE,v67_module.TEST)
+    v67_sources={p:output[p].decode("utf-8") for p in v67_paths}
+    for p, contents in v67_module.transform(v67_sources).items():
+        output[p]=contents.encode("utf-8")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -417,6 +428,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V29 bounded local RPC backpressure and signed-in credential cache",
                    "V30 live DB verification of cached account password and ban status",
                    "V66 signed-in same-party, build, liveness and bidirectional consent gate (default deny)",
+                   "V67 ephemeral Qt Hub pair snapshot revoked by re-hello, world epoch and consent",
                    "Qt 6.4 / modern WebAPI ABI compatibility from full server build",
                    "Qt 6.4 / modern WebAPI session invitation UTC timestamp compatibility",
                    "Qt 6.4 / modern StatsServer and BloodborneBackendServer HTTP API compatibility",
