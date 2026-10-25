@@ -1,4 +1,4 @@
-name: Seamless Hunt V78-V79 Qt TLS1.3 pinned game-session identity (no grants)
+name: Seamless Hunt V78-V80 Qt TLS1.3 authenticated per-session keys (no grants)
 on:
   push:
     branches: [feature/shyt-hybrid-p2p-v52]
@@ -8,6 +8,8 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/patch_tls_account_binding.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_identity.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_tls_local_identity.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_key_session.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_tls_local_key_session.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_tls_local_listener.cpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v78-mtls-local-control.yml
@@ -64,6 +66,15 @@ jobs:
             /tmp/shyt-v78-certs/ca.pem /tmp/shyt-v78-certs/client.pem \
             /tmp/shyt-v78-certs/client.key
           echo SHYT_V79_CURRENT_GAME_EPOCH_X509_PIN_MTLS_PASS
+          c++ -std=c++20 -O0 -g0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$ROOT" "$ROOT/test_tls_local_key_session.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -o /tmp/shyt-v80-qt-ephemeral-wrap
+          /tmp/shyt-v80-qt-ephemeral-wrap \
+            /tmp/shyt-v78-certs/server.pem /tmp/shyt-v78-certs/server.key \
+            /tmp/shyt-v78-certs/ca.pem /tmp/shyt-v78-certs/client.pem \
+            /tmp/shyt-v78-certs/client.key
+          echo SHYT_V80_TLS13_UNIQUE_SESSION_KEY_REVOCATION_PASS
   actual-single-qt-server:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -94,6 +105,7 @@ jobs:
           manifest=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
           for p in ('server/src/main.cpp','server/src/sh_p2p_tls_listener.hpp',
                     'server/src/sh_p2p_tls_identity.hpp',
+                    'server/src/sh_p2p_tls_key_session.hpp',
                     'server/src/server.h','server/src/server.cpp',
                     'server/src/link_server.h','server/src/link_server.cpp',
                     'server/src/bloodborne_world.h','server/src/bloodborne_world.cpp',
@@ -116,6 +128,12 @@ jobs:
           assert 'SHYT_P2P_TLS_CLIENT_CERT_SHA256' in main
           assert 'server.CurrentDirectAccountEpoch' in main
           assert 'V79 operator X509 SHA256 pin plus LIVE authenticated Qt game epoch, no grants' in manifest['applied']
+          assert 'YT-P2P/V80 BEGIN' in header
+          assert 'YT-P2P/V80 CHECK' in header
+          assert 'V80 per mTLS connection fresh wrapping key and live epoch recheck, NO peer offers' in manifest['applied']
+          key_header=(root/'server/src/sh_p2p_tls_key_session.hpp').read_text()
+          assert 'QRandomGenerator::system()->generate()' in key_header
+          assert 'current->current_epoch==epoch_' in key_header
           assert 'CurrentDirectAccountEpoch("guest")==0' in (root/'server/tests/test_bloodborne_world.cpp').read_text()
           assert 'V78 disabled-by-default loopback-only mTLS 1.3 Qt readiness, NO grants' in manifest['applied']
           assert 'direct_egress.Arm(' not in (root/'emulator/src/core/libraries/network/p2p_sockets.cpp').read_text()
