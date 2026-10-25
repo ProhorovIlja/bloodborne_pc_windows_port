@@ -23,7 +23,7 @@ struct NativeOfferIdentityV84 {
     std::uint64_t world_revision=0;   // live authoritative world fingerprint
     bool locally_opted_in=false;      // actual native game preference
 };
-using RefreshNativeOfferIdentityV84V84=bool (*)(
+using RefreshNativeOfferIdentityV84=bool (*)(
     NativeOfferIdentityV84& result,void* trusted_game_state) noexcept;
 
 class NativeSealedGrantInboxV84 final {
@@ -47,7 +47,7 @@ public:
     bool BeginTrustedTls(std::span<const std::uint8_t> ephemeral_key,
                          const NativeOfferIdentityV84& initial,
                          std::uint64_t tls_connection_serial,
-                         RefreshNativeOfferIdentityV84V84 refresh,
+                         RefreshNativeOfferIdentityV84 refresh,
                          void* trusted_game_state) noexcept {
         ResetCurrent();
         if(!tls_connection_serial || tls_connection_serial<=last_tls_serial_ ||
@@ -169,7 +169,7 @@ private:
     SealedPeerOffersV84 sealer_{};
     SecurePeerOfferV84 pending_{};
     NativeOfferIdentityV84 bound_{};
-    RefreshNativeOfferIdentityV84V84 refresh_=nullptr;
+    RefreshNativeOfferIdentityV84 refresh_=nullptr;
     void* game_state_=nullptr;
     std::uint64_t last_tls_serial_=0;
     bool active_=false;
