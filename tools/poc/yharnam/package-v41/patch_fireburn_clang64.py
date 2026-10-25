@@ -18,6 +18,8 @@ FRAME_TARGET = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/com
 FRAME_HEADER = "#include <algorithm>    // for max used inside SPD CPU code.\n"
 FRAME_ADDED_HEADER = FRAME_HEADER + "#include <iterator>   // portable C++17 std::size for fixed arrays\n"
 FRAME_COUNT = 14  # exact number of pinned AMD SDK _countof(array) occurrences
+OPTICAL_TARGET = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/components/opticalflow/ffx_opticalflow.cpp"
+OPTICAL_COUNT = 9  # three each of srv/uav/cbBindingNames arrays
 HEADERS = '#include <windows.h>  // required for OutputDebugString()\n'
 HEADER_PATCH = HEADERS + '#include <cwchar>  // C++17 bounded std::swprintf for CLANG64\n'
 ERROR = 'swprintf_s(buffer, 512, L"FSR_API_DEBUG_ERROR: %ls\\n", message);'
@@ -57,22 +59,44 @@ def transform_frame_interpolation(source: str) -> str:
     )
 
 
+def transform_opticalflow(source: str) -> str:
+    """Windows CLANG64: replace 9 MSVC-only array counts in optical flow.
+
+    The original fixed Binding arrays are not pointers. Validate exact
+    pinned call sites and headers, fail closed on unseen SDK layout.
+    """
+    if "std::size(" in source or "portable C++17 std::size for fixed arrays" in source:
+        raise ValueError("opticalflow already patched")
+    if source.count(FRAME_HEADER) != 1 or source.count("_countof(") != OPTICAL_COUNT:
+        raise ValueError("pinned FidelityFX opticalflow source drifted")
+    for name in ("srvBindingNames", "uavBindingNames", "cbBindingNames"):
+        if source.count(f"_countof({name})") != 3 or source.count(f"static const Binding {name}[]") != 1:
+            raise ValueError("pinned FidelityFX opticalflow binding array drifted: " + name)
+    return source.replace(FRAME_HEADER, FRAME_ADDED_HEADER, 1).replace(
+        "_countof(", "std::size("
+    )
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("pinned_checkout", type=Path)
     args = p.parse_args()
     target = args.pinned_checkout / TARGET
     frame_target = args.pinned_checkout / FRAME_TARGET
-    if not target.is_file() or not frame_target.is_file():
+    optical_target = args.pinned_checkout / OPTICAL_TARGET
+    if not target.is_file() or not frame_target.is_file() or not optical_target.is_file():
         p.error("pinned FireBurn FSR C++ source missing")
     old = target.read_text("utf-8")
     frame_old = frame_target.read_text("utf-8")
-    # Validate BOTH pinned files before modifying either checked-out vendor file.
+    optical_old = optical_target.read_text("utf-8")
+    # Strictly validate ALL THREE files before modifying the checked-out vendor subtree.
     new = transform(old)
     frame_new = transform_frame_interpolation(frame_old)
+    optical_new = transform_opticalflow(optical_old)
     target.write_text(new, encoding="utf-8")
     frame_target.write_text(frame_new, encoding="utf-8")
-    print("SHYT_FSR_WINDOWS_CLANG64_CXX17_WPRINTF_AND_COUNTOF_PATCH_PASS")
+    optical_target.write_text(optical_new, encoding="utf-8")
+    print("SHYT_FSR_WINDOWS_CLANG64_THREE_HOST_CPP_PATCH_PASS")
 
 
 if __name__ == "__main__":
