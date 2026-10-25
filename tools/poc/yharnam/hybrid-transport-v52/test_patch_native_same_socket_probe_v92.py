@@ -47,6 +47,10 @@ class V92Tests(unittest.TestCase):
     def test_probe_on_exact_original_udp_socket_not_game_route(self):
         result=v92.patch_game(SOURCE)
         self.assertEqual(result.count(v92.TAG),1)
+        self.assertIn("TryPairedTlsReadyForNatTest(",result)
+        self.assertIn("NativeTlsLocalOfferClientV91::Request(",result)
+        self.assertIn("nat_paired_tls_generation_v92!=generation",result)
+        self.assertIn("nat_paired_tls_binding_v92!=grant->pair_binding",result)
         self.assertIn("TryStartSameSocketNatProbeForTest(",result)
         self.assertIn("SameSocketNatProbeVerifiedForTest(",result)
         self.assertIn("ReceiveNativeSignedProbeV92(",result)
