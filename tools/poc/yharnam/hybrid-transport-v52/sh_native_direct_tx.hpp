@@ -19,6 +19,11 @@ namespace SeamlessHunt::Hybrid {
 using AuthenticatedDirectTransmit = bool (*)(
     PhysicalV4 peer, std::span<const std::uint8_t> complete_native_frame,
     std::int64_t now_ms, void* trusted_crypto_socket_owner) noexcept;
+// The runtime must consult an authenticated, MAC-verified reverse path from
+// NativeDirectReceiver, not a client-supplied "connected" boolean.
+using VerifiedReversePath = bool (*)(const PeerTicket& outbound_ticket,
+    PhysicalV4 physical_peer, VirtualV4 virtual_peer,
+    std::int64_t now_ms, void* trusted_native_receiver) noexcept;
 
 enum class NativeTxStatus : std::uint8_t {
     RelayRequired, DirectSubmitted
@@ -37,7 +42,9 @@ public:
              PhysicalV4 physical_peer, std::string_view local_native_sender,
              CurrentWorld refresh_authority, void* authority_ctx,
              AuthenticatedDirectTransmit send_authenticated,
-             void* crypto_socket_owner, std::int64_t now_ms) noexcept {
+             void* crypto_socket_owner,
+             VerifiedReversePath verified_reverse, void* receiver_owner,
+             std::int64_t now_ms) noexcept {
         if(slot>=kMaxAuthorizedPeers) return false;
         auto& link=links_[slot];
         link.Reset();
@@ -58,7 +65,8 @@ public:
            !physical_peer.addr_nbo || !physical_peer.port_nbo ||
            local_native_sender.empty() || local_native_sender.size()>255 ||
            !refresh_authority || !authority_ctx ||
-           !send_authenticated || !crypto_socket_owner)
+           !send_authenticated || !crypto_socket_owner ||
+           !verified_reverse || !receiver_owner)
             return false;
         link.virtual_peer=virtual_peer;
         link.physical_peer=physical_peer;
@@ -67,6 +75,9 @@ public:
         link.authority_ctx=authority_ctx;
         link.transmit=send_authenticated;
         link.crypto_ctx=crypto_socket_owner;
+        link.outbound_ticket=server_ticket;
+        link.verified_reverse=verified_reverse;
+        link.receiver_ctx=receiver_owner;
         link.expires_at_ms=server_ticket.expires_at_ms;
         link.active=true;
         return true;
@@ -93,6 +104,10 @@ public:
                 link.Reset();
                 return NativeTxStatus::RelayRequired;
             }
+            if(!link.verified_reverse ||
+               !link.verified_reverse(link.outbound_ticket,link.physical_peer,
+                                      link.virtual_peer,now_ms,link.receiver_ctx))
+                return NativeTxStatus::RelayRequired;
             if(complete_native_frame.empty() ||
                complete_native_frame.size()>DirectReceiver::kMaxPayloadBytes ||
                !EligibleNativeWireFrame(complete_native_frame,link.sender,
@@ -126,6 +141,9 @@ private:
     struct Link {
         VirtualV4 virtual_peer{};
         PhysicalV4 physical_peer{};
+        PeerTicket outbound_ticket{};
+        VerifiedReversePath verified_reverse=nullptr;
+        void* receiver_ctx=nullptr;
         std::string_view sender{}; // borrowed from trusted owner: must outlive Arm
         CurrentWorld refresh=nullptr;
         void* authority_ctx=nullptr;
@@ -136,6 +154,7 @@ private:
         bool active=false;
         void Reset() noexcept {
             virtual_peer={};physical_peer={};sender={};
+            outbound_ticket={};verified_reverse=nullptr;receiver_ctx=nullptr;
             refresh=nullptr;authority_ctx=nullptr;transmit=nullptr;
             crypto_ctx=nullptr;expires_at_ms=0;cooldown_until_ms=0;
             active=false;
