@@ -7,6 +7,8 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_secure_grant_v84.cpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_v84.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_tls_offer_v84.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_grant_inbox_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_grant_inbox_v84.cpp
       - .github/workflows/shyt-v84-fullwidth-grant.yml
   pull_request:
     branches: [feature/seamless-hunt-mainline]
@@ -15,6 +17,8 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_secure_grant_v84.cpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_v84.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_tls_offer_v84.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_grant_inbox_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_grant_inbox_v84.cpp
       - .github/workflows/shyt-v84-fullwidth-grant.yml
 permissions:
   contents: read
@@ -45,6 +49,9 @@ jobs:
           c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I "$root" \
             "$root/test_secure_grant_v84.cpp" -lcrypto -o /tmp/shyt-v84
           /tmp/shyt-v84
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I "$root" \
+            "$root/test_native_grant_inbox_v84.cpp" -lcrypto -o /tmp/shyt-v84-native
+          /tmp/shyt-v84-native
           echo SHYT_V84_LINUX_CRYPTOPROOF_PASS
       - name: Linux actual Qt server issuer -> native SHG2 full-ID roundtrip
         if: runner.os == 'Linux'
@@ -67,4 +74,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'V84 native Windows compile failed' }
           ./shyt-v84.exe
           if ($LASTEXITCODE -ne 0) { throw 'V84 Windows AEAD identity tests failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_native_grant_inbox_v84.cpp bcrypt.lib /Fe:shyt-v84-native.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V84 native inbox Windows compile failed' }
+          ./shyt-v84-native.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V84 native inbox rejection tests failed' }
           Write-Host SHYT_V84_WINDOWS_CRYPTOPROOF_PASS
