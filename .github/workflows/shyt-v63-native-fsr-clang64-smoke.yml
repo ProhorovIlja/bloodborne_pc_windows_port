@@ -58,4 +58,6 @@ jobs:
           clang++ "${common[@]}" "$sdk/src/shared/ffx_message.cpp"
           clang++ "${common[@]}" -I "$sdk/src/components/frameinterpolation" \
             "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"
-          echo SHYT_V63_PINNED_NATIVE_FIDELITYFX_HOST_PRECHECK_PASS
+          clang++ "${common[@]}" -I "$sdk/src/components/opticalflow" \
+            "$sdk/src/components/opticalflow/ffx_opticalflow.cpp"
+          echo SHYT_V63_PINNED_NATIVE_FIDELITYFX_ALL_THREE_HOST_UNITS_PASS
