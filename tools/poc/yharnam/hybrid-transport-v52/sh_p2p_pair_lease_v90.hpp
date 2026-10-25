@@ -4,6 +4,7 @@
 // Strictly in-process DEV-only test lease. This does NOT open a new listener,
 // deliver an Internet credential, authenticate UDP, or arm Direct gameplay.
 #include "sh_p2p_reciprocal_pair_v88.hpp"
+#include "sh_pair_ready_v91.hpp"
 #include <QByteArray>
 #include <functional>
 #include <optional>
@@ -39,6 +40,9 @@ public:
            !Same(*first,*confirm_a) || !Same(*second,*confirm_b)) {
             ErasePair(pair);
             return false;
+        }
+        if(!ready_gate_.Prepare(pair.for_a,pair.for_b,now_ms)) {
+            ErasePair(pair);return false;
         }
         a_=account_a;b_=account_b;
         first_=*first;second_=*second;
@@ -82,14 +86,48 @@ public:
         }
         out=offer;
         if(a)issued_a_=true;else issued_b_=true;
-        // Copy already left in out. Once BOTH halves were consumed there
-        // is no legitimate server-side reason to retain the pair master.
-        // Clear also makes the next TLS OFFER fail closed immediately.
-        if(issued_a_ && issued_b_)Clear();
+        // After both halves were issued, retain only separate HMAC READY
+        // commitments, authoritative resolver and epochs. Immediately wipe
+        // master so it is not available while awaiting both TLS receipts.
+        if(issued_a_ && issued_b_) {
+            ErasePair(pair_);pair_={};active_=false;
+        }
         return true;
+    }
+    // Only from a certificate-pinned CURRENT mTLS session already issued
+    // this exact paired SHG2 offer. Never call from plaintext SHLK or UDP.
+    bool MarkReady(const QByteArray& authenticated_recipient,
+                   quint64 current_epoch,
+                   std::span<const std::uint8_t> proof,
+                   std::uint64_t now_ms,bool& both_ready) {
+        both_ready=false;
+        if(!issued_a_ || !issued_b_ || !resolver_ ||
+           !ready_gate_.PairBinding() || !now_ms) {
+            Clear();return false;
+        }
+        const auto cur_a=resolver_(a_,b_);
+        const auto cur_b=resolver_(b_,a_);
+        if(!cur_a || !cur_b || !Same(first_,*cur_a) ||
+           !Same(second_,*cur_b)) {
+            Clear();return false;
+        }
+        const auto digest=P2PFullIdentityIssuerV84::AccountDigest(
+            authenticated_recipient);
+        if(!digest) {Clear();return false;}
+        const auto accepted=ready_gate_.Mark(
+            *digest,current_epoch,first_.world_revision,true,proof,now_ms);
+        if(accepted==PairReadyGateV91::Result::Denied){
+            Clear();return false;
+        }
+        both_ready=accepted==PairReadyGateV91::Result::BothReady;
+        return true;
+    }
+    bool BothReady(std::uint64_t now_ms) const noexcept {
+        return ready_gate_.BothReady(now_ms);
     }
     bool Active() const noexcept{return active_;}
     void Clear() noexcept {
+        ready_gate_.Clear();
         ErasePair(pair_);
         pair_={};
         if(!a_.isEmpty())std::fill(a_.begin(),a_.end(),char(0));
@@ -117,6 +155,7 @@ private:
     QByteArray a_{},b_{};
     P2PLocalOfferScope first_{},second_{};
     P2PReciprocalOffersV88 pair_{};
+    PairReadyGateV91 ready_gate_{};
     Resolver resolver_{};
     bool active_=false,issued_a_=false,issued_b_=false;
 };
