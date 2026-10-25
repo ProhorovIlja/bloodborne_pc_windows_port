@@ -640,6 +640,21 @@ def run(checkout:Path, repo:Path, out:Path):
     files[v82.NETWORK]=v82.patch_game(files[v82.NETWORK].decode("utf-8")).encode("utf-8")
     files[v82.HEADER]=(metrics_dir/"sh_native_grant_inbox.hpp").read_bytes()
     meta["applied"].append("V82 actual native game owns unarmed, replay-protected TLS SHG1 inbox, revoked with account/socket")
+    # V83: real non-Qt OpenSSL/LibreSSL TLS 1.3 client, pinned server
+    # certificate chain + loopback IP SAN, mutual X509, 1-use V80 key,
+    # actual V81 SHG1 -> V82 game-owned inbox. Only a dedicated native
+    # developer CMake opt-in exposes its callable entry point. DEFAULT OFF;
+    # NO autoconnect, remote endpoint, NAT or Direct Arm call.
+    v83_script=metrics_dir/"patch_native_tls_local_client.py"
+    v83=types.ModuleType("sh_v83_native_local_mtls")
+    v83.__file__=str(v83_script)
+    exec(compile(v83_script.read_text("utf-8"),str(v83_script),"exec"),v83.__dict__)
+    files[v83.NETWORK]=v83.patch_game(files[v83.NETWORK].decode("utf-8")).encode("utf-8")
+    cmake_game=(files[v83.CMAKE] if v83.CMAKE in files
+                 else (checkout/v83.CMAKE).read_bytes()).decode("utf-8")
+    files[v83.CMAKE]=v83.patch_cmake(cmake_game).encode("utf-8")
+    files[v83.HEADER]=(metrics_dir/"sh_native_tls_local_client.hpp").read_bytes()
+    meta["applied"].append("V83 real native LibreSSL TLS1.3 client callable DEV-only; default OFF, no Direct Arm")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
