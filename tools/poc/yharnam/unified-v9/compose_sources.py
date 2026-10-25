@@ -487,6 +487,15 @@ def run(checkout:Path, repo:Path, out:Path):
         path="emulator/src/core/libraries/network/"+filename
         files[path]=(metrics_dir/filename).read_bytes()
     meta["applied"].append("V70 fail-closed HMAC direct RX hook in native P2PTransport socket")
+    # V71: Direct-first SEND boundary in actual native P2PTransport::SendFrame.
+    # The trusted server-grant installer does not exist, so it remains RELAY.
+    tx_script=metrics_dir/"patch_native_direct_tx.py"
+    v71=types.ModuleType("sh_v71_native_direct_tx")
+    v71.__file__=str(tx_script)
+    exec(compile(tx_script.read_text("utf-8"),str(tx_script),"exec"),v71.__dict__)
+    files[NETWORK]=v71.patch(files[NETWORK].decode("utf-8")).encode("utf-8")
+    files["emulator/src/core/libraries/network/sh_native_direct_tx.hpp"]=(metrics_dir/"sh_native_direct_tx.hpp").read_bytes()
+    meta["applied"].append("V71 fail-closed native SendFrame Direct/Relay TX hook")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
