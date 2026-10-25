@@ -48,7 +48,64 @@ def patch_game(src):
             '            nat_paired_tls_generation_v92=0;\n'
             '            nat_paired_tls_binding_v92=0;\n',
             remark+" revocation")
-    method='''    // V92 DEV-ONLY. Called from trusted native game worker, never UDP
+    method='''    // V92: ONLY a full SHG2 *coordinated* V90 pair can probe. The
+    // original game's authenticated online ID must agree with the
+    // certificate identity and must survive the entire blocking mTLS
+    // handshake. V85 standalone SHG2 is explicitly NOT sufficient.
+    bool TryPairedTlsReadyForNatTest(
+        const SeamlessHunt::Hybrid::NativeTlsLocalConfig& cfg,
+        const SeamlessHunt::Hybrid::NativeOfferIdentityV84& expected,
+        std::uint64_t serial,
+        SeamlessHunt::Hybrid::RefreshNativeOfferIdentityV84 current,
+        void* verified_game_state,std::uint64_t now_ms,bool& both_ready) {
+        both_ready=false;
+        if(!running.load(std::memory_order_acquire) || LinkCut())
+            return false;
+        std::uint64_t generation=0;
+        std::string game_id;
+        bool welcomed=false,configured=false;
+        {
+            std::lock_guard link_lock(link_mutex);
+            generation=shyt_link_generation_v87;
+            game_id=link_online_id;
+            welcomed=link_welcomed;
+            configured=link_server.addr_nbo && link_server.port_nbo;
+        }
+        const bool valid=generation &&
+            SeamlessHunt::Hybrid::NativeGameSelfIdentityV87::MatchesAcceptedLink(
+                game_id,welcomed,configured,expected);
+        std::fill(game_id.begin(),game_id.end(),char(0));
+        if(!valid)return false;
+        std::lock_guard lock(native_grant_mutex);
+        nat_probe_v92.reset();
+        nat_probe_link_generation_v92=0;
+        nat_paired_tls_generation_v92=0;
+        nat_paired_tls_binding_v92=0;
+        if(!SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV91::Request(
+              cfg,native_grant_inbox_v84,expected,serial,current,
+              verified_game_state,now_ms,both_ready))return false;
+        bool still_current=false;
+        {
+            std::lock_guard link_lock(link_mutex);
+            still_current=shyt_link_generation_v87==generation &&
+                 link_welcomed && link_server.addr_nbo && link_server.port_nbo;
+        }
+        const auto received_ms=static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+        const auto* grant=still_current ?
+            native_grant_inbox_v84.PendingForNat(received_ms):nullptr;
+        if(!grant || !running.load(std::memory_order_acquire) ||
+           LinkCut()) {
+            native_grant_inbox_v84.Revoke();
+            both_ready=false;return false;
+        }
+        nat_paired_tls_generation_v92=generation;
+        nat_paired_tls_binding_v92=grant->pair_binding;
+        return true; // Still NOT permission for Direct game traffic
+    }
+
+    // V92 DEV-ONLY. Called from trusted native game worker, never UDP
     // receive thread. This sends only a 144-byte SIGNED challenge over
     // the existing host_socket; it NEVER changes the guest game-frame sender.
     bool TryStartSameSocketNatProbeForTest(bool initiator,std::uint64_t now_ms) {
@@ -113,6 +170,19 @@ def patch_game(src):
         return nat_probe_v92 && nat_probe_v92->InitiatorVerified();
     }
 '''
+    # A manually invoked old V85 one-sided offer must never be permitted
+    # to inherit the pair-authorized NAT socket state from an earlier V91
+    # full two-recipient receipt (even if the same online ID reconnects).
+    src=one(src,
+        '''        const bool received=SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV85::Request(
+''',
+        '''        nat_probe_v92.reset();
+        nat_probe_link_generation_v92=0;
+        nat_paired_tls_generation_v92=0;
+        nat_paired_tls_binding_v92=0;
+        const bool received=SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV85::Request(
+''',
+        "legacy one-sided mTLS cannot inherit V92 paired-transport admission")
     src=one(src,
         '''private:
 #endif
