@@ -101,8 +101,15 @@ public:
                    std::span<const std::uint8_t> proof,
                    std::uint64_t now_ms,bool& both_ready) {
         both_ready=false;
-        if(!issued_a_ || !issued_b_ || !resolver_ ||
-           !ready_gate_.PairBinding() || !now_ms) {
+        // First client may report READY before the other client has
+        // even asked for its offer. Only the reporting side needs to
+        // have received its own SHG2 ticket at this point.
+        const bool reporting_a=authenticated_recipient==a_;
+        const bool reporting_b=authenticated_recipient==b_;
+        if((!reporting_a && !reporting_b) ||
+           (reporting_a && !issued_a_) ||
+           (reporting_b && !issued_b_) ||
+           !resolver_ || !ready_gate_.PairBinding() || !now_ms) {
             Clear();return false;
         }
         const auto cur_a=resolver_(a_,b_);
