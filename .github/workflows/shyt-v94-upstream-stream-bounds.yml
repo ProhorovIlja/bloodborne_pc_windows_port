@@ -52,8 +52,7 @@ jobs:
           old=f.read_text()
           patched=m.patch_header(old)
           assert "size > static_cast<uint32_t>(Remaining())" in patched
-          assert "m_pos + (int)size" not in patched.replace(
-              "A size past INT_MAX made m_pos + (int)size negative", "")
+          assert "if (m_pos + (int)size > m_data.size())" not in patched
           assert "n < 0 || n > Remaining()" in patched
           try:
               m.patch_header(patched)
