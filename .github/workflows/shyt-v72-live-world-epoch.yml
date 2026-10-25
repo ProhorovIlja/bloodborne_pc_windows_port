@@ -96,8 +96,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/shyt-v72-proto
-          protoc --proto_path=pinned-upstream/server/coop \
-            --cpp_out=/tmp/shyt-v72-proto pinned-upstream/server/coop/coop.proto
+          # V74 extends protobuf Hello. The server/game C++ must compile
+          # against the COMPOSED proto, not the old pinned upstream message.
+          protoc --proto_path=/tmp/shyt-v72-composed/server/coop \
+            --cpp_out=/tmp/shyt-v72-proto /tmp/shyt-v72-composed/server/coop/coop.proto
           protoc --proto_path=pinned-upstream/server/src \
             --cpp_out=/tmp/shyt-v72-proto pinned-upstream/server/src/shadnet.proto
       - name: Compile and run actual Qt BloodborneWorld tests, including V72 invalidation
