@@ -60,6 +60,10 @@ jobs:
             "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"
           clang++ "${common[@]}" -I "$sdk/src/components/opticalflow" \
             "$sdk/src/components/opticalflow/ffx_opticalflow.cpp"
+          # V65 real failure from full Windows job: 7 more _countof uses in
+          # ffx_fsr3upscaler.cpp, covered by CLS's MinGW header shim.
+          clang++ "${common[@]}" -I "$sdk/src/components/fsr3upscaler" \
+            "$sdk/src/components/fsr3upscaler/ffx_fsr3upscaler.cpp"
           fsr="pinned-upstream/bbport/gpu/third_party/fsr-vulkan"
           clang++ "${common[@]}" \
             -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
