@@ -87,3 +87,26 @@ jobs:
               raise AssertionError('double patch was accepted')
           print('SHYT_V69_REAL_PINNED_P2P_TRANSPORT_PATCH_PASS')
           PY
+      - name: Verify V69 against the fully composed pinned native game and server sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v69-full-composed
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path("/tmp/shyt-v69-full-composed")
+          manifest=json.loads((root/"SEAMLESS-HUNT-COMPOSE-MANIFEST.json").read_text())
+          client=root/"emulator/src/core/libraries/network/p2p_sockets.cpp"
+          telemetry=root/"emulator/src/core/libraries/network/sh_route_metrics.hpp"
+          assert client.is_file() and telemetry.is_file()
+          source=client.read_text()
+          assert "route_metrics.NoteServerSend" in source
+          assert "route_metrics.NoteRelayReceive" in source
+          assert "Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed)" in source
+          assert 'std::getenv("SHYT_ROUTE_METRICS")' in source
+          assert manifest["sha256"]["emulator/src/core/libraries/network/p2p_sockets.cpp"]==hashlib.sha256(client.read_bytes()).hexdigest()
+          assert any("V69 opt-in real native P2PTransport relay volume counters" in a for a in manifest["applied"])
+          print("SHYT_V69_FULL_NATIVE_YHARNAM_COMPOSITION_PASS")
+          PY
