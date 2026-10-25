@@ -43,6 +43,7 @@ public:
         a_=account_a;b_=account_b;
         first_=*first;second_=*second;
         pair_=pair;
+        ErasePair(pair); // no second plaintext master copy on stack
         resolver_=std::move(authoritative);
         active_=true;
         return true;
