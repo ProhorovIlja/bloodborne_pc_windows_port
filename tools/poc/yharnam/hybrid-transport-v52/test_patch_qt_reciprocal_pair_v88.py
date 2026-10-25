@@ -23,7 +23,7 @@ class V88Patch(unittest.TestCase):
         self.assertEqual(set(out),set(SOURCES))
         self.assertEqual(out[patch.SERVER_H].count(patch.MARKER),1)
         self.assertEqual(out[patch.LINK_H].count(patch.MARKER),1)
-        self.assertEqual(out[patch.SERVER_CPP].count("CaptureLocalReciprocalP2POffersV88("),1)
+        self.assertEqual(out[patch.SERVER_CPP].count("CaptureLocalReciprocalP2POffersV88("),2) # declaration + original LinkServer delegation
         self.assertEqual(out[patch.LINK_CPP].count("CaptureLocalReciprocalP2POffersV88("),1)
         self.assertIn("CaptureLocalP2POffer(first,second)",out[patch.LINK_CPP])
         self.assertIn("CaptureLocalP2POffer(second,first)",out[patch.LINK_CPP])
