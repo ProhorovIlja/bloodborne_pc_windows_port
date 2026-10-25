@@ -7,6 +7,7 @@
 // change. Does not depend on Qt 6.12 TLS exporter support.
 #include "sh_p2p_tls_identity.hpp"
 #include "sh_p2p_tls_offer_issuer.hpp"
+#include "sh_p2p_tls_offer_v84.hpp" // V85 full-width SHG2, local mTLS test only
 #include <QByteArray>
 #include <QRandomGenerator>
 #include <QSslCertificate>
@@ -81,6 +82,39 @@ public:
         CryptoDetail::Erase(offer.direction_key);
         if(!sealed)return false;
         tls_response="YT-P2P/V81 OFFER "+QByteArray(
+            reinterpret_cast<const char*>(wire.data()),
+            static_cast<qsizetype>(wire.size())).toHex()+"\n";
+        CryptoDetail::Erase(wire);
+        offer_sent_=true;
+        return true;
+    }
+    // V85: mutually exclusive with legacy V81. Exactly one SHG2 record
+    // on this SAME authenticated TLS 1.3 connection after V80 BEGIN.
+    // Untrusted client never supplies account, peer selector or endpoints.
+    bool SealOneLocalOfferV84(const P2PTlsIdentity& identity,
+                              const QSslCertificate& cert,
+                              const P2PLocalOfferScope& scope,
+                              QByteArray& tls_response) {
+        tls_response.clear();
+        if(offer_sent_ || !StillBound(identity,cert))return false;
+        SecurePeerOfferV84 offer{};
+        const auto now=static_cast<std::uint64_t>(
+            QDateTime::currentMSecsSinceEpoch());
+        if(!P2PFullIdentityIssuerV84::Prepare(scope,account_,epoch_,now,offer))
+            return false;
+        SealedPeerOffersV84 sealer;
+        const auto raw_key=std::span<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(key_.constData()),
+            static_cast<std::size_t>(key_.size()));
+        if(!sealer.InstallChannelKey(raw_key)) {
+            CryptoDetail::Erase(offer.direction_key);
+            return false;
+        }
+        std::vector<std::uint8_t> wire;
+        const bool sealed=sealer.Seal(offer,now,wire);
+        CryptoDetail::Erase(offer.direction_key);
+        if(!sealed || wire.size()!=SecureOfferV84Detail::kWireBytes)return false;
+        tls_response="YT-P2P/V84 OFFER "+QByteArray(
             reinterpret_cast<const char*>(wire.data()),
             static_cast<qsizetype>(wire.size())).toHex()+"\n";
         CryptoDetail::Erase(wire);
