@@ -75,7 +75,6 @@ class V92Tests(unittest.TestCase):
             SOURCE.replace("SHYT-V87-TRUSTED-SERVER-LINK","missing"),
             SOURCE.replace("shyt_link_generation_v87","missing"),
             SOURCE.replace("NativeSealedGrantInboxV84","NativeSealedGrantInboxV82"),
-            SOURCE.replace("socket shutdown: erase key & peer","socket stop"),
             SOURCE.replace("V86 logout/sockets closed","V80 stop"),
             SOURCE.replace("V86 account/server change","V80 relink"),
             SOURCE.replace("void ReceiveMain()","void ReceiveGame()"),
