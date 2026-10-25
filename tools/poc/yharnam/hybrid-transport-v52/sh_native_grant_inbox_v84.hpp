@@ -136,6 +136,28 @@ public:
     const SecurePeerOfferV84* PendingForNat(std::uint64_t now_ms) noexcept {
         return HasCurrentPending(now_ms) ? &pending_ : nullptr;
     }
+    // V93: receive TLS on a *worker-local* inbox, then hand its validated
+    // grant to the original game-owned inbox under a SHORT grant lock.
+    // Never hold the game's recvfrom-path mutex across TLS I/O. No new
+    // socket, and no authorization to switch game packets to Direct.
+    bool TransferVerifiedTo(NativeSealedGrantInboxV84& destination,
+                            std::uint64_t now_ms) noexcept {
+        if(this==&destination || !HasCurrentPending(now_ms) ||
+           !last_tls_serial_ ||
+           last_tls_serial_<=destination.last_tls_serial_)
+            return false;
+        // Fail closed and preserve the original monotonic TLS serial.
+        destination.ResetCurrent();
+        destination.bound_=bound_;
+        destination.pending_=pending_;
+        destination.refresh_=refresh_;
+        destination.game_state_=game_state_;
+        destination.last_tls_serial_=last_tls_serial_;
+        destination.active_=true;
+        destination.accepted_=true;
+        ResetCurrent(); // wipes the worker's now-redundant pair master
+        return true;
+    }
     void Revoke() noexcept {ResetCurrent();}
     bool IsPending() const noexcept {return active_ && accepted_;}
 private:
