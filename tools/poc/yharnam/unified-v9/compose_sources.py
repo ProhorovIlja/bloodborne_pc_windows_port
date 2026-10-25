@@ -751,6 +751,15 @@ def run(checkout:Path, repo:Path, out:Path):
     exec(compile(v92_file.read_text("utf-8"),str(v92_file),"exec"),v92.__dict__)
     files[v92.NETWORK]=v92.patch_game(files[v92.NETWORK].decode("utf-8")).encode("utf-8")
     meta["applied"].append("V92-V93 original UDP host_socket SHN1 probe dev-only; worker-local V91 TLS grant verification and short game-owned inbox handoff, relay unchanged")
+    # V94: backport real upstream Yharnam Together PR365 pre-auth
+    # 2GB blob-size parser crash fix. Original pinned source still has
+    # the cast to int; this changes only the unsafe bounds checks.
+    v94_path=metrics_dir/"patch_upstream_stream_bounds_v94.py"
+    v94=types.ModuleType("sh_v94_upstream_parser_bounds")
+    v94.__file__=str(v94_path)
+    exec(compile(v94_path.read_text("utf-8"),str(v94_path),"exec"),v94.__dict__)
+    files[v94.SERVER]=v94.patch_header(files[v94.SERVER].decode("utf-8")).encode("utf-8")
+    meta["applied"].append("V94 upstream PR365 shadNet pre-auth 2GB blob signed-overflow bounds fix, default enabled")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
