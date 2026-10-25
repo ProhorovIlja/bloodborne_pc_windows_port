@@ -51,6 +51,13 @@ def transform(files: dict[str, str]) -> dict[str, str]:
     DirectConsent direct_consent; // unconfigured in production => no P2P grant
 ''',"Hub private resolver")
 
+    # V68: preserve sign-in provenance at the ORIGINAL successful Hello.
+    h = replace_exact(h,
+'''        qint64 last_heard_ms = 0;
+''',
+'''        qint64 last_heard_ms = 0;
+        bool authenticated_at_hello = false;
+''',"explicit login marker")
     cpp = replace_exact(cpp,
 '''Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint64 now_ms) {
 ''',
@@ -70,7 +77,8 @@ bool Hub::DirectPairEligible(const Endpoint& source, const Endpoint& destination
     const Link& b = *two;
     if (a.online_id.isEmpty() || b.online_id.isEmpty() ||
         a.online_id == b.online_id || a.build.isEmpty() || b.build.isEmpty() ||
-        a.build != b.build || a.quiet || b.quiet || a.lost || b.lost ||
+        a.build != b.build || !a.authenticated_at_hello ||
+        !b.authenticated_at_hello || a.quiet || b.quiet || a.lost || b.lost ||
         now_ms < a.last_heard_ms || now_ms < b.last_heard_ms ||
         now_ms - a.last_heard_ms > quiet_ms ||
         now_ms - b.last_heard_ms > quiet_ms ||
@@ -84,6 +92,14 @@ bool Hub::DirectPairEligible(const Endpoint& source, const Endpoint& destination
 
 Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint64 now_ms) {
 ''',"Hub pair authorization implementation")
+
+    cpp = replace_exact(cpp,
+'''    link.last_heard_ms = now_ms;
+''',
+'''    link.last_heard_ms = now_ms;
+    // SignIn above must have succeeded for THIS specific accepted Hello.
+    link.authenticated_at_hello = static_cast<bool>(sign_in);
+''',"per-hello authentication provenance")
 
     test = replace_exact(test,
 '''int HelloAndBuilds() {
@@ -152,6 +168,26 @@ Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint6
   no_party.Receive(Kaniel, HelloFrom("Kaniel", Build, "test-only-password"), 0);
   no_party.Receive(Ada, HelloFrom("Ada", Build, "test-only-password"), 0);
   CHECK(!no_party.DirectPairEligible(Kaniel, Ada, 1));
+  // V68: callback installed after old unauthenticated Hellos is not retroactive.
+  Hub late_auth;
+  late_auth.SetPartyOf(both_in_party);
+  late_auth.SetDirectConsent([](auto, auto) { return true; });
+  late_auth.Receive(Kaniel, HelloFrom("Kaniel", Build), 0);
+  late_auth.Receive(Ada, HelloFrom("Ada", Build), 0);
+  late_auth.SetSignIn(allows_sign_in);
+  CHECK(!late_auth.DirectPairEligible(Kaniel, Ada, 1));
+  late_auth.Receive(Kaniel, HelloFrom("Kaniel", Build, "test-only-password"), 2);
+  CHECK(!late_auth.DirectPairEligible(Kaniel, Ada, 3));
+  late_auth.Receive(Ada, HelloFrom("Ada", Build, "test-only-password"), 4);
+  CHECK(late_auth.DirectPairEligible(Kaniel, Ada, 5));
+  Hub failed_login;
+  failed_login.SetSignIn(allows_sign_in);
+  failed_login.SetPartyOf(both_in_party);
+  failed_login.SetDirectConsent([](auto,auto){return true;});
+  failed_login.Receive(Kaniel,HelloFrom("Kaniel",Build,"wrong"),0);
+  failed_login.Receive(Ada,HelloFrom("Ada",Build,"test-only-password"),0);
+  CHECK(!failed_login.DirectPairEligible(Kaniel,Ada,1));
+
   // A forged/rejected Hello must not register a link.
   const Endpoint attacker{0x7F000001, 40009};
   hub.Receive(attacker, HelloFrom("attacker", Build, "wrong"), 3008);
