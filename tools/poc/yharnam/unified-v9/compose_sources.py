@@ -593,7 +593,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v79.__file__=str(v79_script)
     exec(compile(v79_script.read_text("utf-8"),str(v79_script),"exec"),v79.__dict__)
     v79_paths=(v79.MAIN,v79.SERVER_H,v79.SERVER_CPP,v79.LINK_H,
-               v79.LINK_CPP,v79.WORLD_H,v79.WORLD_CPP)
+               v79.LINK_CPP,v79.WORLD_H,v79.WORLD_CPP,v79.WORLD_TEST)
     v79_sources={p:(files[p] if p in files else (checkout/p).read_bytes())
                  .decode("utf-8") for p in v79_paths}
     for path,body in v79.patch(v79_sources).items():
