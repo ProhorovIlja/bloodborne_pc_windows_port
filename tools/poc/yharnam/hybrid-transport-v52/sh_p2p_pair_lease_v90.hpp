@@ -81,8 +81,10 @@ public:
         }
         out=offer;
         if(a)issued_a_=true;else issued_b_=true;
-        // Do NOT clear pair here: other recipient needs same random
-        // master. 10-second expiry and explicit revoke always erase it.
+        // Copy already left in out. Once BOTH halves were consumed there
+        // is no legitimate server-side reason to retain the pair master.
+        // Clear also makes the next TLS OFFER fail closed immediately.
+        if(issued_a_ && issued_b_)Clear();
         return true;
     }
     bool Active() const noexcept{return active_;}
