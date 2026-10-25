@@ -1,0 +1,16 @@
+name: Seamless Hunt V63 native Windows client full candidate build
+on:
+  push:
+    branches:
+      - feature/shyt-win-fsr-countof-v63
+    paths:
+      - .github/workflows/shyt-v63-native-game-candidate.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-game-client:
+    # Run the full pinned native Windows GPU compiler/package path using the
+    # C++17 FidelityFX fast preflight verified in PR #20. This is a development
+    # artifact; it is NOT a validated playable release and has no live deploy.
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
