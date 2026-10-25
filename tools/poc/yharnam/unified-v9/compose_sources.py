@@ -692,6 +692,21 @@ def run(checkout:Path, repo:Path, out:Path):
     files[v87.NETWORK]=v87.patch_game(files[v87.NETWORK].decode("utf-8")).encode("utf-8")
     files[v87.HEADER]=(metrics_dir/"sh_native_game_identity_v87.hpp").read_bytes()
     meta["applied"].append("V87 SHA256 game-self identity requires server Welcome, stable link epoch, Direct OFF")
+    # V88: stage full 2-way SHG2 reciprocal pair helper inside original
+    # SINGLE Qt shadNet, and add internal server-only capture API.
+    # It obtains two current mutually consenting LinkServer snapshots,
+    # refuses mismatch, generates a common pair binding and two distinct
+    # directional keys. NOT delivered on public TLS / NAT / UDP yet.
+    v88_script=metrics_dir/"patch_qt_reciprocal_pair_v88.py"
+    v88=types.ModuleType("sh_v88_qt_recipient_pair")
+    v88.__file__=str(v88_script)
+    exec(compile(v88_script.read_text("utf-8"),str(v88_script),"exec"),v88.__dict__)
+    files[v88.HEADER]=(metrics_dir/"sh_p2p_reciprocal_pair_v88.hpp").read_bytes()
+    v88_paths=(v88.SERVER_H,v88.SERVER_CPP,v88.LINK_H,v88.LINK_CPP)
+    v88_input={p:files[p].decode("utf-8") for p in v88_paths}
+    for name,body in v88.patch(v88_input).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("V88 Qt original LinkServer two reciprocal same-world SHG2 offers, DISTINCT directional keys, local DEV ONLY")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
