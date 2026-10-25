@@ -518,6 +518,22 @@ def run(checkout:Path, repo:Path, out:Path):
     # original GameLink ACK/sequence/retransmit lane has genuinely migrated.
     # Header bytes are already staged by V70/V71; record exactly what ships.
     meta["applied"].append("V73 native Direct allows only ACK-free unreliable game frames until reliable GameLink migration")
+    # V74: a newer native client may explicitly opt in using an optional
+    # protobuf Hello field. ORIGINAL legacy clients emit no field => DENY.
+    # The shadNet Qt world holds each client's consent from its signed-in
+    # link, and the real Hub checks BOTH directions. Crucially this neither
+    # distributes addresses/keys nor Arm()s client Direct sockets yet.
+    v74_script=metrics_dir/"patch_mutual_p2p_consent.py"
+    v74=types.ModuleType("sh_v74_mutual_p2p_consent")
+    v74.__file__=str(v74_script)
+    exec(compile(v74_script.read_text("utf-8"),str(v74_script),"exec"),v74.__dict__)
+    v74_paths=(v74.PROTO,v74.WORLD_H,v74.WORLD_CPP,v74.LINK_CPP,
+               v74.CLIENT_WORLD,v74.WORLD_TEST)
+    v74_sources={p:(files[p] if p in files else (checkout/p).read_bytes()).decode("utf-8")
+                 for p in v74_paths}
+    for path,body in v74.transform(v74_sources).items():
+        files[path]=body.encode("utf-8")
+    meta["applied"].append("V74 opt-in protobuf native client Hello + game-world mutual consent, legacy DENY")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
