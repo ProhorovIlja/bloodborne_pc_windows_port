@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "sh_route_metrics.hpp"
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -32,14 +33,14 @@ int main(){
     assert(!m.ShouldEmit(30001,0));
     // Two threads must never emit on the same interval.
     RouteMetrics simultaneous(true);
-    unsigned emitted=0;
+    std::atomic<unsigned> emitted{0};
     std::vector<std::thread> threads;
     for(int i=0;i<8;++i) threads.emplace_back([&]{
         if(simultaneous.ShouldEmit(42))
-            __atomic_fetch_add(&emitted,1U,__ATOMIC_RELAXED);
+            emitted.fetch_add(1,std::memory_order_relaxed);
     });
     for(auto& t:threads)t.join();
-    assert(emitted==1);
+    assert(emitted.load()==1);
     m.NoteServerSend(250,true);
     m.NoteServerSend(30,false);
     m.NoteRelayReceive(170);
