@@ -45,7 +45,7 @@ def patch_game(src):
             remark+" revocation")
     method='''    // V92 DEV-ONLY. Called from trusted native game worker, never UDP
     // receive thread. This sends only a 144-byte SIGNED challenge over
-    // the existing host_socket; it NEVER calls game frame SendFrame().
+    // the existing host_socket; it NEVER changes the guest game-frame sender.
     bool TryStartSameSocketNatProbeForTest(bool initiator,std::uint64_t now_ms) {
         if(!running.load(std::memory_order_acquire) || LinkCut())
             return false;
