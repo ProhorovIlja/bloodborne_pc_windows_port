@@ -54,8 +54,8 @@ int main(int argc,char** argv) {
         if(!first_buf.endsWith('\n'))return;
         if(phase==0) {
             if(!first_buf.startsWith("YT-P2P/V80 KEY ") ||
-               first_buf.size()!=17+64+1) {app.exit(2);return;}
-            original_key=first_buf.mid(17,64);
+               first_buf.size()!=QByteArray("YT-P2P/V80 KEY ").size()+64+1) {app.exit(2);return;}
+            original_key=first_buf.mid(QByteArray("YT-P2P/V80 KEY ").size(),64);
             if(QByteArray::fromHex(original_key).size()!=32) {app.exit(3);return;}
             first_buf.clear();phase=1;
             first.write("YT-P2P/V80 CHECK\n");
@@ -79,8 +79,8 @@ int main(int argc,char** argv) {
         if(!second_buf.endsWith('\n'))return;
         if(phase!=3 ||
            !second_buf.startsWith("YT-P2P/V80 KEY ") ||
-           second_buf.size()!=17+64+1 ||
-           second_buf.mid(17,64)==original_key) {app.exit(6);return;}
+           second_buf.size()!=QByteArray("YT-P2P/V80 KEY ").size()+64+1 ||
+           second_buf.mid(QByteArray("YT-P2P/V80 KEY ").size(),64)==original_key) {app.exit(6);return;}
         phase=4;
         epoch=712; // changing server-owned game link generation revokes key
         revoked.write("YT-P2P/V80 CHECK\n");
