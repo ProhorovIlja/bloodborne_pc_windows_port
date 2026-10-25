@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <climits>
+#include <chrono>
 #include <algorithm>
 #include <cstring>
 #include <span>
@@ -234,7 +235,16 @@ public:
             return false;
         }
         if(nonsecret_test_stage)*nonsecret_test_stage=8;
-        if(!inbox.ReceiveSealedTlsLine(line,now_ms)) {
+        // V83: the TLS handshake/request takes time. A grant is issued
+        // by the server AFTER Request() starts; checking its issued_ms
+        // against the call-start timestamp would incorrectly reject every
+        // genuine offer as "not yet issued". Sample wall clock ONLY after
+        // the full sealed TLS record arrives.
+        const auto received_ms=static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+        if(received_ms<now_ms ||
+           !inbox.ReceiveSealedTlsLine(line,received_ms)) {
             inbox.Revoke();
             std::fill(line.begin(),line.end(),char(0));
             return false;
@@ -244,7 +254,7 @@ public:
         // Even a cryptographically verified offer NEVER Arm()s UDP sender
         // or receiver. Only future independently proven NAT game-socket
         // pairing is allowed to use this pending candidate.
-        return inbox.HasCurrentPending(now_ms);
+        return inbox.HasCurrentPending(received_ms);
     }
 };
 } // namespace SeamlessHunt::Hybrid
