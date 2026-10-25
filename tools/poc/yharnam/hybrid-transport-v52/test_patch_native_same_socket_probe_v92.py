@@ -50,6 +50,12 @@ class V92Tests(unittest.TestCase):
         self.assertIn("TryStartSameSocketNatProbeForTest(",result)
         self.assertIn("SameSocketNatProbeVerifiedForTest(",result)
         self.assertIn("ReceiveNativeSignedProbeV92(",result)
+        # Completion must not call Reply first: a valid ReadyAck has one
+        # sequence and a double-open would reject it as a replay.
+        self.assertIn("NatProbeKindV91::ReadyAck",result)
+        self.assertIn("nat_probe_v92->Complete(",result)
+        self.assertLess(result.index("NatProbeKindV91::ReadyAck"),
+                        result.index("nat_probe_v92->Complete("))
         self.assertIn("::recvfrom(host_socket",result)
         self.assertIn("Transmit(destination",result)
         self.assertNotIn("::socket(AF_INET",result)
