@@ -57,11 +57,13 @@ public:
         // have logged in, while its loopback listener is running.
         // Never mutate this QObject from the native TLS worker thread,
         // and never permit staging behind an Internet-facing listener.
-        if(QThread::currentThread()!=thread() || pair_lease_.Active() ||
+        if(QThread::currentThread()!=thread() ||
            (isListening() && serverAddress()!=QHostAddress::LocalHost))
             return false;
         const auto now=QDateTime::currentMSecsSinceEpoch();
-        return now>0 && pair_lease_.Begin(
+        if(now<=0 || pair_lease_.HasOutstanding(
+             static_cast<std::uint64_t>(now)))return false;
+        return pair_lease_.Begin(
             first,second,std::move(authoritative),
             static_cast<std::uint64_t>(now));
     }
