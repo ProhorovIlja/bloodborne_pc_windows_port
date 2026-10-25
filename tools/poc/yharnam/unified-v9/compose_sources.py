@@ -629,6 +629,17 @@ def run(checkout:Path, repo:Path, out:Path):
     files["server/src/sh_p2p_tls_key_session.hpp"]=(metrics_dir/"sh_p2p_tls_key_session.hpp").read_bytes()
     files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
     meta["applied"].append("V81 loopback mTLS peer offer from current mutually consenting Qt links, sealed SHG1 once")
+    # V82: the ACTUAL native game's P2PTransport now OWNS a fail-closed
+    # SHG1 receiver. It is only staged; no native client TLS adapter exists,
+    # no public grant installer and NO direct TX/RX Arm calls. Native socket
+    # stop / account-reconfigure clear pending secrets, leaving SHLK intact.
+    v82_script=metrics_dir/"patch_native_grant_inbox.py"
+    v82=types.ModuleType("sh_v82_native_offer_inbox")
+    v82.__file__=str(v82_script)
+    exec(compile(v82_script.read_text("utf-8"),str(v82_script),"exec"),v82.__dict__)
+    files[v82.NETWORK]=v82.patch_game(files[v82.NETWORK].decode("utf-8")).encode("utf-8")
+    files[v82.HEADER]=(metrics_dir/"sh_native_grant_inbox.hpp").read_bytes()
+    meta["applied"].append("V82 actual native game owns unarmed, replay-protected TLS SHG1 inbox, revoked with account/socket")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
