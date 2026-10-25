@@ -26,7 +26,7 @@ class P2PTlsListener final : public QTcpServer {
 public:
     explicit P2PTlsListener(QObject* parent=nullptr) : QTcpServer(parent) {}
     static constexpr int kMaxSessions=32;
-    static constexpr int kMaxInputBytes=64;
+    static constexpr int kMaxInputBytes=96; // V91 fixed 64-hex mTLS READY proof
     bool ConfigureLocalIdentity(const QByteArray& pin_sha256_hex,
                                 const QByteArray& account,
                                 P2PTlsIdentity::LiveEpoch live) {
@@ -232,6 +232,42 @@ protected:
                     pair_lease_.Clear();session->Clear();s->abort();return;
                 }
                 std::fill(reply.begin(),reply.end(),char(0));
+            } else if (pending->startsWith("YT-P2P/V91 READY ")) {
+                // Full 32-byte proof is on the SAME verified TLS1.3
+                // connection which received V90 pair half. Refuse old
+                // V85/V84 standalone grants or a TLS session rebind.
+                static const QByteArray prefix="YT-P2P/V91 READY ";
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                if(!session->PairedIssued() || !bound ||
+                   !session->StillBound(identity_,s->peerCertificate()) ||
+                   pending->size()!=prefix.size()+64+1 ||
+                   !pending->endsWith('\n')) {
+                    pair_lease_.Clear();session->Clear();s->abort();return;
+                }
+                const auto hex=pending->mid(prefix.size(),64);
+                QByteArray proof=QByteArray::fromHex(hex);
+                if(proof.size()!=32 || proof.toHex()!=hex.toLower()) {
+                    std::fill(proof.begin(),proof.end(),char(0));
+                    pair_lease_.Clear();session->Clear();s->abort();return;
+                }
+                const auto stamp=QDateTime::currentMSecsSinceEpoch();
+                bool both_ready=false;
+                const bool accepted=stamp>0 && pair_lease_.MarkReady(
+                    bound->account,bound->current_epoch,
+                    std::span<const std::uint8_t>(
+                        reinterpret_cast<const std::uint8_t*>(proof.constData()),
+                        static_cast<std::size_t>(proof.size())),
+                    static_cast<std::uint64_t>(stamp),both_ready);
+                std::fill(proof.begin(),proof.end(),char(0));
+                pending->clear();
+                session->Clear();
+                if(!accepted) {s->abort();return;}
+                // STILL NO UDP DIRECT AUTHORIZATION. This acknowledges
+                // mTLS possession only; both clients must also prove NAT
+                // reachability AND a future server-to-both ready barrier.
+                s->write(both_ready?"YT-P2P/V91 BOTH_READY\n":
+                                    "YT-P2P/V91 PENDING\n");
+                s->disconnectFromHost();
             } else if (*pending=="YT-P2P/V80 CHECK\n") {
                 // Revocation is re-checked on this SAME TLS session: no
                 // reuse if the game re-Hello/map/team/session epoch changed.
