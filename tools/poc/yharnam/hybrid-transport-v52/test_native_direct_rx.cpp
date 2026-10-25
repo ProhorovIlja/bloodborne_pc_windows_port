@@ -133,6 +133,14 @@ int main(){
            ==NativeRxStatus::Dropped);
     assert(Send(encoder,r,DirectKind::GameData,wire,physical,109)
            ==NativeRxStatus::Game);
+    // Authentic but duplicated HMAC datagram must fail the replay window,
+    // even when both network source IP/port and world authority are valid.
+    std::vector<std::uint8_t> replay;
+    assert(encoder.Encode(DirectKind::GameData,wire,109,replay));
+    auto first=r.Receive(physical,replay,109);
+    assert(first.status==NativeRxStatus::Game);
+    auto duplicate=r.Receive(physical,replay,109);
+    assert(duplicate.status==NativeRxStatus::Dropped);
     // Real-time world revocation tears down MAC/replay state; reverting
     // the world state cannot revive an obsolete pair ticket.
     world.allowed=false;
