@@ -87,7 +87,7 @@ jobs:
               assert f.is_file(),p
               assert manifest["sha256"][p]==hashlib.sha256(f.read_bytes()).hexdigest()
           assert "m_link.SetDirectWorldEpoch(" in (root/"server/src/link_server.cpp").read_text()
-          assert "m_link.SetDirectConsent(" not in (root/"server/src/link_server.cpp").read_text()
+          assert "m_link.SetDirectConsent(" in (root/"server/src/link_server.cpp").read_text()  # V74 both opt-in
           assert "DirectWorldEpoch(host.endpoint,guest.endpoint)" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
           print("SHYT_V72_QT_LIVE_WORLD_EPOCH_SOURCE_PASS")
           PY
