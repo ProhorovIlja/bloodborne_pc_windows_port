@@ -655,6 +655,23 @@ def run(checkout:Path, repo:Path, out:Path):
     files[v83.CMAKE]=v83.patch_cmake(cmake_game).encode("utf-8")
     files[v83.HEADER]=(metrics_dir/"sh_native_tls_local_client.hpp").read_bytes()
     meta["applied"].append("V83 real native LibreSSL TLS1.3 client callable DEV-only; default OFF, no Direct Arm")
+    # V84/V85: SAME original Qt loopback-only listener now offers an
+    # explicit SHG2 version, with full SHA256 IDs and a non-Qt recipient.
+    # Keep the production game call site UNWIRED and Direct disabled.
+    # These headers are staged to ensure the Qt server and native game
+    # have exactly the same audited protocol sources in the combined tree.
+    for name in ("sh_secure_grant_v84.hpp",):
+        blob=(metrics_dir/name).read_bytes()
+        files["server/src/"+name]=blob
+        files["emulator/src/core/libraries/network/"+name]=blob
+    files["server/src/sh_p2p_tls_offer_v84.hpp"]=(
+        metrics_dir/"sh_p2p_tls_offer_v84.hpp").read_bytes()
+    for name in ("sh_native_grant_inbox_v84.hpp",
+                 "sh_native_tls_local_client_v85.hpp"):
+        files["emulator/src/core/libraries/network/"+name]=(
+            metrics_dir/name).read_bytes()
+    meta["applied"].append(
+        "V84-V85 SHG2 256-bit recipient and peer identity, actual Qt/native local TLS source; no production P2P Arm")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
