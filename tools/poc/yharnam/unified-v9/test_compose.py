@@ -73,7 +73,7 @@ def originals():
         compose.COOP_STREAM: STREAM_FIXTURE,
         compose.SERVER_LINK_CPP: LINK_ID_FIXTURE.replace(
             '#include "server_link.h"',
-            '#include "server_link.h"\n' + LOGIN_CPP_FIXTURE
+            '#include "server_link.h"\n#include <algorithm>\n' + LOGIN_CPP_FIXTURE
         ) + '''    const bool again = members.contains(from.Key());
     Link& link = members[from.Key()];
     link.build = hello->build;
