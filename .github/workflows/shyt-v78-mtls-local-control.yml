@@ -1,0 +1,114 @@
+name: Seamless Hunt V78 real Qt TLS 1.3 local P2P control (no grants)
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_tls_local_listener.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_tls_local_listener.cpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v78-mtls-local-control.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  mtls-qt-loopback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install real Qt/OpenSSL TLS dev dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev libssl-dev openssl pkg-config
+      - name: Make test-only ephemeral root CA and signed server/client certificates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v78-certs
+          cd /tmp/shyt-v78-certs
+          openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 -keyout ca.key -out ca.pem -subj '/CN=SHYT V78 Throwaway CI CA' -addext 'basicConstraints=critical,CA:TRUE'
+          openssl req -newkey rsa:2048 -sha256 -nodes -keyout server.key -out server.csr -subj '/CN=127.0.0.1'
+          printf 'subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > server.ext
+          openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out server.pem -days 1 -sha256 -extfile server.ext
+          openssl req -newkey rsa:2048 -sha256 -nodes -keyout client.key -out client.csr -subj '/CN=CI client only'
+          printf 'extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n' > client.ext
+          openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out client.pem -days 1 -sha256 -extfile client.ext
+          chmod 600 *.key
+      - name: Compile and exercise actual TLS handshake and missing-client-cert denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O0 -g0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$ROOT" "$ROOT/test_tls_local_listener.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -o /tmp/shyt-v78-real-qt-tls
+          /tmp/shyt-v78-real-qt-tls \
+            /tmp/shyt-v78-certs/server.pem /tmp/shyt-v78-certs/server.key \
+            /tmp/shyt-v78-certs/ca.pem /tmp/shyt-v78-certs/client.pem \
+            /tmp/shyt-v78-certs/client.key
+          echo SHYT_V78_ACTUAL_TLS13_MUTUAL_CERT_LOOPBACK_PASS
+  actual-single-qt-server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Install original Qt server developer packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libprotobuf-dev protobuf-compiler pkg-config
+      - name: Compose actual source and verify disabled mTLS in SAME original shadnet main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v78-full
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          root=Path('/tmp/shyt-v78-full')
+          manifest=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          for p in ('server/src/main.cpp','server/src/sh_p2p_tls_listener.hpp'):
+              source=(root/p).read_bytes()
+              assert manifest['sha256'][p]==hashlib.sha256(source).hexdigest(),p
+          main=(root/'server/src/main.cpp').read_text()
+          header=(root/'server/src/sh_p2p_tls_listener.hpp').read_text()
+          assert main.count('ShadNetServer server;')==1
+          assert main.count('P2PTlsListener p2p_tls;')==1
+          assert 'SHYT_P2P_TLS_LOCAL_TEST")=="1"' in main
+          assert 'StartLocal(' in main
+          assert 'QHostAddress::LocalHost' in header
+          assert 'config.setProtocol(QSsl::TlsV1_3)' in header
+          assert 'config.setPeerVerifyMode(QSslSocket::VerifyPeer)' in header
+          assert 'ignoreSslErrors' not in header
+          assert 'TLS_READY NO_GRANTS' in header
+          assert 'V78 disabled-by-default loopback-only mTLS 1.3 Qt readiness, NO grants' in manifest['applied']
+          assert 'direct_egress.Arm(' not in (root/'emulator/src/core/libraries/network/p2p_sockets.cpp').read_text()
+          print('SHYT_V78_SAME_SHADNET_DAEMON_MTLS_DEFAULT_OFF_SOURCE_PASS')
+          PY
+      - name: Compile original server main using actual Qt6 and protobuf definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v78-proto
+          protoc --proto_path=/tmp/shyt-v78-full/server/coop --cpp_out=/tmp/shyt-v78-proto /tmp/shyt-v78-full/server/coop/coop.proto
+          protoc --proto_path=pinned-upstream/server/src --cpp_out=/tmp/shyt-v78-proto pinned-upstream/server/src/shadnet.proto
+          c++ -std=c++20 -O0 -fPIC -fsyntax-only \
+            -I /tmp/shyt-v78-full/server/src \
+            -I pinned-upstream/server/src -I pinned-upstream/server \
+            -I /tmp/shyt-v78-proto \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6HttpServer) \
+            /tmp/shyt-v78-full/server/src/main.cpp
+          echo SHYT_V78_REAL_SHADNET_MAIN_QT_TLS_COMPILES_PASS
