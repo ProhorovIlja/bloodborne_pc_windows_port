@@ -155,15 +155,17 @@ public:
             static_cast<qsizetype>(wire.size())).toHex()+"\n";
         CryptoDetail::Erase(wire);
         offer_sent_=true;
+        paired_offer_=true; // V91 only same mTLS connection may READY
         return true;
     }
+    bool PairedIssued() const noexcept{return paired_offer_;}
     bool Active() const noexcept{return active_;}
     void Clear() {
         if(!key_.isEmpty())std::fill(key_.begin(),key_.end(),char(0));
         key_.clear();
         if(!account_.isEmpty())std::fill(account_.begin(),account_.end(),char(0));
         account_.clear();
-        epoch_=0;active_=false;offer_sent_=false;
+        epoch_=0;active_=false;offer_sent_=false;paired_offer_=false;
     }
 private:
     QByteArray key_{};
@@ -171,5 +173,6 @@ private:
     quint64 epoch_=0;
     bool active_=false;
     bool offer_sent_=false;
+    bool paired_offer_=false;
 };
 } // namespace SeamlessHunt::Hybrid
