@@ -12,6 +12,10 @@
 #include <limits>
 
 namespace SeamlessHunt::Hybrid {
+struct P2PReciprocalOffersV88 {
+    SecurePeerOfferV84 for_a{};
+    SecurePeerOfferV84 for_b{};
+};
 class P2PReciprocalPairIssuerV88 final {
 public:
     static bool Prepare(const P2PLocalOfferScope& to_a,
