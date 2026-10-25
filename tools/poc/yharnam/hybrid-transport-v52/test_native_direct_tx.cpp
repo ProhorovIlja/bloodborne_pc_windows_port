@@ -123,7 +123,7 @@ int main() {
     assert(!tx.Arm(0,t,grant,{},phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
     assert(!tx.Arm(0,t,grant,dest,{},"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
     assert(!tx.Arm(0,t,grant,dest,phys,"A",nullptr,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
-    assert(!tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,nullptr,&wire,100));
+    assert(!tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,nullptr,&wire,ReverseReady,&reverse,100));
     grant.peer_consent=false;
     assert(!tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
     grant=Granted();
