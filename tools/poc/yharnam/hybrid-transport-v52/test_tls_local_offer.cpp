@@ -44,6 +44,26 @@ int main(int argc,char** argv) {
     assert(!server.ConfigureLocalOfferPeer("changed-peer",
         [](const QByteArray&,const QByteArray&)
              ->std::optional<P2PLocalOfferScope> {return std::nullopt;}));
+    // V81: no client-supplied online_id/epoch may ever pass the issuer.
+    const P2PLocalOfferScope trusted_scope{
+        "recipient","peer-A",game_epoch,9002,93001,
+        0x01020304U,41234,0x0A010203U,3658
+    };
+    SecurePeerOffer malformed{};
+    assert(!P2PLocalOfferIssuer::Prepare(trusted_scope,"attacker",game_epoch,
+                                        120000,malformed));
+    assert(!P2PLocalOfferIssuer::Prepare(trusted_scope,"recipient",game_epoch+1,
+                                        120000,malformed));
+    auto changed=trusted_scope;
+    changed.recipient="peer-A";
+    assert(!P2PLocalOfferIssuer::Prepare(changed,"recipient",game_epoch,
+                                        120000,malformed));
+    changed=trusted_scope;changed.world_revision=0;
+    assert(!P2PLocalOfferIssuer::Prepare(changed,"recipient",game_epoch,
+                                        120000,malformed));
+    changed=trusted_scope;changed.physical_port_host=0;
+    assert(!P2PLocalOfferIssuer::Prepare(changed,"recipient",game_epoch,
+                                        120000,malformed));
     assert(server.StartLocal(argv[1],argv[2],argv[3],0));
     assert(server.serverAddress()==QHostAddress::LocalHost);
 
