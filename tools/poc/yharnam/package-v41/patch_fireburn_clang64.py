@@ -26,6 +26,7 @@ VK_TARGET = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/backen
 VK_HEADER = "#include <vulkan/vulkan.h>\n"
 VK_HEADER_PATCH = (VK_HEADER
     + "#include <new>    // placement new for Vk backend mutex, C++17\n"
+    + "#include <mutex>  // std::lock_guard and std::mutex in Vk backend\n"
     + "#include <cmath>  // std::floor, std::log2 for mip level count\n")
 VK_PLACEMENT = "new (&backendContext->uniformBufferMutex) std::mutex();"
 VK_MIP_EXPRESSION = "floor(log2(FFX_MAXIMUM("
