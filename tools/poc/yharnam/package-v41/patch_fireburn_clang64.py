@@ -14,6 +14,10 @@ from pathlib import Path
 
 SUBMODULE = "c64f093404125e960813f95f1996c14780f0dd69"
 TARGET = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/shared/ffx_message.cpp"
+FRAME_TARGET = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"
+FRAME_HEADER = "#include <algorithm>    // for max used inside SPD CPU code.\n"
+FRAME_ADDED_HEADER = FRAME_HEADER + "#include <iterator>   // portable C++17 std::size for fixed arrays\n"
+FRAME_COUNT = 14  # exact number of pinned AMD SDK _countof(array) occurrences
 HEADERS = '#include <windows.h>  // required for OutputDebugString()\n'
 HEADER_PATCH = HEADERS + '#include <cwchar>  // C++17 bounded std::swprintf for CLANG64\n'
 ERROR = 'swprintf_s(buffer, 512, L"FSR_API_DEBUG_ERROR: %ls\\n", message);'
@@ -35,17 +39,40 @@ def transform(source: str) -> str:
     return source
 
 
+def transform_frame_interpolation(source: str) -> str:
+    """Convert pinned MSVC-only _countof(array) into C++17 std::size(array).
+
+    All 14 occurrences in this pinned source refer to fixed-size C++ arrays,
+    including local copyJobs. Fail closed if the AMD vendored file drifts.
+    """
+    if "std::size(" in source or "portable C++17 std::size for fixed arrays" in source:
+        raise ValueError("frame interpolation source already patched")
+    if source.count(FRAME_HEADER) != 1:
+        raise ValueError("pinned FidelityFX frame interpolation header drifted")
+    if source.count("_countof(") != FRAME_COUNT:
+        raise ValueError("pinned FidelityFX frame interpolation _countof calls drifted")
+    # No macro definitions or pointer calls are supported by this patch.
+    return source.replace(FRAME_HEADER, FRAME_ADDED_HEADER, 1).replace(
+        "_countof(", "std::size("
+    )
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("pinned_checkout", type=Path)
     args = p.parse_args()
     target = args.pinned_checkout / TARGET
-    if not target.is_file():
+    frame_target = args.pinned_checkout / FRAME_TARGET
+    if not target.is_file() or not frame_target.is_file():
         p.error("pinned FireBurn FSR C++ source missing")
     old = target.read_text("utf-8")
+    frame_old = frame_target.read_text("utf-8")
+    # Validate BOTH pinned files before modifying either checked-out vendor file.
     new = transform(old)
+    frame_new = transform_frame_interpolation(frame_old)
     target.write_text(new, encoding="utf-8")
-    print("SHYT_FSR_WINDOWS_CLANG64_CXX17_WPRINTF_PATCH_PASS")
+    frame_target.write_text(frame_new, encoding="utf-8")
+    print("SHYT_FSR_WINDOWS_CLANG64_CXX17_WPRINTF_AND_COUNTOF_PATCH_PASS")
 
 
 if __name__ == "__main__":
