@@ -123,7 +123,12 @@ jobs:
             -I "$sdk/src/shared" \
             -I "$sdk/src/components/frameinterpolation" \
             "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"
-          echo SHYT_FSR_CLANG64_HOST_PRECHECK_BOTH_SOURCES_PASS
+          clang++ -std=c++17 -fsyntax-only \
+            -I "$sdk/include" \
+            -I "$sdk/src/shared" \
+            -I "$sdk/src/components/opticalflow" \
+            "$sdk/src/components/opticalflow/ffx_opticalflow.cpp"
+          echo SHYT_FSR_CLANG64_HOST_PRECHECK_ALL_THREE_SOURCES_PASS
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
