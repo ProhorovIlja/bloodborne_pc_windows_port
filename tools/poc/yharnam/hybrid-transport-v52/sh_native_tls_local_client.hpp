@@ -223,16 +223,24 @@ public:
         }
         CryptoDetail::Erase(secret);
         if(nonsecret_test_stage)*nonsecret_test_stage=6;
-        if(!LocalTlsDetail::Send(tls.p,"YT-P2P/V81 OFFER\n") ||
-           !LocalTlsDetail::ReadLine(
-              tls.p,line,NativeSealedGrantInbox::kLineBytes) ||
-           !inbox.ReceiveSealedTlsLine(line,now_ms)) {
+        if(!LocalTlsDetail::Send(tls.p,"YT-P2P/V81 OFFER\n")) {
+            inbox.Revoke();return false;
+        }
+        if(nonsecret_test_stage)*nonsecret_test_stage=7;
+        if(!LocalTlsDetail::ReadLine(
+              tls.p,line,NativeSealedGrantInbox::kLineBytes)) {
+            inbox.Revoke();
+            std::fill(line.begin(),line.end(),char(0));
+            return false;
+        }
+        if(nonsecret_test_stage)*nonsecret_test_stage=8;
+        if(!inbox.ReceiveSealedTlsLine(line,now_ms)) {
             inbox.Revoke();
             std::fill(line.begin(),line.end(),char(0));
             return false;
         }
         std::fill(line.begin(),line.end(),char(0));
-        if(nonsecret_test_stage)*nonsecret_test_stage=8;
+        if(nonsecret_test_stage)*nonsecret_test_stage=9;
         // Even a cryptographically verified offer NEVER Arm()s UDP sender
         // or receiver. Only future independently proven NAT game-socket
         // pairing is allowed to use this pending candidate.
