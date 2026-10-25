@@ -56,12 +56,12 @@ int main() {
     assert(!client.Open(wire,recv,peer,203,404,1001,opened));
     assert(!client.Open(wire,recv,peer,202,405,1001,opened));
     assert(!client.Open(wire,recv,peer,202,404,999,opened));
-    assert(opened.direction_key==std::array<std::uint8_t,32>{});
+    assert((opened.direction_key==std::array<std::uint8_t,32>{}));
     assert(client.Open(wire,recv,peer,202,404,1001,opened));
     assert(opened.sender_account==peer && opened.recipient_account==recv);
     assert(opened.direction_key==original.direction_key);
     assert(!client.Open(wire,recv,peer,202,404,1001,opened));
-    assert(opened.direction_key==std::array<std::uint8_t,32>{});
+    assert((opened.direction_key==std::array<std::uint8_t,32>{}));
     assert(client.Open(second,recv,peer,202,404,1001,opened));
     SealedPeerOffersV84 expiry;
     assert(expiry.InstallChannelKey(key));
