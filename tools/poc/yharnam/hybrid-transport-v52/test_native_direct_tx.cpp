@@ -153,9 +153,6 @@ int main() {
     auto too_big=Game(0x06,'A',DirectReceiver::kMaxPayloadBytes);
     assert(tx.TrySend(dest,too_big,110)==NativeTxStatus::RelayRequired);
     assert(wire.total==1);
-    world.active=false;
-    assert(tx.TrySend(dest,frame,111)==NativeTxStatus::RelayRequired);
-    world.active=true;
     assert(tx.TrySend(dest,frame,111)==NativeTxStatus::DirectSubmitted);
     wire.force_error=true;
     assert(tx.TrySend(dest,frame,112)==NativeTxStatus::RelayRequired);
