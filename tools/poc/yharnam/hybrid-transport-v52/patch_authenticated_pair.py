@@ -94,9 +94,11 @@ Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint6
 ''',"Hub pair authorization implementation")
 
     cpp = replace_exact(cpp,
-'''    link.last_heard_ms = now_ms;
+'''    link.build = hello->build;
+    link.last_heard_ms = now_ms;
 ''',
-'''    link.last_heard_ms = now_ms;
+'''    link.build = hello->build;
+    link.last_heard_ms = now_ms;
     // SignIn above must have succeeded for THIS specific accepted Hello.
     link.authenticated_at_hello = static_cast<bool>(sign_in);
 ''',"per-hello authentication provenance")
