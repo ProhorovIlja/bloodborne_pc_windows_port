@@ -1,0 +1,53 @@
+name: Seamless Hunt V89 native cross-platform directional pair keys
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_reciprocal_pair_v88.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_pair_key_schedule_v89.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_pair_key_schedule_v89.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_reciprocal_pair_v88.cpp
+      - .github/workflows/shyt-v89-native-pair-keys.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_reciprocal_pair_v88.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_pair_key_schedule_v89.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_pair_key_schedule_v89.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_reciprocal_pair_v88.cpp
+      - .github/workflows/shyt-v89-native-pair-keys.yml
+permissions:
+  contents: read
+jobs:
+  derive:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Linux OpenSSL native directional/probe/game key KDF
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I "$base" \
+            "$base/test_pair_key_schedule_v89.cpp" -lcrypto -o /tmp/shyt-v89
+          /tmp/shyt-v89
+          echo SHYT_V89_LINUX_PAIR_DERIVE_PASS
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Windows CNG native directional/probe/game key KDF
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_pair_key_schedule_v89.cpp bcrypt.lib /Fe:shyt-v89.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V89 native CNG key derivation compile failed' }
+          ./shyt-v89.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V89 native CNG directional KDF failed' }
+          Write-Host SHYT_V89_WINDOWS_PAIR_DERIVE_PASS
