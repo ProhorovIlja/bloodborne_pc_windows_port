@@ -5,12 +5,18 @@ on:
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_reciprocal_pair_v88.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_reciprocal_pair_v88.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_qt_reciprocal_pair_v88.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_qt_reciprocal_pair_v88.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v88-reciprocal-pair.yml
   pull_request:
     branches: [feature/seamless-hunt-mainline]
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_reciprocal_pair_v88.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_reciprocal_pair_v88.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_qt_reciprocal_pair_v88.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_qt_reciprocal_pair_v88.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v88-reciprocal-pair.yml
 permissions:
   contents: read
@@ -28,6 +34,13 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends qt6-base-dev libssl-dev pkg-config
+      - name: Test fail-closed original Qt server source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_qt_reciprocal_pair_v88.py' -v
+          echo SHYT_V88_QT_LINKSERVER_PATCH_GUARD_PASS
       - name: Compile and run real AES256-GCM 2-party reciprocal tickets
         shell: bash
         run: |
