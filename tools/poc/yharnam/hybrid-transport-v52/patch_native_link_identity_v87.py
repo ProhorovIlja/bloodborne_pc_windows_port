@@ -81,6 +81,21 @@ def patch_game(src):
 ''',
         "original server-accepted Welcome")
     src=one(src,
+        '''            } else {
+                repeated = link_refusal == welcome.text;
+                link_refusal = welcome.text;
+''',
+        '''            } else {
+                repeated = link_refusal == welcome.text;
+#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
+                // A denied hello is not an authenticated game session.
+                link_welcomed = false;
+                BumpLocalLinkGenerationV87();
+#endif
+                link_refusal = welcome.text;
+''',
+        "server explicitly refused game Hello")
+    src=one(src,
         '''            if (quiet) {
                 // The server may have restarted and forgotten this game: say hello again.
                 link_welcomed = false;
