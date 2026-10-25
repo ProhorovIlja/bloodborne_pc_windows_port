@@ -53,6 +53,6 @@ int main() {
     auto near=*a;near[31]^=1;
     SealedPeerOffersV84 denied;assert(denied.InstallChannelKey(key));
     assert(!denied.Open(wire,near,*b,8001,93001,1001,opened));
-    assert(opened.direction_key==std::array<std::uint8_t,32>{});
+    assert((opened.direction_key==std::array<std::uint8_t,32>{}));
     return 0;
 }
