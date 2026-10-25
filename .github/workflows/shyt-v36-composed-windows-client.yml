@@ -128,6 +128,11 @@ jobs:
             -I "$sdk/src/shared" \
             -I "$sdk/src/components/opticalflow" \
             "$sdk/src/components/opticalflow/ffx_opticalflow.cpp"
+          # V65: catch exact 165-min native build failure BEFORE GPU Ninja.
+          clang++ -std=c++17 -fsyntax-only \
+            -I "$sdk/include" -I "$sdk/src/shared" \
+            -I "$sdk/src/components/fsr3upscaler" \
+            "$sdk/src/components/fsr3upscaler/ffx_fsr3upscaler.cpp"
           fsr="pinned-upstream/bbport/gpu/third_party/fsr-vulkan"
           clang++ -std=c++17 -fsyntax-only \
             -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
