@@ -266,9 +266,16 @@ public:
             CryptoDetail::Erase(decoded.direction_key);
             return false;
         }
+        // Never evict an old nonce while the same TLS-exporter key is in
+        // use. Exhaustion forces an authenticated channel rekey and denies
+        // further grants; otherwise an older valid offer could be replayed.
+        if(next_>=seen_.size()) {
+            CryptoDetail::Erase(decoded.direction_key);
+            return false;
+        }
         accepted=decoded;
         CryptoDetail::Erase(decoded.direction_key);
-        auto& cell=seen_[next_++ % seen_.size()];
+        auto& cell=seen_[next_++];
         std::copy(nonce.begin(),nonce.end(),cell.nonce.begin());
         cell.valid=true;
         return true;
