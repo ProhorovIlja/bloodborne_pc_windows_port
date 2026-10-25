@@ -5,12 +5,16 @@ on:
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/sh_secure_grant_v84.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_secure_grant_v84.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_tls_offer_v84.cpp
       - .github/workflows/shyt-v84-fullwidth-grant.yml
   pull_request:
     branches: [feature/seamless-hunt-mainline]
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/sh_secure_grant_v84.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_secure_grant_v84.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_tls_offer_v84.cpp
       - .github/workflows/shyt-v84-fullwidth-grant.yml
 permissions:
   contents: read
@@ -26,6 +30,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Install original Qt server and crypto dev headers (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev libssl-dev pkg-config
       - name: Linux OpenSSL real AES256-GCM SHG2 V84 regression
         if: runner.os == 'Linux'
         shell: bash
@@ -36,6 +46,17 @@ jobs:
             "$root/test_secure_grant_v84.cpp" -lcrypto -o /tmp/shyt-v84
           /tmp/shyt-v84
           echo SHYT_V84_LINUX_CRYPTOPROOF_PASS
+      - name: Linux actual Qt server issuer -> native SHG2 full-ID roundtrip
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -fPIC -Wall -Wextra -Werror -pedantic -I "$root" \
+            "$root/test_tls_offer_v84.cpp" $(pkg-config --cflags --libs Qt6Core) \
+            -lcrypto -o /tmp/shyt-v84-qt-issuer
+          /tmp/shyt-v84-qt-issuer
+          echo SHYT_V84_QT_FULL_HASH_ISSUER_PASS
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - name: Windows CNG real AES256-GCM SHG2 V84 regression
