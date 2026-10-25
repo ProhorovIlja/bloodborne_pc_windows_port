@@ -6,6 +6,7 @@
 // Do not reuse the key across TLS sessions or after an account/world epoch
 // change. Does not depend on Qt 6.12 TLS exporter support.
 #include "sh_p2p_tls_identity.hpp"
+#include "sh_p2p_tls_offer_issuer.hpp"
 #include <QByteArray>
 #include <QRandomGenerator>
 #include <QSslCertificate>
@@ -52,18 +53,53 @@ public:
         return current && current->account==account_ &&
                current->current_epoch==epoch_;
     }
+    // V81: after this SAME mTLS socket's V80 BEGIN, issue at most ONE
+    // internally derived, recipient-specific V75 AES-GCM offer. The peer
+    // selector and all endpoints originate from shadNet's authoritative
+    // current links/world, NEVER from arbitrary client request contents.
+    bool SealOneLocalOffer(const P2PTlsIdentity& identity,
+                           const QSslCertificate& cert,
+                           const P2PLocalOfferScope& scope,
+                           QByteArray& tls_response) {
+        tls_response.clear();
+        if(offer_sent_ || !StillBound(identity,cert))return false;
+        SecurePeerOffer offer{};
+        const auto now=static_cast<std::uint64_t>(
+            QDateTime::currentMSecsSinceEpoch());
+        if(!P2PLocalOfferIssuer::Prepare(scope,account_,epoch_,now,offer))
+            return false;
+        SealedPeerOffers sealer;
+        const auto raw_key=std::span<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(key_.constData()),
+            static_cast<std::size_t>(key_.size()));
+        if(!sealer.InstallChannelKey(raw_key)) {
+            CryptoDetail::Erase(offer.direction_key);
+            return false;
+        }
+        std::vector<std::uint8_t> wire;
+        const bool sealed=sealer.Seal(offer,now,wire);
+        CryptoDetail::Erase(offer.direction_key);
+        if(!sealed)return false;
+        tls_response="YT-P2P/V81 OFFER "+QByteArray(
+            reinterpret_cast<const char*>(wire.data()),
+            static_cast<qsizetype>(wire.size())).toHex()+"\n";
+        CryptoDetail::Erase(wire);
+        offer_sent_=true;
+        return true;
+    }
     bool Active() const noexcept{return active_;}
     void Clear() {
         if(!key_.isEmpty())std::fill(key_.begin(),key_.end(),char(0));
         key_.clear();
         if(!account_.isEmpty())std::fill(account_.begin(),account_.end(),char(0));
         account_.clear();
-        epoch_=0;active_=false;
+        epoch_=0;active_=false;offer_sent_=false;
     }
 private:
     QByteArray key_{};
     QByteArray account_{};
     quint64 epoch_=0;
     bool active_=false;
+    bool offer_sent_=false;
 };
 } // namespace SeamlessHunt::Hybrid
