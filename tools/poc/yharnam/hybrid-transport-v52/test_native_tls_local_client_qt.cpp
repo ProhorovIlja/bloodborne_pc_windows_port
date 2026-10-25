@@ -67,9 +67,11 @@ int main(int argc,char** argv) {
                 return static_cast<std::uint64_t>(QDateTime::currentMSecsSinceEpoch());
             };
             NativeSealedGrantInbox inbox;
+            std::uint8_t stage=0;
             bool pass=NativeTlsLocalOfferClient::Request(
-                config,inbox,world.identity,1,Refresh,&world,now());
-            std::fprintf(stderr,"V83 stage local TLS+offer: %s\n",pass?"PASS":"FAIL");
+                config,inbox,world.identity,1,Refresh,&world,now(),&stage);
+            std::fprintf(stderr,"V83 stage local TLS+offer: %s (checkpoint %u)\n",
+                         pass?"PASS":"FAIL",unsigned(stage));
             const auto* offer=inbox.PendingForNat(now());
             std::fprintf(stderr,"V83 stage pending native offer: %s\n",offer?"PASS":"FAIL");
             pass=pass && offer && offer->sender_account==world.identity.peer_account &&
