@@ -81,6 +81,25 @@ public:
         return true;
     }
 
+    // V71+: require a cryptographically verified REVERSE path before the
+    // SendFrame route can bypass the shadNet relay. Must be called under the
+    // application's native inbound receive mutex. Missing peer, mismatched
+    // session or insufficient signed probes always return false.
+    bool ReversePathReady(const PeerTicket& outbound,PhysicalV4 peer_physical,
+                          VirtualV4 peer_virtual,std::int64_t now_ms) noexcept {
+        for(auto& link:links_) {
+            if(!link.active ||
+               link.physical.addr_nbo!=peer_physical.addr_nbo ||
+               link.physical.port_nbo!=peer_physical.port_nbo ||
+               link.virtual_peer.addr_nbo!=peer_virtual.addr_nbo ||
+               link.virtual_peer.port_nbo!=peer_virtual.port_nbo)
+                continue;
+            return link.ingress.MatchesReverse(outbound) &&
+                   link.ingress.CurrentPath(now_ms)==Path::Direct;
+        }
+        return false;
+    }
+
     void Revoke(std::size_t slot) noexcept {
         if (slot < kMaxAuthorizedPeers) links_[slot].Reset();
     }
