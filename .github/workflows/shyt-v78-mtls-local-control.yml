@@ -105,9 +105,25 @@ jobs:
           mkdir -p /tmp/shyt-v78-proto
           protoc --proto_path=/tmp/shyt-v78-full/server/coop --cpp_out=/tmp/shyt-v78-proto /tmp/shyt-v78-full/server/coop/coop.proto
           protoc --proto_path=pinned-upstream/server/src --cpp_out=/tmp/shyt-v78-proto pinned-upstream/server/src/shadnet.proto
+          # The source composer is a PATCH OVERLAY, not a complete
+          # checkout. Mirror untouched headers into a temporary build tree
+          # so the compiler never sees TWO physical copies of database.h
+          # (Qt project's class declarations would otherwise be redefined).
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          src=Path('pinned-upstream/server/src')
+          out=Path('/tmp/shyt-v78-full/server/src')
+          for item in src.rglob('*'):
+              if item.is_file():
+                  dst=out/item.relative_to(src)
+                  if not dst.exists():
+                      dst.parent.mkdir(parents=True,exist_ok=True)
+                      shutil.copy2(item,dst)
+          PY
           c++ -std=c++20 -O0 -fPIC -fsyntax-only \
             -I /tmp/shyt-v78-full/server/src \
-            -I pinned-upstream/server/src -I pinned-upstream/server \
+            -I pinned-upstream/server \
             -I /tmp/shyt-v78-proto \
             $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6HttpServer) \
             /tmp/shyt-v78-full/server/src/main.cpp
