@@ -513,6 +513,11 @@ def run(checkout:Path, repo:Path, out:Path):
     original_world_tests=(checkout/v72.WORLD_TEST).read_text(encoding="utf-8")
     files[v72.WORLD_TEST]=v72.transform_test(original_world_tests).encode("utf-8")
     meta["applied"].append("V72 server-derived party/map/owner world epoch for P2P candidate revocation")
+    # V73: even if a future caller claims reliable-stream authority, the
+    # REAL native TX/RX header hardcodes the handover gate to false until the
+    # original GameLink ACK/sequence/retransmit lane has genuinely migrated.
+    # Header bytes are already staged by V70/V71; record exactly what ships.
+    meta["applied"].append("V73 native Direct allows only ACK-free unreliable game frames until reliable GameLink migration")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
