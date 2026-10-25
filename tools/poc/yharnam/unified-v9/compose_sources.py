@@ -728,6 +728,19 @@ def run(checkout:Path, repo:Path, out:Path):
     files["emulator/src/core/libraries/network/sh_nat_probe_v91.hpp"]=(
         metrics_dir/"sh_nat_probe_v91.hpp").read_bytes()
     meta["applied"].append("V91 native CNG/OpenSSL signed NAT probe source, still UNWIRED from game UDP socket, Direct OFF")
+    # V91 server and native recipient must use exact same purpose-isolated
+    # READY HMAC header. Server checks two TLS receipts; this is *only*
+    # possession of pair master, never proof of completed UDP/GameLink.
+    ready_header=(metrics_dir/"sh_pair_ready_v91.hpp").read_bytes()
+    files["server/src/sh_pair_ready_v91.hpp"]=ready_header
+    files["emulator/src/core/libraries/network/sh_pair_ready_v91.hpp"]=ready_header
+    files["emulator/src/core/libraries/network/sh_native_tls_local_client_v91.hpp"]=(
+        metrics_dir/"sh_native_tls_local_client_v91.hpp").read_bytes()
+    # Stage the revised KDF on BOTH platforms; both need ReadyProof=3.
+    kdf_header=(metrics_dir/"sh_pair_key_schedule_v89.hpp").read_bytes()
+    files["server/src/sh_pair_key_schedule_v89.hpp"]=kdf_header
+    files["emulator/src/core/libraries/network/sh_pair_key_schedule_v89.hpp"]=kdf_header
+    meta["applied"].append("V91 original Qt TLS client READY HMAC requires both recipients, native V91 proof; all Direct game routes OFF")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
