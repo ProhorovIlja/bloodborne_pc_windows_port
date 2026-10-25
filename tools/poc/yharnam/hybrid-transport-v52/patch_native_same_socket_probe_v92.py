@@ -148,11 +148,20 @@ private:
                 nat_probe_link_generation_v92=0;
                 return true; // consume only the SHN1 control prefix
             }
-            send=nat_probe_v92->Reply(bytes,source_ip_nbo,source_port_nbo,
-                                      now,response);
-            if(!send)
+            // ReadyAck must go DIRECTLY to Complete(). Calling Reply()
+            // first would consume its valid sequence in the one-use
+            // anti-replay window and falsely reject the final proof.
+            // The kind byte selects a handler, NOT an authorization:
+            // both handlers verify full HMAC, IDs, candidate and nonce.
+            if(bytes.size()==SeamlessHunt::Hybrid::NatProbeCodecV91::kWireBytes &&
+               bytes[5]==static_cast<std::uint8_t>(
+                 SeamlessHunt::Hybrid::NatProbeKindV91::ReadyAck)) {
                 (void)nat_probe_v92->Complete(
                     bytes,source_ip_nbo,source_port_nbo,now);
+            } else {
+                send=nat_probe_v92->Reply(
+                    bytes,source_ip_nbo,source_port_nbo,now,response);
+            }
             if(send) {
                 destination.sin_family=AF_INET;
                 destination.sin_addr.s_addr=grant->peer_ipv4_nbo;
