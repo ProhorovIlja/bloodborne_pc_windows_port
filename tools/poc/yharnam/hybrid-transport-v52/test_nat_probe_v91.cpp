@@ -80,14 +80,14 @@ struct LoopSocket{
         return wire;
     }
 };
-static AccountDigestV84 Id(unsigned salt){
-    AccountDigestV84 id{};
+static std::array<std::uint8_t,32> Id(unsigned salt){
+    std::array<std::uint8_t,32> id{};
     for(unsigned i=0;i<id.size();++i)
         id[i]=static_cast<std::uint8_t>(salt+i);
     return id;
 }
-static SecurePeerOfferV84 Grant(const AccountDigestV84& self,
-                               const AccountDigestV84& peer,
+static SecurePeerOfferV84 Grant(const std::array<std::uint8_t,32>& self,
+                               const std::array<std::uint8_t,32>& peer,
                                std::uint16_t peer_port){
     SecurePeerOfferV84 g{};
     g.recipient_account=self;g.sender_account=peer;
