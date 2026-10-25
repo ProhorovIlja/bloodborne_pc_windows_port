@@ -1,0 +1,86 @@
+name: Seamless Hunt V90 two real native TLS clients one QT pair
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_pair_lease_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_key_session.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_pair_lease_v90.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_pair_v90.cpp
+      - .github/workflows/shyt-v90-actual-two-client-tls.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_pair_lease_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_key_session.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_pair_lease_v90.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_pair_v90.cpp
+      - .github/workflows/shyt-v90-actual-two-client-tls.yml
+permissions:
+  contents: read
+jobs:
+  real-twin-mtls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Qt6, OpenSSL and pinned original shadNet test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev libssl-dev pkg-config
+      - name: Compile and test one-use two-account Qt world pair lease
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O1 -g0 -fPIC -Wall -Wextra -Werror -pedantic -I "$src" \
+            "$src/test_pair_lease_v90.cpp" $(pkg-config --cflags --libs Qt6Core) \
+            -lcrypto -o /tmp/shyt-v90-pair-lease
+          /tmp/shyt-v90-pair-lease
+          echo SHYT_V90_BOTH_SESSIONS_REVALIDATED_ONE_USE_PASS
+      - name: Create CI-only trusted CA, server IP SAN, two distinct client certificates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v90-certs
+          cd /tmp/shyt-v90-certs
+          openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 \
+            -keyout ca.key -out ca.pem -subj '/CN=V90 dev test CA' \
+            -addext 'basicConstraints=critical,CA:TRUE'
+          openssl req -newkey rsa:2048 -sha256 -nodes \
+            -keyout server.key -out server.csr -subj '/CN=127.0.0.1'
+          printf 'subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > server.ext
+          openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key \
+            -CAcreateserial -out server.pem -days 1 -sha256 -extfile server.ext
+          printf 'extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n' > client.ext
+          for hunter in a b; do
+            openssl req -newkey rsa:2048 -sha256 -nodes \
+              -keyout "$hunter.key" -out "$hunter.csr" \
+              -subj "/CN=V90 test client $hunter"
+            openssl x509 -req -in "$hunter.csr" -CA ca.pem -CAkey ca.key \
+              -CAserial ca.srl -out "$hunter.pem" -days 1 -sha256 -extfile client.ext
+          done
+          chmod 600 *.key
+      - name: Two REAL native OpenSSL TLS clients -> same original Qt server
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O0 -g0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_real_mtls_pair_v90.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -lssl -lcrypto -pthread -o /tmp/shyt-v90-real-mtls
+          /tmp/shyt-v90-real-mtls \
+            /tmp/shyt-v90-certs/server.pem /tmp/shyt-v90-certs/server.key \
+            /tmp/shyt-v90-certs/ca.pem /tmp/shyt-v90-certs/a.pem \
+            /tmp/shyt-v90-certs/a.key /tmp/shyt-v90-certs/b.pem \
+            /tmp/shyt-v90-certs/b.key
+          echo SHYT_V90_REAL_TWO_TLS13_CLIENT_PAIRED_SHG2_PASS
