@@ -154,6 +154,17 @@ jobs:
           if (-not $native.Contains('SHYT-V95-QUIT-IN-GAME')) { throw 'Native Co-op Team Quit action missing' }
           if (-not $native.Contains('SHYT-V95-NATIVE-HUNTER-LEVEL-BUILD')) { throw 'Native BL/build preview missing' }
           Write-Host 'SHYT_V95_ACTUAL_GAME_BL_BUILD_PREVIEW_AND_SAFE_QUIT_STAGED'
+      - name: V96 scope HudSight Vulkan crash-layer denylist to native game launch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/package-v41/patch_vk_layer_compat_v96.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V96 original native launcher incompatible; fail closed' }
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_vk_layer_compat_v96.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V96 layer denylist tests failed' }
+          $launcher = Get-Content -Raw pinned-upstream/bbport/launcher/bbport_launcher_win.py
+          if (-not $launcher.Contains('SHYT-V96-HUDSIGHT-CRASHING-VULKAN-LAYER')) { throw 'V96 launcher guard absent' }
+          Write-Host 'SHYT_V96_ACTUAL_PINNED_NATIVE_WINDOWS_LAUNCHER_GUARD_STAGED'
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
