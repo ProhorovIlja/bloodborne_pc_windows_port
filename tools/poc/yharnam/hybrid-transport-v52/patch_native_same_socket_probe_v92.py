@@ -27,13 +27,16 @@ def patch_game(src):
     src=one(src,
         '#include "core/libraries/network/sh_native_game_identity_v87.hpp" // SHYT-V87-TRUSTED-SERVER-LINK\n',
         '#include "core/libraries/network/sh_native_game_identity_v87.hpp" // SHYT-V87-TRUSTED-SERVER-LINK\n'
-        '#include "core/libraries/network/sh_nat_probe_v91.hpp" // '+TAG+'\n',
+        '#include "core/libraries/network/sh_nat_probe_v91.hpp" // '+TAG+'\n'
+        '#include "core/libraries/network/sh_native_tls_local_client_v91.hpp" // V92 paired TLS-only admission\n',
         "dev-only native probe header")
     src=one(src,
         '    SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 native_grant_inbox_v84{};\n',
         '    SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 native_grant_inbox_v84{};\n'
         '    std::optional<SeamlessHunt::Hybrid::NatProbeProofV91> nat_probe_v92;\n'
-        '    std::uint64_t nat_probe_link_generation_v92=0;\n',
+        '    std::uint64_t nat_probe_link_generation_v92=0;\n'
+        '    std::uint64_t nat_paired_tls_generation_v92=0;\n'
+        '    std::uint64_t nat_paired_tls_binding_v92=0;\n',
         "existing full-identity native grant member")
     for old,remark in (
         ('            native_grant_inbox_v84.Revoke(); // V86 logout/sockets closed\n',"socket shutdown"),
@@ -41,7 +44,9 @@ def patch_game(src):
     ):
         src=one(src,old,old+
             '            nat_probe_v92.reset(); // V92 '+remark+', wipe probe secrets\n'
-            '            nat_probe_link_generation_v92=0;\n',
+            '            nat_probe_link_generation_v92=0;\n'
+            '            nat_paired_tls_generation_v92=0;\n'
+            '            nat_paired_tls_binding_v92=0;\n',
             remark+" revocation")
     method='''    // V92 DEV-ONLY. Called from trusted native game worker, never UDP
     // receive thread. This sends only a 144-byte SIGNED challenge over
@@ -65,7 +70,10 @@ def patch_game(src):
                           link_server.port_nbo;
             }
             const auto* grant=native_grant_inbox_v84.PendingForNat(now_ms);
-            if(!generation || !welcomed || !grant)return false;
+            if(!generation || !welcomed || !grant ||
+               nat_paired_tls_generation_v92!=generation ||
+               nat_paired_tls_binding_v92!=grant->pair_binding)
+                return false;
             nat_probe_v92.emplace(
                 initiator ?
                   SeamlessHunt::Hybrid::NatProbeProofV91::Role::Initiator :
@@ -143,7 +151,9 @@ private:
                    link_server.addr_nbo && link_server.port_nbo;
             }
             const auto* grant=native_grant_inbox_v84.PendingForNat(now);
-            if(!link_ok || !grant || !nat_probe_v92) {
+            if(!link_ok || !grant || !nat_probe_v92 ||
+               nat_paired_tls_generation_v92!=nat_probe_link_generation_v92 ||
+               nat_paired_tls_binding_v92!=grant->pair_binding) {
                 nat_probe_v92.reset();
                 nat_probe_link_generation_v92=0;
                 return true; // consume only the SHN1 control prefix
