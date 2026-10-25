@@ -2,6 +2,7 @@
 // V88 original Qt bidirectional pair admission and separate SHG2 TLS keys.
 // Does NOT authorize any real gameplay UDP; no network connector here.
 #include "sh_p2p_reciprocal_pair_v88.hpp"
+#include "sh_pair_key_schedule_v89.hpp"
 #include <array>
 #include <cassert>
 #include <cstdint>
@@ -37,7 +38,45 @@ int main() {
     assert(a.world_revision==303 && b.world_revision==303);
     assert(a.pair_binding && a.pair_binding==b.pair_binding);
     assert(a.issued_ms==b.issued_ms && a.expires_ms==11000);
-    assert(a.direction_key!=b.direction_key);
+    // Both authentic recipients possess the pair master, but NO direct
+    // gameplay packet ever uses that raw key: directional KDF required.
+    assert(a.direction_key==b.direction_key);
+    std::array<std::uint8_t,32> a_tx_probe{},b_rx_probe{},b_tx_probe{},a_rx_probe{};
+    std::array<std::uint8_t,32> a_tx_game{},b_rx_game{},a_rx_game{};
+    assert(PairKeyScheduleV89::Derive(a,true,PairKeyPurposeV89::NatProbe,
+                                     1001,a_tx_probe));
+    assert(PairKeyScheduleV89::Derive(b,false,PairKeyPurposeV89::NatProbe,
+                                     1001,b_rx_probe));
+    assert(a_tx_probe==b_rx_probe);
+    assert(PairKeyScheduleV89::Derive(b,true,PairKeyPurposeV89::NatProbe,
+                                     1001,b_tx_probe));
+    assert(PairKeyScheduleV89::Derive(a,false,PairKeyPurposeV89::NatProbe,
+                                     1001,a_rx_probe));
+    assert(a_rx_probe==b_tx_probe && a_tx_probe!=b_tx_probe);
+    assert(PairKeyScheduleV89::Derive(a,true,PairKeyPurposeV89::GameData,
+                                     1001,a_tx_game));
+    assert(PairKeyScheduleV89::Derive(b,false,PairKeyPurposeV89::GameData,
+                                     1001,b_rx_game));
+    assert(PairKeyScheduleV89::Derive(a,false,PairKeyPurposeV89::GameData,
+                                     1001,a_rx_game));
+    assert(a_tx_game==b_rx_game && a_tx_game!=a_tx_probe &&
+           a_tx_game!=a_rx_game);
+    auto different_epoch=a;
+    different_epoch.pair_binding++;
+    std::array<std::uint8_t,32> other{};
+    assert(PairKeyScheduleV89::Derive(different_epoch,true,
+           PairKeyPurposeV89::NatProbe,1001,other));
+    assert(other!=a_tx_probe);
+    different_epoch=a;different_epoch.world_revision++;
+    assert(PairKeyScheduleV89::Derive(different_epoch,true,
+           PairKeyPurposeV89::NatProbe,1001,other));
+    assert(other!=a_tx_probe);
+    assert(!PairKeyScheduleV89::Derive(a,true,
+           PairKeyPurposeV89::NatProbe,11000,other));
+    assert((other==std::array<std::uint8_t,32>{}));
+    assert(!PairKeyScheduleV89::Derive(a,true,
+           static_cast<PairKeyPurposeV89>(77),1001,other));
+    assert((other==std::array<std::uint8_t,32>{}));
     assert(a.peer_port_nbo==qToBigEndian(quint16(45001)));
     assert(b.peer_port_nbo==qToBigEndian(quint16(45002)));
     assert(a.peer_virtual_port_nbo==qToBigEndian(quint16(31314)));
@@ -64,7 +103,7 @@ int main() {
     assert(client_a.Open(wire_a,*aid,*bid,11,303,1001,opened_a));
     assert(client_b.Open(wire_b,*bid,*aid,22,303,1001,opened_b));
     assert(opened_a.pair_binding==opened_b.pair_binding);
-    assert(opened_a.direction_key!=opened_b.direction_key);
+    assert(opened_a.direction_key==opened_b.direction_key);
     assert(!client_a.Open(wire_a,*aid,*bid,11,303,1001,opened_a));
     assert((opened_a.direction_key==std::array<std::uint8_t,32>{}));
 
