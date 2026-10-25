@@ -111,7 +111,8 @@ public:
             if(complete_native_frame.empty() ||
                complete_native_frame.size()>DirectReceiver::kMaxPayloadBytes ||
                !EligibleNativeWireFrame(complete_native_frame,link.sender,
-                                        current).direct_eligible)
+                                        current,
+                                        false /* no actual reliable stream handover */).direct_eligible)
                 return NativeTxStatus::RelayRequired;
             // The trusted callback must sign the *whole* frame as SHP1, use
             // the actual P2PTransport physical UDP socket, and accurately
