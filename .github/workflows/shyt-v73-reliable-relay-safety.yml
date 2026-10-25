@@ -81,15 +81,15 @@ jobs:
           for filename in ('sh_game_frame_offload.hpp','sh_direct_ingress.hpp','sh_native_direct_tx.hpp'):
               full=p+filename
               data=(root/full).read_text()
-              assert 'native_reliable_handover_proven' in (root/p+'sh_game_frame_offload.hpp').read_text()
+              assert 'native_reliable_handover_proven' in (root/(p+'sh_game_frame_offload.hpp')).read_text()
               assert manifest['sha256'][full]==hashlib.sha256((root/full).read_bytes()).hexdigest(),full
-          rx=(root/p+'sh_direct_ingress.hpp').read_text()
-          tx=(root/p+'sh_native_direct_tx.hpp').read_text()
+          rx=(root/(p+'sh_direct_ingress.hpp')).read_text()
+          tx=(root/(p+'sh_native_direct_tx.hpp')).read_text()
           assert 'false /* GameLink reliable migration not wired */' in rx
           assert 'false /* no actual reliable stream handover */' in tx
           assert rx.count('EligibleNativeWireFrame(')==1
           assert tx.count('EligibleNativeWireFrame(')==1
           assert 'V73 native Direct allows only ACK-free unreliable game frames until reliable GameLink migration' in manifest['applied']
-          assert 'framed = Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed);' in (root/p+'p2p_sockets.cpp').read_text()
+          assert 'framed = Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed);' in (root/(p+'p2p_sockets.cpp')).read_text()
           print('SHYT_V73_REAL_PINNED_CLIENT_DIRECT_ACK_GUARD_PASS')
           PY
