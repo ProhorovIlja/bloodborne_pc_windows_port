@@ -87,13 +87,13 @@ struct ReverseState {
 static bool ReverseReady(const PeerTicket& outbound,PhysicalV4 physical,
                          VirtualV4 virtual_peer,std::int64_t now,
                          void* trusted_receiver) noexcept {
-    const auto& r=*static_cast<ReverseState*>(trusted_receiver);
+    auto& r=*static_cast<ReverseState*>(trusted_receiver);
     return r.physical.addr_nbo==physical.addr_nbo &&
            r.physical.port_nbo==physical.port_nbo &&
            r.virtual_peer.addr_nbo==virtual_peer.addr_nbo &&
            r.virtual_peer.port_nbo==virtual_peer.port_nbo &&
-           const_cast<DirectIngress&>(r.inbound).MatchesReverse(outbound) &&
-           const_cast<DirectIngress&>(r.inbound).CurrentPath(now)==Path::Direct;
+           r.inbound.MatchesReverse(outbound) &&
+           r.inbound.CurrentPath(now)==Path::Direct;
 }
 int main() {
     const auto t=Ticket();auto grant=Granted();auto auth=Allowed();
