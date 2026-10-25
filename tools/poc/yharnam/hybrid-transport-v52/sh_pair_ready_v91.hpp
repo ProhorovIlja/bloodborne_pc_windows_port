@@ -8,6 +8,7 @@
 #include <array>
 #include <algorithm>
 #include <cstdint>
+#include <initializer_list>
 #include <span>
 
 namespace SeamlessHunt::Hybrid {
