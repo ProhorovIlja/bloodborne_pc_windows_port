@@ -712,6 +712,15 @@ def run(checkout:Path, repo:Path, out:Path):
     files["emulator/src/core/libraries/network/sh_pair_key_schedule_v89.hpp"]=(
         metrics_dir/"sh_pair_key_schedule_v89.hpp").read_bytes()
     meta["applied"].append("V88-V89 Qt original LinkServer reciprocal pair, shared SHG2 secret, native directional probe/game KDF (no UDP Arm)")
+    # V90: same Qt shadNet loopback TLS listener owns one short-lived
+    # server-generated two-recipient pair lease. Each independently pinned
+    # TLS session consumes its half ONCE, always after fresh world checks.
+    # The separate native client is DEV-only and never auto-connects.
+    files["server/src/sh_p2p_pair_lease_v90.hpp"]=(
+        metrics_dir/"sh_p2p_pair_lease_v90.hpp").read_bytes()
+    files["emulator/src/core/libraries/network/sh_native_tls_local_client_v90.hpp"]=(
+        metrics_dir/"sh_native_tls_local_client_v90.hpp").read_bytes()
+    meta["applied"].append("V90 original Qt loopback mTLS two-client one-use paired SHG2 lease; game UDP remains relay")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
