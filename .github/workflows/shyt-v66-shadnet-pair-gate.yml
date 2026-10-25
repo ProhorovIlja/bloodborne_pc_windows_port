@@ -1,14 +1,16 @@
-name: Seamless Hunt V66 real shadNet authenticated pair gate
+name: Seamless Hunt V66-V67 real shadNet pair grant prechecks
 on:
   push:
     branches: [feature/shyt-hybrid-p2p-v52]
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/patch_authenticated_pair.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_pair_snapshot.py
       - .github/workflows/shyt-v66-shadnet-pair-gate.yml
   pull_request:
     branches: [feature/seamless-hunt-mainline]
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/patch_authenticated_pair.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_pair_snapshot.py
       - .github/workflows/shyt-v66-shadnet-pair-gate.yml
 permissions:
   contents: read
@@ -34,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/poc/yharnam/hybrid-transport-v52/patch_authenticated_pair.py pinned-upstream
+          python3 tools/poc/yharnam/hybrid-transport-v52/patch_pair_snapshot.py pinned-upstream
           c++ -std=c++20 -fPIC -O2 -Wall -Wextra -Werror -Wno-error=missing-field-initializers -pedantic \
             -I pinned-upstream/server -I pinned-upstream/server/src \
             '-DBLOODBORNE_SERVER_LINK_CONTRACTS="pinned-upstream/server/tests/contracts/server_link_frames.txt"' \
@@ -56,5 +58,7 @@ jobs:
           assert 'now_ms - a.last_heard_ms > quiet_ms' in p
           assert 'No client opt-ins or P2P feature by default' in p
           assert 'DirectPairEligible' in Path('pinned-upstream/server/src/server_link.cpp').read_text()
+          assert 'CaptureDirectPairSnapshot' in Path('pinned-upstream/server/src/server_link.cpp').read_text()
+          assert 'DirectPairSnapshotRevocation()' in Path('pinned-upstream/server/tests/test_server_link.cpp').read_text()
           print('SHYT_V66_NO_UNAUTHENTICATED_DIRECT_GRANTS_PASS')
           PY
