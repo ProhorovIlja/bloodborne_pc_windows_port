@@ -496,6 +496,18 @@ def run(checkout:Path, repo:Path, out:Path):
     files[NETWORK]=v71.patch(files[NETWORK].decode("utf-8")).encode("utf-8")
     files["emulator/src/core/libraries/network/sh_native_direct_tx.hpp"]=(metrics_dir/"sh_native_direct_tx.hpp").read_bytes()
     meta["applied"].append("V71 fail-closed native SendFrame Direct/Relay TX hook")
+    # V72: LinkServer's snapshot epoch must read the real BloodborneWorld
+    # party/map/area/owner revision, not client-supplied booleans. Mutual
+    # P2P consent remains unconfigured => still no live direct grants.
+    v72_script=metrics_dir/"patch_live_world_epoch.py"
+    v72=types.ModuleType("sh_v72_authoritative_world_epoch")
+    v72.__file__=str(v72_script)
+    exec(compile(v72_script.read_text("utf-8"),str(v72_script),"exec"),v72.__dict__)
+    affected={p:files[p].decode("utf-8") for p in (v72.WORLD_H,v72.WORLD_CPP,v72.LINK_CPP)}
+    for path,body in v72.transform(affected).items():
+        files[path]=body.encode("utf-8")
+    files[v72.REVISION_H]=(metrics_dir/"sh_world_revision.hpp").read_bytes()
+    meta["applied"].append("V72 server-derived party/map/owner world epoch for P2P candidate revocation")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
