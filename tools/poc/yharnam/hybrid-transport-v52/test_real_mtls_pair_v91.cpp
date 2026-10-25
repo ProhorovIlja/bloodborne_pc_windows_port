@@ -69,7 +69,10 @@ int main(int argc,char** argv) {
     assert(listener.serverAddress()==QHostAddress::LocalHost);
     // Pair must be configurable only from the original Qt server event
     // thread AFTER the gamers are actually signed in, not at startup.
-    assert(listener.ConfigureLocalReciprocalPairV91(
+    assert(listener.ConfigureLocalReciprocalPairV90(
+        "hunter-A","hunter-B",scoped));
+    // Never replace a live, partially delivered or READY-pending pair.
+    assert(!listener.ConfigureLocalReciprocalPairV90(
         "hunter-A","hunter-B",scoped));
     const auto port=listener.serverPort();
     NativeTlsLocalConfig config_a{argv[3],argv[4],argv[5],port};
