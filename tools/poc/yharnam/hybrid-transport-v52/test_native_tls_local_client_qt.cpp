@@ -11,6 +11,7 @@
 #include <thread>
 #include <cassert>
 #include <cstdio>
+#include <cstdio>
 
 using namespace SeamlessHunt::Hybrid;
 static QSslCertificate Certificate(const QString& path) {
@@ -72,6 +73,7 @@ int main(int argc,char** argv) {
                 config,inbox,world.identity,1,Refresh,&world,now(),&stage);
             std::fprintf(stderr,"V83 stage local TLS+offer: %s (checkpoint %u)\n",
                          pass?"PASS":"FAIL",unsigned(stage));
+            std::fprintf(stderr,"V83 first_request=%d pending=%d\\n",pass?1:0,inbox.IsPending()?1:0);
             const auto* offer=inbox.PendingForNat(now());
             std::fprintf(stderr,"V83 stage pending native offer: %s\n",offer?"PASS":"FAIL");
             pass=pass && offer && offer->sender_account==world.identity.peer_account &&
@@ -110,6 +112,7 @@ int main(int argc,char** argv) {
                 config,inbox,world.identity,1,Refresh,&world,now());
             std::fprintf(stderr,"V83 stage old serial denial: %s\n",replay_denied?"PASS":"FAIL");
             pass=pass && replay_denied;
+            std::fprintf(stderr,"V83 final result=%d\\n",pass?1:0);
             result.store(pass?0:1);
             QMetaObject::invokeMethod(&app,[&]{app.quit();},Qt::QueuedConnection);
         });
@@ -117,5 +120,6 @@ int main(int argc,char** argv) {
     QTimer::singleShot(18000,&app,[&]{app.exit(9);});
     const int event=app.exec();
     if(worker.joinable())worker.join();
+    std::fprintf(stderr,"V83 event=%d result=%d\\n",event,result.load());
     return event==0 && result.load()==0 ? 0 : 1;
 }
