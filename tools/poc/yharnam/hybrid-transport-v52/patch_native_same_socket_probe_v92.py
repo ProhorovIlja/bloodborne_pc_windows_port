@@ -36,7 +36,8 @@ def patch_game(src):
         '    std::optional<SeamlessHunt::Hybrid::NatProbeProofV91> nat_probe_v92;\n'
         '    std::uint64_t nat_probe_link_generation_v92=0;\n'
         '    std::uint64_t nat_paired_tls_generation_v92=0;\n'
-        '    std::uint64_t nat_paired_tls_binding_v92=0;\n',
+        '    std::uint64_t nat_paired_tls_binding_v92=0;\n'
+        '    std::atomic_flag nat_tls_request_active_v93=ATOMIC_FLAG_INIT;\n',
         "existing full-identity native grant member")
     for old,remark in (
         ('            native_grant_inbox_v84.Revoke(); // V86 logout/sockets closed\n',"socket shutdown"),
@@ -59,6 +60,12 @@ def patch_game(src):
         SeamlessHunt::Hybrid::RefreshNativeOfferIdentityV84 current,
         void* verified_game_state,std::uint64_t now_ms,bool& both_ready) {
         both_ready=false;
+        if(nat_tls_request_active_v93.test_and_set(
+              std::memory_order_acquire))return false;
+        struct ClearBusyV93 {
+            std::atomic_flag& busy;
+            ~ClearBusyV93(){busy.clear(std::memory_order_release);}
+        } clear_busy{nat_tls_request_active_v93};
         if(!running.load(std::memory_order_acquire) || LinkCut())
             return false;
         std::uint64_t generation=0;
@@ -76,32 +83,42 @@ def patch_game(src):
                 game_id,welcomed,configured,expected);
         std::fill(game_id.begin(),game_id.end(),char(0));
         if(!valid)return false;
-        std::lock_guard lock(native_grant_mutex);
-        nat_probe_v92.reset();
-        nat_probe_link_generation_v92=0;
-        nat_paired_tls_generation_v92=0;
-        nat_paired_tls_binding_v92=0;
-        if(!SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV91::Request(
-              cfg,native_grant_inbox_v84,expected,serial,current,
-              verified_game_state,now_ms,both_ready))return false;
-        bool still_current=false;
         {
-            std::lock_guard link_lock(link_mutex);
-            still_current=shyt_link_generation_v87==generation &&
-                 link_welcomed && link_server.addr_nbo && link_server.port_nbo;
+            std::lock_guard lock(native_grant_mutex);
+            nat_probe_v92.reset();
+            nat_probe_link_generation_v92=0;
+            nat_paired_tls_generation_v92=0;
+            nat_paired_tls_binding_v92=0;
+            native_grant_inbox_v84.Revoke();
         }
+        // TLS I/O must never block the game's original UDP receive path.
+        SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 temporary_inbox;
+        bool receipt=false;
+        if(!SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV91::Request(
+              cfg,temporary_inbox,expected,serial,current,
+              verified_game_state,now_ms,receipt))return false;
         const auto received_ms=static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
-        const auto* grant=still_current ?
-            native_grant_inbox_v84.PendingForNat(received_ms):nullptr;
-        if(!grant || !running.load(std::memory_order_acquire) ||
-           LinkCut()) {
-            native_grant_inbox_v84.Revoke();
-            both_ready=false;return false;
+        if(!running.load(std::memory_order_acquire) || LinkCut())
+            return false;
+        {
+            // Only short, in-memory transfer under the game grant lock.
+            std::lock_guard lock(native_grant_mutex);
+            std::lock_guard link_lock(link_mutex);
+            if(!running.load(std::memory_order_acquire) ||
+               shyt_link_generation_v87!=generation || !link_welcomed ||
+               !link_server.addr_nbo || !link_server.port_nbo)
+                return false;
+            const auto* grant=temporary_inbox.PendingForNat(received_ms);
+            if(!grant)return false;
+            const auto binding=grant->pair_binding;
+            if(!temporary_inbox.TransferVerifiedTo(
+                  native_grant_inbox_v84,received_ms))return false;
+            nat_paired_tls_generation_v92=generation;
+            nat_paired_tls_binding_v92=binding;
         }
-        nat_paired_tls_generation_v92=generation;
-        nat_paired_tls_binding_v92=grant->pair_binding;
+        both_ready=receipt;
         return true; // Still NOT permission for Direct game traffic
     }
 
