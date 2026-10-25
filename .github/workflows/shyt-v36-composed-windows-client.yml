@@ -144,6 +144,16 @@ jobs:
             -I "$fsr/generated/ffx-1.1.4/vk/fsr3framegeneration" \
             "$sdk/src/backends/vk/ffx_vk.cpp"
           echo SHYT_FSR_CLANG64_HOST_PRECHECK_ALL_FOUR_SOURCES_PASS
+      - name: V95 stage native game BL/build and in-game Quit to Desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/package-v41/patch_bbport_hunter_presence_v95.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V95 native menu source drift; cannot safely stage game UI' }
+          $native = Get-Content -Raw pinned-upstream/bbport/gpu/shim/bbport_overlay.cpp
+          if (-not $native.Contains('SHYT-V95-QUIT-IN-GAME')) { throw 'Native Co-op Team Quit action missing' }
+          if (-not $native.Contains('SHYT-V95-NATIVE-HUNTER-LEVEL-BUILD')) { throw 'Native BL/build preview missing' }
+          Write-Host 'SHYT_V95_ACTUAL_GAME_BL_BUILD_PREVIEW_AND_SAFE_QUIT_STAGED'
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
