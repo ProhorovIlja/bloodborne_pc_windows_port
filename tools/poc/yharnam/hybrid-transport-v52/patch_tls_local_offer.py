@@ -11,6 +11,7 @@ SERVER_H="server/src/server.h"
 SERVER_CPP="server/src/server.cpp"
 LINK_H="server/src/link_server.h"
 LINK_CPP="server/src/link_server.cpp"
+CMAKE="server/CMakeLists.txt"
 OFFER_H="server/src/sh_p2p_tls_offer_issuer.hpp"
 def one(src,old,new,label):
     n=src.count(old)
@@ -106,3 +107,24 @@ quint64 LinkServer::CurrentDirectAccountEpoch(const QByteArray& id) const {
         qInfo() << "Local-only mTLS P2P readiness check on 127.0.0.1:"
 ''',"operator-selected test-only peer and authoritative Qt snapshot")
     return dict(zip(paths,(main,sh,sc,lh,lc)))
+
+def patch_cmake(original):
+    if "V81_AES_GCM_CRYPTO_LINK" in original:
+        raise ValueError("V81 CMake already patched")
+    return one(original,
+'''target_link_libraries(shadnet PRIVATE
+    Qt6::Core
+''',
+'''# V81_AES_GCM_CRYPTO_LINK: same Qt process, V75 SHG1 AES-GCM
+# implementation uses OpenSSL EVP on Linux; Windows uses native CNG.
+if(WIN32)
+    set(SHYT_V81_CRYPTO_BACKEND bcrypt)
+else()
+    find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+    set(SHYT_V81_CRYPTO_BACKEND OpenSSL::Crypto)
+endif()
+target_link_libraries(shadnet PRIVATE
+    ${SHYT_V81_CRYPTO_BACKEND}
+    Qt6::Core
+''',"link actual Qt shadNet to platform AES GCM backend")
+
