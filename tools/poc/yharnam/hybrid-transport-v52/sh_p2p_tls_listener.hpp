@@ -15,6 +15,7 @@
 #include <QSslSocket>
 #include <QTcpServer>
 #include <QTimer>
+#include <memory>
 
 namespace SeamlessHunt::Hybrid {
 class P2PTlsListener final : public QTcpServer {
@@ -52,7 +53,8 @@ public:
 
     ~P2PTlsListener() override {
         close();
-        for(auto* s:clients_)s->abort();
+        const auto snapshot=clients_.values();
+        for(auto* s:snapshot)s->abort();
     }
 protected:
     void incomingConnection(qintptr descriptor) override {
@@ -68,10 +70,9 @@ protected:
         }
         clients_.insert(s);
         s->setSslConfiguration(ssl_);
-        auto* pending=new QByteArray;
-        QObject::connect(s,&QSslSocket::disconnected,s,[this,s,pending] {
+        const auto pending=std::make_shared<QByteArray>();
+        QObject::connect(s,&QSslSocket::disconnected,this,[this,s] {
             clients_.remove(s);
-            delete pending;
             s->deleteLater();
         });
         QObject::connect(s,&QSslSocket::sslErrors,s,[s](const QList<QSslError>&) {
