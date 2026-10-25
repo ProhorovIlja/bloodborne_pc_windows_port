@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
-// V88 DEV-ONLY: atomic 2-sided Qt server-issued SHG2 pair scope.
+// V88 DEV-ONLY: two-sided Qt server-issued SHG2 pair scope.
 // Both inputs MUST be freshly captured from the ORIGINAL authoritative
 // shadNet LinkServer->CaptureLocalP2POffer, once in EACH direction.
 // Never use arbitrary client-submitted peers, world, endpoints or consent.
@@ -50,17 +50,13 @@ public:
         if(!a || !b || !SecureOfferV84Detail::Nonzero(*a) ||
            !SecureOfferV84Detail::Nonzero(*b) ||
            SecureOfferV84Detail::EqualDigest(*a,*b))return false;
-        std::array<std::uint8_t,72> random{};
+        std::array<std::uint8_t,40> random{};
         if(!SecureOfferV84Detail::Random(random))return false;
         std::uint64_t pair=0;
         for(unsigned i=0;i<8;++i)
             pair |= std::uint64_t(random[i]) << (8U*i);
         if(!pair || !SecureOfferV84Detail::Nonzero(
-                std::span<const std::uint8_t>(random.data()+8,32)) ||
-           !SecureOfferV84Detail::Nonzero(
-                std::span<const std::uint8_t>(random.data()+40,32)) ||
-           std::equal(random.begin()+8,random.begin()+40,
-                      random.begin()+40)) {
+                std::span<const std::uint8_t>(random.data()+8,32))) {
             CryptoDetail::Erase(random);
             return false;
         }
@@ -86,8 +82,13 @@ public:
         out_b.peer_port_nbo=qToBigEndian(to_b.physical_port_host);
         out_b.peer_virtual_ipv4_nbo=qToBigEndian(to_b.virtual_ipv4_host);
         out_b.peer_virtual_port_nbo=qToBigEndian(to_b.virtual_port_host);
+        // V89: both recipients receive the SAME fresh pair secret, but only
+        // inside their independent SHG2-over-mTLS wrapping keys. Each
+        // native peer derives independent A->B/B->A PROBE and GAME keys
+        // with DirectionKeyScheduleV89. NEVER install this raw secret
+        // directly as a UDP MAC/AEAD key.
         std::copy_n(random.begin()+8,32,out_a.direction_key.begin());
-        std::copy_n(random.begin()+40,32,out_b.direction_key.begin());
+        std::copy_n(random.begin()+8,32,out_b.direction_key.begin());
         CryptoDetail::Erase(random);
         if(!SecureOfferV84Detail::Valid(out_a,now_ms) ||
            !SecureOfferV84Detail::Valid(out_b,now_ms)) {
