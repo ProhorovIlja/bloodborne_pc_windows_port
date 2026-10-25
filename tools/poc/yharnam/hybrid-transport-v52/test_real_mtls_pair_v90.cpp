@@ -65,10 +65,12 @@ int main(int argc,char** argv) {
                 0x0a010001u,31101};
         return std::nullopt;
     };
-    assert(listener.ConfigureLocalReciprocalPairV90(
-        "hunter-A","hunter-B",scoped));
     assert(listener.StartLocal(argv[1],argv[2],argv[3],0));
     assert(listener.serverAddress()==QHostAddress::LocalHost);
+    // Pair must be configurable only from the original Qt server event
+    // thread AFTER the gamers are actually signed in, not at startup.
+    assert(listener.ConfigureLocalReciprocalPairV90(
+        "hunter-A","hunter-B",scoped));
     const auto port=listener.serverPort();
     NativeTlsLocalConfig config_a{argv[3],argv[4],argv[5],port};
     NativeTlsLocalConfig config_b{argv[3],argv[6],argv[7],port};
