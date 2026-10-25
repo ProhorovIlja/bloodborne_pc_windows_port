@@ -1,0 +1,54 @@
+name: Seamless Hunt V92 original game UDP socket gated probe
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_same_socket_probe_v92.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v92-original-socket-probe.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_same_socket_probe_v92.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v92-original-socket-probe.yml
+permissions:
+  contents: read
+jobs:
+  source-guard:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate original host socket gated source patch and lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_native_same_socket_probe_v92.py' -v
+          python - <<'PY'
+          from pathlib import Path
+          code=Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
+          assert 'v92.patch_game(files[v92.NETWORK]' in code
+          assert 'V92 game ORIGINAL UDP host_socket' in code
+          patch=Path('tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py').read_text()
+          assert '::socket(AF_INET' not in patch
+          assert '::recvfrom(host_socket' not in patch # reuse existing original call
+          assert 'Transmit(destination' in patch
+          assert 'SendFrame(' not in patch
+          assert 'direct_egress.Arm(' not in patch
+          assert 'SHYT_ENABLE_TEST_LOCAL_MTLS' in patch
+          print('SHYT_V92_ORIGINAL_GAME_SOCKET_GUARDED_PROBE_PASS')
+          PY
