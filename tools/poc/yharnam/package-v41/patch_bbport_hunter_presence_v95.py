@@ -56,6 +56,47 @@ def patch_overlay(data: str) -> str:
     const auto& items = BbSaveEditor::Items();'''
     return one(data,place,inserted,"save editor local level/build preview")
 
+def patch_team_quit(data: str) -> str:
+    """Put Quit beside Close in the real in-game Co-op Team/System menu.
+
+    Reuse the native already-confirmed quit_open + SDL_EVENT_QUIT path.
+    Never call exit/terminate from the game renderer, preserve saves.
+    """
+    anchor='''    // The buttons: the team, Begin the hunt, the world.
+    ImGui::PushFont(MenuArt::Font(), 24.0f);
+    const float bw = S(260.0f), bh = S(54.0f);'''
+    data=one(data,anchor,'''    // SHYT-V95-QUIT-IN-GAME: fourth button in the real System -> Co-op Team menu.
+    // The menu's existing QuitBox validates the player's confirmation.
+    ImGui::PushFont(MenuArt::Font(), 24.0f);
+    const float bw = lobby.menu ? S(215.0f) : S(260.0f), bh = S(54.0f);''',
+    "original Team button geometry")
+    data=one(data,
+        '''    float bx = win.x + (size.x - (3 * bw + 2 * gap)) * 0.5f;''',
+        '''    const int buttons = lobby.menu ? 4 : 3;
+    float bx = win.x + (size.x - (buttons * bw + (buttons - 1) * gap)) * 0.5f;''',
+        "native Team four-button width")
+    data=one(data,
+        '''        if (Button(draw, "close", T("Close", "Закрыть"), ImVec2(bx, by), ImVec2(bw, bh))) {
+            bbcoop_team_menu(0);
+        }
+        ImGui::PopFont();''',
+        '''        if (Button(draw, "close", T("Close", "Закрыть"), ImVec2(bx, by), ImVec2(bw, bh))) {
+            bbcoop_team_menu(0);
+        }
+        bx += bw + gap;
+        if (Button(draw, "quit-desktop",
+                   T("Quit to Desktop", "Выйти из игры"), ImVec2(bx, by), ImVec2(bw, bh))) {
+            // Explicit game-menu action; use the existing confirmation
+            // dialog and normal SDL window shutdown (not std::exit).
+            bbcoop_team_menu(0);
+            SetOpen(false);
+            quit_open = true;
+        }
+        ImGui::PopFont();''',
+        "real native in-game Co-op Team Quit action")
+    return data
+
+
 def stage(root: Path)->None:
     source=root/OVERLAY
     destination=root/HEADER
@@ -64,13 +105,13 @@ def stage(root: Path)->None:
     if destination.exists():
         raise ValueError("V95 header already staged; refuse overwriting vendor data")
     old=source.read_text("utf-8")
-    new=patch_overlay(old)
+    new=patch_team_quit(patch_overlay(old))
     header=LOCAL.read_text("utf-8")
     if "MinBuildAttribute = 18;" not in header:
         raise ValueError("V95 unrecognized classifier")
     source.write_text(new,encoding="utf-8")
     destination.write_text(header,encoding="utf-8")
-    print("SHYT_V95_PINNED_GAME_LOCAL_LEVEL_BUILD_PREVIEW_STAGED")
+    print("SHYT_V95_NATIVE_BL_BUILD_LOCAL_PREVIEW_AND_IN_GAME_QUIT_STAGED")
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
