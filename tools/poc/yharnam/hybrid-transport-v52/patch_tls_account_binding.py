@@ -13,15 +13,16 @@ LINK_H="server/src/link_server.h"
 LINK_CPP="server/src/link_server.cpp"
 WORLD_H="server/src/bloodborne_world.h"
 WORLD_CPP="server/src/bloodborne_world.cpp"
+WORLD_TEST="server/tests/test_bloodborne_world.cpp"
 IDENTITY_H="server/src/sh_p2p_tls_identity.hpp"
 def one(src,old,new,label):
     count=src.count(old)
     if count!=1: raise ValueError(f"V79 {label}: {count} pinned anchors")
     return src.replace(old,new,1)
 def patch(files):
-    paths=(MAIN,SERVER_H,SERVER_CPP,LINK_H,LINK_CPP,WORLD_H,WORLD_CPP)
+    paths=(MAIN,SERVER_H,SERVER_CPP,LINK_H,LINK_CPP,WORLD_H,WORLD_CPP,WORLD_TEST)
     if set(files)!=set(paths): raise ValueError("V79 expected original Qt server source tree")
-    main,server_h,server_cpp,link_h,link_cpp,world_h,world_cpp=(files[p] for p in paths)
+    main,server_h,server_cpp,link_h,link_cpp,world_h,world_cpp,world_test=(files[p] for p in paths)
     world_h=one(world_h,
 '''    bool PairDirectConsent(const QByteArray& a,const QByteArray& b) const;
 ''',
@@ -102,4 +103,42 @@ ShadNetServer::~ShadNetServer() {
         }
         qInfo() << "Local-only mTLS P2P readiness check on 127.0.0.1:"
 ''',"operator fingerprint bound to live SHLK/game account")
-    return dict(zip(paths,(main,server_h,server_cpp,link_h,link_cpp,world_h,world_cpp)))
+    world_test=one(world_test,
+'''  const auto captured=service.CaptureDirectPairScope("host","guest");
+  CHECK(captured.has_value());
+''',
+'''  const auto captured=service.CaptureDirectPairScope("host","guest");
+  CHECK(captured.has_value());
+  CHECK(service.CurrentDirectAccountEpoch("host")!=0);
+  CHECK(service.CurrentDirectAccountEpoch("guest")!=0);
+  CHECK(service.CurrentDirectAccountEpoch("stranger")==0);
+''',"live game identity accepts current opted-in link only")
+    world_test=one(world_test,
+'''  a.Map(0,now+20);
+  Pump(service,games,now+20);
+  CHECK(!service.PairDirectConsent("host","guest"));
+''',
+'''  a.Map(0,now+20);
+  Pump(service,games,now+20);
+  CHECK(service.CurrentDirectAccountEpoch("host")==0);
+  CHECK(!service.PairDirectConsent("host","guest"));
+''',"map loading revokes bound game account")
+    world_test=one(world_test,
+'''  b.Hello(now+40,Party,false);
+  Pump(service,games,now+40);
+  CHECK(!service.PairDirectConsent("host","guest"));
+''',
+'''  b.Hello(now+40,Party,false);
+  Pump(service,games,now+40);
+  CHECK(service.CurrentDirectAccountEpoch("guest")==0);
+  CHECK(!service.PairDirectConsent("host","guest"));
+''',"user opt-out invalidates live TLS binding")
+    world_test=one(world_test,
+'''  service.Forget(b.endpoint);
+  CHECK(!service.PairDirectConsent("host","guest"));
+''',
+'''  service.Forget(b.endpoint);
+  CHECK(service.CurrentDirectAccountEpoch("guest")==0);
+  CHECK(!service.PairDirectConsent("host","guest"));
+''',"disconnected game account can never bind TLS")
+    return dict(zip(paths,(main,server_h,server_cpp,link_h,link_cpp,world_h,world_cpp,world_test)))
