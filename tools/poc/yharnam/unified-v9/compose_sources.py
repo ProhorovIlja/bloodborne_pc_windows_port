@@ -721,6 +721,13 @@ def run(checkout:Path, repo:Path, out:Path):
     files["emulator/src/core/libraries/network/sh_native_tls_local_client_v90.hpp"]=(
         metrics_dir/"sh_native_tls_local_client_v90.hpp").read_bytes()
     meta["applied"].append("V90 original Qt loopback mTLS two-client one-use paired SHG2 lease; game UDP remains relay")
+    # V91 staged ONLY: signed NAT reverse challenges using V89 derived probe
+    # keys, full 256-bit identities, strict server-authorized endpoints,
+    # replay-protected wire + four-step key possession proof. No game
+    # socket read/write hook, no Direct Arm, no ACK/routing change.
+    files["emulator/src/core/libraries/network/sh_nat_probe_v91.hpp"]=(
+        metrics_dir/"sh_nat_probe_v91.hpp").read_bytes()
+    meta["applied"].append("V91 native CNG/OpenSSL signed NAT probe source, still UNWIRED from game UDP socket, Direct OFF")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
