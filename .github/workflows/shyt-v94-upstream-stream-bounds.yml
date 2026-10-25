@@ -1,0 +1,75 @@
+name: Seamless Hunt V94 upstream PR365 preauth parser bounds
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_upstream_stream_bounds_v94.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_stream_bounds_v94.cpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v94-upstream-stream-bounds.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_upstream_stream_bounds_v94.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_stream_bounds_v94.cpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v94-upstream-stream-bounds.yml
+permissions:
+  contents: read
+jobs:
+  parser-preauth-bounds:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install original shadNet Qt 6 build headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev pkg-config
+      - name: Load pinned ORIGINAL upstream source and apply exact V94 fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v94
+          pin=77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          for file in stream_extractor.h protocol.h; do
+            curl -fsSL --retry 3 \
+              "https://raw.githubusercontent.com/lKaniel/bloodborne-server/$pin/server/src/$file" \
+              -o "/tmp/shyt-v94/$file"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util
+          p=Path("tools/poc/yharnam/hybrid-transport-v52/patch_upstream_stream_bounds_v94.py")
+          sp=importlib.util.spec_from_file_location("v94",p)
+          m=importlib.util.module_from_spec(sp)
+          sp.loader.exec_module(m)
+          f=Path("/tmp/shyt-v94/stream_extractor.h")
+          old=f.read_text()
+          patched=m.patch_header(old)
+          assert "size > static_cast<uint32_t>(Remaining())" in patched
+          assert "m_pos + (int)size" not in patched.replace(
+              "A size past INT_MAX made m_pos + (int)size negative", "")
+          assert "n < 0 || n > Remaining()" in patched
+          try:
+              m.patch_header(patched)
+          except ValueError:
+              pass
+          else:
+              raise AssertionError("V94 duplicate patch was not rejected")
+          f.write_text(patched)
+          print("SHYT_V94_PINNED_ORIGINAL_SOURCE_PATCH_PASS")
+          PY
+      - name: Compile and run malformed 2GB-4GB packet tests with Qt6
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O1 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I /tmp/shyt-v94 \
+            tools/poc/yharnam/hybrid-transport-v52/test_stream_bounds_v94.cpp \
+            $(pkg-config --cflags --libs Qt6Core) -o /tmp/shyt-v94/test
+          /tmp/shyt-v94/test
