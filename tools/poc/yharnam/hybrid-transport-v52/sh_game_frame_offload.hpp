@@ -41,7 +41,7 @@ inline bool U16(std::span<const std::uint8_t> bytes, std::size_t& offset,
 inline Decision EligibleNativeWireFrame(std::span<const std::uint8_t> bytes,
                                         std::string_view authenticated_sender,
                                         const ChannelAuthority& authority,
-                                        bool native_reliable_handover_proven = true) noexcept {
+                                        bool native_reliable_handover_proven = false) noexcept {
     constexpr std::size_t kMaxDatagram = 4096;
     constexpr std::size_t kPrefix = 9; // two vports, "SHAD", GamePacketsType
     if (bytes.size() < 26 || bytes.size() > kMaxDatagram ||
