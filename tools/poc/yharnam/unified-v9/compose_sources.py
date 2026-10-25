@@ -584,6 +584,24 @@ def run(checkout:Path, repo:Path, out:Path):
         .decode("utf-8")).encode("utf-8")
     files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
     meta["applied"].append("V78 disabled-by-default loopback-only mTLS 1.3 Qt readiness, NO grants")
+    # V79: local, operator-pinned SHA256 X.509 certificate -> signed-in
+    # current game account and server-owned live link generation. CN/SAN
+    # and arbitrary client-provided ID are NEVER accepted as identity.
+    # No grants/keys/IPs issued even after a valid V79 BIND.
+    v79_script=metrics_dir/"patch_tls_account_binding.py"
+    v79=types.ModuleType("sh_v79_live_tls_game_identity")
+    v79.__file__=str(v79_script)
+    exec(compile(v79_script.read_text("utf-8"),str(v79_script),"exec"),v79.__dict__)
+    v79_paths=(v79.MAIN,v79.SERVER_H,v79.SERVER_CPP,v79.LINK_H,
+               v79.LINK_CPP,v79.WORLD_H,v79.WORLD_CPP)
+    v79_sources={p:(files[p] if p in files else (checkout/p).read_bytes())
+                 .decode("utf-8") for p in v79_paths}
+    for path,body in v79.patch(v79_sources).items():
+        files[path]=body.encode("utf-8")
+    files[v79.IDENTITY_H]=(metrics_dir/"sh_p2p_tls_identity.hpp").read_bytes()
+    # listener is included in main and now depends on the pinned identity.
+    files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
+    meta["applied"].append("V79 operator X509 SHA256 pin plus LIVE authenticated Qt game epoch, no grants")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
