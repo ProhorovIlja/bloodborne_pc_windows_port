@@ -44,6 +44,7 @@ public:
             return false;
         }
         verified_sender_ = server_verified_game_sender;
+        inbound_ticket_ = peer;
         epoch_ = peer.session_epoch;
         return true;
     }
@@ -89,10 +90,38 @@ public:
         return selector_.Choose(true, now_ms);
     }
 
+    // A direct sender can only share this link after the opposite direction
+    // was authenticated for EXACTLY the same server-approved session/pair,
+    // with sender/receiver IDs reversed. Different pairs/epochs fail closed.
+    bool MatchesReverse(const PeerTicket& outbound) const noexcept {
+        return receiver_.armed() &&
+               inbound_ticket_.session_epoch != 0 &&
+               inbound_ticket_.session_epoch == outbound.session_epoch &&
+               inbound_ticket_.pair_binding == outbound.pair_binding &&
+               inbound_ticket_.expires_at_ms == outbound.expires_at_ms &&
+               inbound_ticket_.authenticated_sender == outbound.local_receiver &&
+               inbound_ticket_.local_receiver == outbound.authenticated_sender &&
+               inbound_ticket_.authenticated_sender !=
+                   inbound_ticket_.local_receiver &&
+               inbound_ticket_.server_grant_verified &&
+               inbound_ticket_.both_consented &&
+               inbound_ticket_.version_compatible &&
+               outbound.server_grant_verified && outbound.both_consented &&
+               outbound.version_compatible;
+    }
+
+    // A local sendto() failure immediately prevents further direct attempts.
+    // Existing shadNet routing remains available; retry needs an explicit
+    // re-probe after the cooldown and a still-valid server-issued grant.
+    void DirectTransmitFailed(std::int64_t now_ms) noexcept {
+        selector_.Fallback(now_ms);
+    }
+
     void Reset() noexcept {
         receiver_.Reset();
         selector_.Reset();
         verified_sender_.clear();
+        inbound_ticket_ = {};
         epoch_ = 0;
     }
 
@@ -101,6 +130,7 @@ private:
     DirectReceiver receiver_{};
     Selector selector_{};
     std::string verified_sender_{};
+    PeerTicket inbound_ticket_{};
     std::uint64_t epoch_ = 0;
 };
 
