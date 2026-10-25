@@ -380,6 +380,18 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    v46_module.LAUNCHER:output[LAUNCHER].decode("utf-8")}
     for name,body in v46_module.transform(remote_source).items():
         output[name]=body.encode("utf-8")
+    # V66: actual pinned Qt shadNet Hub read-only authenticated pair gate.
+    # Requires signed-in current same-team game links and a server-authoritative
+    # mutual opt-in callback. The callback is intentionally NOT installed:
+    # without a secure server-issued grant/control channel, runtime stays relay.
+    v66_script=Path(__file__).resolve().parent.parent/"hybrid-transport-v52/patch_authenticated_pair.py"
+    v66_module=types.ModuleType("sh_v66_authenticated_pair")
+    v66_module.__file__=str(v66_script)
+    exec(compile(v66_script.read_text("utf-8"),str(v66_script),"exec"),v66_module.__dict__)
+    v66_paths=(v66_module.HEADER,v66_module.SOURCE,v66_module.TEST)
+    v66_sources={p:output[p].decode("utf-8") for p in v66_paths}
+    for p, contents in v66_module.transform(v66_sources).items():
+        output[p]=contents.encode("utf-8")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -404,6 +416,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V28 opt-in bounded pre-database Hello admission",
                    "V29 bounded local RPC backpressure and signed-in credential cache",
                    "V30 live DB verification of cached account password and ban status",
+                   "V66 signed-in same-party, build, liveness and bidirectional consent gate (default deny)",
                    "Qt 6.4 / modern WebAPI ABI compatibility from full server build",
                    "Qt 6.4 / modern WebAPI session invitation UTC timestamp compatibility",
                    "Qt 6.4 / modern StatsServer and BloodborneBackendServer HTTP API compatibility",
