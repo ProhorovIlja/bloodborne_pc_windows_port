@@ -1,0 +1,135 @@
+name: Seamless Hunt V72 authoritative real BloodborneWorld P2P epoch
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_world_revision.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_live_world_epoch.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v72-live-world-epoch.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_world_revision.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_live_world_epoch.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v72-live-world-epoch.yml
+permissions:
+  contents: read
+jobs:
+  revision-policy:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Verify world/map/team/owner revisions Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp \
+            -o /tmp/shyt-v72-revision
+          /tmp/shyt-v72-revision
+      - name: Verify world/map/team/owner revisions Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp /Fe:shyt-v72-revision.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V72 MSVC source fail' }
+          ./shyt-v72-revision.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V72 MSVC world regression fail' }
+  real-qt-game-world:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Install original Qt server and protobuf developer packages
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev qt6-httpserver-dev libprotobuf-dev protobuf-compiler pkg-config
+      - name: Compose full game and Qt server with V72 real world revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v72-composed
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path("/tmp/shyt-v72-composed")
+          manifest=json.loads((root/"SEAMLESS-HUNT-COMPOSE-MANIFEST.json").read_text())
+          for p in ("server/src/bloodborne_world.cpp",
+                    "server/src/bloodborne_world.h",
+                    "server/src/link_server.cpp",
+                    "server/src/sh_world_revision.hpp",
+                    "server/tests/test_bloodborne_world.cpp"):
+              f=root/p
+              assert f.is_file(),p
+              assert manifest["sha256"][p]==hashlib.sha256(f.read_bytes()).hexdigest()
+          assert "m_link.SetDirectWorldEpoch(" in (root/"server/src/link_server.cpp").read_text()
+          assert "m_link.SetDirectConsent(" not in (root/"server/src/link_server.cpp").read_text()
+          assert "DirectWorldEpoch(host.endpoint,guest.endpoint)" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
+          print("SHYT_V72_QT_LIVE_WORLD_EPOCH_SOURCE_PASS")
+          PY
+      - name: Generate actual co-op and server protobuf types
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v72-proto
+          protoc --proto_path=pinned-upstream/server/coop \
+            --cpp_out=/tmp/shyt-v72-proto pinned-upstream/server/coop/coop.proto
+          protoc --proto_path=pinned-upstream/server/src \
+            --cpp_out=/tmp/shyt-v72-proto pinned-upstream/server/src/shadnet.proto
+      - name: Compile and run actual Qt BloodborneWorld tests, including V72 invalidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRV=/tmp/shyt-v72-composed/server
+          ROOT=pinned-upstream/server
+          c++ -std=c++20 -O0 -g0 -fPIC \
+            -I "$SRV/src" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v72-proto \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql) \
+            "$SRV/tests/test_bloodborne_world.cpp" \
+            "$SRV/src/bloodborne_world.cpp" \
+            "$ROOT/src/bloodborne_party_boards.cpp" \
+            "$SRV/src/server_link.cpp" \
+            "$ROOT/coop/world_log.cpp" \
+            "$ROOT/coop/coop_messages.cpp" \
+            "$ROOT/coop/team_lobby.cpp" \
+            "$ROOT/coop/trade.cpp" \
+            /tmp/shyt-v72-proto/coop.pb.cc \
+            $(pkg-config --libs Qt6Core Qt6Network Qt6Sql) -lprotobuf \
+            -o /tmp/shyt-v72-real-world-tests
+          /tmp/shyt-v72-real-world-tests
+          echo SHYT_V72_REAL_BLOODBORNE_WORLD_TESTS_PASS
+      - name: Compile actual Qt LinkServer API, avoiding live listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRV=/tmp/shyt-v72-composed/server
+          ROOT=pinned-upstream/server
+          c++ -std=c++20 -O0 -g0 -fPIC -fsyntax-only \
+            -I "$SRV/src" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v72-proto \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6HttpServer) \
+            "$SRV/src/link_server.cpp"
+          echo SHYT_V72_QT_LINKSERVER_WIRING_COMPILED_PASS
