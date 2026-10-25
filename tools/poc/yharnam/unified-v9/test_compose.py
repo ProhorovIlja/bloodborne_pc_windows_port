@@ -76,8 +76,10 @@ def originals():
             '#include "server_link.h"\n' + LOGIN_CPP_FIXTURE
         ) + '''    const bool again = members.contains(from.Key());
     Link& link = members[from.Key()];
+Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint64 now_ms) {
 ''',
         compose.SERVER_LINK_H: LOGIN_H_FIXTURE +
+            '    int Members() const {\n    SignIn sign_in;\n' +
             '        QList<Endpoint> gone; // links forgotten\n',
         compose.LINK_SERVER_CPP: '#include "link_server.h"\n' + RPC_CPP_FIXTURE.replace(
             '    m_signedIn.insert(online_id, hash);',
@@ -102,7 +104,7 @@ def originals():
         compose.HTTP_BACKEND_CPP: StatsBackendQtCompatibility.BACKEND,
         compose.HTTP_BLOODBORNE_CPP: BLOODBORNE_HTTP_FIXTURE,
         compose.WEB_AUTH_CPP: GATEWAY_AUTH_FIXTURE,
-        compose.SERVER_LINK_TEST: """int Relays() {
+        compose.SERVER_LINK_TEST: """int HelloAndBuilds() {\nint Relays() {
   if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
 """,
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
