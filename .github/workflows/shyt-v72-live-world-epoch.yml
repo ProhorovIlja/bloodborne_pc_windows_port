@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qt6-base-dev qt6-httpserver-dev libprotobuf-dev protobuf-compiler pkg-config
+          sudo apt-get install -y --no-install-recommends qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libprotobuf-dev protobuf-compiler pkg-config
       - name: Compose full game and Qt server with V72 real world revision
         shell: bash
         run: |
