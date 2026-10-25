@@ -1,0 +1,28 @@
+# V81: one-time local encrypted peer offer using actual Qt shadNet world, V80 key and V75 AES-GCM
+
+**Developer/source-only. Default DISABLED, 127.0.0.1 ONLY. No public peer address disclosure and NO game Direct P2P activation.** The existing working Fornex CLS Friends service is unchanged.
+
+## What actually runs
+
+- The original single Qt `shadnet` daemon contains one optional V78–V81 `QSslSocket` listener, TLS 1.3, verified client certificate. The exact DER SHA256 leaf pin must map to an existing *currently signed-in* shadNet `online_id`, with matching V77 game generation and explicit co-op opt-in (V79).
+- The local server operator may optionally select **one** test peer with `SHYT_P2P_TLS_OFFER_PEER_ID`. No peer selector exists in the client's TLS request, and no arbitrary user-controlled client `online_id`, certificate common name, plaintext HTTP/SHLK parameter or supplied network endpoint is accepted as peer authority.
+- After a validated `YT-P2P/V80 BEGIN\n`, the recipient's TLS socket holds a unique 256-bit CSPRNG application wrapping key, previously returned INSIDE TLS (not a TLS exporter). The single fixed `YT-P2P/V81 OFFER\n` request dynamically invokes:
+  `ShadNetServer::CaptureLocalP2POffer -> LinkServer::CaptureLocalP2POffer -> BloodborneWorld::Service::CaptureDirectPairScope`.
+- LinkServer rechecks **BOTH** authenticated/sign-in account links, both players' live V77 generations and opt-in, their current shared party and map, cut-status and world owner, then obtains the real physical UDP address of the target peer and the original stable virtual gameplay address from the **existing game connection**.
+- A V81 offer is prepared with recipient/sender account tokens (SHA-256 domain-separated, truncated to 64-bit for V75's *existing developer wire structure*; zero/equal tokens rejected), recipient V77 link epoch, real world version, fresh random pair binding and **fresh one-direction 256-bit UDP HMAC key**, address data in network-byte order and a **10-second TTL**. The V75 `SealedPeerOffers` primitive encrypts the full offer under the same TLS session's V80 256-bit key with authenticated AES-256-GCM. The response is `YT-P2P/V81 OFFER <SHG1 ciphertext hex>\n`, ONLY within the already authenticated TLS 1.3 socket.
+- One offer per TLS socket, no second offer replay. Missing peer/opt-in, changed epoch, bad map, invalid endpoints or unlinked account deny and abort the socket without exposing endpoint data. Max 32 TLS sockets, 5s socket timeout and 64 bytes inbound request from V78 still apply.
+- P2P actual client receives/validates the `SHG1` envelope only in the test, using existing V75 `SealedPeerOffers::Open` (recipient/session/world binding, expiry and nonce replay rejection). **The composed native game runtime still has ZERO grant installer and ZERO real outbound/inbound `Arm` calls**. No server event-stream or matchmaking protocol becomes public, no account DB migration, no opening ports on Fornex.
+
+## What the test proves, and what it does not
+
+The real `.github/workflows/shyt-v78-mtls-local-control.yml` builds/test-executes Qt/OpenSSL TLS 1.3 + actual V75 AES-256-GCM EVP. `test_tls_local_offer.cpp` proves one recipient TLS cert can receive a sealed 135-byte SHG1 payload, decrypt it with its unique wrapping key, inspect the correctly bound peer identity and actual/virtual candidate addresses, reject corrupted ciphertext and replay, deny a second offer on the same socket and deny a new offer after consent revocation. It also tests forged TLS account, changed requester epoch, world=0 and bad endpoint preconditions. Original V78/79/80 test suites still run.
+
+GitHub source composition includes `server/src/sh_p2p_tls_offer_issuer.hpp`, patched `main.cpp`/`server.cpp`/`link_server.cpp` and the original server `CMakeLists.txt`; the shadNet executable now links `OpenSSL::Crypto` on Linux or native `bcrypt` on Windows for its V75 AES-GCM implementation. This is one Qt server process, not a second Python co-op backend.
+
+**Do NOT mistake these local tests for actual production security or online functionality.** The 64-bit compatibility account tags are an interim format, not full collision-resistant canonical account IDs. A public successor should use full 128/256-bit authenticated account IDs, explicit pair/role/direction/migration epochs, real public-key client enrollment and revocation, cryptographically confirmed opt-in from both intended players, rate limiting, endpoint privacy policy, abuse protection, replay-safe session transport, an authenticated peer candidate rendezvous with server-controlled NAT punching, encrypt game datagrams in addition to their HMAC, and **migrate actual reliable GameLink ACK/sequence/retransmit state** before switching reliable packets to P2P. Until then, shadNet relay remains the only activated game transport.
+
+## Test-only local setup
+
+The pre-existing `SHYT_P2P_TLS_LOCAL_TEST=1`, server PEM+key, client CA and local client leaf certificate SHA256 pin+bound shadNet account still apply. Set the additional `SHYT_P2P_TLS_OFFER_PEER_ID` only for a single consenting, signed-in test pair. If the variable is absent, V81 OFFER is denied. The default local listener never starts unless explicitly enabled. **Do not set these variables on Fornex**.
+
+Next implement recipient-side TLS client provisioning / verified SHG1 offer installer (with current game epoch and replay store), pair-wise reciprocal grants, NAT candidates using actual native game UDP sockets and test two physical clients. Avoid enabling full-mesh Direct for 200 unrelated users; only game peers sharing an authorized room may exchange traffic.
