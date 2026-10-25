@@ -559,6 +559,18 @@ def run(checkout:Path, repo:Path, out:Path):
     for path,body in v76.patch(v76_files).items():
         files[path]=body.encode("utf-8")
     meta["applied"].append("V76 single authoritative Qt peer scope, two consents, real/virtual endpoints, no key disclosure")
+    # V77: a pair can return to the exact same map/team/owner after
+    # leaving or a link restart. Include server-only monotonically
+    # allocated per-member generations to avoid an old grant matching
+    # this apparent same-world (ABA) state. No network/user DB updates.
+    v77_script=metrics_dir/"patch_p2p_session_generation.py"
+    v77=types.ModuleType("sh_v77_game_link_generation")
+    v77.__file__=str(v77_script)
+    exec(compile(v77_script.read_text("utf-8"),str(v77_script),"exec"),v77.__dict__)
+    for path,body in v77.patch({p:files[p].decode("utf-8") for p in
+                               (v77.H,v77.CPP,v77.TEST)}).items():
+        files[path]=body.encode("utf-8")
+    meta["applied"].append("V77 server-only game link epoch rejects old grants after same-map/owner rejoin")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
