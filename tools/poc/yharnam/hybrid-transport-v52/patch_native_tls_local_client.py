@@ -58,9 +58,6 @@ def patch_cmake(src):
     if "SHYT_ENABLE_TEST_LOCAL_MTLS" in src:
         raise ValueError("V83 CMake already patched")
     return one(src,
-'''target_link_libraries(shadps4 PRIVATE Cpp_Httplib)''',
-'''target_link_libraries(shadps4 PRIVATE Cpp_Httplib)''',
-"noop") if False else one(src,
 '''target_link_libraries(shadps4 PRIVATE Freetype::Freetype)
 ''',
 '''target_link_libraries(shadps4 PRIVATE Freetype::Freetype)
