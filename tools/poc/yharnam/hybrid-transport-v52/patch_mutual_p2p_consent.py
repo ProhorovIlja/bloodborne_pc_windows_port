@@ -127,6 +127,69 @@ quint64 Service::DirectWorldEpoch(const ServerLink::Endpoint& from,
 #endif
 ''',"native client Hello opt-in, off by default")
     t=one(t,
+'''  void Hello(qint64 now_ms, const QByteArray &party = Party) {
+''',
+'''  void Hello(qint64 now_ms, const QByteArray &party = Party,
+             bool direct_p2p_opt_in=false) {
+''',"original test game can explicitly consent")
+    t=one(t,
+'''    envelope.mutable_hello()->set_enemy_owner(enemy_owner);
+''',
+'''    envelope.mutable_hello()->set_enemy_owner(enemy_owner);
+    envelope.mutable_hello()->set_direct_p2p_opt_in(direct_p2p_opt_in);
+''',"native original world test passes Hello opt-in")
+    t=one(t,
+'''int GamePacketsGoByMapAndOwner() {
+''',
+'''// V74 REAL-world: both game sessions explicitly opt in through protobuf
+// and server derives consent from its authenticated account/member state.
+int DirectP2PConsentRequiresTwoCurrentPlayers() {
+  Service service{{}};
+  Game a{1000,"host",11};
+  Game b{1001,"guest",12};
+  const std::vector<Game*> games{&a,&b};
+  const qint64 now=1000000;
+  constexpr u32 Yharnam=0x18010000;
+  a.Hello(now,Party,true);
+  b.Hello(now,Party,false);
+  Pump(service,games,now);
+  a.Map(Yharnam,now);
+  b.Map(Yharnam,now);
+  Pump(service,games,now);
+  CHECK(service.DirectWorldEpoch(a.endpoint,b.endpoint)!=0);
+  CHECK(!service.PairDirectConsent("host","guest"));
+  b.Hello(now+10,Party,true);
+  Pump(service,games,now+10);
+  CHECK(service.PairDirectConsent("host","guest"));
+  CHECK(service.PairDirectConsent("guest","host"));
+  CHECK(!service.PairDirectConsent("host","host"));
+  CHECK(!service.PairDirectConsent("host","stranger"));
+  a.Map(0,now+20);
+  Pump(service,games,now+20);
+  CHECK(!service.PairDirectConsent("host","guest"));
+  a.Map(Yharnam,now+30);
+  Pump(service,games,now+30);
+  CHECK(service.PairDirectConsent("host","guest"));
+  b.Hello(now+40,Party,false);
+  Pump(service,games,now+40);
+  CHECK(!service.PairDirectConsent("host","guest"));
+  b.Hello(now+50,Party,true);
+  Pump(service,games,now+50);
+  CHECK(service.PairDirectConsent("host","guest"));
+  service.Forget(b.endpoint);
+  CHECK(!service.PairDirectConsent("host","guest"));
+  return 0;
+}
+
+int GamePacketsGoByMapAndOwner() {
+''',"real signed game-world mutual consent scenarios")
+    t=one(t,
+'''      {"GamePacketsGoByMapAndOwner", GamePacketsGoByMapAndOwner},
+''',
+'''      {"DirectP2PConsentRequiresTwoCurrentPlayers", DirectP2PConsentRequiresTwoCurrentPlayers},
+      {"GamePacketsGoByMapAndOwner", GamePacketsGoByMapAndOwner},
+''',"register V74 actual co-op test")
+    t=one(t,
 '''  CHECK(service.DirectWorldEpoch(host.endpoint,guest.endpoint)==0);
 ''',
 '''  CHECK(service.DirectWorldEpoch(host.endpoint,guest.endpoint)==0);
