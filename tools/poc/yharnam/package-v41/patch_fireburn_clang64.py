@@ -14,6 +14,18 @@ from pathlib import Path
 
 SUBMODULE = "c64f093404125e960813f95f1996c14780f0dd69"
 TARGET = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/shared/ffx_message.cpp"
+# V65: CLS (PR #412) added a MinGW-only _countof shim in AMD's ffx_types.h.
+# V64 native CI reached *another* upscaler source not covered by our four
+# translation-unit patches, then retried the same error for 165 minutes.
+COUNT_TARGET = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/include/FidelityFX/host/ffx_types.h"
+COUNT_ANCHOR = "#include <stdint.h>\n"
+COUNT_SHIM = (
+    COUNT_ANCHOR
+    + "\n// MSVC provides _countof, but CLANG64/MinGW follows the Windows SDK path.\n"
+    + "#if defined(__MINGW32__) && !defined(_countof)\n"
+    + "#define _countof(array) (sizeof(array) / sizeof((array)[0]))\n"
+    + "#endif\n"
+)
 FRAME_TARGET = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"
 FRAME_HEADER = "#include <algorithm>    // for max used inside SPD CPU code.\n"
 FRAME_ADDED_HEADER = FRAME_HEADER + "#include <iterator>   // portable C++17 std::size for fixed arrays\n"
@@ -108,6 +120,22 @@ def transform_vk_backend(source: str) -> str:
     return source
 
 
+def transform_countof_header(source: str) -> str:
+    """Backport source-proven CLS PR #412 MinGW-only array length shim.
+
+    This provides _countof for *all* AMD SDK compilation units including
+    fsr3upscaler.cpp, not only the first two already patched .cpp files.
+    Other platforms remain exactly unchanged. Reject unexpected headers.
+    """
+    if "#define _countof(" in source:
+        raise ValueError("pinned AMD types _countof already patched")
+    if source.count(COUNT_ANCHOR)!=1:
+        raise ValueError("pinned AMD host ffx_types.h source drifted")
+    if "#if defined(__MINGW32__)" in source:
+        raise ValueError("pinned AMD host ffx_types.h MinGW guard drifted")
+    return source.replace(COUNT_ANCHOR,COUNT_SHIM,1)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("pinned_checkout", type=Path)
@@ -116,23 +144,28 @@ def main() -> None:
     frame_target = args.pinned_checkout / FRAME_TARGET
     optical_target = args.pinned_checkout / OPTICAL_TARGET
     vk_target = args.pinned_checkout / VK_TARGET
+    count_target = args.pinned_checkout / COUNT_TARGET
     if (not target.is_file() or not frame_target.is_file() or
-            not optical_target.is_file() or not vk_target.is_file()):
+            not optical_target.is_file() or not vk_target.is_file() or
+            not count_target.is_file()):
         p.error("pinned FireBurn FSR C++ source missing")
     old = target.read_text("utf-8")
     frame_old = frame_target.read_text("utf-8")
     optical_old = optical_target.read_text("utf-8")
     vk_old = vk_target.read_text("utf-8")
+    count_old = count_target.read_text("utf-8")
     # Validate ALL FOUR pinned AMD files before writing any replacement.
     new = transform(old)
     frame_new = transform_frame_interpolation(frame_old)
     optical_new = transform_opticalflow(optical_old)
     vk_new = transform_vk_backend(vk_old)
+    count_new = transform_countof_header(count_old)
     target.write_text(new, encoding="utf-8")
     frame_target.write_text(frame_new, encoding="utf-8")
     optical_target.write_text(optical_new, encoding="utf-8")
     vk_target.write_text(vk_new, encoding="utf-8")
-    print("SHYT_FSR_WINDOWS_CLANG64_FOUR_HOST_CPP_PATCH_PASS")
+    count_target.write_text(count_new, encoding="utf-8")
+    print("SHYT_FSR_WINDOWS_CLANG64_FIVE_PINNED_AMD_SOURCES_PATCH_PASS")
 
 
 if __name__ == "__main__":
