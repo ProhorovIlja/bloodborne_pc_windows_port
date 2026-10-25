@@ -65,7 +65,6 @@ V69_NATIVE_FIXTURE = r"""
                 Deliver(data->addr_nbo, data->port_nbo, data->frame);
             }
             return;
-    net_socket host_socket{kInvalidSocket};
 """
 
 def originals():
