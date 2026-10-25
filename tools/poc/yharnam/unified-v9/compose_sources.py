@@ -682,6 +682,16 @@ def run(checkout:Path, repo:Path, out:Path):
     exec(compile(v86_script.read_text("utf-8"),str(v86_script),"exec"),v86.__dict__)
     files[v86.NETWORK]=v86.patch_game(files[v86.NETWORK].decode("utf-8")).encode("utf-8")
     meta["applied"].append("V86 native P2PTransport owns SHG2 inbox, DEV-only OFF and revoked at logout/socket stop; Direct OFF")
+    # V87: only the original game P2PTransport's server-welcomed link
+    # online_id may become the local SHG2 ID; a link reconnect/build
+    # change/quiet epoch must fail closed even for the same account name.
+    v87_script=metrics_dir/"patch_native_link_identity_v87.py"
+    v87=types.ModuleType("sh_v87_native_accepted_server_link")
+    v87.__file__=str(v87_script)
+    exec(compile(v87_script.read_text("utf-8"),str(v87_script),"exec"),v87.__dict__)
+    files[v87.NETWORK]=v87.patch_game(files[v87.NETWORK].decode("utf-8")).encode("utf-8")
+    files[v87.HEADER]=(metrics_dir/"sh_native_game_identity_v87.hpp").read_bytes()
+    meta["applied"].append("V87 SHA256 game-self identity requires server Welcome, stable link epoch, Direct OFF")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
