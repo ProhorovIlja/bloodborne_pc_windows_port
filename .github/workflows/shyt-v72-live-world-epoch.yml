@@ -1,4 +1,4 @@
-name: Seamless Hunt V72 authoritative real BloodborneWorld P2P epoch
+name: Seamless Hunt V72-V74 real world authority and mutual consent
 on:
   push:
     branches: [feature/shyt-hybrid-p2p-v52]
@@ -6,6 +6,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/sh_world_revision.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_live_world_epoch.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_mutual_p2p_consent.py
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v72-live-world-epoch.yml
   pull_request:
@@ -14,6 +15,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/sh_world_revision.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_live_world_epoch.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_mutual_p2p_consent.py
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v72-live-world-epoch.yml
 permissions:
@@ -82,12 +84,18 @@ jobs:
                     "server/src/bloodborne_world.h",
                     "server/src/link_server.cpp",
                     "server/src/sh_world_revision.hpp",
-                    "server/tests/test_bloodborne_world.cpp"):
+                    "server/tests/test_bloodborne_world.cpp",
+                    "server/coop/coop.proto",
+                    "emulator/src/core/bloodborne_server_world.cpp"):
               f=root/p
               assert f.is_file(),p
               assert manifest["sha256"][p]==hashlib.sha256(f.read_bytes()).hexdigest()
           assert "m_link.SetDirectWorldEpoch(" in (root/"server/src/link_server.cpp").read_text()
           assert "m_link.SetDirectConsent(" in (root/"server/src/link_server.cpp").read_text()  # V74 both opt-in
+          assert "bool direct_p2p_opt_in = 7;" in (root/"server/coop/coop.proto").read_text()
+          assert "SHYT_DIRECT_P2P_OPT_IN" in (root/"emulator/src/core/bloodborne_server_world.cpp").read_text()
+          assert "PairDirectConsent(" in (root/"server/src/bloodborne_world.cpp").read_text()
+          assert "DirectP2PConsentRequiresTwoCurrentPlayers" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
           assert "DirectWorldEpoch(host.endpoint,guest.endpoint)" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
           print("SHYT_V72_QT_LIVE_WORLD_EPOCH_SOURCE_PASS")
           PY
