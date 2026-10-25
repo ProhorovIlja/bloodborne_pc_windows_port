@@ -5,6 +5,7 @@ on:
       - feature/shyt-cls-friends-one-server-v62
     paths:
       - docs/architecture/ONE_YHARNAM_TOGETHER_SERVER.md
+      - docs/architecture/DIRECT_P2P_FIRST_AND_MATCHMAKING.md
       - tools/poc/yharnam/one-server-v62/**
       - .github/workflows/shyt-v62-one-server-audit.yml
   pull_request:
@@ -12,6 +13,7 @@ on:
       - feature/seamless-hunt-mainline
     paths:
       - docs/architecture/ONE_YHARNAM_TOGETHER_SERVER.md
+      - docs/architecture/DIRECT_P2P_FIRST_AND_MATCHMAKING.md
       - tools/poc/yharnam/one-server-v62/**
       - .github/workflows/shyt-v62-one-server-audit.yml
 permissions:
@@ -53,3 +55,34 @@ jobs:
               assert forbidden not in script, forbidden
           print("SHYT_V62_READONLY_ONE_SERVER_MIGRATION_CONTRACT_PASS")
           PY
+  match-intents:
+    name: shared coop/PvP policy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Verify shared matchmaking authorization (Linux GCC)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            tools/poc/yharnam/one-server-v62/test_unified_matchmaking.cpp \
+            -o /tmp/shyt-v64-match-intents
+          /tmp/shyt-v64-match-intents
+      - name: Verify shared matchmaking authorization (Windows MSVC)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 tools/poc/yharnam/one-server-v62/test_unified_matchmaking.cpp /Fe:shyt-v64-match-intents.exe
+          if ($LASTEXITCODE -ne 0) { throw 'matchmaking intent compile failed' }
+          ./shyt-v64-match-intents.exe
+          if ($LASTEXITCODE -ne 0) { throw 'PvP opt-in, permission or capacity policy regression failed' }
