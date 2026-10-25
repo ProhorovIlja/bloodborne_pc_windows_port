@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
-#include "sh_direct_crypto.hpp"
 #include "sh_direct_ingress.hpp"
 #include <array>
 #include <cstddef>
@@ -11,13 +10,13 @@
 // V70: Boundary for the EXISTING Yharnam Together physical UDP ReceiveMain.
 // It never creates a socket, broadcasts peer IPs, or modifies shadNet relay.
 // An authenticated, encrypted server control plane MUST supply the pair ticket,
-// per-direction HMAC key, physical candidate, virtual peer address and current
+// independently verified MAC callback, physical candidate, virtual peer address and current
 // authoritative world callback. The native client DOES NOT call Arm yet.
 //
 // Direct packets without a bound, authenticated path are consumed/dropped;
 // they must NEVER fall back into generic virtual-socket delivery.
 //
-// This is integrity/authentication ONLY. HMAC does not encrypt gameplay.
+// The key lives in the trusted secure-rendezvous component, NOT here; it must\n// outlive Arm and be zeroized on Revoke. An untrusted callback cannot count as\n// server authorization. This is integrity/authentication ONLY; HMAC does not encrypt gameplay.
 // Implement transport confidentiality separately before a public rollout.
 namespace SeamlessHunt::Hybrid {
 
@@ -50,7 +49,8 @@ public:
 
     bool Arm(std::size_t slot, const PeerTicket& from_remote,
              const Grant& session_grant,
-             std::span<const std::uint8_t> directional_hmac_key,
+             VerifyDirectTag authenticated_mac_verifier,
+             void* authenticated_mac_context,
              PhysicalV4 peer_physical, VirtualV4 peer_virtual,
              std::string_view server_verified_sender,
              CurrentWorld refresh_authority, void* authority_ctx,
@@ -61,13 +61,16 @@ public:
         if (!peer_physical.addr_nbo || !peer_physical.port_nbo ||
             !peer_virtual.addr_nbo || !peer_virtual.port_nbo ||
             refresh_authority==nullptr ||
-            !link.mac.InstallKey(directional_hmac_key))
+            authenticated_mac_verifier==nullptr ||
+            authenticated_mac_context==nullptr)
             return false;
         if (!link.ingress.Arm(from_remote,session_grant,
                               server_verified_sender,now_ms)) {
             link.Reset();
             return false;
         }
+        link.mac_verifier=authenticated_mac_verifier;
+        link.mac_context=authenticated_mac_context;
         link.physical=peer_physical;
         link.virtual_peer=peer_virtual;
         link.refresh=refresh_authority;
@@ -104,8 +107,8 @@ public:
             }
             std::span<const std::uint8_t> native{};
             const auto status=link.ingress.Receive(
-                datagram,now_ms,DirectionMac::VerifyCallback,
-                &link.mac,authority,native);
+                datagram,now_ms,link.mac_verifier,
+                link.mac_context,authority,native);
             if (status==IngressStatus::AuthenticatedGame)
                 return {NativeRxStatus::Game,link.virtual_peer,native};
             if (status==IngressStatus::AuthenticatedProbeOrHeartbeat)
@@ -118,7 +121,8 @@ public:
 private:
     struct Link final {
         DirectIngress ingress{};
-        DirectionMac mac{};
+        VerifyDirectTag mac_verifier=nullptr;
+        void* mac_context=nullptr;
         PhysicalV4 physical{};
         VirtualV4 virtual_peer{};
         CurrentWorld refresh=nullptr;
@@ -127,7 +131,7 @@ private:
         void Reset() noexcept {
             active=false;
             ingress.Reset();
-            mac.Clear();
+            mac_verifier=nullptr;mac_context=nullptr;
             physical={};virtual_peer={};refresh=nullptr;context=nullptr;
         }
     };
