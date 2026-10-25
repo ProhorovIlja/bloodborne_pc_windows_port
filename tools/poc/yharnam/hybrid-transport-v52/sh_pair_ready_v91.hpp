@@ -71,7 +71,7 @@ public:
         issued_=a.issued_ms;expires_=a.expires_ms;active_=true;
         return true;
     }
-    Result Mark(const AccountDigestV84& recipient,
+    Result Mark(const std::array<std::uint8_t,32>& recipient,
                 std::uint64_t currently_authorized_epoch,
                 std::uint64_t currently_authorized_world,
                 bool server_confirmed_both_consents,
@@ -122,7 +122,7 @@ public:
     }
 private:
     Tag proof_a_{},proof_b_{};
-    AccountDigestV84 id_a_{},id_b_{};
+    std::array<std::uint8_t,32> id_a_{},id_b_{};
     std::uint64_t epoch_a_=0,epoch_b_=0,world_=0,pair_=0;
     std::uint64_t issued_=0,expires_=0;
     bool marked_a_=false,marked_b_=false,active_=false,ready_=false;
