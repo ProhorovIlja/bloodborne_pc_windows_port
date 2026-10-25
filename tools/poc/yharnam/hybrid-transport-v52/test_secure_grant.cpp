@@ -81,6 +81,17 @@ int main(){
     assert(!server.Seal(off,1001,second));
     off=Offer();off.expires_ms=off.issued_ms;
     assert(!server.Seal(off,1000,second));
+    // The replay cache MUST never evict old nonces under a live exporter
+    // key: after 64 accepted offers, fail closed and require TLS rekeying.
+    SealedPeerOffers bounded;assert(bounded.InstallChannelKey(key));
+    std::vector<std::uint8_t> extra;
+    for(unsigned i=0;i<64;++i) {
+        assert(server.Seal(p,1001,extra));
+        assert(bounded.Open(extra,502,701,901,1001,out));
+    }
+    assert(server.Seal(p,1001,extra));
+    assert(!bounded.Open(extra,502,701,901,1001,out));
+    assert(out.sender_account==0);
     server.Clear();recipient.Clear();
     assert(!server.Seal(p,1001,second));
     assert(!recipient.Open(message,502,701,901,1001,out));
