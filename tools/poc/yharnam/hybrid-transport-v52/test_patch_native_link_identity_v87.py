@@ -27,6 +27,9 @@ GAME='''// SHYT-V86-NATIVE-FULL-ID-TLS
                 first = !link_welcomed;
                 link_welcomed = true;
                 link_refusal.clear();
+            } else {
+                repeated = link_refusal == welcome.text;
+                link_refusal = welcome.text;
     }
     void LinkHousekeeping() {
             if (quiet) {
@@ -57,7 +60,7 @@ class IdentityPatch(unittest.TestCase):
         self.assertIn("original_generation=shyt_link_generation_v87",s)
         self.assertIn("shyt_link_generation_v87==original_generation",s)
         self.assertIn("native_grant_inbox_v84.Revoke();",s)
-        self.assertEqual(s.count("BumpLocalLinkGenerationV87();"),4)
+        self.assertEqual(s.count("BumpLocalLinkGenerationV87();"),5)
         self.assertIn("std::fill(original_online_id.begin()",s)
         self.assertIn("if(!running.load(std::memory_order_acquire)",s)
         self.assertIn("SHYT_ENABLE_TEST_LOCAL_MTLS",s)
@@ -72,6 +75,7 @@ class IdentityPatch(unittest.TestCase):
             GAME.replace("link_online_id = std::move(online_id);","link_online_id = online_id;"),
             GAME.replace("link_secret = std::move(secret);","link_secret = secret;"),
             GAME.replace("first = !link_welcomed;","first=false;"),
+            GAME.replace("repeated = link_refusal == welcome.text;","repeated=false;"),
             GAME.replace("The server may have restarted and forgotten this game","The game was restarted"),
             GAME.replace("std::string link_online_id;","std::string online_name;"),
             GAME.replace("NativeTlsLocalOfferClientV85::Request","NativeTlsLocalOfferClientV83::Request"),
