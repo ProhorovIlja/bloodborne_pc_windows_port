@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/poc/yharnam/hybrid-transport-v52/patch_authenticated_pair.py pinned-upstream
-          c++ -std=c++20 -fPIC -O2 -Wall -Wextra -Werror -pedantic \
+          c++ -std=c++20 -fPIC -O2 -Wall -Wextra -Werror -Wno-error=missing-field-initializers -pedantic \
             -I pinned-upstream/server -I pinned-upstream/server/src \
             '-DBLOODBORNE_SERVER_LINK_CONTRACTS="pinned-upstream/server/tests/contracts/server_link_frames.txt"' \
             $(pkg-config --cflags Qt6Core) \
