@@ -473,8 +473,21 @@ def run(checkout:Path, repo:Path, out:Path):
     exec(compile(metrics_script.read_text("utf-8"),str(metrics_script),"exec"),metrics.__dict__)
     files[NETWORK]=metrics.patch(files[NETWORK].decode("utf-8")).encode("utf-8")
     files[metrics.HEADER]=(metrics_dir/"sh_route_metrics.hpp").read_bytes()
-    meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     meta["applied"].append("V69 opt-in real native P2PTransport relay volume counters")
+    # V70: REAL physical UDP ReceiveMain can now recognize a MAC-authenticated
+    # SHP1 peer payload and restore the server-attested virtual game endpoint.
+    # No trusted install/Arm exists yet: every peer SHP1 packet drops by default.
+    # The legacy SHLK server relay path and default user settings are unchanged.
+    ingress_script=metrics_dir/"patch_native_direct_rx.py"
+    v70=types.ModuleType("sh_v70_native_direct_rx")
+    v70.__file__=str(ingress_script)
+    exec(compile(ingress_script.read_text("utf-8"),str(ingress_script),"exec"),v70.__dict__)
+    files[NETWORK]=v70.patch(files[NETWORK].decode("utf-8")).encode("utf-8")
+    for filename in v70.DIRECT_HEADERS:
+        path="emulator/src/core/libraries/network/"+filename
+        files[path]=(metrics_dir/filename).read_bytes()
+    meta["applied"].append("V70 fail-closed HMAC direct RX hook in native P2PTransport socket")
+    meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
     for path, data in files.items():
