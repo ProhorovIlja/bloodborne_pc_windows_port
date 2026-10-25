@@ -1,0 +1,89 @@
+name: Seamless Hunt V69 actual native socket route instrumentation
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_route_metrics.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_route_metrics.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_route_metrics.cpp
+      - .github/workflows/shyt-v69-real-udp-metrics.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_route_metrics.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_route_metrics.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_route_metrics.cpp
+      - .github/workflows/shyt-v69-real-udp-metrics.yml
+permissions:
+  contents: read
+jobs:
+  metrics-cross-platform:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Run standalone portable route counters (Ubuntu)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -pthread \
+            tools/poc/yharnam/hybrid-transport-v52/test_route_metrics.cpp \
+            -o /tmp/shyt-v69-route-metrics
+          /tmp/shyt-v69-route-metrics
+      - name: Run standalone portable route counters (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 tools/poc/yharnam/hybrid-transport-v52/test_route_metrics.cpp /Fe:shyt-v69-route-metrics.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V69 route telemetry MSVC compile failed' }
+          ./shyt-v69-route-metrics.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V69 route telemetry MSVC regression failed' }
+  actual-native-transport-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Verify instrumentation against the actual pinned original UDP transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util
+          root=Path('tools/poc/yharnam/hybrid-transport-v52')
+          path=root/'patch_native_route_metrics.py'
+          spec=importlib.util.spec_from_file_location('metrics_patch',path)
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          source=(Path('pinned-upstream')/mod.NETWORK).read_text('utf-8')
+          result=mod.patch(source)
+          assert result.count('route_metrics.NoteServerSend') == 1
+          assert result.count('route_metrics.NoteRelayReceive') == 1
+          assert 'Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed)' in result
+          assert 'Deliver(data->addr_nbo, data->port_nbo, data->frame)' in result
+          assert 'SHYT_ROUTE_METRICS' in result
+          try:
+              mod.patch(result)
+          except ValueError:
+              pass
+          else:
+              raise AssertionError('double patch was accepted')
+          print('SHYT_V69_REAL_PINNED_P2P_TRANSPORT_PATCH_PASS')
+          PY
