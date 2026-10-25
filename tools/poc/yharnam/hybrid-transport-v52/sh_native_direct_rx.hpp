@@ -16,7 +16,9 @@
 // Direct packets without a bound, authenticated path are consumed/dropped;
 // they must NEVER fall back into generic virtual-socket delivery.
 //
-// The key lives in the trusted secure-rendezvous component, NOT here; it must\n// outlive Arm and be zeroized on Revoke. An untrusted callback cannot count as\n// server authorization. This is integrity/authentication ONLY; HMAC does not encrypt gameplay.
+// The key lives in the trusted secure-rendezvous component, NOT here; it must
+// outlive Arm and be zeroized on Revoke by that owner. An untrusted callback
+// cannot count as server authorization. HMAC does not encrypt gameplay.
 // Implement transport confidentiality separately before a public rollout.
 namespace SeamlessHunt::Hybrid {
 
