@@ -184,7 +184,7 @@ Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint6
   CHECK(snap.has_value());
   CHECK(snap->world_epoch==42 && snap->party=="room-1");
   CHECK(hub.ValidateDirectPairSnapshot(*snap,1));
-  CHECK(hub.ValidateDirectPairSnapshot(*snap,4999));
+  CHECK(hub.ValidateDirectPairSnapshot(*snap,2)); // both peers still fresh
   CHECK(!hub.ValidateDirectPairSnapshot(*snap,5001));
   auto tampered=*snap;
   tampered.source_generation++;
