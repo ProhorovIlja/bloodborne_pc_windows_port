@@ -6,8 +6,8 @@
 #include <cassert>
 #include <cstdint>
 using namespace SeamlessHunt::Hybrid;
-static AccountDigestV84 Id(unsigned seed) {
-    AccountDigestV84 out{};
+static std::array<std::uint8_t,32> Id(unsigned seed) {
+    std::array<std::uint8_t,32> out{};
     for(unsigned i=0;i<out.size();++i)
         out[i]=static_cast<std::uint8_t>(seed+i);
     return out;
@@ -59,7 +59,7 @@ int main(){
     assert(!gate.BothReady(1004)); // replay completely revokes pair
     assert(gate.PairBinding()==0);
 
-    const auto assert_denied=[&](const AccountDigestV84& who,
+    const auto assert_denied=[&](const std::array<std::uint8_t,32>& who,
                                   std::uint64_t epoch,std::uint64_t world,
                                   bool consent,
                                   const PairReadyProofV91::Tag& proof,
