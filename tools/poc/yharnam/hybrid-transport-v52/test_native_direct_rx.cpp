@@ -142,7 +142,7 @@ int main(){
     assert(Send(encoder,r,DirectKind::GameData,wire,physical,111)
            ==NativeRxStatus::Dropped);
     // Even a current HMAC tag for a never-granted physical peer gets dropped.
-    assert(r.Arm(0,ticket,grant,Key(),physical,virtual_peer,"A",Refresh,&world,112));
+    assert(r.Arm(0,ticket,grant,DirectionMac::VerifyCallback,&sender,physical,virtual_peer,"A",Refresh,&world,112));
     assert(Send(encoder,r,DirectKind::GameData,wire,physical,113)
            ==NativeRxStatus::Dropped); // new probe needed before game
     r.RevokeAll();
