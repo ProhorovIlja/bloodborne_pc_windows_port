@@ -1,0 +1,72 @@
+name: Seamless Hunt V85 native full-ID SHG2 real Qt mTLS exchange
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_key_session.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_grant_inbox_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v85.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_tls_local_client_qt_v85.cpp
+      - .github/workflows/shyt-v85-real-mtls-shg2.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_key_session.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_grant_inbox_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v85.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_tls_local_client_qt_v85.cpp
+      - .github/workflows/shyt-v85-real-mtls-shg2.yml
+permissions:
+  contents: read
+jobs:
+  actual-local-mtls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install real Qt6/OpenSSL compilers and TLS dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev libssl-dev openssl pkg-config
+      - name: Create ephemeral CI-only server CA, server IP SAN and client leaf
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v85-certs
+          cd /tmp/shyt-v85-certs
+          openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 \
+            -keyout ca.key -out ca.pem \
+            -subj '/CN=SHYT V85 CI Test CA' \
+            -addext 'basicConstraints=critical,CA:TRUE'
+          openssl req -newkey rsa:2048 -sha256 -nodes \
+            -keyout server.key -out server.csr -subj '/CN=127.0.0.1'
+          printf 'subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > server.ext
+          openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key \
+            -CAcreateserial -out server.pem -days 1 -sha256 -extfile server.ext
+          openssl req -newkey rsa:2048 -sha256 -nodes \
+            -keyout client.key -out client.csr -subj '/CN=CI client only'
+          printf 'extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n' > client.ext
+          openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key \
+            -CAcreateserial -out client.pem -days 1 -sha256 -extfile client.ext
+          chmod 600 *.key
+      - name: Compile and run real native TLS1.3 SHG2 over Qt listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O0 -g0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_native_tls_local_client_qt_v85.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -lssl -lcrypto -pthread -o /tmp/shyt-v85-native-qt
+          /tmp/shyt-v85-native-qt \
+            /tmp/shyt-v85-certs/server.pem /tmp/shyt-v85-certs/server.key \
+            /tmp/shyt-v85-certs/ca.pem /tmp/shyt-v85-certs/client.pem \
+            /tmp/shyt-v85-certs/client.key
+          echo SHYT_V85_REAL_QT_NATIVE_TLS13_SHG2_ACCOUNT_SHA256_PASS
