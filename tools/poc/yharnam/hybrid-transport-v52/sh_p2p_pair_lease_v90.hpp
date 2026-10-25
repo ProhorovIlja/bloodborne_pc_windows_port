@@ -133,6 +133,11 @@ public:
         return ready_gate_.BothReady(now_ms);
     }
     bool Active() const noexcept{return active_;}
+    bool HasOutstanding(std::uint64_t now_ms) const noexcept {
+        return (active_ && now_ms>=pair_.for_a.issued_ms &&
+                now_ms<pair_.for_a.expires_ms) ||
+               ready_gate_.Outstanding(now_ms);
+    }
     void Clear() noexcept {
         ready_gate_.Clear();
         ErasePair(pair_);
