@@ -609,6 +609,26 @@ def run(checkout:Path, repo:Path, out:Path):
     files["server/src/sh_p2p_tls_key_session.hpp"]=(metrics_dir/"sh_p2p_tls_key_session.hpp").read_bytes()
     files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
     meta["applied"].append("V80 per mTLS connection fresh wrapping key and live epoch recheck, NO peer offers")
+    # V81: the first (local/dev ONLY) real offer must be minted from
+    # server-owned CURRENT signed-in game links and mutual consent, then
+    # sealed with V80's one-time TLS application key using V75 AES-GCM.
+    # The destination peer is selected by the local server operator, NOT
+    # by a user-supplied plaintext SHLK/HTTP/TLS peer identifier.
+    v81_script=metrics_dir/"patch_tls_local_offer.py"
+    v81=types.ModuleType("sh_v81_tls_local_grant")
+    v81.__file__=str(v81_script)
+    exec(compile(v81_script.read_text("utf-8"),str(v81_script),"exec"),v81.__dict__)
+    v81_paths=(v81.MAIN,v81.SERVER_H,v81.SERVER_CPP,v81.LINK_H,v81.LINK_CPP)
+    v81_input={p:files[p].decode("utf-8") for p in v81_paths}
+    for path,body in v81.patch(v81_input).items():
+        files[path]=body.encode("utf-8")
+    cmake_source=(files[v81.CMAKE] if v81.CMAKE in files
+                  else (checkout/v81.CMAKE).read_bytes()).decode("utf-8")
+    files[v81.CMAKE]=v81.patch_cmake(cmake_source).encode("utf-8")
+    files[v81.OFFER_H]=(metrics_dir/"sh_p2p_tls_offer_issuer.hpp").read_bytes()
+    files["server/src/sh_p2p_tls_key_session.hpp"]=(metrics_dir/"sh_p2p_tls_key_session.hpp").read_bytes()
+    files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
+    meta["applied"].append("V81 loopback mTLS peer offer from current mutually consenting Qt links, sealed SHG1 once")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
