@@ -750,7 +750,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v92.__file__=str(v92_file)
     exec(compile(v92_file.read_text("utf-8"),str(v92_file),"exec"),v92.__dict__)
     files[v92.NETWORK]=v92.patch_game(files[v92.NETWORK].decode("utf-8")).encode("utf-8")
-    meta["applied"].append("V92 game ORIGINAL UDP host_socket handles optional SHN1 signed control only; fallback remains relay")
+    meta["applied"].append("V92-V93 original UDP host_socket SHN1 probe dev-only; worker-local V91 TLS grant verification and short game-owned inbox handoff, relay unchanged")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
