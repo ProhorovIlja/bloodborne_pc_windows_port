@@ -80,7 +80,8 @@ public:
         // Validation of the entire SHAD frame (including mixed packet classes)
         // takes place AFTER the UDP MAC, anti-replay and pair binding checks.
         if (!EligibleNativeWireFrame(packet.payload, verified_sender_,
-                                     current_world_authority).direct_eligible)
+                                     current_world_authority,
+                                     false /* GameLink reliable migration not wired */).direct_eligible)
             return IngressStatus::Reject;
         game_payload = packet.payload;
         return IngressStatus::AuthenticatedGame;
