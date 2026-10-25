@@ -31,7 +31,7 @@ public:
     static constexpr std::size_t kCipherBytes=SecureOfferDetail::kWireBytes;
     static constexpr std::size_t kLineBytes=kPrefix.size()+2*kCipherBytes+1;
     NativeSealedGrantInbox()=default;
-    ~NativeSealedGrantInbox(){Reset();}
+    ~NativeSealedGrantInbox(){ResetCurrent();}
     NativeSealedGrantInbox(const NativeSealedGrantInbox&)=delete;
     NativeSealedGrantInbox& operator=(const NativeSealedGrantInbox&)=delete;
     NativeSealedGrantInbox(NativeSealedGrantInbox&&)=delete;
