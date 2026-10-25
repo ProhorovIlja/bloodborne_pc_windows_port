@@ -534,6 +534,18 @@ def run(checkout:Path, repo:Path, out:Path):
     for path,body in v74.transform(v74_sources).items():
         files[path]=body.encode("utf-8")
     meta["applied"].append("V74 opt-in protobuf native client Hello + game-world mutual consent, legacy DENY")
+    # V75: stage the same AES-256-GCM sealed-offer codec on BOTH game and
+    # original Qt server. Not included/called by any production transport yet:
+    # TLS-exporter keying, mutual TLS identities and grant issuance still
+    # require their authenticated control-plane integration.
+    sealed_header=(metrics_dir/"sh_secure_grant.hpp").read_bytes()
+    files["emulator/src/core/libraries/network/sh_secure_grant.hpp"]=sealed_header
+    files["server/src/sh_secure_grant.hpp"]=sealed_header
+    # The server-side codec's header imports the primitive from the same
+    # source tree, not via the game's include search path.
+    for shared in ("sh_direct_crypto.hpp","sh_direct_datagram.hpp"):
+        files["server/src/"+shared]=(metrics_dir/shared).read_bytes()
+    meta["applied"].append("V75 AES-GCM peer grant offer codec staged; no unencrypted SHLK grant delivery and no game Arm")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
