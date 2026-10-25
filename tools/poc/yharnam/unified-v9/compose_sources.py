@@ -507,6 +507,11 @@ def run(checkout:Path, repo:Path, out:Path):
     for path,body in v72.transform(affected).items():
         files[path]=body.encode("utf-8")
     files[v72.REVISION_H]=(metrics_dir/"sh_world_revision.hpp").read_bytes()
+    # Extend the ORIGINAL server world tests; do not rely solely on a toy
+    # revision helper. These tests compile/run against actual Qt+protobuf
+    # when the entire server candidate is built.
+    original_world_tests=(checkout/v72.WORLD_TEST).read_text(encoding="utf-8")
+    files[v72.WORLD_TEST]=v72.transform_test(original_world_tests).encode("utf-8")
     meta["applied"].append("V72 server-derived party/map/owner world epoch for P2P candidate revocation")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
