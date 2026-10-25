@@ -1,20 +1,22 @@
-name: Seamless Hunt V63 native Windows client full candidate build
+name: Seamless Hunt V64 native Windows client full candidate build
 on:
   push:
     branches:
       - feature/shyt-win-fsr-countof-v63
     paths:
       - .github/workflows/shyt-v63-native-game-candidate.yml
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+      - tools/poc/yharnam/package-v41/patch_fireburn_clang64.py
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   native-game-client:
     # Rerun after fixing the exact 165-minute native build failure:
-    # original AMD SDK opticalflow cpp had 9 MSVC-only _countof calls not
-    # covered by the prior frameinterpolation patch. Pinned AMD frame,
-    # opticalflow, and message C++17/CLANG64 preflight have ALL passed in
-    # V63 smoke Windows CI on this branch. Original renderer packaging must
+    # V63 fixed host SDK MSVC-only _countof in frame+opticalflow;
+    # V64 fixes backend ffx_vk.cpp missing standard C++ new, mutex, log2.
+    # Windows 2022 CLANG64 smoke now compiles all FOUR pinned AMD units
+    # successfully: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/40230295455 Original renderer packaging must
     # still compile/link before any candidate artifact can be claimed.
     # This is NOT a validated playable release and has no live deploy.
     uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
