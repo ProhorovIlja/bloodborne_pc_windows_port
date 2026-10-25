@@ -51,7 +51,7 @@ def patch(src: str)->str:
     # Future secure-grant installer may pass this callback to TX Arm.
     # It reads the SAME authenticated native inbound UDP path and requires
     # matching reverse session ticket, physical/virtual endpoint and three
-    // signed probes. No network/callback installer exists in production yet.
+    # signed probes. No network/callback installer exists in production yet.
     src=one(src,
 '''    P2PTransport() = default;
 ''',
