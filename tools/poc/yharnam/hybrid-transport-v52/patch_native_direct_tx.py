@@ -48,6 +48,28 @@ def patch(src: str)->str:
             }
             framed = Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed);
 ''',"real SendFrame whole native SHAD pre-relay guard")
+    // Future secure-grant installer may pass this callback to TX Arm.
+    // It reads the SAME authenticated native inbound UDP path and requires
+    // matching reverse session ticket, physical/virtual endpoint and three
+    // signed probes. No network/callback installer exists in production yet.
+    src=one(src,
+'''    P2PTransport() = default;
+''',
+'''    P2PTransport() = default;
+
+    static bool TrustedReverseDirectReady(
+        const SeamlessHunt::Hybrid::PeerTicket& outbound,
+        SeamlessHunt::Hybrid::PhysicalV4 physical,
+        SeamlessHunt::Hybrid::VirtualV4 virtual_peer,
+        std::int64_t now_ms,void* trusted_transport) noexcept {
+        if(!trusted_transport) return false;
+        auto* transport=static_cast<P2PTransport*>(trusted_transport);
+        std::lock_guard lock(transport->direct_ingress_mutex);
+        return transport->direct_ingress.ReversePathReady(
+            outbound,physical,virtual_peer,now_ms);
+    }
+''',"inbound authenticated direct readiness callback")
+
     src=one(src,
 '''    SeamlessHunt::Hybrid::NativeDirectReceiver direct_ingress{};
 ''',
