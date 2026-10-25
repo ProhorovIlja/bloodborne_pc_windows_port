@@ -146,6 +146,12 @@ int main() {
     assert(std::equal(accepted.payload.begin(),accepted.payload.end(),frame.begin()));
     assert(!receiver.Receive(wire.last,106,DirectionMac::VerifyCallback,&mac,accepted));
     assert(tx.TrySend(dest,Game(0x2f),107)==NativeTxStatus::RelayRequired);
+    // V73: not even a fully authorized map/room flag can silently move
+    // reliable sequences, ACK traffic or mixed lanes to UDP Direct.
+    assert(tx.TrySend(dest,Game(0x14),107)==NativeTxStatus::RelayRequired);
+    auto with_ack=frame;
+    with_ack[20]=1;
+    assert(tx.TrySend(dest,with_ack,107)==NativeTxStatus::RelayRequired);
     assert(tx.TrySend(dest,Game(0x06,'B'),108)==NativeTxStatus::RelayRequired);
     world.policy.map_epoch_verified=false;
     assert(tx.TrySend(dest,frame,109)==NativeTxStatus::RelayRequired);
