@@ -10,6 +10,7 @@
 #include <atomic>
 #include <thread>
 #include <cassert>
+#include <cstdio>
 
 using namespace SeamlessHunt::Hybrid;
 static QSslCertificate Certificate(const QString& path) {
@@ -68,7 +69,9 @@ int main(int argc,char** argv) {
             NativeSealedGrantInbox inbox;
             bool pass=NativeTlsLocalOfferClient::Request(
                 config,inbox,world.identity,1,Refresh,&world,now());
+            std::fprintf(stderr,"V83 stage local TLS+offer: %s\n",pass?"PASS":"FAIL");
             const auto* offer=inbox.PendingForNat(now());
+            std::fprintf(stderr,"V83 stage pending native offer: %s\n",offer?"PASS":"FAIL");
             pass=pass && offer && offer->sender_account==world.identity.peer_account &&
                  offer->recipient_account==world.identity.self_account &&
                  offer->peer_port_nbo==qToBigEndian(quint16(41234)) &&
@@ -77,24 +80,34 @@ int main(int argc,char** argv) {
             // No trusted local CA => must NEVER silently downgrade or
             // accept the server identity from the connecting peer.
             auto missing_ca=config;missing_ca.server_ca_pem="/nonexistent/ca.pem";
-            pass=pass && !NativeTlsLocalOfferClient::Request(
+            const bool wrong_ca_denied=!NativeTlsLocalOfferClient::Request(
                 missing_ca,inbox,world.identity,2,Refresh,&world,now());
+            std::fprintf(stderr,"V83 stage missing CA denial: %s\n",wrong_ca_denied?"PASS":"FAIL");
+            pass=pass && wrong_ca_denied;
             auto wrong_epoch=world.identity;wrong_epoch.session_epoch++;
-            pass=pass && !NativeTlsLocalOfferClient::Request(
+            const bool wrong_epoch_denied=!NativeTlsLocalOfferClient::Request(
                 config,inbox,wrong_epoch,3,Refresh,&world,now());
+            std::fprintf(stderr,"V83 stage stale epoch denial: %s\n",wrong_epoch_denied?"PASS":"FAIL");
+            pass=pass && wrong_epoch_denied;
             // A still-valid TLS identity must not override revoked consent.
             both_consented.store(false);
-            pass=pass && !NativeTlsLocalOfferClient::Request(
+            const bool no_consent_denied=!NativeTlsLocalOfferClient::Request(
                 config,inbox,world.identity,4,Refresh,&world,now());
+            std::fprintf(stderr,"V83 stage peer optout denial: %s\n",no_consent_denied?"PASS":"FAIL");
+            pass=pass && no_consent_denied;
             both_consented.store(true);
             // A missing game-world callback always fails closed.
             world.active.store(false);
-            pass=pass && !NativeTlsLocalOfferClient::Request(
+            const bool no_world_denied=!NativeTlsLocalOfferClient::Request(
                 config,inbox,world.identity,5,Refresh,&world,now());
+            std::fprintf(stderr,"V83 stage missing world denial: %s\n",no_world_denied?"PASS":"FAIL");
+            pass=pass && no_world_denied;
             world.active.store(true);
             // Reject an exact old TLS serial to avoid accidental reuse.
-            pass=pass && !NativeTlsLocalOfferClient::Request(
+            const bool replay_denied=!NativeTlsLocalOfferClient::Request(
                 config,inbox,world.identity,1,Refresh,&world,now());
+            std::fprintf(stderr,"V83 stage old serial denial: %s\n",replay_denied?"PASS":"FAIL");
+            pass=pass && replay_denied;
             result.store(pass?0:1);
             QMetaObject::invokeMethod(&app,[&]{app.quit();},Qt::QueuedConnection);
         });
