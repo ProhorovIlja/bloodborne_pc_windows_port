@@ -546,6 +546,19 @@ def run(checkout:Path, repo:Path, out:Path):
     for shared in ("sh_direct_crypto.hpp","sh_direct_datagram.hpp"):
         files["server/src/"+shared]=(metrics_dir/shared).read_bytes()
     meta["applied"].append("V75 AES-GCM peer grant offer codec staged; no unencrypted SHLK grant delivery and no game Arm")
+    # V76: gather peer addresses/virtual IDs and world revision atomically
+    # from the REAL single Qt server game-world state, and require both
+    # current account-bound game Hello consents, before future TLS grants.
+    # No public/shadNet plaintext endpoint exposes this sensitive snapshot.
+    v76_script=metrics_dir/"patch_authoritative_pair_scope.py"
+    v76=types.ModuleType("sh_v76_direct_pair_scope")
+    v76.__file__=str(v76_script)
+    exec(compile(v76_script.read_text("utf-8"),str(v76_script),"exec"),v76.__dict__)
+    v76_files={p:files[p].decode("utf-8") for p in (
+        v76.WORLD_H,v76.WORLD_CPP,v76.WORLD_TEST)}
+    for path,body in v76.patch(v76_files).items():
+        files[path]=body.encode("utf-8")
+    meta["applied"].append("V76 single authoritative Qt peer scope, two consents, real/virtual endpoints, no key disclosure")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
