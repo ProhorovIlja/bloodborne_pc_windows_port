@@ -40,6 +40,7 @@ public:
 };
 class PairReadyGateV91 final {
 public:
+    using Tag=PairReadyProofV91::Tag;
     enum class Result : std::uint8_t { Denied, WaitingPeer, BothReady };
     ~PairReadyGateV91(){Clear();}
     PairReadyGateV91()=default;
@@ -55,7 +56,6 @@ public:
            a.sender_account!=b.recipient_account ||
            b.sender_account!=a.recipient_account ||
            a.recipient_account==b.recipient_account ||
-           a.session_epoch==b.session_epoch && a.recipient_account==b.recipient_account ||
            a.pair_binding!=b.pair_binding || !a.pair_binding ||
            a.world_revision!=b.world_revision ||
            a.issued_ms!=b.issued_ms || a.expires_ms!=b.expires_ms ||
