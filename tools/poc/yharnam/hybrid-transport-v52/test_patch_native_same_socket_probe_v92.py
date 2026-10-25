@@ -54,6 +54,15 @@ class V92Tests(unittest.TestCase):
         self.assertEqual(result.count(v92.TAG),1)
         self.assertIn("TryPairedTlsReadyForNatTest(",result)
         self.assertIn("NativeTlsLocalOfferClientV91::Request(",result)
+        self.assertIn("NativeSealedGrantInboxV84 temporary_inbox;",result)
+        self.assertIn("TransferVerifiedTo(",result)
+        self.assertIn("nat_tls_request_active_v93.test_and_set(",result)
+        # A blocking TLS call MUST run outside native_grant_mutex, which
+        # the ORIGINAL game UDP receive thread also uses for signed SHN1.
+        call=result.index("if(!SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV91::Request(")
+        before=result[:call].rfind("std::lock_guard lock(native_grant_mutex);")
+        self.assertNotIn("std::lock_guard lock(native_grant_mutex);",result[before:call])
+        self.assertIn("std::lock_guard lock(native_grant_mutex);",result[call:])
         self.assertIn("nat_paired_tls_generation_v92!=generation",result)
         self.assertIn("nat_paired_tls_binding_v92!=grant->pair_binding",result)
         self.assertIn("TryStartSameSocketNatProbeForTest(",result)
