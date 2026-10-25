@@ -706,7 +706,12 @@ def run(checkout:Path, repo:Path, out:Path):
     v88_input={p:files[p].decode("utf-8") for p in v88_paths}
     for name,body in v88.patch(v88_input).items():
         files[name]=body.encode("utf-8")
-    meta["applied"].append("V88 Qt original LinkServer two reciprocal same-world SHG2 offers, DISTINCT directional keys, local DEV ONLY")
+    # V89: shared pair master is delivered to BOTH native clients using
+    # separate authenticated TLS keys. Derive direction- and purpose-
+    # separated HMAC keys locally; never install the raw master on UDP.
+    files["emulator/src/core/libraries/network/sh_pair_key_schedule_v89.hpp"]=(
+        metrics_dir/"sh_pair_key_schedule_v89.hpp").read_bytes()
+    meta["applied"].append("V88-V89 Qt original LinkServer reciprocal pair, shared SHG2 secret, native directional probe/game KDF (no UDP Arm)")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
