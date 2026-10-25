@@ -59,14 +59,6 @@ V69_NATIVE_FIXTURE = r"""
 #include "net_error.h"
         physical_port = ntohs(actual.sin_port);
         running.store(true, std::memory_order_release);
-        // The server link: the frame goes to shadNet, which hands it to the peer.
-        if (const auto server = LinkServer();
-            Link::RoutesThroughServer(server, dest_addr_nbo, dest_port_nbo)) {
-            framed = Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed);
-            dest.sin_addr.s_addr = server.addr_nbo;
-            dest.sin_port = server.port_nbo;
-        }
-        return Transmit(dest, std::move(framed)) ? static_cast<int>(len) : -1;
     void ConfigureLink(u32 server_addr_nbo, u16 server_port_nbo, std::string online_id,
         case Link::Kind::Data:
             if (const auto data = Link::DecodeData(datagram)) {
