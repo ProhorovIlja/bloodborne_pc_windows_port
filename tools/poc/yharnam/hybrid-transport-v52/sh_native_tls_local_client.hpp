@@ -9,6 +9,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <climits>
+#include <algorithm>
 #include <cstring>
 #include <span>
 #include <string>
