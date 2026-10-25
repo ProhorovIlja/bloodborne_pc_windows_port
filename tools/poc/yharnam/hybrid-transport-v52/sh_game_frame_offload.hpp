@@ -40,7 +40,8 @@ inline bool U16(std::span<const std::uint8_t> bytes, std::size_t& offset,
 // if either denies, send via the ORIGINAL server path without rewriting frames.
 inline Decision EligibleNativeWireFrame(std::span<const std::uint8_t> bytes,
                                         std::string_view authenticated_sender,
-                                        const ChannelAuthority& authority) noexcept {
+                                        const ChannelAuthority& authority,
+                                        bool native_reliable_handover_proven = true) noexcept {
     constexpr std::size_t kMaxDatagram = 4096;
     constexpr std::size_t kPrefix = 9; // two vports, "SHAD", GamePacketsType
     if (bytes.size() < 26 || bytes.size() > kMaxDatagram ||
@@ -64,13 +65,23 @@ inline Decision EligibleNativeWireFrame(std::span<const std::uint8_t> bytes,
     if (!Detail::U32(bytes, off, instance) || !Detail::U32(bytes, off, peer_instance) ||
         !Detail::U32(bytes, off, ack))
         return {false, OffloadWhy::BadChannel};
+    // V73: a flag in ChannelAuthority is NOT evidence that the game's
+    // reliable transport actually migrated its ACK/sequence/retransmit lane.
+    // Native runtime must set this independent gate to false until a
+    // bidirectional, epoch-scoped GameLink handover is verified. Even a
+    // frame carrying only unreliable game entries can acknowledge older
+    // reliable traffic via this common ACK header.
+    if (!native_reliable_handover_proven && ack != 0)
+        return {false, OffloadWhy::ReliablePathNotValidated};
     std::uint16_t count = 0;
     if (!Detail::U16(bytes, off, count) || count > 80)
         return {false, OffloadWhy::BadChannel};
     if (count == 0)
-        return off == bytes.size()
-            ? EligibleFrame({}, authority, true)
-            : Decision{false, OffloadWhy::BadChannel};
+        return !native_reliable_handover_proven
+            ? Decision{false, OffloadWhy::ReliablePathNotValidated}
+            : (off == bytes.size()
+                ? EligibleFrame({}, authority, true)
+                : Decision{false, OffloadWhy::BadChannel});
     for (std::uint16_t i = 0; i < count; ++i) {
         if (bytes.size() - off < 9)
             return {false, OffloadWhy::BadChannel};
@@ -80,6 +91,11 @@ inline Decision EligibleNativeWireFrame(std::span<const std::uint8_t> bytes,
             !Detail::U32(bytes, off, packet_size) ||
             packet_size < 8 || packet_size > bytes.size() - off)
             return {false, OffloadWhy::BadChannel};
+        // The GameLink RELIABLE class is server-only until an actual
+        // stream route migration is implemented; a claimed world flag
+        // cannot authorize it. Mixed-class frames stay intact on relay.
+        if (!native_reliable_handover_proven && packet_class == 1)
+            return {false, OffloadWhy::ReliablePathNotValidated};
         // NetSync game packet layout: u32 channel, u32 payload byte count.
         std::size_t inner = off;
         std::uint32_t channel = 0, net_size = 0;
