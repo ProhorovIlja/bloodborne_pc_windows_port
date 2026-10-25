@@ -53,7 +53,7 @@ jobs:
           ROOT=tools/poc/yharnam/hybrid-transport-v52
           c++ -std=c++20 -O0 -g0 -fPIC -Wall -Wextra -Werror -pedantic \
             -I "$ROOT" "$ROOT/test_tls_local_listener.cpp" \
-            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) -lcrypto \
             -o /tmp/shyt-v78-real-qt-tls
           /tmp/shyt-v78-real-qt-tls \
             /tmp/shyt-v78-certs/server.pem /tmp/shyt-v78-certs/server.key \
@@ -62,7 +62,7 @@ jobs:
           echo SHYT_V78_ACTUAL_TLS13_MUTUAL_CERT_LOOPBACK_PASS
           c++ -std=c++20 -O0 -g0 -fPIC -Wall -Wextra -Werror -pedantic \
             -I "$ROOT" "$ROOT/test_tls_local_identity.cpp" \
-            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) -lcrypto \
             -o /tmp/shyt-v79-qt-cert-binding
           /tmp/shyt-v79-qt-cert-binding \
             /tmp/shyt-v78-certs/server.pem /tmp/shyt-v78-certs/server.key \
@@ -71,7 +71,7 @@ jobs:
           echo SHYT_V79_CURRENT_GAME_EPOCH_X509_PIN_MTLS_PASS
           c++ -std=c++20 -O0 -g0 -fPIC -Wall -Wextra -Werror -pedantic \
             -I "$ROOT" "$ROOT/test_tls_local_key_session.cpp" \
-            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) -lcrypto \
             -o /tmp/shyt-v80-qt-ephemeral-wrap
           /tmp/shyt-v80-qt-ephemeral-wrap \
             /tmp/shyt-v78-certs/server.pem /tmp/shyt-v78-certs/server.key \
