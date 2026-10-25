@@ -672,6 +672,16 @@ def run(checkout:Path, repo:Path, out:Path):
             metrics_dir/name).read_bytes()
     meta["applied"].append(
         "V84-V85 SHG2 256-bit recipient and peer identity, actual Qt/native local TLS source; no production P2P Arm")
+    # V86: the *same* original native game P2PTransport stores a SECOND
+    # sealed inbox while the dev-only TLS compile flag is enabled. Both
+    # account/reconfigure and socket shutdown revoke its pending secrets.
+    # No runtime caller, automatic connect, NAT probes, or Direct Arm here.
+    v86_script=metrics_dir/"patch_native_shg2_owner_v86.py"
+    v86=types.ModuleType("sh_v86_native_fullid_owner")
+    v86.__file__=str(v86_script)
+    exec(compile(v86_script.read_text("utf-8"),str(v86_script),"exec"),v86.__dict__)
+    files[v86.NETWORK]=v86.patch_game(files[v86.NETWORK].decode("utf-8")).encode("utf-8")
+    meta["applied"].append("V86 native P2PTransport owns SHG2 inbox, DEV-only OFF and revoked at logout/socket stop; Direct OFF")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
