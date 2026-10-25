@@ -76,10 +76,12 @@ def originals():
             '#include "server_link.h"\n' + LOGIN_CPP_FIXTURE
         ) + '''    const bool again = members.contains(from.Key());
     Link& link = members[from.Key()];
+    link.build = hello->build;
+    link.last_heard_ms = now_ms;
 Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint64 now_ms) {
 ''',
         compose.SERVER_LINK_H: LOGIN_H_FIXTURE +
-            '    int Members() const {\n    SignIn sign_in;\n' +
+            '    int Members() const {\n        qint64 last_heard_ms = 0;\n    SignIn sign_in;\n' +
             '        QList<Endpoint> gone; // links forgotten\n',
         compose.LINK_SERVER_CPP: '#include "link_server.h"\n' + RPC_CPP_FIXTURE.replace(
             '    m_signedIn.insert(online_id, hash);',
