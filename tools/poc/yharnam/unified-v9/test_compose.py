@@ -52,21 +52,6 @@ def load(path,name):
 v8=load(V8,"sh_v8")
 compose=load(HERE/"compose_sources.py","sh_compose")
 
-# V69 pinned-socket-only stubs used by source composition fixtures; all
-# actual CPP insertion anchors are additionally verified against the real
-# lKaniel pinned p2p_sockets.cpp in the V69 GitHub Actions job.
-V69_NATIVE_FIXTURE = r"""
-#include "net_error.h"
-        physical_port = ntohs(actual.sin_port);
-        running.store(true, std::memory_order_release);
-    void ConfigureLink(u32 server_addr_nbo, u16 server_port_nbo, std::string online_id,
-        case Link::Kind::Data:
-            if (const auto data = Link::DecodeData(datagram)) {
-                Deliver(data->addr_nbo, data->port_nbo, data->frame);
-            }
-            return;
-"""
-
 def originals():
     v3=compose.load_zip_module(ARCHIVES/compose.ARCHIVES["ui"],"PATCH-YHARNAM-TEAM-UI.py","sh_ui_test")
     v7=compose.load_zip_module(ARCHIVES/compose.ARCHIVES["direct"],"PATCH-BBPORT-NATIVE-DIRECT-V7.py","sh_direct_test")
@@ -187,7 +172,7 @@ static float camhook_frame(unsigned char *camera,float pitch) {
 """,
         "bbport/src/runtime_pad.c": 'if (!kbm.mouse_camera) { puts("Runtime: Mouse camera: off (mouse_camera=0)"); return; }',
         compose.NETWORK: "\n".join([v7.INSERT_INCLUDE,v7.INSERT_SEND,v7.INSERT_RECEIVE,
-                                    v7.INSERT_TICK,v7.INSERT_FIELD,v7.INSERT_RESET]) + V69_NATIVE_FIXTURE,
+                                    v7.INSERT_TICK,v7.INSERT_FIELD,v7.INSERT_RESET]),
         compose.COOP: """import re, json, urllib.request
 RELEASES_API = 'https://api.github.com/repositories/1405692683/releases?per_page=100'
 def newest_release(releases):
