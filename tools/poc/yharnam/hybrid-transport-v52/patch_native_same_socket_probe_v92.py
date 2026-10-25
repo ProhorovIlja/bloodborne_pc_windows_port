@@ -105,13 +105,18 @@ def patch_game(src):
         {
             // Only short, in-memory transfer under the game grant lock.
             std::lock_guard lock(native_grant_mutex);
-            std::lock_guard link_lock(link_mutex);
-            if(!running.load(std::memory_order_acquire) ||
-               shyt_link_generation_v87!=generation || !link_welcomed ||
-               !link_server.addr_nbo || !link_server.port_nbo)
-                return false;
+            // The refreshed game state callback may itself consult
+            // link_mutex. NEVER nest it under that lock.
             const auto* grant=temporary_inbox.PendingForNat(received_ms);
             if(!grant)return false;
+            bool original_session_stable=false;
+            {
+                std::lock_guard link_lock(link_mutex);
+                original_session_stable=running.load(std::memory_order_acquire) &&
+                    shyt_link_generation_v87==generation && link_welcomed &&
+                    link_server.addr_nbo && link_server.port_nbo;
+            }
+            if(!original_session_stable)return false;
             const auto binding=grant->pair_binding;
             if(!temporary_inbox.TransferVerifiedTo(
                   native_grant_inbox_v84,received_ms))return false;
