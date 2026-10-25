@@ -51,6 +51,24 @@ class NativeFsrClang64Tests(unittest.TestCase):
             with self.subTest(broken=broken[:40]), self.assertRaisesRegex(ValueError, "drifted|additional"):
                 patch.transform(broken)
 
+    def test_v65_mingw_global_countof_shim_matches_cls_upstream(self):
+        original = (
+            "// AMD SDK\\n"
+            "#include <stdint.h>\\n"
+            "typedef unsigned FfxUInt32;\\n"
+        )
+        actual=original.replace("\\n","\n")
+        fixed=patch.transform_countof_header(actual)
+        self.assertIn("#if defined(__MINGW32__) && !defined(_countof)",fixed)
+        self.assertIn("#define _countof(array) (sizeof(array) / sizeof((array)[0]))",fixed)
+        self.assertIn("#endif",fixed)
+        self.assertEqual(fixed.count("#include <stdint.h>"),1)
+        with self.assertRaisesRegex(ValueError,"already patched"):
+            patch.transform_countof_header(fixed)
+        with self.assertRaisesRegex(ValueError,"drifted"):
+            patch.transform_countof_header(actual.replace("#include <stdint.h>", "#include <cstdint>"))
+        self.assertEqual(patch.COUNT_TARGET.split("/")[-1],"ffx_types.h")
+
     def test_opticalflow_fixed_arrays_and_no_vendor_drift(self):
         optical = (
             "// This file is part of the FidelityFX SDK.\n"
