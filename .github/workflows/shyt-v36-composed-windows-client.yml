@@ -109,15 +109,21 @@ jobs:
           }
           python tools/poc/yharnam/package-v41/patch_fireburn_clang64.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR CLANG64 portability patch failed' }
-      - name: Compile pinned FidelityFX FSR host translation unit before expensive GPU build
+      - name: Compile pinned FidelityFX FSR host C++ units before expensive GPU build
         shell: msys2 {0}
         run: |
           set -euo pipefail
           sdk="pinned-upstream/bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk"
           clang++ -std=c++17 -fsyntax-only \
             -I "$sdk/include" \
+            -I "$sdk/src/shared" \
             "$sdk/src/shared/ffx_message.cpp"
-          echo SHYT_FSR_CLANG64_SINGLE_FILE_COMPATIBILITY_PASS
+          clang++ -std=c++17 -fsyntax-only \
+            -I "$sdk/include" \
+            -I "$sdk/src/shared" \
+            -I "$sdk/src/components/frameinterpolation" \
+            "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"
+          echo SHYT_FSR_CLANG64_HOST_PRECHECK_BOTH_SOURCES_PASS
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
