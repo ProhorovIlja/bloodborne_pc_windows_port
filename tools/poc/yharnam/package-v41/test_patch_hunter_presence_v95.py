@@ -20,6 +20,18 @@ void SaveTab() {
     const auto& items = BbSaveEditor::Items();
 }
 '''
+TEAM_SOURCE='''    // The buttons: the team, Begin the hunt, the world.
+    ImGui::PushFont(MenuArt::Font(), 24.0f);
+    const float bw = S(260.0f), bh = S(54.0f);
+    float bx = win.x + (size.x - (3 * bw + 2 * gap)) * 0.5f;
+    if (lobby.menu) {
+        if (Button(draw, "close", T("Close", "Закрыть"), ImVec2(bx, by), ImVec2(bw, bh))) {
+            bbcoop_team_menu(0);
+        }
+        ImGui::PopFont();
+    }
+'''
+
 class TestNativeHunterPresenceV95(unittest.TestCase):
     def test_exact_overlay_patches_and_does_not_export_private_data(self):
         result=v.patch_overlay(S)
@@ -34,6 +46,18 @@ class TestNativeHunterPresenceV95(unittest.TestCase):
         self.assertNotIn('joinSecret',result)
         with self.assertRaisesRegex(ValueError,"already modified"):
             v.patch_overlay(result)
+
+    def test_exact_game_menu_has_confirmed_quit_and_no_force_exit(self):
+        result=v.patch_team_quit(TEAM_SOURCE)
+        self.assertIn("SHYT-V95-QUIT-IN-GAME",result)
+        self.assertIn('Button(draw, "quit-desktop"',result)
+        self.assertIn('quit_open = true;',result)
+        self.assertIn('lobby.menu ? 4 : 3',result)
+        self.assertIn('bbcoop_team_menu(0);',result)
+        self.assertNotIn('std::exit(',result)
+        self.assertNotIn('TerminateProcess(',result)
+        with self.assertRaises(ValueError):
+            v.patch_team_quit(result)
 
     def test_drift_rejected_fail_closed(self):
         for changed in (
