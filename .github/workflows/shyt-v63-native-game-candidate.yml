@@ -7,6 +7,11 @@ on:
       - .github/workflows/shyt-v63-native-game-candidate.yml
       - .github/workflows/shyt-v36-composed-windows-client.yml
       - tools/poc/yharnam/package-v41/patch_fireburn_clang64.py
+  pull_request:
+    branches:
+      - feature/seamless-hunt-mainline
+    paths:
+      - .github/workflows/shyt-v63-native-game-candidate.yml
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,7 +21,7 @@ jobs:
     # V63 fixed host SDK MSVC-only _countof in frame+opticalflow;
     # V64 fixes backend ffx_vk.cpp missing standard C++ new, mutex, log2.
     # Windows 2022 CLANG64 smoke now compiles all FOUR pinned AMD units
-    # successfully: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/40230295455 Original renderer packaging must
-    # still compile/link before any candidate artifact can be claimed.
+    # successfully: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/40230295455
+    # The real renderer still must compile/link, package, and pass gameplay QA.
     # This is NOT a validated playable release and has no live deploy.
     uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
