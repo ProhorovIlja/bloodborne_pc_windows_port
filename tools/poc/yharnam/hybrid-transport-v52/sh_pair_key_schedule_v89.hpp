@@ -12,7 +12,7 @@
 #include <span>
 
 namespace SeamlessHunt::Hybrid {
-enum class PairKeyPurposeV89 : std::uint8_t { NatProbe=1, GameData=2 };
+enum class PairKeyPurposeV89 : std::uint8_t { NatProbe=1, GameData=2, ReadyProof=3 };
 
 class PairKeyScheduleV89 final {
 public:
@@ -23,7 +23,8 @@ public:
         result.fill(0);
         if(!SecureOfferV84Detail::Valid(grant,now_ms) ||
            (purpose!=PairKeyPurposeV89::NatProbe &&
-            purpose!=PairKeyPurposeV89::GameData))
+            purpose!=PairKeyPurposeV89::GameData &&
+            purpose!=PairKeyPurposeV89::ReadyProof))
             return false;
         // Grant is recipient-perspective: sender_account is peer,
         // recipient_account is this native game. Reverse for outgoing.
