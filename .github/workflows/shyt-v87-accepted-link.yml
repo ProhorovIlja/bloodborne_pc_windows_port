@@ -1,0 +1,64 @@
+name: Seamless Hunt V87 original native server-accepted account SHA256
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_link_identity_v87.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_identity_v87.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_game_identity_v87.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_link_identity_v87.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v87-accepted-link.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_link_identity_v87.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_identity_v87.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_game_identity_v87.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_link_identity_v87.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v87-accepted-link.yml
+permissions:
+  contents: read
+jobs:
+  trusted-account:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile Python game link source transformer tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_native_link_identity_v87.py' -v
+      - name: Linux OpenSSL actual SHA256 against original Qt V84 vectors
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I "$p" \
+            "$p/test_native_game_identity_v87.cpp" -lcrypto -o /tmp/v87-identity
+          /tmp/v87-identity
+          echo SHYT_V87_NATIVE_SHA256_LINUX_PASS
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Windows native CNG actual SHA256 against original Qt V84 vectors
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_native_game_identity_v87.cpp bcrypt.lib /Fe:v87-identity.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V87 Windows game account digest compile failed' }
+          ./v87-identity.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V87 Windows game account digest tests failed' }
+          Write-Host SHYT_V87_NATIVE_SHA256_WINDOWS_PASS
