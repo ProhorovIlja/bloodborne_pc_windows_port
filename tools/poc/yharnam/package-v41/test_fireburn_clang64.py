@@ -104,5 +104,35 @@ class NativeFsrClang64Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "drifted"):
             patch.transform_frame_interpolation(original.replace(patch.FRAME_HEADER, "#include <algorithm>\\n"))
 
+    def test_vulkan_backend_missing_standard_headers_and_log2(self):
+        # Exact positions/call-site shapes of the pinned AMD backend.
+        vk = (
+            "// This file is part of the FidelityFX SDK.\n"
+            "#include <FidelityFX/host/backends/vk/ffx_vk.h>\n"
+            + patch.VK_HEADER
+            + "#include <mutex>\n"
+            + "struct Backend { std::mutex uniformBufferMutex; };\n"
+            + "void construct(Backend* backendContext) { "
+            + patch.VK_PLACEMENT + " }\n"
+            + "int count(int n) { return (int)(1 + "
+            + patch.VK_MIP_EXPRESSION + "n,n))); }\n"
+        )
+        fixed = patch.transform_vk_backend(vk)
+        self.assertIn("#include <new>", fixed)
+        self.assertIn("#include <cmath>", fixed)
+        self.assertEqual(fixed.count("std::floor(std::log2("), 1)
+        self.assertEqual(fixed.count(patch.VK_PLACEMENT), 1)
+        with self.assertRaisesRegex(ValueError, "already patched"):
+            patch.transform_vk_backend(fixed)
+        for bad in (
+            vk.replace(patch.VK_HEADER, "#include <vulkan/vulkan_core.h>\n"),
+            vk.replace(patch.VK_PLACEMENT, "new (&other->mutex) std::mutex();"),
+            vk.replace(patch.VK_MIP_EXPRESSION, "floor(log2(FFX_MINIMUM("),
+            vk + "double another = log2(8);\n",
+        ):
+            with self.subTest(reason=bad[-80:]), self.assertRaisesRegex(
+                    ValueError, "drifted"):
+                patch.transform_vk_backend(bad)
+
 if __name__ == "__main__":
     unittest.main()
