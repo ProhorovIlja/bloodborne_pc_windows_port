@@ -167,8 +167,10 @@ Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint6
     return !who.isEmpty() && password == "test-only-password";
   });
   QString shared_party = "room-1";
+  const Endpoint rebound{0x7F000001,40008};
   hub.SetPartyOf([&](const Endpoint& from) -> QString {
-    return from == Kaniel || from == Ada ? shared_party : QString{};
+    return from == Kaniel || from == Ada || from == rebound
+           ? shared_party : QString{};
   });
   bool consent=true;
   hub.SetDirectConsent([&](const QByteArray&,const QByteArray&) { return consent; });
@@ -215,7 +217,6 @@ Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint6
   auto newhello=hub.CaptureDirectPairSnapshot(Kaniel,Ada,3,5000);
   CHECK(newhello && hub.ValidateDirectPairSnapshot(*newhello,3));
   // Rebinding Ada to another real endpoint removes the former identity.
-  const Endpoint rebound{0x7F000001,40008};
   hub.Receive(rebound,HelloFrom("Ada",Build,"test-only-password"),4);
   CHECK(!hub.ValidateDirectPairSnapshot(*newhello,4));
   CHECK(!hub.CaptureDirectPairSnapshot(Kaniel,Ada,4,1000));
