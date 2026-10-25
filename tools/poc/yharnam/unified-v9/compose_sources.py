@@ -97,6 +97,16 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
         with zipfile.ZipFile(archive) as z:
             output[path]=z.read(member)
     if len(output)!=len(dest)+4: raise ValueError("missing header outputs")
+    # V69: observe REAL UDP traffic submitted by P2PTransport, with strict
+    # no-routing-change semantics. Disabled unless SHYT_ROUTE_METRICS=1.
+    # Profiling uses only aggregate bytes/packets, no personal data.
+    v69_dir=Path(__file__).resolve().parent.parent/"hybrid-transport-v52"
+    v69_file=v69_dir/"patch_native_route_metrics.py"
+    v69_mod=types.ModuleType("sh_v69_route_metrics")
+    v69_mod.__file__=str(v69_file)
+    exec(compile(v69_file.read_text("utf-8"),str(v69_file),"exec"),v69_mod.__dict__)
+    output[NETWORK]=v69_mod.patch(output[NETWORK].decode("utf-8")).encode("utf-8")
+    output[v69_mod.HEADER]=(v69_dir/"sh_route_metrics.hpp").read_bytes()
     # V10: patch V7 adapter in BOTH directions. Never deliver map/owner-sensitive
     # gameplay channels directly, even if a pairwise MAC is otherwise valid.
     v10_dir=Path(__file__).resolve().parent.parent/"direct-channel-v10"
@@ -429,6 +439,7 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V30 live DB verification of cached account password and ban status",
                    "V66 signed-in same-party, build, liveness and bidirectional consent gate (default deny)",
                    "V67 ephemeral Qt Hub pair snapshot revoked by re-hello, world epoch and consent",
+                   "V69 opt-in original-game UDP relay volume counters without network behavior changes",
                    "Qt 6.4 / modern WebAPI ABI compatibility from full server build",
                    "Qt 6.4 / modern WebAPI session invitation UTC timestamp compatibility",
                    "Qt 6.4 / modern StatsServer and BloodborneBackendServer HTTP API compatibility",
