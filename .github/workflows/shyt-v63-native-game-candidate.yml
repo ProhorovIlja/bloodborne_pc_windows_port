@@ -10,7 +10,11 @@ permissions:
   contents: read
 jobs:
   native-game-client:
-    # Run the full pinned native Windows GPU compiler/package path using the
-    # C++17 FidelityFX fast preflight verified in PR #20. This is a development
-    # artifact; it is NOT a validated playable release and has no live deploy.
+    # Rerun after fixing the exact 165-minute native build failure:
+    # original AMD SDK opticalflow cpp had 9 MSVC-only _countof calls not
+    # covered by the prior frameinterpolation patch. Pinned AMD frame,
+    # opticalflow, and message C++17/CLANG64 preflight have ALL passed in
+    # V63 smoke Windows CI on this branch. Original renderer packaging must
+    # still compile/link before any candidate artifact can be claimed.
+    # This is NOT a validated playable release and has no live deploy.
     uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
