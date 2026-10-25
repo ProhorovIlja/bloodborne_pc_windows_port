@@ -5,6 +5,7 @@
 // Requires external trusted native account state; no public remote listener.
 #include "sh_native_tls_local_client.hpp" // reuse verified TLS transport
 #include "sh_native_grant_inbox_v84.hpp"
+#include "sh_pair_ready_v91.hpp" // separate mTLS possession proof
 
 namespace SeamlessHunt::Hybrid {
 class NativeTlsLocalOfferClientV90 final {
@@ -21,10 +22,13 @@ public:
                         RefreshNativeOfferIdentityV84 refresh,
                         void* trusted_game_state,
                         std::uint64_t now_ms,
-                        std::uint8_t* nonsecret_test_stage=nullptr) {
+                        std::uint8_t* nonsecret_test_stage=nullptr,
+                        bool send_ready_proof=false,
+                        bool* both_received_ready=nullptr) {
         // Test diagnostics report only milestone numbers, NEVER peer IP,
         // TLS keys, certificate contents, access tokens or secret bytes.
         if(nonsecret_test_stage)*nonsecret_test_stage=0;
+        if(both_received_ready)*both_received_ready=false;
         // In particular, no remote endpoint can be configured through
         // this incomplete prototype. No 31313/31314/31315 traffic changes.
         inbox.Revoke();
@@ -132,6 +136,35 @@ public:
         // Even a cryptographically verified offer NEVER Arm()s UDP sender
         // or receiver. Only future independently proven NAT game-socket
         // pairing is allowed to use this pending candidate.
+        if(!inbox.HasCurrentPending(received_ms))return false;
+        if(!send_ready_proof)return true; // V90 compatibility unchanged
+        // V91: prove receipt of the SAME V90 pair secret inside this very
+        // client-cert-pinned TLS1.3 connection, without exposing master.
+        const auto* offer=inbox.PendingForNat(received_ms);
+        PairReadyProofV91::Tag proof{};
+        if(!offer || !PairReadyProofV91::Create(*offer,received_ms,proof)) {
+            inbox.Revoke();return false;
+        }
+        constexpr char lut[]="0123456789abcdef";
+        std::string message="YT-P2P/V91 READY ";
+        for(const auto byte:proof){
+            message.push_back(lut[byte>>4U]);
+            message.push_back(lut[byte&0x0FU]);
+        }
+        CryptoDetail::Erase(proof);
+        message.push_back('\n');
+        const bool sent=LocalTlsDetail::Send(tls.p,message);
+        std::fill(message.begin(),message.end(),char(0));
+        if(!sent || !LocalTlsDetail::ReadLine(tls.p,line,40)) {
+            inbox.Revoke();return false;
+        }
+        const bool complete=line=="YT-P2P/V91 BOTH_READY\n";
+        const bool pending=line=="YT-P2P/V91 PENDING\n";
+        std::fill(line.begin(),line.end(),char(0));
+        if(!complete && !pending) {inbox.Revoke();return false;}
+        if(both_received_ready)*both_received_ready=complete;
+        // A PENDING recipient has proved key possession but MUST NOT arm
+        // game UDP merely because the second recipient later replies.
         return inbox.HasCurrentPending(received_ms);
     }
 };
