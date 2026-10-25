@@ -48,9 +48,9 @@ def patch(src: str)->str:
             }
             framed = Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed);
 ''',"real SendFrame whole native SHAD pre-relay guard")
-    // Future secure-grant installer may pass this callback to TX Arm.
-    // It reads the SAME authenticated native inbound UDP path and requires
-    // matching reverse session ticket, physical/virtual endpoint and three
+    # Future secure-grant installer may pass this callback to TX Arm.
+    # It reads the SAME authenticated native inbound UDP path and requires
+    # matching reverse session ticket, physical/virtual endpoint and three
     // signed probes. No network/callback installer exists in production yet.
     src=one(src,
 '''    P2PTransport() = default;
