@@ -48,8 +48,8 @@ jobs:
         with:
           msystem: CLANG64
           update: false
-          install: mingw-w64-clang-x86_64-clang
-      - name: Compile both patched AMD C++ host translation units before native renderer build
+          install: mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-vulkan-headers
+      - name: Compile pinned AMD C++ host and Vulkan backend units before native renderer build
         shell: msys2 {0}
         run: |
           set -euo pipefail
@@ -60,4 +60,13 @@ jobs:
             "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"
           clang++ "${common[@]}" -I "$sdk/src/components/opticalflow" \
             "$sdk/src/components/opticalflow/ffx_opticalflow.cpp"
-          echo SHYT_V63_PINNED_NATIVE_FIDELITYFX_ALL_THREE_HOST_UNITS_PASS
+          fsr="pinned-upstream/bbport/gpu/third_party/fsr-vulkan"
+          clang++ "${common[@]}" \
+            -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
+            -I "$sdk/src/components" \
+            -I "$sdk/src/backends/shared" \
+            -I "$sdk/src/backends/shared/blob_accessors" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3upscaler" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3framegeneration" \
+            "$sdk/src/backends/vk/ffx_vk.cpp"
+          echo SHYT_V64_PINNED_NATIVE_FIDELITYFX_FOUR_HOST_UNITS_PASS
