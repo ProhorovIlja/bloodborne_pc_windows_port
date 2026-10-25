@@ -141,13 +141,18 @@ public:
                         std::uint64_t tls_serial,
                         RefreshNativeOfferIdentity refresh,
                         void* trusted_game_state,
-                        std::uint64_t now_ms) {
+                        std::uint64_t now_ms,
+                        std::uint8_t* nonsecret_test_stage=nullptr) {
+        // Test diagnostics report only milestone numbers, NEVER peer IP,
+        // TLS keys, certificate contents, access tokens or secret bytes.
+        if(nonsecret_test_stage)*nonsecret_test_stage=0;
         // In particular, no remote endpoint can be configured through
         // this incomplete prototype. No 31313/31314/31315 traffic changes.
         inbox.Revoke();
         if(config.server_ca_pem.empty() || config.client_cert_pem.empty() ||
            config.client_key_pem.empty() || !config.localhost_port ||
            !tls_serial || !refresh || !trusted_game_state)return false;
+        if(nonsecret_test_stage)*nonsecret_test_stage=1;
         LocalTlsDetail::SocketPlatform net;
         if(!net.ready)return false;
         LocalTlsDetail::SslCtxOwner context;
@@ -166,9 +171,11 @@ public:
            SSL_CTX_check_private_key(context.p)!=1)
             return false;
 
+        if(nonsecret_test_stage)*nonsecret_test_stage=2;
         LocalTlsDetail::SocketOwner socket;
         socket.fd=LocalTlsDetail::OpenLocal(config.localhost_port);
         if(socket.fd==LocalTlsDetail::Invalid)return false;
+        if(nonsecret_test_stage)*nonsecret_test_stage=3;
         LocalTlsDetail::SslOwner tls;
         tls.p=SSL_new(context.p);
         if(!tls.p)return false;
@@ -186,6 +193,7 @@ public:
            SSL_version(tls.p)!=TLS1_3_VERSION ||
            SSL_get_verify_result(tls.p)!=X509_V_OK)
             return false;
+        if(nonsecret_test_stage)*nonsecret_test_stage=4;
         X509* server_cert=SSL_get_peer_certificate(tls.p);
         if(!server_cert)return false;
         X509_free(server_cert);
@@ -197,6 +205,7 @@ public:
            line.compare(0,prefix.size(),prefix)!=0 ||
            line.back()!='\n')return false;
 
+        if(nonsecret_test_stage)*nonsecret_test_stage=5;
         std::array<std::uint8_t,32> secret{};
         for(std::size_t i=0;i<secret.size();++i) {
             const int hi=LocalTlsDetail::Hex(line[prefix.size()+2*i]);
@@ -213,6 +222,7 @@ public:
             CryptoDetail::Erase(secret);return false;
         }
         CryptoDetail::Erase(secret);
+        if(nonsecret_test_stage)*nonsecret_test_stage=6;
         if(!LocalTlsDetail::Send(tls.p,"YT-P2P/V81 OFFER\n") ||
            !LocalTlsDetail::ReadLine(
               tls.p,line,NativeSealedGrantInbox::kLineBytes) ||
@@ -222,6 +232,7 @@ public:
             return false;
         }
         std::fill(line.begin(),line.end(),char(0));
+        if(nonsecret_test_stage)*nonsecret_test_stage=8;
         // Even a cryptographically verified offer NEVER Arm()s UDP sender
         // or receiver. Only future independently proven NAT game-socket
         // pairing is allowed to use this pending candidate.
