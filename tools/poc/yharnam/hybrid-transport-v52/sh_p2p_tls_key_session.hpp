@@ -121,6 +121,42 @@ public:
         offer_sent_=true;
         return true;
     }
+    // V90: the server's *coordinated* two-recipient lease supplies this
+    // immutable single-use SHG2 record. Do NOT mint a fresh independent
+    // recipient master as the legacy V85 one-way branch does.
+    bool SealOnePairedOfferV90(const P2PTlsIdentity& identity,
+                               const QSslCertificate& cert,
+                               const SecurePeerOfferV84& prepared,
+                               std::uint64_t now_ms,
+                               QByteArray& response) {
+        response.clear();
+        if(offer_sent_ || !StillBound(identity,cert) ||
+           !SecureOfferV84Detail::Valid(prepared,now_ms) ||
+           prepared.session_epoch!=epoch_ ||
+           P2PFullIdentityIssuerV84::AccountDigest(account_)!=
+               std::optional<std::array<std::uint8_t,32>>(
+                   prepared.recipient_account))
+            return false;
+        SealedPeerOffersV84 sealer;
+        if(!sealer.InstallChannelKey(
+            std::span<const std::uint8_t>(
+                reinterpret_cast<const std::uint8_t*>(key_.constData()),
+                static_cast<std::size_t>(key_.size()))))
+            return false;
+        std::vector<std::uint8_t> wire;
+        if(!sealer.Seal(prepared,now_ms,wire) ||
+           wire.size()!=SecureOfferV84Detail::kWireBytes) {
+            CryptoDetail::Erase(wire);return false;
+        }
+        // V90 command, old V84 sealed record syntax: native V85 inbox
+        // validates the same ciphertext and the same live identities.
+        response="YT-P2P/V84 OFFER "+QByteArray(
+            reinterpret_cast<const char*>(wire.data()),
+            static_cast<qsizetype>(wire.size())).toHex()+"\n";
+        CryptoDetail::Erase(wire);
+        offer_sent_=true;
+        return true;
+    }
     bool Active() const noexcept{return active_;}
     void Clear() {
         if(!key_.isEmpty())std::fill(key_.begin(),key_.end(),char(0));
