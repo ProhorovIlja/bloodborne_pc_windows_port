@@ -45,6 +45,8 @@ int main() {
     assert(Valid(Frame(0x06,false),a));
     assert(Valid(Frame(0x06,false),a,"X",false)); // candidate Direct movement
     assert(!Valid(Frame(0x14,true),a,"X",false)); // reliable is still relay
+    assert(!EligibleNativeWireFrame(Frame(0x14,true),"X",a).direct_eligible);
+    assert(!EligibleNativeWireFrame(Frame(0,true,true),"X",a).direct_eligible);
     assert(!Valid(Frame(0,true,true),a,"X",false)); // ACK-only is relay
     {
         auto has_ack=Frame(0x06,false);
