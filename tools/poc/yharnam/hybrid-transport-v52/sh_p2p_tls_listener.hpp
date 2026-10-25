@@ -18,6 +18,7 @@
 #include <memory>
 #include "sh_p2p_tls_identity.hpp" // V79 pinned cert/account
 #include "sh_p2p_tls_key_session.hpp" // V80 per TLS connection ephemeral key
+#include "sh_p2p_pair_lease_v90.hpp" // developer-only coordinated 2-recipient offers
 
 namespace SeamlessHunt::Hybrid {
 class P2PTlsListener final : public QTcpServer {
@@ -43,6 +44,19 @@ public:
         offer_peer_=peer;
         offer_scope_=std::move(resolve);
         return true;
+    }
+
+    // V90 privileged local operator only: prepare BOTH halves from the
+    // original Qt server's authenticated world resolver, BEFORE starting.
+    // No client may choose peers or create/rekey a pair through TLS.
+    bool ConfigureLocalReciprocalPairV90(
+        const QByteArray& first,const QByteArray& second,
+        P2PPairLeaseV90::Resolver authoritative) {
+        if(isListening() || pair_lease_.Active())return false;
+        const auto now=QDateTime::currentMSecsSinceEpoch();
+        return now>0 && pair_lease_.Begin(
+            first,second,std::move(authoritative),
+            static_cast<std::uint64_t>(now));
     }
 
     // An explicitly enabled, isolated loopback smoke-test endpoint. Production
@@ -184,6 +198,33 @@ protected:
                     session->Clear();s->abort();return;
                 }
                 std::fill(reply.begin(),reply.end(),char(0));
+            } else if (*pending=="YT-P2P/V90 OFFER\n") {
+                // This intentionally cannot be requested with client-chosen
+                // names, peers, endpoints, epoch or pair binding.
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                if(!bound || !session->StillBound(identity_,s->peerCertificate())) {
+                    pair_lease_.Clear();session->Clear();s->abort();return;
+                }
+                const qint64 stamp=QDateTime::currentMSecsSinceEpoch();
+                SeamlessHunt::Hybrid::SecurePeerOfferV84 grant{};
+                if(stamp<=0 || !pair_lease_.Take(
+                     bound->account,bound->current_epoch,
+                     static_cast<std::uint64_t>(stamp),grant)) {
+                    session->Clear();s->abort();return;
+                }
+                QByteArray reply;
+                const bool sealed=session->SealOnePairedOfferV90(
+                    identity_,s->peerCertificate(),grant,
+                    static_cast<std::uint64_t>(stamp),reply);
+                CryptoDetail::Erase(grant.direction_key);
+                if(!sealed) {
+                    pair_lease_.Clear();session->Clear();s->abort();return;
+                }
+                pending->clear();
+                if(s->write(reply)!=reply.size()) {
+                    pair_lease_.Clear();session->Clear();s->abort();return;
+                }
+                std::fill(reply.begin(),reply.end(),char(0));
             } else if (*pending=="YT-P2P/V80 CHECK\n") {
                 // Revocation is re-checked on this SAME TLS session: no
                 // reuse if the game re-Hello/map/team/session epoch changed.
@@ -204,6 +245,7 @@ protected:
         s->startServerEncryption();
     }
 private:
+    P2PPairLeaseV90 pair_lease_{};
     QByteArray offer_peer_{};
     OfferScopeResolver offer_scope_{};
     P2PTlsIdentity identity_{};
