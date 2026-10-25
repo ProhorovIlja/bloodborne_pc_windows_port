@@ -128,7 +128,17 @@ jobs:
             -I "$sdk/src/shared" \
             -I "$sdk/src/components/opticalflow" \
             "$sdk/src/components/opticalflow/ffx_opticalflow.cpp"
-          echo SHYT_FSR_CLANG64_HOST_PRECHECK_ALL_THREE_SOURCES_PASS
+          fsr="pinned-upstream/bbport/gpu/third_party/fsr-vulkan"
+          clang++ -std=c++17 -fsyntax-only \
+            -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
+            -I "$sdk/include" -I "$sdk/src/shared" \
+            -I "$sdk/src/components" \
+            -I "$sdk/src/backends/shared" \
+            -I "$sdk/src/backends/shared/blob_accessors" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3upscaler" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3framegeneration" \
+            "$sdk/src/backends/vk/ffx_vk.cpp"
+          echo SHYT_FSR_CLANG64_HOST_PRECHECK_ALL_FOUR_SOURCES_PASS
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
