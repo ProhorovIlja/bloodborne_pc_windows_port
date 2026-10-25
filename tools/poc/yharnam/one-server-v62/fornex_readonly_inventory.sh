@@ -61,8 +61,11 @@ if command -v ss >/dev/null 2>&1; then
          port=="31320" || port=="20443") {
         protocol=$1;
         ownership="unknown";
-        if(match($0,/users:\(\("[^"]+"/))
-          ownership=substr($0,RSTART+8,RLENGTH-9);
+        if ($0 ~ /users:\(\("/) {
+          ownership=$0;
+          sub(/^.*users:\(\("/, "", ownership);
+          sub(/".*$/, "", ownership);
+        }
         print "port=" port " proto=" protocol " process=" ownership
       }
     }
