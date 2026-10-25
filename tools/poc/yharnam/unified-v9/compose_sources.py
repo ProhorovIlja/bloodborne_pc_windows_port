@@ -602,6 +602,13 @@ def run(checkout:Path, repo:Path, out:Path):
     # listener is included in main and now depends on the pinned identity.
     files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
     meta["applied"].append("V79 operator X509 SHA256 pin plus LIVE authenticated Qt game epoch, no grants")
+    # V80: a uniquely generated wrapping key is sent only INSIDE the
+    # verified TLS 1.3 connection to the operator-pinned current game account.
+    # A later command on the SAME socket must revalidate V77 link epoch.
+    # This is not the future V75 grant-issuance path and offers no peer IPs.
+    files["server/src/sh_p2p_tls_key_session.hpp"]=(metrics_dir/"sh_p2p_tls_key_session.hpp").read_bytes()
+    files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
+    meta["applied"].append("V80 per mTLS connection fresh wrapping key and live epoch recheck, NO peer offers")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
