@@ -79,6 +79,22 @@ static bool SendAuthenticated(PhysicalV4 dest,
     ++w.total;
     return true;
 }
+struct ReverseState {
+    DirectIngress inbound{};
+    PhysicalV4 physical{};
+    VirtualV4 virtual_peer{};
+};
+static bool ReverseReady(const PeerTicket& outbound,PhysicalV4 physical,
+                         VirtualV4 virtual_peer,std::int64_t now,
+                         void* trusted_receiver) noexcept {
+    const auto& r=*static_cast<ReverseState*>(trusted_receiver);
+    return r.physical.addr_nbo==physical.addr_nbo &&
+           r.physical.port_nbo==physical.port_nbo &&
+           r.virtual_peer.addr_nbo==virtual_peer.addr_nbo &&
+           r.virtual_peer.port_nbo==virtual_peer.port_nbo &&
+           const_cast<DirectIngress&>(r.inbound).MatchesReverse(outbound) &&
+           const_cast<DirectIngress&>(r.inbound).CurrentPath(now)==Path::Direct;
+}
 int main() {
     const auto t=Ticket();auto grant=Granted();auto auth=Allowed();
     const VirtualV4 dest{0x7f000001U,12345};
@@ -90,20 +106,37 @@ int main() {
     DirectionMac mac;assert(mac.InstallKey(Key()));
     DirectEncoder enc;assert(enc.Arm(t,mac,100));
     Wire wire{&enc};
+    auto from_remote=t;
+    from_remote.authenticated_sender=t.local_receiver;
+    from_remote.local_receiver=t.authenticated_sender;
+    ReverseState reverse{};
+    reverse.physical=phys; reverse.virtual_peer=dest;
+    assert(reverse.inbound.Arm(from_remote,grant,"B",100));
+    DirectionMac remote_mac; assert(remote_mac.InstallKey(Key()));
+    DirectEncoder remote_encoder;
+    assert(remote_encoder.Arm(from_remote,remote_mac,100));
     auto bad=t;bad.server_grant_verified=false;
-    assert(!tx.Arm(0,bad,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,100));
+    assert(!tx.Arm(0,bad,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
     bad=t;bad.pair_binding++;
-    assert(!tx.Arm(0,bad,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,100));
-    assert(!tx.Arm(9,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,100));
-    assert(!tx.Arm(0,t,grant,{},phys,"A",Refresh,&world,SendAuthenticated,&wire,100));
-    assert(!tx.Arm(0,t,grant,dest,{},"A",Refresh,&world,SendAuthenticated,&wire,100));
-    assert(!tx.Arm(0,t,grant,dest,phys,"A",nullptr,&world,SendAuthenticated,&wire,100));
+    assert(!tx.Arm(0,bad,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
+    assert(!tx.Arm(9,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
+    assert(!tx.Arm(0,t,grant,{},phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
+    assert(!tx.Arm(0,t,grant,dest,{},"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
+    assert(!tx.Arm(0,t,grant,dest,phys,"A",nullptr,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
     assert(!tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,nullptr,&wire,100));
     grant.peer_consent=false;
-    assert(!tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,100));
+    assert(!tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
     grant=Granted();
-    assert(tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,100));
+    assert(tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
+    assert(tx.TrySend(dest,frame,101)==NativeTxStatus::RelayRequired);
     assert(tx.TrySend({dest.addr_nbo,54321},frame,105)==NativeTxStatus::RelayRequired);
+    std::vector<std::uint8_t> probe_wire;
+    std::span<const std::uint8_t> empty_game{};
+    for(std::int64_t now=102;now<=104;++now) {
+        assert(remote_encoder.Encode(DirectKind::Probe,{},now,probe_wire));
+        assert(reverse.inbound.Receive(probe_wire,now,DirectionMac::VerifyCallback,
+              &remote_mac,auth,empty_game)==IngressStatus::AuthenticatedProbeOrHeartbeat);
+    }
     assert(tx.TrySend(dest,frame,106)==NativeTxStatus::DirectSubmitted);
     assert(wire.total==1 && wire.last_target.addr_nbo==phys.addr_nbo);
     DirectReceiver receiver;assert(receiver.Arm(t,100));
@@ -120,19 +153,23 @@ int main() {
     auto too_big=Game(0x06,'A',DirectReceiver::kMaxPayloadBytes);
     assert(tx.TrySend(dest,too_big,110)==NativeTxStatus::RelayRequired);
     assert(wire.total==1);
+    world.active=false;
+    assert(tx.TrySend(dest,frame,111)==NativeTxStatus::RelayRequired);
+    world.active=true;
     assert(tx.TrySend(dest,frame,111)==NativeTxStatus::DirectSubmitted);
     wire.force_error=true;
     assert(tx.TrySend(dest,frame,112)==NativeTxStatus::RelayRequired);
     wire.force_error=false;
     assert(tx.TrySend(dest,frame,113)==NativeTxStatus::RelayRequired);
     assert(wire.total==2); // original relay owns BOTH unsuccessful submissions
-    assert(tx.TrySend(dest,frame,10112)==NativeTxStatus::DirectSubmitted);
-    assert(wire.total==3);
+    // Even after cooldown, an unrefreshed signed reverse path must relay.
+    assert(tx.TrySend(dest,frame,10112)==NativeTxStatus::RelayRequired);
+    assert(wire.total==2);
     world.active=false;
     assert(tx.TrySend(dest,frame,10113)==NativeTxStatus::RelayRequired);
     world.active=true;
     assert(tx.TrySend(dest,frame,10114)==NativeTxStatus::RelayRequired);
-    assert(tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,15000));
+    assert(tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,15000));
     assert(tx.TrySend(dest,frame,20000)==NativeTxStatus::RelayRequired);
     assert(tx.TrySend(dest,frame,20001)==NativeTxStatus::RelayRequired);
     tx.RevokeAll();
