@@ -51,5 +51,29 @@ class NativeFsrClang64Tests(unittest.TestCase):
             with self.subTest(broken=broken[:40]), self.assertRaisesRegex(ValueError, "drifted|additional"):
                 patch.transform(broken)
 
+    def test_frame_interpolation_fixed_arrays_and_strict_source_provenance(self):
+        # Exact ABI-safe replacement for 14 fixed-array MSVC _countof uses.
+        # This synthetic source deliberately mirrors all known call sites.
+        original = (
+            "// This file is part of the FidelityFX SDK.\\n"
+            + patch.FRAME_HEADER
+            + "int test() { int array[4] = {1,2,3,4};\\n"
+            + "int values[] = {1,2};\\n"
+            + "".join(f"int n{i} = _countof(array);\\n" for i in range(12))
+            + "int selected[_countof(values)] = {};\\n"
+            + "return _countof(selected); }\\n"
+        )
+        self.assertEqual(original.count("_countof("), patch.FRAME_COUNT)
+        patched = patch.transform_frame_interpolation(original)
+        self.assertIn("#include <iterator>", patched)
+        self.assertEqual(patched.count("std::size("), patch.FRAME_COUNT)
+        self.assertEqual(patched.count("_countof("), 0)
+        with self.assertRaisesRegex(ValueError, "already patched"):
+            patch.transform_frame_interpolation(patched)
+        with self.assertRaisesRegex(ValueError, "drifted"):
+            patch.transform_frame_interpolation(original.replace("_countof(", "_countof (", 1))
+        with self.assertRaisesRegex(ValueError, "drifted"):
+            patch.transform_frame_interpolation(original.replace(patch.FRAME_HEADER, "#include <algorithm>\\n"))
+
 if __name__ == "__main__":
     unittest.main()
