@@ -2,6 +2,7 @@
 // V81: actual Qt mTLS1.3 socket -> V80 key -> V75 AES-GCM SHG1 grant.
 // Test-only game world callback. Original real Qt world is tested separately.
 #include "sh_p2p_tls_listener.hpp"
+#include "sh_native_grant_inbox.hpp" // V82 actual native recipient
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -12,6 +13,15 @@
 #include <array>
 #include <span>
 using namespace SeamlessHunt::Hybrid;
+struct NativeGameAuthority {
+    bool online=true;
+    NativeOfferIdentity identity{};
+};
+static bool RealGameIdentity(NativeOfferIdentity& dst,void* ctx) noexcept {
+    const auto& s=*static_cast<NativeGameAuthority*>(ctx);
+    if(!s.online)return false;
+    dst=s.identity;return true;
+}
 static QSslCertificate Cert(const QString& f) {
     QFile file(f);assert(file.open(QIODevice::ReadOnly));
     QSslCertificate c(&file,QSsl::Pem);assert(!c.isNull());return c;
@@ -76,6 +86,11 @@ int main(int argc,char** argv) {
     QSslSocket first,denied;
     first.setSslConfiguration(cfg);denied.setSslConfiguration(cfg);
     QByteArray incoming,secret;
+    NativeSealedGrantInbox native_inbox{};
+    NativeGameAuthority native_world{};
+    native_world.identity={
+        P2PLocalOfferIssuer::AccountToken("recipient"),
+        P2PLocalOfferIssuer::AccountToken("peer-A"),game_epoch,93001,true};
     int phase=0;
     QObject::connect(&first,&QSslSocket::encrypted,&app,[&] {
         first.write("YT-P2P/V80 BEGIN\n");
@@ -89,6 +104,13 @@ int main(int argc,char** argv) {
                incoming.size()!=prefix.size()+65){app.exit(2);return;}
             secret=QByteArray::fromHex(incoming.mid(prefix.size(),64));
             if(secret.size()!=32){app.exit(3);return;}
+            if(!native_inbox.BeginTrustedTls(
+                std::span<const std::uint8_t>(
+                    reinterpret_cast<const std::uint8_t*>(secret.constData()),
+                    static_cast<std::size_t>(secret.size())),
+                native_world.identity,1,RealGameIdentity,&native_world)) {
+                app.exit(15);return;
+            }
             phase=1;incoming.clear();
             first.write("YT-P2P/V81 OFFER\n");
         } else if(phase==1) {
@@ -124,6 +146,18 @@ int main(int argc,char** argv) {
                accepted.peer_virtual_port_nbo!=qToBigEndian(quint16(3658)) ||
                !SecureOfferDetail::Valid(accepted,now)) {app.exit(7);return;}
             CryptoDetail::Erase(accepted.direction_key);
+            // V82: hand EXACT bytes read from real mTLS 1.3 stream
+            // to the same portable inbox owned by native P2PTransport.
+            const std::string actual_tls_line(incoming.constData(),
+                                              static_cast<std::size_t>(incoming.size()));
+            if(!native_inbox.ReceiveSealedTlsLine(actual_tls_line,now)) {
+                app.exit(16);return;
+            }
+            const auto* native_pending=native_inbox.PendingForNat(now);
+            if(!native_pending || native_pending->sender_account!=peer ||
+               native_pending->peer_port_nbo!=qToBigEndian(quint16(41234))) {
+                app.exit(17);return;
+            }
             if(client.Open(encrypted,recipient,game_epoch,93001,now,accepted)) {
                 app.exit(8);return; // replay must be refused
             }
@@ -141,6 +175,11 @@ int main(int argc,char** argv) {
     QObject::connect(&first,&QSslSocket::disconnected,&app,[&] {
         if(phase!=2){app.exit(11);return;}
         phase=3;peer_opted_in=false; // second client sees revoked consent
+        native_world.identity.locally_opted_in=false;
+        if(native_inbox.HasCurrentPending(
+              static_cast<std::uint64_t>(QDateTime::currentMSecsSinceEpoch()))) {
+            app.exit(18);return;
+        }
         denied.connectToHostEncrypted("127.0.0.1",server.serverPort());
     });
     QByteArray second_incoming;
