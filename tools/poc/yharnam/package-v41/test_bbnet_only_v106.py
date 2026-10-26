@@ -45,8 +45,25 @@ class TestBbnetOnlyV106(unittest.TestCase):
         import shutil
         import subprocess
         import tempfile
-        if shutil.which("bash") is None:
-            self.skipTest("Bash unavailable; original source checks still run")
+        # On hosted Windows, "bash" on PATH is often the WSL shim rather than
+        # Git for Windows Bash. WSL has no distro, so the real Bash regression
+        # incorrectly fails before running its first Ninja stub.
+        if os.name == "nt":
+            git = shutil.which("git")
+            candidates = [
+                Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+                / "Git" / "bin" / "bash.exe",
+            ]
+            if git:
+                git_dir = Path(git).parent
+                candidates.extend(
+                    [git_dir / "bash.exe", git_dir.parent / "bin" / "bash.exe"]
+                )
+            bash = next((str(p) for p in candidates if p.is_file()), None)
+        else:
+            bash = shutil.which("bash")
+        if bash is None:
+            self.skipTest("Real Bash unavailable; do not invoke Windows WSL shim")
         prefix = r"""set -euo pipefail
 uname() { printf '%s\n' 'MINGW64_NT-10.0'; }
 ninja() {
@@ -80,7 +97,7 @@ mkdir -p out/gpu
                            SIMULATE_BBNET_FAIL=fails,
                            SIMULATE_EMPTY_ARCHIVE=empty)
                 run = subprocess.run(
-                    ["bash", "-c", script], cwd=d, env=env,
+                    [bash, "-c", script], cwd=d, env=env,
                     text=True, capture_output=True, timeout=15, check=False)
                 self.assertEqual(run.returncode, exit_code, run.stdout + run.stderr)
                 calls = Path(d, "calls.txt").read_text(encoding="utf-8").splitlines()
