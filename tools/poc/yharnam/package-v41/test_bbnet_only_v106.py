@@ -48,9 +48,9 @@ class TestBbnetOnlyV106(unittest.TestCase):
         if shutil.which("bash") is None:
             self.skipTest("Bash unavailable; original source checks still run")
         prefix = r"""set -euo pipefail
-uname() { printf '%s\\n' 'MINGW64_NT-10.0'; }
+uname() { printf '%s\n' 'MINGW64_NT-10.0'; }
 ninja() {
-    printf '%s\\n' "$*" >> calls.txt
+    printf '%s\n' "$*" >> calls.txt
     case "$*" in
         "-C out/gpu bbnet")
             if [[ "$SIMULATE_BBNET_FAIL" == "1" ]]; then return 7; fi
