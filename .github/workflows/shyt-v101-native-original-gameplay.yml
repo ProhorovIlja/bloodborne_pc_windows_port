@@ -1,0 +1,96 @@
+name: Seamless Hunt V101 real Windows native game V97-V99 integration
+on:
+  push:
+    branches: [feature/shyt-win-fsr-countof-v63]
+    paths:
+      - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_upstream_doll_flag_v97.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_upstream_lethal_catches_v98.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_upstream_stale_death_v99.py
+      - .github/workflows/shyt-v101-native-original-gameplay.yml
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  real-original-gameplay:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax-check exact three patch modules plus V101 bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            tools/poc/yharnam/package-v41/stage_gameplay_v101.py \
+            tools/poc/yharnam/hybrid-transport-v52/patch_upstream_doll_flag_v97.py \
+            tools/poc/yharnam/hybrid-transport-v52/patch_upstream_lethal_catches_v98.py \
+            tools/poc/yharnam/hybrid-transport-v52/patch_upstream_stale_death_v99.py
+      - name: Download IMMUTABLE original native gameplay files and test true composition
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import importlib.util
+          import hashlib
+          from pathlib import Path
+          from urllib.request import urlopen
+          from time import sleep
+          p=Path('tools/poc/yharnam/package-v41/stage_gameplay_v101.py')
+          spec=importlib.util.spec_from_file_location('v101',p)
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          assert m.PIN=='77e350743a7cb4524cfcc1782fb6e3af64e25b15'
+          scripts=[m.module(x) for x in m.SCRIPTS]
+          names=sorted(set().union(*(set(x.FILES) for x in scripts)))
+          assert len(names)==7,names
+          base=f'https://raw.githubusercontent.com/lKaniel/bloodborne-server/{m.PIN}/'
+          originals={}
+          for path in names:
+              for attempt in range(3):
+                  try:
+                      with urlopen(base+path,timeout=40) as response:
+                          originals[path]=response.read()
+                      break
+                  except Exception:
+                      if attempt==2:raise
+                      sleep(2)
+          fixed=m.transform(originals)
+          assert set(fixed)==set(originals)
+          assert all(originals[name]!=fixed[name] for name in names)
+          assert b'Range(6700, 6700, FlagOwner::PerPlayer, 0' in fixed[
+              'emulator/src/core/bloodborne_flags.h']
+          assert b'run.seen_catches' not in fixed[
+              'emulator/src/core/bloodborne_party_death.cpp']
+          assert b'run.lethal_catches.Take(' in fixed[
+              'emulator/src/core/bloodborne_party_death.cpp']
+          assert b'ClearStaleDeathMarks()' in fixed[
+              'emulator/src/core/bloodborne_party_death.cpp']
+          assert b'ClearStaleDeathMarks();' in fixed[
+              'emulator/src/core/bloodborne_re.cpp']
+          # Reject duplicate application and any missing native source.
+          try:
+              m.transform(fixed)
+          except ValueError:
+              pass
+          else:raise AssertionError('Duplicate native gameplay patch unexpectedly succeeded')
+          for missing in names:
+              bad=dict(originals);del bad[missing]
+              try:m.transform(bad)
+              except ValueError:pass
+              else:raise AssertionError('Missing original source accepted: '+missing)
+          print('SHYT_V101_PINNED_REAL_NATIVE_GAMEPLAY_CHAIN_PASS',
+                len(names),'verified unique cpp/header files')
+          for name in names:
+              print(hashlib.sha256(fixed[name]).hexdigest(),name)
+          PY
