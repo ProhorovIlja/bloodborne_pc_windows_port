@@ -1,7 +1,19 @@
 name: Seamless Hunt V36 composed native Windows game client
 on:
   workflow_call:
+    inputs:
+      bbnet_only:
+        description: Compile only the real original co-op/network C++ library, never package a game.
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      bbnet_only:
+        description: Diagnostic: compile only the real original bbnet static game library.
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -11,6 +23,7 @@ jobs:
     env:
       PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
       BB_LTO: 'OFF'
+      SHYT_BBNET_ONLY: ${{ inputs.bbnet_only && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -219,6 +232,15 @@ jobs:
           python tools/poc/yharnam/package-v41/patch_bbnet_first_v103.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'V103 pinned bbnet build shell unexpected' }
           Write-Host 'SHYT_V103_ACTUAL_NATIVE_GAME_BBNET_FIRST_STAGED'
+      - name: V106 add opt-in true game bbnet-only Clang64 build mode
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_bbnet_only_v106.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V106 native original game bbnet-only regression failed' }
+          python tools/poc/yharnam/package-v41/patch_bbnet_only_v106.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V106 original bbnet-only build stage drifted' }
+          Write-Host 'SHYT_V106_ORIGINAL_GAME_BBNET_ONLY_OPTION_STAGED'
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
@@ -298,11 +320,17 @@ jobs:
             exit "$build_status"
           fi
           ccache --show-stats
-          test -s out/bb-probe.exe
-          test -s out/bb-gpu-capabilities.exe
-          test -s out/bb-play.exe
-          echo REAL_NATIVE_WINDOWS_EXE_BUILT_NO_GAMEPLAY_CLAIM
+          if [[ "${SHYT_BBNET_ONLY:-0}" == "1" ]]; then
+            test -s out/gpu/libbbnet.a
+            echo "SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED"
+          else
+            test -s out/bb-probe.exe
+            test -s out/bb-gpu-capabilities.exe
+            test -s out/bb-play.exe
+            echo REAL_NATIVE_WINDOWS_EXE_BUILT_NO_GAMEPLAY_CLAIM
+          fi
       - name: Enable pinned Yharnam Together guest door and event compatibility in package
+        if: ${{ !inputs.bbnet_only }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -318,6 +346,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pinned native package script drifted' }
           Write-Host 'COOP_EVENT_PATCHER_STAGED; NPC summons still require live verification'
       - name: Package complete portable native Windows launcher and DLL dependencies
+        if: ${{ !inputs.bbnet_only }}
         shell: msys2 {0}
         run: |
           set -euo pipefail
@@ -328,11 +357,13 @@ jobs:
           test -s dist/bbport-windows.zip
           echo WINDOWS_PORTABLE_PACKAGE_BUILT_NOT_GAME_TESTED
       - name: Stamp game ZIP with exact mainline source identity
+        if: ${{ !inputs.bbnet_only }}
         shell: pwsh
         run: |
           python tools/poc/yharnam/package-v41/source_identity.py --game-zip pinned-upstream/bbport/dist/bbport-windows.zip --commit $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Native client provenance stamping failed' }
       - name: Validate portable game launcher archive and reject private/retail data
+        if: ${{ !inputs.bbnet_only }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -351,12 +382,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows artifact checksum and safety gate rejected' }
           Write-Host 'SIGNED_MANIFEST_NOT_YET_AVAILABLE_RELEASE_BLOCKED'
       - name: Preserve only INTERNAL Windows development candidate
+        if: ${{ !inputs.bbnet_only }}
         uses: actions/upload-artifact@v4
         with:
           name: seamless-hunt-V36-native-windows-INTERNAL
           path: |
             pinned-upstream/bbport/dist/bbport-windows.zip
             pinned-upstream/bbport/dist/bbport-windows.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve INTERNAL authentic bbnet-only C++ static library proof
+        if: ${{ inputs.bbnet_only && success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-v106-real-native-bbnet-only-INTERNAL
+          path: |
+            pinned-upstream/bbport/out/gpu/libbbnet.a
+            pinned-upstream/bbport/out/bbnet-build.log
+            pinned-upstream/bbport/out/shyt-v101-gameplay-source.json
           if-no-files-found: error
           retention-days: 7
       - name: Preserve build failure evidence without publishing a client
@@ -379,6 +422,7 @@ jobs:
           path: .ccache
           key: shyt-native-gpu-ccache-v2-${{ runner.os }}-${{ github.run_id }}
       - name: No proprietary assets and no untested public release
+        if: ${{ !inputs.bbnet_only }}
         shell: pwsh
         run: |
           if (Test-Path pinned-upstream/CUSA03173) { throw 'Retail assets detected' }
