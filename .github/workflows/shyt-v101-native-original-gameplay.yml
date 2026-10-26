@@ -37,6 +37,35 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/patch_upstream_doll_flag_v97.py \
             tools/poc/yharnam/hybrid-transport-v52/patch_upstream_lethal_catches_v98.py \
             tools/poc/yharnam/hybrid-transport-v52/patch_upstream_stale_death_v99.py
+      - name: Windows PowerShell actual seven-file source SHA-256 manifest gate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'v101-manifest-test'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $digests = [ordered]@{}
+          for ($i=1; $i -le 7; $i++) {
+            $name = "native-game-unit-$i.cpp"
+            $file = Join-Path $root $name
+            [IO.File]::WriteAllText($file, "V101 owned source $i", [Text.Encoding]::UTF8)
+            $digests[$name] = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $payload = @{
+            pinned_upstream = '77e350743a7cb4524cfcc1782fb6e3af64e25b15'
+            native_gameplay_direct_udp_enabled = $false
+            source_sha256 = $digests
+          } | ConvertTo-Json -Depth 5
+          $report = $payload | ConvertFrom-Json
+          $entries = @($report.source_sha256.PSObject.Properties)
+          if ($entries.Count -ne 7) { throw "V101 JSON enumerator returned $($entries.Count), expected 7" }
+          foreach ($entry in $entries) {
+            $path = Join-Path $root $entry.Name
+            if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$entry.Value) {
+              throw 'V101 source integrity proof failed'
+            }
+          }
+          Write-Host SHYT_V101_WINDOWS_JSON_SEVEN_SHA256_GATE_PASS
       - name: Download IMMUTABLE original native gameplay files and test true composition
         shell: bash
         run: |
