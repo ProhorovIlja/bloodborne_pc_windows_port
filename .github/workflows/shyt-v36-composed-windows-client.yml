@@ -245,6 +245,15 @@ jobs:
           python tools/poc/yharnam/package-v41/patch_native_ninja_jobs_v111.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'V111 original Windows Ninja build drift detected' }
           Write-Host 'SHYT_V111_REAL_NATIVE_CXX_NINJA_TWO_JOBS_DEFAULT_STAGED'
+      - name: V115 preserve original native CMake configuration diagnostics
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_cmake_trace_v115.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V115 original Windows CMake trace test failed' }
+          python tools/poc/yharnam/package-v41/patch_native_cmake_trace_v115.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V115 pinned original CMake configure anchor changed' }
+          Write-Host 'SHYT_V115_REAL_WINDOWS_CMAKE_CONFIGURE_LOG_ENABLED'
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
@@ -316,15 +325,19 @@ jobs:
               echo "SHYT_V104_NINJA_PROGRESS_LOG=$logfile"
               tail -n 10 "$logfile" || true
             done
-            if [[ ! -f out/bbnet-build.log && ! -f out/gpu-build.log ]]; then
-              echo "Native bbnet/GPU Ninja logs not yet created; configuring dependencies"
+            if [[ ! -f out/cmake-configure.log && ! -f out/bbnet-build.log && ! -f out/gpu-build.log ]]; then
+              echo "Native CMake/bbnet/GPU logs not yet created; preparing dependencies"
+            fi
+            if [[ -f out/cmake-configure.log ]]; then
+              echo "SHYT_V115_NATIVE_CMAKE_CONFIGURE_PROGRESS"
+              tail -n 8 out/cmake-configure.log || true
             fi
             # No completed Ninja action OR freshly written compiler
             # diagnostic in either phase for 30 min is a stall, not progress.
             # In particular, this catches the 2026-10-26 Windows run stuck
             # at 119/418 for the entire 165-minute timeout.
             last_write="$native_build_started_at"
-            for logfile in out/bbnet-build.log out/gpu-build.log; do
+            for logfile in out/cmake-configure.log out/bbnet-build.log out/gpu-build.log; do
               if [[ ! -f "$logfile" ]]; then continue; fi
               modified="$(stat -c %Y "$logfile")"
               if [[ "$modified" =~ ^[0-9]+$ ]] && (( modified > last_write )); then
@@ -458,6 +471,8 @@ jobs:
         with:
           name: shyt-v36-native-windows-compiler-failure
           path: |
+            pinned-upstream/bbport/out/cmake-configure.log
+            pinned-upstream/bbport/out/shyt-native-build.exit
             pinned-upstream/bbport/out/bbnet-build.log
             pinned-upstream/bbport/out/gpu-build.log
             pinned-upstream/bbport/out/gpu/CMakeCache.txt
