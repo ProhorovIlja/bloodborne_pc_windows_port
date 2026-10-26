@@ -226,9 +226,27 @@ jobs:
             exit "$rc"
           ) &
           builder=$!
+          # V102: original Ninja can remain busy (or its MSYS shell appear
+          # alive) after the first compiler failure. Previously the same
+          # error was printed every 30s for 165 minutes. Detect ONLY
+          # unambiguous compiler/Ninja fatal records in the real GPU log.
+          fatal_pattern='(^FAILED:|^ninja: build stopped|fatal error:|: error:|error C[0-9]{4}:)'
+          printf '%s\n' "foo.cpp:22:13: fatal error: missing standard header" |
+            grep -Eq "$fatal_pattern" ||
+            { echo "SHYT_V102_FATAL_PATTERN_BROKEN"; exit 1; }
+          if printf '%s\n' "foo.cpp:22: warning: harmless" |
+               grep -Eq "$fatal_pattern"; then
+            echo "SHYT_V102_FALSE_POSITIVE_PATTERN"; exit 1
+          fi
           while [[ ! -f "$statusfile" ]]; do
             echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             if [[ -f out/gpu-build.log ]]; then
+              if grep -Eq "$fatal_pattern" out/gpu-build.log; then
+                echo "SHYT_V102_REAL_NATIVE_COMPILER_ERROR_ABORT_EARLY"
+                tail -n 100 out/gpu-build.log || true
+                kill "$builder" >/dev/null 2>&1 || true
+                exit 1
+              fi
               tail -n 10 out/gpu-build.log || true
             else
               echo "GPU Ninja log not created yet; configuring dependencies"
