@@ -18,12 +18,23 @@ def settings(players: int) -> tuple[int, int, int]:
     return (min(4, max(1, (players + 49)//50)), 15 if players <= 64 else 25, 100)
 
 def quality(m: dict, players: int) -> str:
-    if m.get("players") != players:
+    # Upstream bbload reports aggregate counters, not per-peer delivery proofs.
+    keys = ("players", "playing", "packets_sent", "packets_received", "packets_lost")
+    if any(type(m.get(key)) is not int or m[key] < 0 for key in keys):
+        return "INVALID_METRICS"
+    if m["players"] != players:
         return "GENERATOR_MISMATCH"
-    if m.get("playing", 0) == 0 or m.get("packets_sent", 0) == 0:
+    if (m["playing"] > players or m["packets_lost"] > m["packets_sent"]
+            or m["packets_received"] > m["packets_sent"]):
+        return "INVALID_METRICS"
+    if m["playing"] == 0 or m["packets_sent"] == 0 or m["packets_received"] == 0:
         return "NO_GAMEPLAY"
     if m["playing"] != players:
         return "PARTIAL_GAMEPLAY"
+    # A handful of packets cannot substantiate an all-player gameplay claim.
+    # This is a minimum evidence gate, not proof of per-client packet delivery.
+    if m["packets_sent"] < players or m["packets_received"] < players:
+        return "INSUFFICIENT_DELIVERY_EVIDENCE"
     return "FULL_GAMEPLAY"
 
 def run(args) -> int:
