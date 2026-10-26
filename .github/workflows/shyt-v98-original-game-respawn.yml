@@ -1,0 +1,99 @@
+name: Seamless Hunt V98 original game no second down at lamp
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_upstream_lethal_catches_v98.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_upstream_lethal_v98.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_lethal_catches_v98.cpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v98-original-game-respawn.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  pinned-real-death-policy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fail-closed original death-state source tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_upstream_lethal_v98.py' -v
+      - name: Fetch exact pinned 2026 game code and compile the ACTUAL fixed method
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen
+          import importlib.util
+          from time import sleep
+          root=Path('tools/poc/yharnam/hybrid-transport-v52')
+          patch=root/'patch_upstream_lethal_catches_v98.py'
+          spec=importlib.util.spec_from_file_location('v98',patch)
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          pin='77e350743a7cb4524cfcc1782fb6e3af64e25b15'
+          files={}
+          for path in mod.FILES:
+              last=None
+              for attempt in range(3):
+                  try:
+                      with urlopen(f'https://raw.githubusercontent.com/lKaniel/bloodborne-server/{pin}/{path}',timeout=45) as r:
+                          files[path]=r.read()
+                      break
+                  except Exception as exc:
+                      last=exc;sleep(2)
+              else:
+                  raise RuntimeError('Pinned original game could not be fetched: '+path) from last
+          out=mod.patch(files)
+          # Check BOTH old counter remnants disappeared from relevant files.
+          assert b'run.seen_catches' not in out[mod.DEATH_CPP]
+          assert b'u32 seen_catches = 0;' not in out[mod.INTERNAL_H]
+          assert b'run.lethal_catches.Take(' in out[mod.DEATH_CPP]
+          assert out[mod.DEATH_CPP].index(b'run.lethal_catches.Take(')<out[mod.DEATH_CPP].index(b'switch (run.downed.Current())')
+          assert 'v98.patch(v98_sources)' in Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
+          h=out[mod.GAME_H].decode()
+          cpp=out[mod.GAME_CPP].decode()
+          start=h.index('class LethalCatches {')
+          end=h.index('\n};',start)+3
+          method=cpp.index('bool LethalCatches::Take(')
+          method_end=cpp.index('\n}\n',method)+2
+          Path('sh_v98_extracted_class.inc').write_text(h[start:end]+'\n')
+          Path('sh_v98_extracted_method.inc').write_text(cpp[method:method_end]+'\n')
+          print('SHYT_V98_PINNED_NATIVE_GAME_SOURCE_AND_POLICY_EXTRACT_PASS')
+          PY
+      - name: Linux GCC compile real upstream lethal-catching policy
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I . tools/poc/yharnam/hybrid-transport-v52/test_lethal_catches_v98.cpp \
+            -o /tmp/shyt-v98-respawn
+          /tmp/shyt-v98-respawn
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Windows MSVC compile real upstream lethal-catching policy
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I . tools/poc/yharnam/hybrid-transport-v52/test_lethal_catches_v98.cpp /Fe:shyt-v98-respawn.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V98 original game code C++ compilation failed' }
+          ./shyt-v98-respawn.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V98 original game clean lamp respawn test failed' }
+          Write-Host SHYT_V98_WINDOWS_LETHAL_CATCH_CLEAN_RESPAWN_PASS
