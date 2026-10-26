@@ -15,7 +15,7 @@ ANCHOR = """    echo 'SHYT_V103_REAL_GAME_CXX_BBNET_COMPILED'
 REPLACEMENT = """    echo 'SHYT_V103_REAL_GAME_CXX_BBNET_COMPILED'
     # SHYT-V106-BBNET-ONLY: opt in for an authentic game-C++ library
     # compile, not a GPU renderer, launcher, archive or public release.
-    if [[ \${SHYT_BBNET_ONLY:-0} == 1 ]]; then
+    if [[ ${SHYT_BBNET_ONLY:-0} == 1 ]]; then
         test -s out/gpu/libbbnet.a || {
             echo 'V106 original native bbnet archive missing' >&2
             exit 1
