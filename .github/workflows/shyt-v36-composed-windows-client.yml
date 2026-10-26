@@ -323,6 +323,17 @@ jobs:
             test -s out/bb-play.exe
             echo REAL_NATIVE_WINDOWS_EXE_BUILT_NO_GAMEPLAY_CLAIM
           fi
+      - name: V108 verify four compiled gameplay objects and all V101 digests
+        if: ${{ inputs.bbnet_only }}
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          command -v llvm-ar
+          python tools/poc/yharnam/package-v41/verify_bbnet_archive_v108.py \
+            pinned-upstream/bbport/out/gpu/libbbnet.a \
+            pinned-upstream/bbport/out/shyt-v101-gameplay-source.json \
+            pinned-upstream
+          echo SHYT_V108_NATIVE_BBNET_PATCHED_GAME_OBJECTS_VERIFIED
       - name: Enable pinned Yharnam Together guest door and event compatibility in package
         if: ${{ !inputs.bbnet_only }}
         shell: pwsh
