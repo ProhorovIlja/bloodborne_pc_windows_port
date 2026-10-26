@@ -462,7 +462,9 @@ def run(checkout:Path, repo:Path, out:Path):
         "emulator/src/core/bloodborne_flags.h",
         "emulator/src/core/bloodborne_flags_store.cpp",
         "emulator/src/core/bloodborne_party.h",
-        "emulator/src/core/bloodborne_party.cpp"}
+        "emulator/src/core/bloodborne_party.cpp",
+        "emulator/src/core/bloodborne_party_death.cpp",
+        "emulator/src/core/bloodborne_re_internal.h"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # V69: apply runtime-only optional byte/packet counters to the ENTIRE
@@ -778,6 +780,17 @@ def run(checkout:Path, repo:Path, out:Path):
                   for name in v97.FILES}
     files.update(v97.patch(doll_sources))
     meta["applied"].append("V97 upstream PR407 Doll level-up flag 6700 per-player and stale-on-map-load clearing, solo unaffected")
+    # V98: upstream PR410 saves a respawned hunter from an instantly
+    # repeated down at the lamp. Apply *after* V97 (party.h/.cpp overlap),
+    # with two additional immutable original game source units.
+    v98_path=metrics_dir/"patch_upstream_lethal_catches_v98.py"
+    v98=types.ModuleType("sh_v98_no_resurrected_lethal_catches")
+    v98.__file__=str(v98_path)
+    exec(compile(v98_path.read_text("utf-8"),str(v98_path),"exec"),v98.__dict__)
+    v98_sources={name:(files[name] if name in files else sources[name].encode("utf-8"))
+                 for name in v98.FILES}
+    files.update(v98.patch(v98_sources))
+    meta["applied"].append("V98 upstream PR410 consume lethal catches on all real game death ticks, drop dead/down queue, preserve live hits")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
