@@ -9,6 +9,7 @@ sp.loader.exec_module(mod)
 class CapacityUnitTests(unittest.TestCase):
     def test_expected_steps_and_admission_ramp(self):
         self.assertEqual(mod.STAGES,(4,16,32,64,100,200))
+        self.assertEqual(mod.DIAGNOSTIC_STAGES,(32,64,100,200))
         for n in mod.STAGES:
             processes,seconds,ramp=mod.settings(n)
             self.assertGreaterEqual(processes,1)
@@ -20,7 +21,8 @@ class CapacityUnitTests(unittest.TestCase):
     def test_true_delivery_and_valid_packets_required(self):
         baseline = {"players":200, "playing":200,
                     "packets_sent":2000, "packets_received":2000,
-                    "packets_lost":0}
+                    "packets_lost":0, "relay_ms_p99":0.7,
+                    "main_thread_cpu_avg":5.0}
         self.assertEqual(mod.quality(baseline, 200), "FULL_GAMEPLAY")
         self.assertEqual(mod.quality(baseline | {"playing":199}, 200), "PARTIAL_GAMEPLAY")
         self.assertEqual(mod.quality(baseline | {"players":199}, 200), "GENERATOR_MISMATCH")
@@ -37,6 +39,22 @@ class CapacityUnitTests(unittest.TestCase):
         # Broadcast/fan-out and detected sequence gaps do not prove corruption.
         self.assertEqual(mod.quality(baseline | {"packets_received":3000}, 200),
                          "FULL_GAMEPLAY")
+        self.assertEqual(mod.quality(baseline | {"packets_received":1900}, 200),
+                         "DELIVERY_DEGRADED")
+        self.assertEqual(mod.quality(baseline | {"relay_ms_p99":262.676}, 200),
+                         "RELAY_LATENCY_DEGRADED")
+        self.assertEqual(mod.quality(baseline | {"main_thread_cpu_avg":84.1}, 200),
+                         "MAIN_THREAD_SATURATED")
+        # Actual six-stage optimized 2026-10-26 synthetic evidence,
+        # without inventing per-client packet delivery.
+        actual64 = baseline | {"players":64, "playing":64, "packets_sent":40714,
+                               "packets_received":39882, "packets_lost":787,
+                               "relay_ms_p99":262.676,"main_thread_cpu_avg":18.6}
+        actual100 = baseline | {"players":100, "playing":100, "packets_sent":54435,
+                                "packets_received":32951, "packets_lost":19277,
+                                "relay_ms_p99":2859.115, "main_thread_cpu_avg":84.1}
+        self.assertEqual(mod.quality(actual64, 64), "DELIVERY_DEGRADED")
+        self.assertEqual(mod.quality(actual100, 100), "DELIVERY_DEGRADED")
         for bad in ({"playing":201}, {"packets_sent":float("nan")},
                     {"packets_received":True}, {"packets_received":-1},
                     {"packets_received":None}, {"packets_received":3.5},
