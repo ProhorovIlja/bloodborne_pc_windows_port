@@ -30,9 +30,17 @@ class CapacityUnitTests(unittest.TestCase):
                          "INSUFFICIENT_DELIVERY_EVIDENCE")
         self.assertEqual(mod.quality(baseline | {"packets_sent":1, "packets_received":1}, 200),
                          "INSUFFICIENT_DELIVERY_EVIDENCE")
-        for bad in ({"packets_received":2001}, {"packets_lost":2001},
-                    {"packets_sent":float("nan")}, {"packets_received":True},
-                    {"packets_received":-1}, {"packets_received":None}):
+        # Original bbload serializes QJsonObject counters as double values.
+        self.assertEqual(mod.quality(baseline | {"packets_sent":2000.0,
+                                                 "packets_received":2000.0}, 200),
+                         "FULL_GAMEPLAY")
+        # Broadcast/fan-out and detected sequence gaps do not prove corruption.
+        self.assertEqual(mod.quality(baseline | {"packets_received":3000}, 200),
+                         "FULL_GAMEPLAY")
+        for bad in ({"playing":201}, {"packets_sent":float("nan")},
+                    {"packets_received":True}, {"packets_received":-1},
+                    {"packets_received":None}, {"packets_received":3.5},
+                    {"packets_sent":float("inf")}):
             with self.subTest(bad=bad):
                 self.assertEqual(mod.quality(baseline | bad, 200), "INVALID_METRICS")
 
