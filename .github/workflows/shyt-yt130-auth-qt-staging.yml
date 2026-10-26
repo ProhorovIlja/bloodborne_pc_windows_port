@@ -110,6 +110,8 @@ jobs:
             --seconds 15 --ramp-ms 10 --cfg CheckServerBuild=false \
             --keep > yt130-smoke4.jsonl 2> yt130-smoke4.stderr
           cat yt130-smoke4.jsonl
+          python tools/poc/yharnam/yt130-reference/collect_load_diagnostics.py \
+            yt130-smoke4.stderr --output yt130-smoke4-diagnostics.log
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
             yt130-smoke4.jsonl --expected-players 4
       - name: Benchmark 200 synthetic co-op peers on loopback only
@@ -123,6 +125,8 @@ jobs:
             --seconds 25 --ramp-ms 10 --cfg CheckServerBuild=false \
             --keep > yt130-load200.jsonl 2> yt130-load200.stderr
           cat yt130-load200.jsonl
+          python tools/poc/yharnam/yt130-reference/collect_load_diagnostics.py \
+            yt130-load200.stderr --output yt130-load200-diagnostics.log
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
             yt130-load200.jsonl --expected-players 200
       - name: Preserve synthetic 200-peer CPU and latency evidence
@@ -135,5 +139,7 @@ jobs:
             yt130-smoke4.jsonl
             yt130-smoke4.stderr
             yt130-load200.stderr
+            yt130-smoke4-diagnostics.log
+            yt130-load200-diagnostics.log
           if-no-files-found: ignore
           retention-days: 7
