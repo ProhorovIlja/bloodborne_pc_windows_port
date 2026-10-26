@@ -5,6 +5,11 @@ on:
     paths:
       - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
       - .github/workflows/shyt-v101-postcompose-gameplay-audit.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
+      - .github/workflows/shyt-v101-postcompose-gameplay-audit.yml
 permissions:
   contents: read
 jobs:
