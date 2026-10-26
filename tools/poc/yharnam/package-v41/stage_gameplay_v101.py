@@ -39,9 +39,23 @@ def module(name: str):
     spec.loader.exec_module(result)
     return result
 
+def _lf_from_checkout(relative: str, data: bytes) -> bytes:
+    """Windows Git can checkout pristine C++ text as CRLF; patch pins use LF.
+
+    Accept *only* uniform CRLF or uniform LF, never mixed line endings or
+    stray CR, so this is line-ending normalization rather than a fuzzy
+    source patch that might overwrite unreviewed game changes.
+    """
+    crlf=data.count(b"\r\n")
+    if b"\r" in data:
+        if not crlf or data.count(b"\r")!=crlf or data.count(b"\n")!=crlf:
+            raise ValueError("V101 unexpected/mixed original game line endings: "+relative)
+        return data.replace(b"\r\n",b"\n")
+    return data
+
 def transform(original: dict[str,bytes])->dict[str,bytes]:
     """The same V97 -> V98 -> V99 ordering proven in PR17, no IO."""
-    changed=dict(original)
+    changed={name:_lf_from_checkout(name,data) for name,data in original.items()}
     for name in SCRIPTS:
         step=module(name)
         selected={}
