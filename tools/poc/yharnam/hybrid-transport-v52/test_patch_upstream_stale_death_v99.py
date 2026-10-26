@@ -51,6 +51,7 @@ class TestStaleDeathV99(unittest.TestCase):
         self.assertIn("CurrentPlace().visit!=visit",game)
         self.assertIn("HasMemoryAccess(found->info+0x18,1,MemoryProt::CpuWrite)",game)
         self.assertIn("ReadValue<u32>(p.character,0x08)!=handle",game)
+        self.assertIn("for(const OtherPlayer& p:OtherPlayers())",game)
         self.assertIn("ReadValue<u64>(control,0x30)!=found->info",game)
         self.assertIn("std::ranges::find(invaders,handle)!=invaders.end()",game)
         self.assertIn("WriteValue(found->info,0x18,static_cast<u8>(bits&~u8{1}))",game)
