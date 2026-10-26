@@ -760,6 +760,15 @@ def run(checkout:Path, repo:Path, out:Path):
     exec(compile(v94_path.read_text("utf-8"),str(v94_path),"exec"),v94.__dict__)
     files[v94.SERVER]=v94.patch_header(files[v94.SERVER].decode("utf-8")).encode("utf-8")
     meta["applied"].append("V94 upstream PR365 shadNet pre-auth 2GB blob signed-overflow bounds fix, default enabled")
+    # V97 upstream Kaniel PR407: Doll talk/menu flag 6700 must remain
+    # PER PLAYER; stale host-world flag makes every guest unable to level
+    # up. Only scrub at party map loads, never during live Doll dialogue.
+    v97_path=metrics_dir/"patch_upstream_doll_flag_v97.py"
+    v97=types.ModuleType("sh_v97_doll_per_player")
+    v97.__file__=str(v97_path)
+    exec(compile(v97_path.read_text("utf-8"),str(v97_path),"exec"),v97.__dict__)
+    files.update(v97.patch(files))
+    meta["applied"].append("V97 upstream PR407 Doll level-up flag 6700 per-player and stale-on-map-load clearing, solo unaffected")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
