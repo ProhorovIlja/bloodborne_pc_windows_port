@@ -1,0 +1,159 @@
+name: Seamless Hunt V103 actual native game bbnet before GPU
+on:
+  push:
+    branches: [feature/shyt-win-fsr-countof-v63]
+    paths:
+      - tools/poc/yharnam/package-v41/patch_bbnet_first_v103.py
+      - tools/poc/yharnam/package-v41/test_bbnet_first_v103.py
+      - tools/poc/yharnam/package-v41/patch_bbnet_only_v106.py
+      - tools/poc/yharnam/package-v41/test_bbnet_only_v106.py
+      - tools/poc/yharnam/package-v41/verify_bbnet_archive_v108.py
+      - tools/poc/yharnam/package-v41/test_verify_bbnet_archive_v108.py
+      - tools/poc/yharnam/package-v41/test_composed_native_build_v113.py
+      - tools/poc/yharnam/package-v41/patch_native_lean_dwarf_v116.py
+      - tools/poc/yharnam/package-v41/test_native_lean_dwarf_v116.py
+      - tools/poc/yharnam/package-v41/test_native_ci_no_regen_v120.py
+      - tools/poc/yharnam/package-v41/patch_native_ci_revision_v123.py
+      - tools/poc/yharnam/package-v41/test_native_ci_revision_v123.py
+      - tools/poc/yharnam/package-v41/patch_native_integrated_gate_v117.py
+      - tools/poc/yharnam/package-v41/test_native_integrated_gate_v117.py
+      - tools/poc/yharnam/package-v41/patch_native_cmake_trace_v115.py
+      - tools/poc/yharnam/package-v41/test_native_full_pipeline_v118.py
+      - tools/poc/yharnam/package-v41/patch_native_cmake_trace_v115.py
+      - tools/poc/yharnam/package-v41/test_native_cmake_trace_v115.py
+      - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
+      - .github/workflows/shyt-v103-game-bbnet-before-gpu.yml
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+  workflow_dispatch:
+permissions:
+  contents: read
+# V107: prevent every small PR push from creating another expensive pending
+# original native Clang64 bbnet build. Running compilers are never cancelled.
+concurrency:
+  group: shyt-v107-real-bbnet-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  true-bbnet-first:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: V104 two-log Ninja/Clang fatal watcher regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern='(^FAILED:|^ninja: build stopped|fatal error:|: error:|error C[0-9]{4}:)'
+          mkdir -p ./v104-ninja-log-test
+          printf '%s\n' 'src/bloodborne_party_death.cpp:12:11: fatal error: bad include' > ./v104-ninja-log-test/bbnet-build.log
+          printf '%s\n' 'src/render.cpp:13: warning: harmless' > ./v104-ninja-log-test/gpu-build.log
+          grep -Eq "$pattern" ./v104-ninja-log-test/bbnet-build.log
+          if grep -Eq "$pattern" ./v104-ninja-log-test/gpu-build.log; then
+            echo 'V104 warning interpreted as error'; exit 1
+          fi
+          printf '%s\n' 'FAILED: renderer/fatal.obj' >> ./v104-ninja-log-test/gpu-build.log
+          grep -Eq "$pattern" ./v104-ninja-log-test/gpu-build.log
+          python - <<'PY'
+          from pathlib import Path
+          workflow=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text()
+          assert 'for logfile in out/bbnet-build.log out/gpu-build.log; do' in workflow
+          assert 'SHYT_V104_NATIVE_COMPILER_ERROR_ABORT_EARLY_LOG=' in workflow
+          assert 'pinned-upstream/bbport/out/bbnet-build.log' in workflow
+          print('SHYT_V104_BOTH_REAL_NATIVE_LOG_WATCHED_AND_PRESERVED_PASS')
+          PY
+      - name: Verify actual original native build target order, fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_bbnet_first_v103.py' -v
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen
+          import importlib.util
+          from time import sleep
+          p=Path('tools/poc/yharnam/package-v41/patch_bbnet_first_v103.py')
+          spec=importlib.util.spec_from_file_location('preflight',p)
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          base='https://raw.githubusercontent.com/lKaniel/bloodborne-server/77e350743a7cb4524cfcc1782fb6e3af64e25b15/'
+          content={}
+          for name in (m.SOURCE,'bbport/gpu/CMakeLists.txt'):
+              for attempt in range(3):
+                  try:
+                      with urlopen(base+name,timeout=40) as response:
+                          content[name]=response.read().decode('utf-8')
+                      break
+                  except Exception:
+                      if attempt==2:raise
+                      sleep(2)
+          original=content[m.SOURCE]
+          patched=m.transform(original)
+          assert patched.count('SHYT-V103-NATIVE-BBNET-FIRST')==1
+          assert patched.index('ninja -C out/gpu bbnet')<patched.index('ninja -C out/gpu bb-probe')
+          assert 'add_library(bbnet STATIC' in content['bbport/gpu/CMakeLists.txt']
+          assert 'target_link_libraries(bbgpu PUBLIC bbnet)' in content['bbport/gpu/CMakeLists.txt']
+          print('SHYT_V103_ACTUAL_ORIGINAL_NATIVE_BBNET_TARGET_ORDER_PASS')
+          PY
+      - name: V106 source-verify only original native bbnet archive opt-in
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_bbnet_only_v106.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_verify_bbnet_archive_v108.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_composed_native_build_v113.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_native_lean_dwarf_v116.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_native_ci_no_regen_v120.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_native_ci_revision_v123.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_native_integrated_gate_v117.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_native_full_pipeline_v118.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_native_cmake_trace_v115.py' -v
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text(encoding='utf-8')
+          assert 'SHYT_BBNET_ONLY:' in s
+          assert 'SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED' in s
+          assert 'pinned-upstream/bbport/out/gpu/libbbnet.a' in s
+          assert 'SHYT_V108_NATIVE_BBNET_PATCHED_GAME_OBJECTS_VERIFIED' in s
+          assert 'verify_bbnet_archive_v108.py' in s
+          assert 'SHYT_V115_REAL_WINDOWS_CMAKE_CONFIGURE_LOG_ENABLED' in s
+          assert 'pinned-upstream/bbport/out/cmake-configure.log' in s
+          assert "SHYT_V101_ALL_SEVEN_ACTUAL_NATIVE_BBNET_GAME_SOURCE_SHA256_PASS" in s
+          print('SHYT_V106_REUSABLE_ORIGINAL_GAME_COMPILER_INPUT_PASS')
+          PY
+  compile-real-original-game-bbnet:
+    # V117: native full build already compiles/validates bbnet before GPU.
+    # Keep second expensive standalone bbnet-only build MANUAL only.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: true-bbnet-first
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
+    with:
+      bbnet_only: true

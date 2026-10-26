@@ -43,6 +43,7 @@ jobs:
           python3 -m unittest discover -s tools/poc/yharnam/package-v40 -p 'test_patch_windows_package.py' -v
           python3 -m unittest discover -s tools/diagnostics/tests -p 'test_windows_candidate.py' -v
           python3 -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_assemble_windows_test_kit.py' -v
+          python3 -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_fireburn_clang64.py' -v
   windows-game:
     needs: source-contract
     uses: ./.github/workflows/shyt-v36-composed-windows-client.yml

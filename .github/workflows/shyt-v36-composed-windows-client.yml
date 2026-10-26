@@ -1,6 +1,12 @@
 name: Seamless Hunt V36 composed native Windows game client
 on:
   workflow_call:
+    inputs:
+      bbnet_only:
+        description: Compile only the real original co-op/network C++ library, never package a game.
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,6 +17,9 @@ jobs:
     env:
       PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
       BB_LTO: 'OFF'
+      SHYT_V117_VERIFY_AFTER_BBNET: '1' # verify actual native game source+archive before GPU
+      SHYT_BBCOOP_CI_PINNED_REVISION: '77e350743a7cb4524cfcc1782fb6e3af64e25b15-dirty' # exact original Git dirty fingerprint for immutable CI overlays
+      SHYT_BBNET_ONLY: ${{ inputs.bbnet_only && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,6 +62,32 @@ jobs:
             throw 'Native game UI patch missing'
           }
           Write-Host 'COMPOSED_NATIVE_SOURCE_PASS'
+      - name: V101 stage V97 Doll + V98 respawn + V99 revived boss AI into REAL game
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/package-v41/stage_gameplay_v101.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V101 original game source drift or gameplay integration failed' }
+          $report = Get-Content -Raw -Encoding UTF8 pinned-upstream/bbport/out/shyt-v101-gameplay-source.json | ConvertFrom-Json
+          if ($report.pinned_upstream -ne $env:PIN -or $report.native_gameplay_direct_udp_enabled -ne $false) {
+            throw 'V101 wrong source pin or unsafe Direct gameplay setting'
+          }
+          # PowerShell's PSObject.Properties.Count may not be a scalar count
+          # on all runners. Enumerate actual JSON properties and validate
+          # every staged original-game source file against its SHA-256.
+          $files = @($report.source_sha256.PSObject.Properties)
+          if ($files.Count -ne 7) { throw "V101 expected seven source digests; found $($files.Count)" }
+          foreach ($entry in $files) {
+            $sourcePath = Join-Path 'pinned-upstream' $entry.Name
+            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+              throw "V101 native source missing: $($entry.Name)"
+            }
+            $actual = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne [string]$entry.Value) {
+              throw "V101 staged C++ source hash mismatch: $($entry.Name)"
+            }
+          }
+          Write-Host 'SHYT_V101_ALL_SEVEN_ACTUAL_NATIVE_BBNET_GAME_SOURCE_SHA256_PASS'
       - uses: msys2/setup-msys2@v2
         with:
           msystem: CLANG64
@@ -109,15 +144,147 @@ jobs:
           }
           python tools/poc/yharnam/package-v41/patch_fireburn_clang64.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR CLANG64 portability patch failed' }
-      - name: Compile pinned FidelityFX FSR host translation unit before expensive GPU build
+      - name: Compile pinned FidelityFX FSR host C++ units before expensive GPU build
         shell: msys2 {0}
         run: |
           set -euo pipefail
           sdk="pinned-upstream/bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk"
           clang++ -std=c++17 -fsyntax-only \
             -I "$sdk/include" \
+            -I "$sdk/src/shared" \
             "$sdk/src/shared/ffx_message.cpp"
-          echo SHYT_FSR_CLANG64_SINGLE_FILE_COMPATIBILITY_PASS
+          clang++ -std=c++17 -fsyntax-only \
+            -I "$sdk/include" \
+            -I "$sdk/src/shared" \
+            -I "$sdk/src/components/frameinterpolation" \
+            "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"
+          clang++ -std=c++17 -fsyntax-only \
+            -I "$sdk/include" \
+            -I "$sdk/src/shared" \
+            -I "$sdk/src/components/opticalflow" \
+            "$sdk/src/components/opticalflow/ffx_opticalflow.cpp"
+          # V65: catch exact 165-min native build failure BEFORE GPU Ninja.
+          clang++ -std=c++17 -fsyntax-only \
+            -I "$sdk/include" -I "$sdk/src/shared" \
+            -I "$sdk/src/components/fsr3upscaler" \
+            "$sdk/src/components/fsr3upscaler/ffx_fsr3upscaler.cpp"
+          fsr="pinned-upstream/bbport/gpu/third_party/fsr-vulkan"
+          clang++ -std=c++17 -fsyntax-only \
+            -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
+            -I "$sdk/include" -I "$sdk/src/shared" \
+            -I "$sdk/src/components" \
+            -I "$sdk/src/backends/shared" \
+            -I "$sdk/src/backends/shared/blob_accessors" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3upscaler" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3framegeneration" \
+            "$sdk/src/backends/vk/ffx_vk.cpp"
+          echo SHYT_FSR_CLANG64_HOST_PRECHECK_ALL_FOUR_SOURCES_PASS
+      - name: V95 stage native game BL/build and in-game Quit to Desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/package-v41/patch_bbport_hunter_presence_v95.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V95 native menu source drift; cannot safely stage game UI' }
+          $native = Get-Content -Raw pinned-upstream/bbport/gpu/shim/bbport_overlay.cpp
+          if (-not $native.Contains('SHYT-V95-QUIT-IN-GAME')) { throw 'Native Co-op Team Quit action missing' }
+          if (-not $native.Contains('SHYT-V95-NATIVE-HUNTER-LEVEL-BUILD')) { throw 'Native BL/build preview missing' }
+          Write-Host 'SHYT_V95_ACTUAL_GAME_BL_BUILD_PREVIEW_AND_SAFE_QUIT_STAGED'
+      - name: V96 scope HudSight Vulkan crash-layer denylist to native game launch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/package-v41/patch_vk_layer_compat_v96.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V96 original native launcher incompatible; fail closed' }
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_vk_layer_compat_v96.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V96 layer denylist tests failed' }
+          $launcher = Get-Content -Raw pinned-upstream/bbport/launcher/bbport_launcher_win.py
+          if (-not $launcher.Contains('SHYT-V96-HUDSIGHT-CRASHING-VULKAN-LAYER')) { throw 'V96 launcher guard absent' }
+          Write-Host 'SHYT_V96_ACTUAL_PINNED_NATIVE_WINDOWS_LAUNCHER_GUARD_STAGED'
+      - name: V100 fix pinned Sirit C++20 std::abort declaration before native renderer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_sirit_abort_v100.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V100 original Sirit source regression failed' }
+          python tools/poc/yharnam/package-v41/patch_sirit_abort_v100.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V100 pinned Sirit std::abort header drift detected' }
+          Write-Host SHYT_V100_SIRIT_ABORT_DECLARATION_STAGED
+      - name: V100 preflight actual Sirit translation unit with Windows CLANG64
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          sirit="pinned-upstream/bbport/gpu/third_party/sirit"
+          clang++ -std=c++20 -fsyntax-only -Wall -Wextra -Werror -pedantic \
+            -I "$sirit/include" -I "$sirit/src" \
+            -I "$sirit/externals/SPIRV-Headers/include" \
+            "$sirit/src/instructions/constant.cpp"
+          echo SHYT_V100_ACTUAL_CLANG64_SIRIT_CONSTANT_CPP_PASS
+      - name: V103 pin-check actual Windows native game's bbnet-first compilation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_bbnet_first_v103.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V103 native bbnet-first source guard test failed' }
+          python tools/poc/yharnam/package-v41/patch_bbnet_first_v103.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V103 pinned bbnet build shell unexpected' }
+          Write-Host 'SHYT_V103_ACTUAL_NATIVE_GAME_BBNET_FIRST_STAGED'
+      - name: V106 add opt-in true game bbnet-only Clang64 build mode
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_bbnet_only_v106.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V106 native original game bbnet-only regression failed' }
+          python tools/poc/yharnam/package-v41/patch_bbnet_only_v106.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V106 original bbnet-only build stage drifted' }
+          Write-Host 'SHYT_V106_ORIGINAL_GAME_BBNET_ONLY_OPTION_STAGED'
+      - name: V111 bound true Windows Ninja C++ parallel jobs before compiling
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_ninja_jobs_v111.py' -v
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_composed_native_build_v113.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V111 source exact Ninja job regression failed' }
+          python tools/poc/yharnam/package-v41/patch_native_ninja_jobs_v111.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V111 original Windows Ninja build drift detected' }
+          Write-Host 'SHYT_V111_REAL_NATIVE_CXX_NINJA_TWO_JOBS_DEFAULT_STAGED'
+      - name: V115 preserve original native CMake configuration diagnostics
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_cmake_trace_v115.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V115 original Windows CMake trace test failed' }
+          python tools/poc/yharnam/package-v41/patch_native_cmake_trace_v115.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V115 pinned original CMake configure anchor changed' }
+          Write-Host 'SHYT_V115_REAL_WINDOWS_CMAKE_CONFIGURE_LOG_ENABLED'
+      - name: V116 keep -O2 with lean line-table debug info on hosted Clang64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_lean_dwarf_v116.py' -v
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_ci_no_regen_v120.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V116 CMake line-table regression failed' }
+          python tools/poc/yharnam/package-v41/patch_native_lean_dwarf_v116.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V116 original native Windows CMake flag anchor drifted' }
+          Write-Host 'SHYT_V116_WINDOWS_NATIVE_CXX_O2_LEAN_DWARF_STAGED'
+      - name: Single pipeline gate authentic bbnet objects and V101 SHA before GPU
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_integrated_gate_v117.py' -v
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_full_pipeline_v118.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Integrated bbnet/game provenance test failed' }
+          python tools/poc/yharnam/package-v41/patch_native_integrated_gate_v117.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned native bbnet -> GPU build boundary drifted' }
+          Write-Host SHYT_V117_REAL_BBNET_AND_GPU_SINGLE_COMPILER_PIPELINE_STAGED
+      - name: V123 preflight native revision script without Git subprocesses
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_ci_revision_v123.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V123 real CMake revision regression failed' }
+          python tools/poc/yharnam/package-v41/patch_native_ci_revision_v123.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V123 pinned original source drifted' }
+          Write-Host SHYT_V123_NATIVE_BBCOOP_GIT_FREE_REBUILD_GUARD_STAGED
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
@@ -131,6 +298,10 @@ jobs:
           ccache --max-size 1600M
           ccache --show-stats
           cd pinned-upstream/bbport
+          # The exact original builder was patched V103->V106->V111:
+          # fail before a 165-min compile if the resulting Bash is invalid.
+          bash -n build.sh
+          echo SHYT_V111_ORIGINAL_NATIVE_GAME_BUILD_BASH_SYNTAX_PASS
           # The upstream build redirects ALL Ninja output to gpu-build.log.
           # Without a heartbeat GitHub shows nothing for 90 minutes and the
           # former job limit cancelled, losing the only useful diagnostics.
@@ -149,28 +320,110 @@ jobs:
             exit "$rc"
           ) &
           builder=$!
+          # V110: fail a genuinely stalled compile instead of repeating the
+          # same Ninja lines until the 165-minute step timeout. We measure
+          # file modification timestamps rather than log size; a compiler
+          # writing diagnostic output also counts as activity.
+          native_build_started_at="$(date +%s)"
+          native_stall_seconds=1800
+          # V102: original Ninja can remain busy (or its MSYS shell appear
+          # alive) after the first compiler failure. Previously the same
+          # error was printed every 30s for 165 minutes. Detect ONLY
+          # unambiguous compiler/Ninja fatal records in the real GPU log.
+          fatal_pattern='(^FAILED:|^ninja: build stopped|fatal error:|: error:|error C[0-9]{4}:)'
+          printf '%s\n' "foo.cpp:22:13: fatal error: missing standard header" |
+            grep -Eq "$fatal_pattern" ||
+            { echo "SHYT_V102_FATAL_PATTERN_BROKEN"; exit 1; }
+          if printf '%s\n' "foo.cpp:22: warning: harmless" |
+               grep -Eq "$fatal_pattern"; then
+            echo "SHYT_V102_FALSE_POSITIVE_PATTERN"; exit 1
+          fi
+          # V104: V103 now builds the real game's bbnet BEFORE GPU.
+          # The previous V102 watchdog only watched GPU's log, missing
+          # gameplay C++ failures until Ninja finished/timeout occurred.
+          # Check each log as soon as it exists; never scan unrelated
+          # source/test log text and never treat a warning as fatal.
           while [[ ! -f "$statusfile" ]]; do
             echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            if [[ -f out/gpu-build.log ]]; then
-              tail -n 10 out/gpu-build.log || true
-            else
-              echo "GPU Ninja log not created yet; configuring dependencies"
+            for logfile in out/bbnet-build.log out/gpu-build.log; do
+              if [[ ! -f "$logfile" ]]; then continue; fi
+              if grep -Eq "$fatal_pattern" "$logfile"; then
+                echo "SHYT_V104_NATIVE_COMPILER_ERROR_ABORT_EARLY_LOG=$logfile"
+                tail -n 100 "$logfile" || true
+                kill "$builder" >/dev/null 2>&1 || true
+                exit 1
+              fi
+              echo "SHYT_V104_NINJA_PROGRESS_LOG=$logfile"
+              tail -n 10 "$logfile" || true
+            done
+            if [[ ! -f out/cmake-configure.log && ! -f out/bbnet-build.log && ! -f out/gpu-build.log ]]; then
+              echo "Native CMake/bbnet/GPU logs not yet created; preparing dependencies"
+            fi
+            if [[ -f out/cmake-configure.log ]]; then
+              echo "SHYT_V115_NATIVE_CMAKE_CONFIGURE_PROGRESS"
+              tail -n 8 out/cmake-configure.log || true
+            fi
+            # No completed Ninja action OR freshly written compiler
+            # diagnostic in either phase for 30 min is a stall, not progress.
+            # In particular, this catches the 2026-10-26 Windows run stuck
+            # at 119/418 for the entire 165-minute timeout.
+            last_write="$native_build_started_at"
+            for logfile in out/cmake-configure.log out/bbnet-build.log out/gpu-build.log; do
+              if [[ ! -f "$logfile" ]]; then continue; fi
+              modified="$(stat -c %Y "$logfile")"
+              if [[ "$modified" =~ ^[0-9]+$ ]] && (( modified > last_write )); then
+                last_write="$modified"
+              fi
+            done
+            now="$(date +%s)"
+            if (( now - last_write > native_stall_seconds )); then
+              echo "SHYT_V110_NATIVE_COMPILE_STALL_30M elapsed=$((now - last_write))s"
+              for logfile in out/bbnet-build.log out/gpu-build.log; do
+                if [[ -f "$logfile" ]]; then
+                  echo "SHYT_V110_STALLED_BUILD_SOURCE_LOG=$logfile"
+                  tail -n 35 "$logfile" || true
+                fi
+              done
+              kill "$builder" >/dev/null 2>&1 || true
+              exit 1
             fi
             sleep 30
           done
           build_status="$(cat "$statusfile")"
           wait "$builder" || true
           if [[ "$build_status" != 0 ]]; then
-            echo "SHYT_GPU_BUILD_FAILED_FAST_EXIT=$build_status"
-            tail -n 100 out/gpu-build.log || true
+            echo "SHYT_NATIVE_BBNET_OR_GPU_BUILD_FAILED_FAST_EXIT=$build_status"
+            for logfile in out/bbnet-build.log out/gpu-build.log; do
+              if [[ -f "$logfile" ]]; then
+                echo "SHYT_V104_FAILURE_SOURCE_LOG=$logfile"
+                tail -n 100 "$logfile" || true
+              fi
+            done
             exit "$build_status"
           fi
           ccache --show-stats
-          test -s out/bb-probe.exe
-          test -s out/bb-gpu-capabilities.exe
-          test -s out/bb-play.exe
-          echo REAL_NATIVE_WINDOWS_EXE_BUILT_NO_GAMEPLAY_CLAIM
+          if [[ "${SHYT_BBNET_ONLY:-0}" == "1" ]]; then
+            test -s out/gpu/libbbnet.a
+            echo "SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED"
+          else
+            test -s out/bb-probe.exe
+            test -s out/bb-gpu-capabilities.exe
+            test -s out/bb-play.exe
+            echo REAL_NATIVE_WINDOWS_EXE_BUILT_NO_GAMEPLAY_CLAIM
+          fi
+      - name: V108 verify four compiled gameplay objects and all V101 digests
+        if: ${{ inputs.bbnet_only }}
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          command -v llvm-ar
+          python tools/poc/yharnam/package-v41/verify_bbnet_archive_v108.py \
+            pinned-upstream/bbport/out/gpu/libbbnet.a \
+            pinned-upstream/bbport/out/shyt-v101-gameplay-source.json \
+            pinned-upstream
+          echo SHYT_V108_NATIVE_BBNET_PATCHED_GAME_OBJECTS_VERIFIED
       - name: Enable pinned Yharnam Together guest door and event compatibility in package
+        if: ${{ !inputs.bbnet_only }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -186,6 +439,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pinned native package script drifted' }
           Write-Host 'COOP_EVENT_PATCHER_STAGED; NPC summons still require live verification'
       - name: Package complete portable native Windows launcher and DLL dependencies
+        if: ${{ !inputs.bbnet_only }}
         shell: msys2 {0}
         run: |
           set -euo pipefail
@@ -196,11 +450,13 @@ jobs:
           test -s dist/bbport-windows.zip
           echo WINDOWS_PORTABLE_PACKAGE_BUILT_NOT_GAME_TESTED
       - name: Stamp game ZIP with exact mainline source identity
+        if: ${{ !inputs.bbnet_only }}
         shell: pwsh
         run: |
           python tools/poc/yharnam/package-v41/source_identity.py --game-zip pinned-upstream/bbport/dist/bbport-windows.zip --commit $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Native client provenance stamping failed' }
       - name: Validate portable game launcher archive and reject private/retail data
+        if: ${{ !inputs.bbnet_only }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -219,12 +475,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows artifact checksum and safety gate rejected' }
           Write-Host 'SIGNED_MANIFEST_NOT_YET_AVAILABLE_RELEASE_BLOCKED'
       - name: Preserve only INTERNAL Windows development candidate
+        if: ${{ !inputs.bbnet_only }}
         uses: actions/upload-artifact@v4
         with:
           name: seamless-hunt-V36-native-windows-INTERNAL
           path: |
             pinned-upstream/bbport/dist/bbport-windows.zip
             pinned-upstream/bbport/dist/bbport-windows.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve INTERNAL authentic bbnet-only C++ static library proof
+        if: ${{ inputs.bbnet_only && success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-v106-real-native-bbnet-only-INTERNAL
+          path: |
+            pinned-upstream/bbport/out/gpu/libbbnet.a
+            pinned-upstream/bbport/out/bbnet-build.log
+            pinned-upstream/bbport/out/shyt-v101-gameplay-source.json
           if-no-files-found: error
           retention-days: 7
       - name: Preserve build failure evidence without publishing a client
@@ -234,6 +502,9 @@ jobs:
         with:
           name: shyt-v36-native-windows-compiler-failure
           path: |
+            pinned-upstream/bbport/out/cmake-configure.log
+            pinned-upstream/bbport/out/shyt-native-build.exit
+            pinned-upstream/bbport/out/bbnet-build.log
             pinned-upstream/bbport/out/gpu-build.log
             pinned-upstream/bbport/out/gpu/CMakeCache.txt
             pinned-upstream/bbport/out/gpu/CMakeFiles/CMakeConfigureLog.yaml
@@ -246,6 +517,7 @@ jobs:
           path: .ccache
           key: shyt-native-gpu-ccache-v2-${{ runner.os }}-${{ github.run_id }}
       - name: No proprietary assets and no untested public release
+        if: ${{ !inputs.bbnet_only }}
         shell: pwsh
         run: |
           if (Test-Path pinned-upstream/CUSA03173) { throw 'Retail assets detected' }

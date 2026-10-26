@@ -35,8 +35,8 @@ jobs:
       - name: Check source Python syntax
         run: python -m py_compile tools/poc/yharnam/package-v41/assemble_windows_test_kit.py tools/poc/yharnam/package-v41/test_assemble_windows_test_kit.py
       - name: Verify pinned Windows GPU preflight and fail-fast diagnostic contract
-        run: python -c "from pathlib import Path; w=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text(); assert 'patch_fireburn_clang64.py pinned-upstream' in w; assert 'SHYT_FSR_CLANG64_SINGLE_FILE_COMPATIBILITY_PASS' in w; assert 'SHYT_GPU_BUILD_FAILED_FAST_EXIT' in w; assert 'out/shyt-native-build.exit' in w; print('WINDOWS_NATIVE_GPU_FAST_FAILURE_GUARD_PASS')"
-      - name: Test pinned FireBurn FidelityFX CLANG64 portable wide printf shim
+        run: python -c "from pathlib import Path; w=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text(); assert 'patch_fireburn_clang64.py pinned-upstream' in w; assert 'SHYT_FSR_CLANG64_HOST_PRECHECK_ALL_FOUR_SOURCES_PASS' in w; assert 'ffx_frameinterpolation.cpp' in w; assert 'ffx_opticalflow.cpp' in w; assert 'ffx_vk.cpp' in w; assert 'SHYT_NATIVE_BBNET_OR_GPU_BUILD_FAILED_FAST_EXIT' in w; assert 'SHYT_V110_NATIVE_COMPILE_STALL_30M' in w; assert 'out/shyt-native-build.exit' in w; print('WINDOWS_NATIVE_GPU_FAST_FAILURE_GUARD_PASS')"
+      - name: Test pinned FireBurn FidelityFX CLANG64 wide printf and _countof shims
         run: python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_fireburn_clang64.py' -v
       - name: Verify unified bundle requires only deployed Qt server dependencies
         run: python -c "from pathlib import Path; s=Path('.github/workflows/shyt-mainline-candidate.yml').read_text(); assert 'server/Qt6Concurrent.dll' not in s; assert 'bbport-windows/server/Qt6Core.dll' in s; print('NATIVE_QT_ASSEMBLY_DEPENDENCIES_PASS')"

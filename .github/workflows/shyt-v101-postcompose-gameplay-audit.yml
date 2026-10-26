@@ -1,0 +1,62 @@
+name: Seamless Hunt V101 original post-composer gameplay audit
+on:
+  push:
+    branches: [feature/shyt-win-fsr-countof-v63]
+    paths:
+      - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
+      - .github/workflows/shyt-v101-postcompose-gameplay-audit.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
+      - .github/workflows/shyt-v101-postcompose-gameplay-audit.yml
+permissions:
+  contents: read
+jobs:
+  inspect-real-pinned-overlays:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          submodules: false
+          persist-credentials: false
+      - name: Produce real PR20 original-game overlay without touching a server
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v101-inspected
+          python3 - <<'PY'
+          from pathlib import Path
+          import difflib
+          base=Path('pinned-upstream')
+          overlay=Path('/tmp/shyt-v101-inspected')
+          paths=[
+              'emulator/src/core/bloodborne_flags.h',
+              'emulator/src/core/bloodborne_flags_store.cpp',
+              'emulator/src/core/bloodborne_party.cpp',
+              'emulator/src/core/bloodborne_party.h',
+              'emulator/src/core/bloodborne_party_death.cpp',
+              'emulator/src/core/bloodborne_re_internal.h',
+              'emulator/src/core/bloodborne_re.cpp',
+          ]
+          for path in paths:
+              old=(base/path).read_text(encoding='utf-8')
+              patched=(overlay/path)
+              if not patched.is_file():
+                  print('V101_NATIVE_COMPOSER_ORIGINAL_UNCHANGED',path)
+                  continue
+              new=patched.read_text(encoding='utf-8')
+              print('V101_NATIVE_COMPOSER_OVERLAID',path,'old size',len(old),'new size',len(new))
+              if path.endswith('bloodborne_flags.h'):
+                  for key in ('Range(6680','Range(6700','Range(6744','Range(9180', 'FlagOwner::'):
+                      print('FOUND',key,'COUNT',new.count(key),'AT',new.find(key))
+                  for line in list(difflib.unified_diff(old.splitlines(),new.splitlines(),lineterm=''))[:110]:
+                      print('FLAG_DIFF',line[:260])
+          PY

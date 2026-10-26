@@ -1,0 +1,74 @@
+name: Seamless Hunt V95 actual BL build preview native
+on:
+  push:
+    branches: [feature/shyt-win-fsr-countof-v63]
+    paths:
+      - tools/poc/yharnam/package-v41/sh_hunter_presence_v95.hpp
+      - tools/poc/yharnam/package-v41/test_hunter_presence_v95.cpp
+      - tools/poc/yharnam/package-v41/patch_bbport_hunter_presence_v95.py
+      - tools/poc/yharnam/package-v41/test_patch_hunter_presence_v95.py
+      - .github/workflows/shyt-v95-hunter-bl-discord-preview.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  native-presence:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run original-game source guard and zero-leak preview tests
+        shell: bash
+        run: |
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_patch_hunter_presence_v95.py' -v
+      - name: Compile and run real BL build-classifier unit tests on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/package-v41 \
+            tools/poc/yharnam/package-v41/test_hunter_presence_v95.cpp \
+            -o ./hunter-v95-test
+          ./hunter-v95-test
+          echo SHYT_V95_LINUX_BL_BUILD_CLASSIFIER_PASS
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Compile and run real BL build-classifier unit tests on Windows MSVC
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/package-v41 tools/poc/yharnam/package-v41/test_hunter_presence_v95.cpp /Fe:hunter-v95.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V95 Windows BL classifier compile failed' }
+          ./hunter-v95.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V95 Windows BL classifier runtime failed' }
+          Write-Host SHYT_V95_WINDOWS_BL_BUILD_CLASSIFIER_PASS
+      - name: Verify actual pinned native menu insertion (no Discord SDK needed)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v95/bbport/gpu/shim
+          curl -fsSL --retry 3 \
+            https://raw.githubusercontent.com/lKaniel/bloodborne-server/77e350743a7cb4524cfcc1782fb6e3af64e25b15/bbport/gpu/shim/bbport_overlay.cpp \
+            -o /tmp/shyt-v95/bbport/gpu/shim/bbport_overlay.cpp
+          python tools/poc/yharnam/package-v41/patch_bbport_hunter_presence_v95.py /tmp/shyt-v95
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('/tmp/shyt-v95/bbport/gpu/shim/bbport_overlay.cpp')
+          s=path.read_text()
+          assert s.count("SHYT-V95-NATIVE-HUNTER-LEVEL-BUILD")==2
+          assert 'const std::string discord_preview' in s
+          assert 'SDL_EVENT_QUIT' in s
+          print("SHYT_V95_ACTUAL_PINNED_GAME_MENU_SOURCE_PASS")
+          PY

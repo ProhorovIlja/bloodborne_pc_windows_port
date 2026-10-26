@@ -1,0 +1,57 @@
+name: Seamless Hunt V96 native game crash-layer safety
+on:
+  push:
+    branches: [feature/shyt-win-fsr-countof-v63]
+    paths:
+      - tools/poc/yharnam/package-v41/patch_vk_layer_compat_v96.py
+      - tools/poc/yharnam/package-v41/test_vk_layer_compat_v96.py
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+      - .github/workflows/shyt-v96-native-vulkan-layer-guard.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  original-native-launcher:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify game-only inherited layer guard and user overrides
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_vk_layer_compat_v96.py' -v
+      - name: Patch actual ORIGINAL PINNED Yharnam Together Windows launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p v96-pinned/bbport/launcher
+          curl -fsSL --retry 3 \
+            https://raw.githubusercontent.com/lKaniel/bloodborne-server/77e350743a7cb4524cfcc1782fb6e3af64e25b15/bbport/launcher/bbport_launcher_win.py \
+            -o v96-pinned/bbport/launcher/bbport_launcher_win.py
+          python tools/poc/yharnam/package-v41/patch_vk_layer_compat_v96.py v96-pinned
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          p=Path('v96-pinned/bbport/launcher/bbport_launcher_win.py')
+          source=p.read_text(encoding='utf-8')
+          ast.parse(source)
+          assert source.count('SHYT-V96-HUDSIGHT-CRASHING-VULKAN-LAYER')==1
+          game=source[source.index('def game_environment('):source.index('\n# ',source.index('def game_environment('))]
+          assert game.index('add_crashing_vk_layer_guard(env)')<game.index("for item in str(s['extra_env']).split():")
+          assert "env = dict(os.environ)" in game
+          assert "CRASHING_VK_LAYERS = ('*HudSight*',)" in source
+          print('SHYT_V96_PINNED_LAUNCHER_PARSE_ENVIRONMENT_PASS')
+          PY

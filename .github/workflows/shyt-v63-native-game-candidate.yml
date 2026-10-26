@@ -1,0 +1,37 @@
+name: Seamless Hunt V64 native Windows client full candidate build
+on:
+  push:
+    branches:
+      - feature/shyt-win-fsr-countof-v63
+    paths:
+      - .github/workflows/shyt-v63-native-game-candidate.yml
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+      - tools/poc/yharnam/package-v41/patch_fireburn_clang64.py
+  pull_request:
+    branches:
+      - feature/seamless-hunt-mainline
+    paths:
+      - .github/workflows/shyt-v63-native-game-candidate.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+# V105: real native GPU game C++ builds can take hours. Prevent every
+# intermediate source commit from scheduling another duplicate 180-min
+# renderer build. GitHub retains the latest pending run per branch, but
+# NEVER cancels an already-running compilation with useful cache/results.
+# V114: github.ref differs on push (refs/heads/...) versus pull_request
+# (refs/pull/20/merge). Use the same actual source branch name for both,
+# or the same change schedules TWO 180-minute Windows builds concurrently.
+concurrency:
+  group: shyt-v105-native-full-game-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  native-game-client:
+    # Rerun after fixing the exact 165-minute native build failure:
+    # V63 fixed host SDK MSVC-only _countof in frame+opticalflow;
+    # V64 fixes backend ffx_vk.cpp missing standard C++ new, mutex, log2.
+    # Windows 2022 CLANG64 smoke now compiles all FOUR pinned AMD units
+    # successfully: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/40230295455
+    # The real renderer still must compile/link, package, and pass gameplay QA.
+    # This is NOT a validated playable release and has no live deploy.
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
