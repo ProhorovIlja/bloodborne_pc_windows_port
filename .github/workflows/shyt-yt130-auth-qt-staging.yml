@@ -25,6 +25,7 @@ jobs:
         run: |
           python -m unittest discover -s tools/poc/yharnam/yt130-auth-stage -p 'test_stage_auth.py' -v
           python -m compileall -q tools/poc/yharnam/yt130-auth-stage
+          python -m unittest discover -s tools/poc/yharnam/yt130-auth-stage -p 'test_ci_workflow_shell.py' -v
       - name: Install Qt6 and native server compiler
         run: |
           sudo apt-get update
@@ -85,6 +86,9 @@ jobs:
         run: |
           set -euo pipefail
           ctest --test-dir "$RUNNER_TEMP/yt-build" \
-            -R '^(accounts|server_link|admission|region|packet_routes|rpc_tunnel|bloodborne_world|team_lobby|invasions|bloodborne_duel|stream_extractor) \
+            -R '^(accounts|server_link|admission|region|packet_routes|rpc_tunnel|bloodborne_world|team_lobby|invasions|bloodborne_duel|stream_extractor)
+            --output-on-failure --timeout 120 -j 2
+          echo SHYT_YT130_REAL_QT_NETWORK_WORLD_AND_ACCOUNT_MATRIX_PASS
+ \
             --output-on-failure --timeout 120 -j 2
           echo SHYT_YT130_REAL_QT_NETWORK_WORLD_AND_ACCOUNT_MATRIX_PASS
