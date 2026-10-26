@@ -35,7 +35,9 @@ class NativeLauncherVkLayerV96Tests(unittest.TestCase):
         patched=patch.patch_launcher(FIXTURE)
         self.assertIn(patch.MARKER,patched)
         self.assertIn("add_crashing_vk_layer_guard(env)",patched)
-        self.assertLess(patched.index("add_crashing_vk_layer_guard(env)",patched.index("for item in str(s['extra_env']).split()"))
+        self.assertLess(
+            patched.index("add_crashing_vk_layer_guard(env)"),
+            patched.index("for item in str(s['extra_env']).split()"))
         with self.assertRaisesRegex(ValueError,"already applied"):
             patch.patch_launcher(patched)
         helper=get_helper(patched)
