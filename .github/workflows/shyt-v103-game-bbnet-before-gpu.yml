@@ -26,6 +26,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: V104 two-log Ninja/Clang fatal watcher regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern='(^FAILED:|^ninja: build stopped|fatal error:|: error:|error C[0-9]{4}:)'
+          mkdir -p ./v104-ninja-log-test
+          printf '%s\n' 'src/bloodborne_party_death.cpp:12:11: fatal error: bad include' > ./v104-ninja-log-test/bbnet-build.log
+          printf '%s\n' 'src/render.cpp:13: warning: harmless' > ./v104-ninja-log-test/gpu-build.log
+          grep -Eq "$pattern" ./v104-ninja-log-test/bbnet-build.log
+          if grep -Eq "$pattern" ./v104-ninja-log-test/gpu-build.log; then
+            echo 'V104 warning interpreted as error'; exit 1
+          fi
+          printf '%s\n' 'FAILED: renderer/fatal.obj' >> ./v104-ninja-log-test/gpu-build.log
+          grep -Eq "$pattern" ./v104-ninja-log-test/gpu-build.log
+          python - <<'PY'
+          from pathlib import Path
+          workflow=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text()
+          assert 'for logfile in out/bbnet-build.log out/gpu-build.log; do' in workflow
+          assert 'SHYT_V104_NATIVE_COMPILER_ERROR_ABORT_EARLY_LOG=' in workflow
+          assert 'pinned-upstream/bbport/out/bbnet-build.log' in workflow
+          print('SHYT_V104_BOTH_REAL_NATIVE_LOG_WATCHED_AND_PRESERVED_PASS')
+          PY
       - name: Verify actual original native build target order, fail closed
         shell: bash
         run: |
