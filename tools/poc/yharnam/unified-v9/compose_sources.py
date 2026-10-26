@@ -458,7 +458,11 @@ def run(checkout:Path, repo:Path, out:Path):
     v8.__file__=str(patch_path)
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,HTTP_SESSION_CPP,HTTP_STATS_CPP,HTTP_BACKEND_CPP,HTTP_BLOODBORNE_CPP,WEB_AUTH_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,HTTP_SESSION_CPP,HTTP_STATS_CPP,HTTP_BACKEND_CPP,HTTP_BLOODBORNE_CPP,WEB_AUTH_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c",
+        "emulator/src/core/bloodborne_flags.h",
+        "emulator/src/core/bloodborne_flags_store.cpp",
+        "emulator/src/core/bloodborne_party.h",
+        "emulator/src/core/bloodborne_party.cpp"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # V69: apply runtime-only optional byte/packet counters to the ENTIRE
@@ -767,7 +771,12 @@ def run(checkout:Path, repo:Path, out:Path):
     v97=types.ModuleType("sh_v97_doll_per_player")
     v97.__file__=str(v97_path)
     exec(compile(v97_path.read_text("utf-8"),str(v97_path),"exec"),v97.__dict__)
-    files.update(v97.patch(files))
+    # The four native gameplay units were UNMODIFIED before V97, so
+    # they live in pinned originals, not the previously composed overlay.
+    # Patch exact current overlay when present, else the pinned source.
+    doll_sources={name:(files[name] if name in files else sources[name].encode("utf-8"))
+                  for name in v97.FILES}
+    files.update(v97.patch(doll_sources))
     meta["applied"].append("V97 upstream PR407 Doll level-up flag 6700 per-player and stale-on-map-load clearing, solo unaffected")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
