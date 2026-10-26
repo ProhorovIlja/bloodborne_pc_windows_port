@@ -52,3 +52,31 @@ The V103/V106/V108 diagnostic caller coalesces superseded **pending** runs
 for the same feature branch using a dedicated concurrency group with
 `cancel-in-progress: false`. Already-running compilers are not cancelled.
 The complete GPU/EXE workflow retains its independent scheduling.
+
+
+## V115: actual Windows CMake configuration evidence and stall attribution
+
+Two historic full Windows CLANG64 game builds reached the 165-minute compiler
+step timeout: runs 40302711995 and 40303648350. The first preserved a
+`gpu-build.log` reaching Ninja 119/418, with no subsequent completion.
+The second preserved `gpu/CMakeCache.txt` and `gpu/CMakeFiles/CMakeConfigureLog.yaml`
+but neither `bbnet-build.log` nor `gpu-build.log` in its failure artifact,
+despite the V103 stage step succeeding. It may have stalled in CMake
+configuration; the artifacts **do not prove the exact process or root cause**.
+
+The pinned original Windows `bbport/build.sh` redirected CMake configuration
+stdout to `/dev/null`. V115 source-exactly replaces that one command on the
+staged development copy with an explicitly logged conditional CMake invocation
+(`bbport/out/cmake-configure.log`), emits begin/pass/failure markers, prints
+the last 100 lines on CMake failure, and leaves the original compiler and
+Ninja targets unchanged. The V110 no-activity check now also watches the
+configure log's modification time; the failure archive retains the configure
+log and optional build exit-code file, along with the existing Ninja and CMake
+evidence. It does not enable gameplay Direct P2P.
+
+`test_native_cmake_trace_v115.py` checks the exact pinned Windows command,
+rejects an altered source or duplicate application, and executes Bash with
+stub CMake for success and failure, requiring the log to persist in both
+cases. The V103 Windows/Ubuntu source matrix runs this test before the
+potentially long Clang64 compiler workflow. Tests prove control flow, not
+actual CMake/Clang64 success; that requires a completed Windows CI job.
