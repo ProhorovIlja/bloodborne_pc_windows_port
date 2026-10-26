@@ -31,6 +31,7 @@ class ValidatorTests(unittest.TestCase):
                 self.baseline()|{"players":199},
                 self.baseline()|{"packets_sent":0},
                 self.baseline()|{"playing":201},
+                self.baseline()|{"playing":0},
                 self.baseline()|{"server_cpu_avg":-1},
                 self.baseline()|{"server_in_mbit":"n/a"},
             ):
@@ -40,6 +41,13 @@ class ValidatorTests(unittest.TestCase):
             f.write_text(json.dumps(self.baseline())+"\n"+json.dumps(self.baseline()))
             with self.assertRaises(ValueError):
                 mod.load(f,200)
+
+
+    def test_refused_counts_retries_not_unique_hunters(self):
+        with TemporaryDirectory() as d:
+            p=Path(d)/"load.jsonl"
+            p.write_text(json.dumps(self.baseline()|{"refused":1174})+"\n")
+            self.assertEqual(mod.load(p,200)["refused"],1174)
 
 if __name__=="__main__":
     unittest.main()

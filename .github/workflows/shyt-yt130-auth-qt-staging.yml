@@ -96,6 +96,22 @@ jobs:
           cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target bbload
           test -x "$RUNNER_TEMP/yt-build/shadnet"
           test -x "$RUNNER_TEMP/yt-build/bbload"
+      - name: Diagnose real synthetic 4-peer sign-in before large load
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only a disposable local server: 'bbload' is a synthetic build id,
+          # not the v1.3.0 game BuildFingerprint; disable the release build
+          # gate ONLY in its ephemeral temporary shadnet.cfg, never production.
+          timeout 90s python3 "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --players 4 --team-size 2 --processes 1 \
+            --seconds 15 --ramp-ms 10 --cfg CheckServerBuild=false \
+            --keep > yt130-smoke4.jsonl 2> yt130-smoke4.stderr
+          cat yt130-smoke4.jsonl
+          python tools/poc/yharnam/yt130-reference/verify_load_report.py \
+            yt130-smoke4.jsonl --expected-players 4
       - name: Benchmark 200 synthetic co-op peers on loopback only
         shell: bash
         run: |
@@ -104,8 +120,8 @@ jobs:
             --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
             --players 200 --team-size 2 --processes 2 \
-            --seconds 25 --ramp-ms 10 \
-            > yt130-load200.jsonl
+            --seconds 25 --ramp-ms 10 --cfg CheckServerBuild=false \
+            --keep > yt130-load200.jsonl 2> yt130-load200.stderr
           cat yt130-load200.jsonl
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
             yt130-load200.jsonl --expected-players 200
@@ -114,6 +130,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: yt130-loopback-200-peer-metrics
-          path: yt130-load200.jsonl
+          path: |
+            yt130-load200.jsonl
+            yt130-smoke4.jsonl
+            yt130-smoke4.stderr
+            yt130-load200.stderr
           if-no-files-found: ignore
           retention-days: 7

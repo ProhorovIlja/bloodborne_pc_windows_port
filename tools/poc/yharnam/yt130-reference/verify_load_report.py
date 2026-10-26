@@ -28,8 +28,13 @@ def load(path: Path, expected_players: int) -> dict:
             raise ValueError("Missing/invalid numeric real benchmark metric: "+key)
     if r["players"] != expected_players:
         raise ValueError("Generator did not simulate the requested player count")
-    if r["playing"] > r["players"] or r["refused"] > r["players"]:
-        raise ValueError("Impossible player counters")
+    # Upstream 'refused' counts EACH failed HELLO retry, not distinct players.
+    # It may legitimately exceed attempted users and is diagnostic, not a
+    # measure of unique refused people. Keep that raw counter unchanged.
+    if r["playing"] > r["players"]:
+        raise ValueError("Impossible number of playing users")
+    if r["playing"] == 0:
+        raise ValueError("No synthetic player reached the PLAYING state; do not publish performance results")
     if r["packets_sent"] == 0 or r["packets_lost"] > r["packets_sent"]:
         raise ValueError("No valid actual game traffic")
     return r
