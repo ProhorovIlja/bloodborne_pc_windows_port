@@ -73,7 +73,7 @@ int CachedCredentialRevocationIsVisible(const QString &folder) {
   Database db("staged_auth_v119");
   CHECK(db.Open(folder + "/staged_auth_v119.db"));
   CHECK(db.Migrate());
-  const QString id = "hunter_staged_119";
+  const QString id = "hunter_stage119";
   const auto made = db.SignIn(id, "secret_for_temporary_test", {}, false, true);
   CHECK(made.has_value());
   const auto original = db.CurrentCredentialStatus(id);
