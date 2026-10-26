@@ -165,6 +165,25 @@ jobs:
           $launcher = Get-Content -Raw pinned-upstream/bbport/launcher/bbport_launcher_win.py
           if (-not $launcher.Contains('SHYT-V96-HUDSIGHT-CRASHING-VULKAN-LAYER')) { throw 'V96 launcher guard absent' }
           Write-Host 'SHYT_V96_ACTUAL_PINNED_NATIVE_WINDOWS_LAUNCHER_GUARD_STAGED'
+      - name: V100 fix pinned Sirit C++20 std::abort declaration before native renderer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_sirit_abort_v100.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V100 original Sirit source regression failed' }
+          python tools/poc/yharnam/package-v41/patch_sirit_abort_v100.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V100 pinned Sirit std::abort header drift detected' }
+          Write-Host SHYT_V100_SIRIT_ABORT_DECLARATION_STAGED
+      - name: V100 preflight actual Sirit translation unit with Windows CLANG64
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          sirit="pinned-upstream/bbport/gpu/third_party/sirit"
+          clang++ -std=c++20 -fsyntax-only -Wall -Wextra -Werror -pedantic \
+            -I "$sirit/include" -I "$sirit/src" \
+            -I "$sirit/externals/SPIRV-Headers/include" \
+            "$sirit/src/instructions/constant.cpp"
+          echo SHYT_V100_ACTUAL_CLANG64_SIRIT_CONSTANT_CPP_PASS
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
