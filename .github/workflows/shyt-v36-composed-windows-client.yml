@@ -8,12 +8,6 @@ on:
         type: boolean
         default: false
   workflow_dispatch:
-    inputs:
-      bbnet_only:
-        description: Diagnostic: compile only the real original bbnet static game library.
-        required: false
-        type: boolean
-        default: false
 permissions:
   contents: read
 jobs:
