@@ -18,7 +18,7 @@ ROOT_NAMES = (
     "bloodborne_party_death.cpp", "bloodborne_re_internal.h",
     "bloodborne_re.cpp",
 )
-AR_LIST = "\\n".join(name + ".obj" for name in guard.REQUIRED_UNITS) + "\\n"
+AR_LIST = "\n".join(name + ".obj" for name in guard.REQUIRED_UNITS) + "\n"
 
 
 class TestV108NativeArchive(unittest.TestCase):
@@ -27,7 +27,7 @@ class TestV108NativeArchive(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.archive = self.root / "libbbnet.a"
-        self.archive.write_bytes(b"!<arch>\\nnonempty-fixture")
+        self.archive.write_bytes(b"!<arch>\nnonempty-fixture")
         self.manifest = self.root / "shyt-v101-gameplay-source.json"
         digests = {}
         for name in ROOT_NAMES:
@@ -57,9 +57,9 @@ class TestV108NativeArchive(unittest.TestCase):
 
     def test_fail_on_missing_or_duplicate_object(self):
         samples = (
-            AR_LIST.replace("bloodborne_party_death.cpp.obj\\n", ""),
-            AR_LIST + "bloodborne_party.cpp.obj\\n",
-            "unrelated.cpp.obj\\n",
+            AR_LIST.replace("bloodborne_party_death.cpp.obj\n", ""),
+            AR_LIST + "bloodborne_party.cpp.obj\n",
+            "unrelated.cpp.obj\n",
         )
         for listing in samples:
             with self.subTest(listing=listing), patch.object(
