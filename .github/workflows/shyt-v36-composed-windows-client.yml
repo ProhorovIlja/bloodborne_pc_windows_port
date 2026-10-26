@@ -18,6 +18,7 @@ jobs:
       PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
       BB_LTO: 'OFF'
       SHYT_V117_VERIFY_AFTER_BBNET: '1' # verify actual native game source+archive before GPU
+      SHYT_BBCOOP_CI_PINNED_REVISION: '77e350743a7cb4524cfcc1782fb6e3af64e25b15-dirty' # exact original Git dirty fingerprint for immutable CI overlays
       SHYT_BBNET_ONLY: ${{ inputs.bbnet_only && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
@@ -275,6 +276,15 @@ jobs:
           python tools/poc/yharnam/package-v41/patch_native_integrated_gate_v117.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Pinned native bbnet -> GPU build boundary drifted' }
           Write-Host SHYT_V117_REAL_BBNET_AND_GPU_SINGLE_COMPILER_PIPELINE_STAGED
+      - name: V123 preflight native revision script without Git subprocesses
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_ci_revision_v123.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V123 real CMake revision regression failed' }
+          python tools/poc/yharnam/package-v41/patch_native_ci_revision_v123.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V123 pinned original source drifted' }
+          Write-Host SHYT_V123_NATIVE_BBCOOP_GIT_FREE_REBUILD_GUARD_STAGED
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
