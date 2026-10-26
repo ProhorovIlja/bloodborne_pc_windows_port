@@ -266,6 +266,12 @@ jobs:
             exit "$rc"
           ) &
           builder=$!
+          # V110: fail a genuinely stalled compile instead of repeating the
+          # same Ninja lines until the 165-minute step timeout. We measure
+          # file modification timestamps rather than log size; a compiler
+          # writing diagnostic output also counts as activity.
+          native_build_started_at="$(date +%s)"
+          native_stall_seconds=1800
           # V102: original Ninja can remain busy (or its MSYS shell appear
           # alive) after the first compiler failure. Previously the same
           # error was printed every 30s for 165 minutes. Detect ONLY
@@ -298,6 +304,30 @@ jobs:
             done
             if [[ ! -f out/bbnet-build.log && ! -f out/gpu-build.log ]]; then
               echo "Native bbnet/GPU Ninja logs not yet created; configuring dependencies"
+            fi
+            # No completed Ninja action OR freshly written compiler
+            # diagnostic in either phase for 30 min is a stall, not progress.
+            # In particular, this catches the 2026-10-26 Windows run stuck
+            # at 119/418 for the entire 165-minute timeout.
+            last_write="$native_build_started_at"
+            for logfile in out/bbnet-build.log out/gpu-build.log; do
+              if [[ ! -f "$logfile" ]]; then continue; fi
+              modified="$(stat -c %Y "$logfile")"
+              if [[ "$modified" =~ ^[0-9]+$ ]] && (( modified > last_write )); then
+                last_write="$modified"
+              fi
+            done
+            now="$(date +%s)"
+            if (( now - last_write > native_stall_seconds )); then
+              echo "SHYT_V110_NATIVE_COMPILE_STALL_30M elapsed=$((now - last_write))s"
+              for logfile in out/bbnet-build.log out/gpu-build.log; do
+                if [[ -f "$logfile" ]]; then
+                  echo "SHYT_V110_STALLED_BUILD_SOURCE_LOG=$logfile"
+                  tail -n 35 "$logfile" || true
+                fi
+              done
+              kill "$builder" >/dev/null 2>&1 || true
+              exit 1
             fi
             sleep 30
           done
