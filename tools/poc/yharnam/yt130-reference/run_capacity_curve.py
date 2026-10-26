@@ -5,11 +5,13 @@ Each stage uses a fresh isolated localhost shadNet, synthetic database and indep
 from __future__ import annotations
 import argparse
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
 
 STAGES = (4, 16, 32, 64, 100, 200)
+DIAGNOSTIC_STAGES = (32, 64, 100, 200)
 BUILD = "bb-build 1;version=dev;protocol=9;"
 
 def settings(players: int) -> tuple[int, int, int]:
@@ -41,6 +43,20 @@ def quality(m: dict, players: int) -> str:
     # This is a minimum evidence gate, not proof of per-client packet delivery.
     if m["packets_sent"] < players or m["packets_received"] < players:
         return "INSUFFICIENT_DELIVERY_EVIDENCE"
+    # A connected client and some packets are not a healthy session.
+    # These are explicit conservative *localhost synthetic* acceptance budgets,
+    # not claims of Internet or 2-PC gameplay quality. Never use host-global
+    # UDP drop counters to judge this server alone.
+    for key in ("relay_ms_p99", "main_thread_cpu_avg"):
+        metric = m.get(key)
+        if type(metric) not in (int, float) or not math.isfinite(metric) or metric < 0:
+            return "INVALID_METRICS"
+    if m["packets_received"] / m["packets_sent"] < 0.99:
+        return "DELIVERY_DEGRADED"
+    if m["relay_ms_p99"] > 50.0:
+        return "RELAY_LATENCY_DEGRADED"
+    if m["main_thread_cpu_avg"] >= 75.0:
+        return "MAIN_THREAD_SATURATED"
     return "FULL_GAMEPLAY"
 
 def run(args) -> int:
@@ -48,7 +64,8 @@ def run(args) -> int:
         if not path.is_file():
             raise ValueError("Expected a real compiled executable/upstream script: " + str(path))
     with args.report.open("w", encoding="utf-8") as sink:
-        for index,players in enumerate(STAGES):
+        stages = DIAGNOSTIC_STAGES if args.profile == "reduced" else STAGES
+        for index,players in enumerate(stages):
             processes,seconds,ramp_ms=settings(players)
             cmd=[sys.executable,str(args.load_script),
                  "--shadnet",str(args.shadnet),"--bbload",str(args.bbload),
@@ -56,7 +73,8 @@ def run(args) -> int:
                  "--processes",str(processes),"--seconds",str(seconds),
                  "--ramp-ms",str(ramp_ms),"--port",str(32314+10*index),
                  "--cfg","CheckServerBuild=false",
-                 "--extra","--build '"+BUILD+"'"]
+                 "--extra","--build '"+BUILD+"'" +
+                 (" --owner-fps 10 --follower-fps 3" if args.profile == "reduced" else "")]
             try:
                 result=subprocess.run(cmd,capture_output=True,text=True,timeout=95)
             except subprocess.TimeoutExpired:
@@ -86,9 +104,12 @@ def run(args) -> int:
                   "players="+str(players),"playing="+str(sample.get("playing","?")),
                   "main_cpu="+str(sample.get("main_thread_cpu_avg","?")),
                   "quality="+sample["quality"],flush=True)
-            if sample["quality"]!="FULL_GAMEPLAY":
-                print("SHYT_YT130_CAPACITY_CEILING_REACHED_NOT_A_200_PLAYER_PASS")
+            if sample["quality"]!="FULL_GAMEPLAY" and not args.diagnostic:
+                print("SHYT_YT130_HEALTH_CEILING_REACHED_NOT_A_200_PLAYER_PASS")
                 return 1
+    if args.diagnostic:
+        print("SHYT_YT130_DIAGNOSTIC_ONLY_NO_HEALTH_OR_CAPACITY_PASS_CLAIM")
+        return 0
     print("SHYT_YT130_ACTUAL_200_SIMULATED_PLAYERS_COMPLETE_OPTIMIZED_BUILD")
     return 0
 
@@ -98,4 +119,7 @@ if __name__=="__main__":
     parser.add_argument("--bbload",type=Path,required=True)
     parser.add_argument("--load-script",type=Path,required=True)
     parser.add_argument("--report",type=Path,required=True)
+    parser.add_argument("--profile",choices=("baseline","reduced"),default="baseline")
+    parser.add_argument("--diagnostic",action="store_true",
+                        help="record all stages without publishing a passing capacity claim")
     raise SystemExit(run(parser.parse_args()))
