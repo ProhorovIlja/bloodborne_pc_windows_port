@@ -85,6 +85,7 @@ class NativeWholePipelineV118(unittest.TestCase):
         for marker in (a.MARKER, b.MARKER, c.MARKER, d.MARKER, e.MARKER, f.MARKER):
             self.assertEqual(built.count(marker), 1, marker)
         self.assertIn("CMAKE_CXX_COMPILER_LAUNCHER=ccache", built)
+        self.assertIn("-DCMAKE_SUPPRESS_REGENERATION=ON", built)
         self.assertEqual(built.count("gline-tables-only"), 2)
         self.assertEqual(built.count('ninja -j "'), 2)
         self.assertLess(built.index("out/bbnet-build.log"),
@@ -116,6 +117,7 @@ class NativeWholePipelineV118(unittest.TestCase):
                 self.assertEqual(proc.returncode == 0, ok, proc.stdout + proc.stderr)
                 args = (Path(tmp)/"cmake.args").read_text(encoding="utf-8")
                 self.assertIn("-DCMAKE_CXX_COMPILER_LAUNCHER=ccache", args)
+                self.assertIn("-DCMAKE_SUPPRESS_REGENERATION=ON", args)
                 self.assertIn("-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -gline-tables-only -DNDEBUG", args)
                 ninja = (Path(tmp)/"ninja.calls").read_text(encoding="utf-8")
                 self.assertIn("-j 2 -C out/gpu bbnet", ninja)

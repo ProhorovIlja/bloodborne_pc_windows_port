@@ -19,7 +19,8 @@ ANCHOR = (
 )
 NEW = r"""-DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_C_FLAGS_RELWITHDEBINFO="-O2 -gline-tables-only -DNDEBUG" \
-        -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -gline-tables-only -DNDEBUG" > out/cmake-configure.log 2>&1; then"""
+        -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -gline-tables-only -DNDEBUG" \
+        -DCMAKE_SUPPRESS_REGENERATION=ON > out/cmake-configure.log 2>&1; then"""
 
 
 def transform(source: str) -> str:

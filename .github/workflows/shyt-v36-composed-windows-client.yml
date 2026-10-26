@@ -260,6 +260,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_lean_dwarf_v116.py' -v
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_ci_no_regen_v120.py' -v
           if ($LASTEXITCODE -ne 0) { throw 'V116 CMake line-table regression failed' }
           python tools/poc/yharnam/package-v41/patch_native_lean_dwarf_v116.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'V116 original native Windows CMake flag anchor drifted' }

@@ -53,6 +53,7 @@ class NativeLeanDwarfV116(unittest.TestCase):
         self.assertIn('-DCMAKE_C_FLAGS_RELWITHDEBINFO="-O2 -gline-tables-only -DNDEBUG"', actual)
         self.assertIn('-DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -gline-tables-only -DNDEBUG"', actual)
         self.assertIn("-DCMAKE_CXX_COMPILER_LAUNCHER=ccache", actual)
+        self.assertIn("-DCMAKE_SUPPRESS_REGENERATION=ON", actual)
         self.assertIn("> out/cmake-configure.log 2>&1", actual)
         self.assertIn("SHYT_V115_NATIVE_CMAKE_CONFIGURE_FAILED", actual)
         with self.assertRaisesRegex(ValueError, "already applied"):
@@ -89,6 +90,7 @@ cmake() {
             self.assertIn("-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -gline-tables-only -DNDEBUG", args)
             self.assertIn("-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -gline-tables-only -DNDEBUG", args)
             self.assertIn("-DCMAKE_CXX_COMPILER_LAUNCHER=ccache", args)
+            self.assertIn("-DCMAKE_SUPPRESS_REGENERATION=ON", args)
             self.assertIn("-DCMAKE_BUILD_TYPE=RelWithDebInfo", args)
             self.assertIn("CMAKE_DIAGNOSTIC_PRESERVED",
                           Path(temp, "out/cmake-configure.log").read_text())

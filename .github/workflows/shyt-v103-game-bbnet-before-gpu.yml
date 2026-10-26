@@ -12,6 +12,7 @@ on:
       - tools/poc/yharnam/package-v41/test_composed_native_build_v113.py
       - tools/poc/yharnam/package-v41/patch_native_lean_dwarf_v116.py
       - tools/poc/yharnam/package-v41/test_native_lean_dwarf_v116.py
+      - tools/poc/yharnam/package-v41/test_native_ci_no_regen_v120.py
       - tools/poc/yharnam/package-v41/patch_native_integrated_gate_v117.py
       - tools/poc/yharnam/package-v41/test_native_integrated_gate_v117.py
       - tools/poc/yharnam/package-v41/patch_native_cmake_trace_v115.py
@@ -118,6 +119,9 @@ jobs:
           python -m unittest discover \
             -s tools/poc/yharnam/package-v41 \
             -p 'test_native_lean_dwarf_v116.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_native_ci_no_regen_v120.py' -v
           python -m unittest discover \
             -s tools/poc/yharnam/package-v41 \
             -p 'test_native_integrated_gate_v117.py' -v
