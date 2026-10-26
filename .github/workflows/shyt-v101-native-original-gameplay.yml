@@ -66,6 +66,18 @@ jobs:
                       if attempt==2:raise
                       sleep(2)
           fixed=m.transform(originals)
+          # Windows Git autocrlf may checkout every original .h/.cpp as CRLF.
+          # Unlike relaxed string matching, V101 normalizes only fully
+          # uniform CRLF and still rejects any unreviewed source drift.
+          crlf={name:contents.replace(b'\n',b'\r\n')
+                for name,contents in originals.items()}
+          assert m.transform(crlf)==fixed
+          mixed=dict(crlf)
+          target=names[0]
+          mixed[target]=mixed[target].replace(b'\r\n',b'\n',1)
+          try:m.transform(mixed)
+          except ValueError:pass
+          else:raise AssertionError('Mixed source line endings accepted')
           assert set(fixed)==set(originals)
           assert all(originals[name]!=fixed[name] for name in names)
           assert b'Range(6700, 6700, FlagOwner::PerPlayer, 0' in fixed[
