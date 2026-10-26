@@ -37,15 +37,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/yharnam-v96/bbport/launcher
+          mkdir -p v96-pinned/bbport/launcher
           curl -fsSL --retry 3 \
             https://raw.githubusercontent.com/lKaniel/bloodborne-server/77e350743a7cb4524cfcc1782fb6e3af64e25b15/bbport/launcher/bbport_launcher_win.py \
-            -o /tmp/yharnam-v96/bbport/launcher/bbport_launcher_win.py
-          python tools/poc/yharnam/package-v41/patch_vk_layer_compat_v96.py /tmp/yharnam-v96
+            -o v96-pinned/bbport/launcher/bbport_launcher_win.py
+          python tools/poc/yharnam/package-v41/patch_vk_layer_compat_v96.py v96-pinned
           python - <<'PY'
           from pathlib import Path
           import ast
-          p=Path('/tmp/yharnam-v96/bbport/launcher/bbport_launcher_win.py')
+          p=Path('v96-pinned/bbport/launcher/bbport_launcher_win.py')
           source=p.read_text()
           ast.parse(source)
           assert source.count('SHYT-V96-HUDSIGHT-CRASHING-VULKAN-LAYER')==1
