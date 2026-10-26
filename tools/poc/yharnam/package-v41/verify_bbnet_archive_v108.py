@@ -42,7 +42,7 @@ def verify_manifest(manifest: Path, checkout: Path) -> None:
             raise ValueError("V108 missing patched translation unit digest: " + unit)
     for relative, expected in hashes.items():
         if (not isinstance(relative, str)
-            or not re.fullmatch(r"emulator/src/core/[A-Za-z0-9_]+\\.(?:cpp|h)", relative)
+            or not re.fullmatch(r"emulator/src/core/[A-Za-z0-9_]+\.(?:cpp|h)", relative)
             or not isinstance(expected, str)
             or not re.fullmatch(r"[0-9a-f]{64}", expected)):
             raise ValueError("V108 malformed or unsafe source digest")
