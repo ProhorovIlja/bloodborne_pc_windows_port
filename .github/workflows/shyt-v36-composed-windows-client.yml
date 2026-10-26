@@ -53,6 +53,17 @@ jobs:
             throw 'Native game UI patch missing'
           }
           Write-Host 'COMPOSED_NATIVE_SOURCE_PASS'
+      - name: V101 stage V97 Doll + V98 respawn + V99 revived boss AI into REAL game
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/package-v41/stage_gameplay_v101.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V101 original game source drift or gameplay integration failed' }
+          $report = Get-Content -Raw -Encoding UTF8 pinned-upstream/bbport/out/shyt-v101-gameplay-source.json | ConvertFrom-Json
+          if ($report.pinned_upstream -ne $env:PIN -or $report.native_gameplay_direct_udp_enabled -ne $false -or $report.source_sha256.PSObject.Properties.Count -lt 7) {
+            throw 'V101 incomplete or unsafe original native gameplay source set'
+          }
+          Write-Host 'SHYT_V101_NATIVE_BBNET_GAMEPLAY_V97_V98_V99_PRESENT'
       - uses: msys2/setup-msys2@v2
         with:
           msystem: CLANG64
