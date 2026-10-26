@@ -17,10 +17,24 @@ class CapacityUnitTests(unittest.TestCase):
             self.assertGreaterEqual(ramp,100)
         with self.assertRaises(ValueError):
             mod.settings(10000)
-    def test_no_200_player_success_when_no_one_plays(self):
-        self.assertEqual(mod.quality({"players":200,"playing":0,"packets_sent":0},200),"NO_GAMEPLAY")
-        self.assertEqual(mod.quality({"players":200,"playing":199,"packets_sent":300},200),"PARTIAL_GAMEPLAY")
-        self.assertEqual(mod.quality({"players":200,"playing":200,"packets_sent":300},200),"FULL_GAMEPLAY")
-        self.assertEqual(mod.quality({"players":199,"playing":199,"packets_sent":300},200),"GENERATOR_MISMATCH")
+    def test_true_delivery_and_valid_packets_required(self):
+        baseline = {"players":200, "playing":200,
+                    "packets_sent":2000, "packets_received":2000,
+                    "packets_lost":0}
+        self.assertEqual(mod.quality(baseline, 200), "FULL_GAMEPLAY")
+        self.assertEqual(mod.quality(baseline | {"playing":199}, 200), "PARTIAL_GAMEPLAY")
+        self.assertEqual(mod.quality(baseline | {"players":199}, 200), "GENERATOR_MISMATCH")
+        self.assertEqual(mod.quality(baseline | {"playing":0}, 200), "NO_GAMEPLAY")
+        self.assertEqual(mod.quality(baseline | {"packets_received":0}, 200), "NO_GAMEPLAY")
+        self.assertEqual(mod.quality(baseline | {"packets_received":1}, 200),
+                         "INSUFFICIENT_DELIVERY_EVIDENCE")
+        self.assertEqual(mod.quality(baseline | {"packets_sent":1, "packets_received":1}, 200),
+                         "INSUFFICIENT_DELIVERY_EVIDENCE")
+        for bad in ({"packets_received":2001}, {"packets_lost":2001},
+                    {"packets_sent":float("nan")}, {"packets_received":True},
+                    {"packets_received":-1}, {"packets_received":None}):
+            with self.subTest(bad=bad):
+                self.assertEqual(mod.quality(baseline | bad, 200), "INVALID_METRICS")
+
 if __name__=="__main__":
     unittest.main()
