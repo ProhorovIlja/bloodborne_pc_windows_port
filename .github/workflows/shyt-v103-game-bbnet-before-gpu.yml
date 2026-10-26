@@ -82,3 +82,24 @@ jobs:
           assert 'target_link_libraries(bbgpu PUBLIC bbnet)' in content['bbport/gpu/CMakeLists.txt']
           print('SHYT_V103_ACTUAL_ORIGINAL_NATIVE_BBNET_TARGET_ORDER_PASS')
           PY
+      - name: V106 source-verify only original native bbnet archive opt-in
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_bbnet_only_v106.py' -v
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text(encoding='utf-8')
+          assert 'SHYT_BBNET_ONLY:' in s
+          assert 'SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED' in s
+          assert 'pinned-upstream/bbport/out/gpu/libbbnet.a' in s
+          assert "SHYT_V101_ALL_SEVEN_ACTUAL_NATIVE_BBNET_GAME_SOURCE_SHA256_PASS" in s
+          print('SHYT_V106_REUSABLE_ORIGINAL_GAME_COMPILER_INPUT_PASS')
+          PY
+  compile-real-original-game-bbnet:
+    needs: true-bbnet-first
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
+    with:
+      bbnet_only: true
