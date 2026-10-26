@@ -36,6 +36,17 @@ class V123ActualNativePinnedRevision(unittest.TestCase):
             with self.subTest(changed=changed[:40]), self.assertRaises(ValueError):
                 v.transform(changed)
 
+    def test_git_for_windows_line_ending_normalization_is_fail_closed(self):
+        original = b"set(revision \"\")\nset(dirty FALSE)\n"
+        crlf = original.replace(b"\n", b"\r\n")
+        self.assertEqual(v.normalize_only_line_endings(original), original)
+        self.assertEqual(v.normalize_only_line_endings(crlf), original)
+        self.assertEqual(v.git_blob(v.normalize_only_line_endings(crlf)),
+                         v.git_blob(original))
+        for invalid in (b"a\rb\n", b"a\r\nb\n", b"a\nb\r\n"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                v.normalize_only_line_endings(invalid)
+
     def test_real_cmake_mode_does_not_call_git_and_preserves_existing_header(self):
         if not shutil.which("cmake"):
             self.skipTest("CMake needed to test real interpreter")

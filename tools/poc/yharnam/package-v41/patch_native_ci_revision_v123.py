@@ -38,6 +38,20 @@ def git_blob(raw: bytes) -> str:
     return hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
 
 
+def normalize_only_line_endings(raw: bytes) -> bytes:
+    """Permit Git-for-Windows CRLF checkout, never accept content changes.
+
+    A downloaded Git blob is LF, but Windows checkout may transparently
+    use CRLF. Reject bare CR and mixed LF/CRLF as a source-tamper precaution.
+    """
+    if b"\r" not in raw:
+        return raw
+    clean = raw.replace(b"\r\n", b"")
+    if b"\r" in clean or b"\n" in clean:
+        raise ValueError("V123 mixed/bare CR in original CMake source")
+    return raw.replace(b"\r\n", b"\n")
+
+
 def transform(text: str) -> str:
     required = (
         "execute_process(COMMAND git status --porcelain",
@@ -56,9 +70,12 @@ def stage(pinned: Path) -> None:
     path = pinned / FILE
     if not path.is_file() or path.is_symlink():
         raise ValueError("V123 missing/symlinked pinned original revision.cmake")
-    data = path.read_bytes()
+    raw = path.read_bytes()
+    data = normalize_only_line_endings(raw)
     if git_blob(data) != ORIGINAL_BLOB:
         raise ValueError("V123 original upstream revision.cmake blob mismatch")
+    if raw != data:
+        print("SHYT_V123_ORIGINAL_WINDOWS_CRLF_CHECKOUT_NORMALIZED")
     path.write_text(transform(data.decode("utf-8")), encoding="utf-8")
     print("SHYT_V123_ORIGINAL_DIRTY_CI_BBCOOP_REVISION_STAGED")
 
