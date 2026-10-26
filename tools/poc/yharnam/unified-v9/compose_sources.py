@@ -464,7 +464,8 @@ def run(checkout:Path, repo:Path, out:Path):
         "emulator/src/core/bloodborne_party.h",
         "emulator/src/core/bloodborne_party.cpp",
         "emulator/src/core/bloodborne_party_death.cpp",
-        "emulator/src/core/bloodborne_re_internal.h"}
+        "emulator/src/core/bloodborne_re_internal.h",
+        "emulator/src/core/bloodborne_re.cpp"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
     # V69: apply runtime-only optional byte/packet counters to the ENTIRE
@@ -791,6 +792,17 @@ def run(checkout:Path, repo:Path, out:Path):
                  for name in v98.FILES}
     files.update(v98.patch(v98_sources))
     meta["applied"].append("V98 upstream PR410 consume lethal catches on all real game death ticks, drop dead/down queue, preserve live hits")
+    # V99 backports original boss AI stale-death mark repair after BOTH
+    # PR407/410. Use their already changed original native game sources
+    # for overlaps; pull re.cpp directly from immutable pinned checkout.
+    v99_path=metrics_dir/"patch_upstream_stale_death_v99.py"
+    v99=types.ModuleType("sh_v99_revived_boss_target")
+    v99.__file__=str(v99_path)
+    exec(compile(v99_path.read_text("utf-8"),str(v99_path),"exec"),v99.__dict__)
+    v99_inputs={name:(files[name] if name in files else sources[name].encode("utf-8"))
+                for name in v99.FILES}
+    files.update(v99.patch(v99_inputs))
+    meta["applied"].append("V99 upstream PR413 revived co-op guests regain boss AI targeting after stable 3s, map visit and info-pointer fail-closed guards")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
