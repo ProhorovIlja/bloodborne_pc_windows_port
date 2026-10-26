@@ -254,6 +254,15 @@ jobs:
           python tools/poc/yharnam/package-v41/patch_native_cmake_trace_v115.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'V115 pinned original CMake configure anchor changed' }
           Write-Host 'SHYT_V115_REAL_WINDOWS_CMAKE_CONFIGURE_LOG_ENABLED'
+      - name: V116 keep -O2 with lean line-table debug info on hosted Clang64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_lean_dwarf_v116.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V116 CMake line-table regression failed' }
+          python tools/poc/yharnam/package-v41/patch_native_lean_dwarf_v116.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V116 original native Windows CMake flag anchor drifted' }
+          Write-Host 'SHYT_V116_WINDOWS_NATIVE_CXX_O2_LEAN_DWARF_STAGED'
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
