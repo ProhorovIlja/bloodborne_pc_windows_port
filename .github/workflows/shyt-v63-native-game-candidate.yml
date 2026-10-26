@@ -15,6 +15,13 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# V105: real native GPU game C++ builds can take hours. Prevent every
+# intermediate source commit from scheduling another duplicate 180-min
+# renderer build. GitHub retains the latest pending run per branch, but
+# NEVER cancels an already-running compilation with useful cache/results.
+concurrency:
+  group: shyt-v105-native-full-game-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   native-game-client:
     # Rerun after fixing the exact 165-minute native build failure:
