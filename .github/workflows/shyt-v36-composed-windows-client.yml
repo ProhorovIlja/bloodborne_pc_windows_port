@@ -60,10 +60,25 @@ jobs:
           python tools/poc/yharnam/package-v41/stage_gameplay_v101.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'V101 original game source drift or gameplay integration failed' }
           $report = Get-Content -Raw -Encoding UTF8 pinned-upstream/bbport/out/shyt-v101-gameplay-source.json | ConvertFrom-Json
-          if ($report.pinned_upstream -ne $env:PIN -or $report.native_gameplay_direct_udp_enabled -ne $false -or $report.source_sha256.PSObject.Properties.Count -lt 7) {
-            throw 'V101 incomplete or unsafe original native gameplay source set'
+          if ($report.pinned_upstream -ne $env:PIN -or $report.native_gameplay_direct_udp_enabled -ne $false) {
+            throw 'V101 wrong source pin or unsafe Direct gameplay setting'
           }
-          Write-Host 'SHYT_V101_NATIVE_BBNET_GAMEPLAY_V97_V98_V99_PRESENT'
+          # PowerShell's PSObject.Properties.Count may not be a scalar count
+          # on all runners. Enumerate actual JSON properties and validate
+          # every staged original-game source file against its SHA-256.
+          $files = @($report.source_sha256.PSObject.Properties)
+          if ($files.Count -ne 7) { throw "V101 expected seven source digests; found $($files.Count)" }
+          foreach ($entry in $files) {
+            $sourcePath = Join-Path 'pinned-upstream' $entry.Name
+            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+              throw "V101 native source missing: $($entry.Name)"
+            }
+            $actual = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne [string]$entry.Value) {
+              throw "V101 staged C++ source hash mismatch: $($entry.Name)"
+            }
+          }
+          Write-Host 'SHYT_V101_ALL_SEVEN_ACTUAL_NATIVE_BBNET_GAME_SOURCE_SHA256_PASS'
       - uses: msys2/setup-msys2@v2
         with:
           msystem: CLANG64
