@@ -51,5 +51,30 @@ class NativeQtCIWorkflowShell(unittest.TestCase):
         self.assertIn("accounts|server_link|admission|region|packet_routes", body)
 
 
+    def test_all_expensive_bash_steps_are_syntax_checked(self):
+        raw=WORKFLOW.read_text(encoding="utf-8")
+        bash=shutil.which("bash")
+        if bash is None:
+            self.skipTest("Bash unavailable")
+        blocks=re.split(r"(?m)^      - name: ",raw)[1:]
+        checked=0
+        for item in blocks:
+            if not re.search(r"(?m)^        shell: bash[ \t]*$",item):
+                continue
+            run=re.search(r"(?m)^        run: \|[ \t]*$",item)
+            self.assertIsNotNone(run)
+            lines=[]
+            for line in item[run.end():].splitlines():
+                if line and not line.startswith("          "):
+                    break
+                lines.append(line[10:] if line.startswith("          ") else "")
+            script="\n".join(lines)+"\n"
+            check=subprocess.run([bash,"-n"],input=script,text=True,capture_output=True,timeout=15)
+            with self.subTest(step=item.splitlines()[0]):
+                self.assertEqual(check.returncode,0,check.stderr)
+            checked+=1
+        self.assertGreaterEqual(checked,4)
+
+
 if __name__ == "__main__":
     unittest.main()
