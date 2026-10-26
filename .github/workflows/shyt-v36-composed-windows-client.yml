@@ -262,26 +262,39 @@ jobs:
                grep -Eq "$fatal_pattern"; then
             echo "SHYT_V102_FALSE_POSITIVE_PATTERN"; exit 1
           fi
+          # V104: V103 now builds the real game's bbnet BEFORE GPU.
+          # The previous V102 watchdog only watched GPU's log, missing
+          # gameplay C++ failures until Ninja finished/timeout occurred.
+          # Check each log as soon as it exists; never scan unrelated
+          # source/test log text and never treat a warning as fatal.
           while [[ ! -f "$statusfile" ]]; do
             echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            if [[ -f out/gpu-build.log ]]; then
-              if grep -Eq "$fatal_pattern" out/gpu-build.log; then
-                echo "SHYT_V102_REAL_NATIVE_COMPILER_ERROR_ABORT_EARLY"
-                tail -n 100 out/gpu-build.log || true
+            for logfile in out/bbnet-build.log out/gpu-build.log; do
+              if [[ ! -f "$logfile" ]]; then continue; fi
+              if grep -Eq "$fatal_pattern" "$logfile"; then
+                echo "SHYT_V104_NATIVE_COMPILER_ERROR_ABORT_EARLY_LOG=$logfile"
+                tail -n 100 "$logfile" || true
                 kill "$builder" >/dev/null 2>&1 || true
                 exit 1
               fi
-              tail -n 10 out/gpu-build.log || true
-            else
-              echo "GPU Ninja log not created yet; configuring dependencies"
+              echo "SHYT_V104_NINJA_PROGRESS_LOG=$logfile"
+              tail -n 10 "$logfile" || true
+            done
+            if [[ ! -f out/bbnet-build.log && ! -f out/gpu-build.log ]]; then
+              echo "Native bbnet/GPU Ninja logs not yet created; configuring dependencies"
             fi
             sleep 30
           done
           build_status="$(cat "$statusfile")"
           wait "$builder" || true
           if [[ "$build_status" != 0 ]]; then
-            echo "SHYT_GPU_BUILD_FAILED_FAST_EXIT=$build_status"
-            tail -n 100 out/gpu-build.log || true
+            echo "SHYT_NATIVE_BBNET_OR_GPU_BUILD_FAILED_FAST_EXIT=$build_status"
+            for logfile in out/bbnet-build.log out/gpu-build.log; do
+              if [[ -f "$logfile" ]]; then
+                echo "SHYT_V104_FAILURE_SOURCE_LOG=$logfile"
+                tail -n 100 "$logfile" || true
+              fi
+            done
             exit "$build_status"
           fi
           ccache --show-stats
@@ -353,6 +366,7 @@ jobs:
         with:
           name: shyt-v36-native-windows-compiler-failure
           path: |
+            pinned-upstream/bbport/out/bbnet-build.log
             pinned-upstream/bbport/out/gpu-build.log
             pinned-upstream/bbport/out/gpu/CMakeCache.txt
             pinned-upstream/bbport/out/gpu/CMakeFiles/CMakeConfigureLog.yaml
