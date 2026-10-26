@@ -269,6 +269,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_integrated_gate_v117.py' -v
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_full_pipeline_v118.py' -v
           if ($LASTEXITCODE -ne 0) { throw 'Integrated bbnet/game provenance test failed' }
           python tools/poc/yharnam/package-v41/patch_native_integrated_gate_v117.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Pinned native bbnet -> GPU build boundary drifted' }

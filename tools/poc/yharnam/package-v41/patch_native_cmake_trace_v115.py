@@ -3,7 +3,9 @@
 
 A prior real 165-minute CI timeout saved CMakeCache but no bbnet/GPU
 build log; pinned bbport/build.sh deliberately redirected CMake to /dev/null.
-Source-exact, Windows-only change. No game functionality or release flags.
+Source-exact, Windows-only change. The CI deliberately injects ccache BEFORE
+this transform. The ccache-aware CMake line must match as one complete stage.
+No game functionality or release flags.
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ from pathlib import Path
 TARGET = "bbport/build.sh"
 MARKER = "SHYT-V115-NATIVE-CMAKE-CONFIGURE-LOG"
 ORIGINAL = """    cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PGO=off \\
-        -DBB_LTO="${BB_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null
+        -DBB_LTO="${BB_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache >/dev/null
     echo "GPU library and loader: LTO ${BB_LTO:-OFF}" """
 # The true original line ends at the quote, not after a trailing space.
 ORIGINAL = ORIGINAL.rstrip()
@@ -22,7 +24,7 @@ PATCHED = """    # SHYT-V115-NATIVE-CMAKE-CONFIGURE-LOG: preserve configure outp
     mkdir -p out
     echo SHYT_V115_NATIVE_CMAKE_CONFIGURE_START
     if ! cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PGO=off \\
-        -DBB_LTO="${BB_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ > out/cmake-configure.log 2>&1; then
+        -DBB_LTO="${BB_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache > out/cmake-configure.log 2>&1; then
         echo SHYT_V115_NATIVE_CMAKE_CONFIGURE_FAILED >&2
         tail -n 100 out/cmake-configure.log >&2 || true
         exit 1
