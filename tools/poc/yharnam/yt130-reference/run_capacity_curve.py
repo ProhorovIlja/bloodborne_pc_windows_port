@@ -20,12 +20,18 @@ def settings(players: int) -> tuple[int, int, int]:
 def quality(m: dict, players: int) -> str:
     # Upstream bbload reports aggregate counters, not per-peer delivery proofs.
     keys = ("players", "playing", "packets_sent", "packets_received", "packets_lost")
-    if any(type(m.get(key)) is not int or m[key] < 0 for key in keys):
+    # Qt serializes these counters as JSON numbers: whole values may be 3 or 3.0.
+    # A received packet can also have more than one recipient, so do not
+    # assume that aggregate receive counts never exceed send counts.
+    def valid_counter(v):
+        return ((type(v) is int and v >= 0) or
+                (type(v) is float and v >= 0 and v != float("inf") and
+                 v == v and v.is_integer()))
+    if any(not valid_counter(m.get(key)) for key in keys):
         return "INVALID_METRICS"
     if m["players"] != players:
         return "GENERATOR_MISMATCH"
-    if (m["playing"] > players or m["packets_lost"] > m["packets_sent"]
-            or m["packets_received"] > m["packets_sent"]):
+    if m["playing"] > players:
         return "INVALID_METRICS"
     if m["playing"] == 0 or m["packets_sent"] == 0 or m["packets_received"] == 0:
         return "NO_GAMEPLAY"
