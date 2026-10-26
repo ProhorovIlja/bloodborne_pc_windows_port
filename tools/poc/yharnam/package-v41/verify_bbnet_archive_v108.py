@@ -60,7 +60,7 @@ def verify_archive(archive: Path, archiver: str = "llvm-ar") -> None:
     listing = subprocess.check_output(
         [archiver, "t", str(archive)], text=True, timeout=60
     )
-    members = [entry.replace("\\\\", "/").rsplit("/", 1)[-1].lower()
+    members = [entry.replace("\\", "/").rsplit("/", 1)[-1].lower()
                for entry in listing.splitlines() if entry.strip()]
     for unit in REQUIRED_UNITS:
         expected = {unit.lower() + ".obj", unit.lower() + ".o"}
