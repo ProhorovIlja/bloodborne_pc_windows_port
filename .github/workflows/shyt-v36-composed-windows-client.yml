@@ -17,6 +17,7 @@ jobs:
     env:
       PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
       BB_LTO: 'OFF'
+      SHYT_V117_VERIFY_AFTER_BBNET: '1' # verify actual native game source+archive before GPU
       SHYT_BBNET_ONLY: ${{ inputs.bbnet_only && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
@@ -263,6 +264,15 @@ jobs:
           python tools/poc/yharnam/package-v41/patch_native_lean_dwarf_v116.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'V116 original native Windows CMake flag anchor drifted' }
           Write-Host 'SHYT_V116_WINDOWS_NATIVE_CXX_O2_LEAN_DWARF_STAGED'
+      - name: Single pipeline gate authentic bbnet objects and V101 SHA before GPU
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_integrated_gate_v117.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Integrated bbnet/game provenance test failed' }
+          python tools/poc/yharnam/package-v41/patch_native_integrated_gate_v117.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned native bbnet -> GPU build boundary drifted' }
+          Write-Host SHYT_V117_REAL_BBNET_AND_GPU_SINGLE_COMPILER_PIPELINE_STAGED
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.

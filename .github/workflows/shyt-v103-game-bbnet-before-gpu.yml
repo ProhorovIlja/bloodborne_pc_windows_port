@@ -12,6 +12,8 @@ on:
       - tools/poc/yharnam/package-v41/test_composed_native_build_v113.py
       - tools/poc/yharnam/package-v41/patch_native_lean_dwarf_v116.py
       - tools/poc/yharnam/package-v41/test_native_lean_dwarf_v116.py
+      - tools/poc/yharnam/package-v41/patch_native_integrated_gate_v117.py
+      - tools/poc/yharnam/package-v41/test_native_integrated_gate_v117.py
       - tools/poc/yharnam/package-v41/patch_native_cmake_trace_v115.py
       - tools/poc/yharnam/package-v41/test_native_cmake_trace_v115.py
       - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
@@ -19,6 +21,7 @@ on:
       - .github/workflows/shyt-v36-composed-windows-client.yml
   pull_request:
     branches: [feature/seamless-hunt-mainline]
+  workflow_dispatch:
 permissions:
   contents: read
 # V107: prevent every small PR push from creating another expensive pending
@@ -115,6 +118,9 @@ jobs:
             -p 'test_native_lean_dwarf_v116.py' -v
           python -m unittest discover \
             -s tools/poc/yharnam/package-v41 \
+            -p 'test_native_integrated_gate_v117.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
             -p 'test_native_cmake_trace_v115.py' -v
           python - <<'PY'
           from pathlib import Path
@@ -130,6 +136,9 @@ jobs:
           print('SHYT_V106_REUSABLE_ORIGINAL_GAME_COMPILER_INPUT_PASS')
           PY
   compile-real-original-game-bbnet:
+    # V117: native full build already compiles/validates bbnet before GPU.
+    # Keep second expensive standalone bbnet-only build MANUAL only.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: true-bbnet-first
     uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
     with:
