@@ -1,0 +1,59 @@
+name: Seamless Hunt V106 REAL Windows native game C++ bbnet only
+on:
+  push:
+    branches: [feature/shyt-win-fsr-countof-v63]
+    paths:
+      - tools/poc/yharnam/package-v41/patch_bbnet_only_v106.py
+      - tools/poc/yharnam/package-v41/test_bbnet_only_v106.py
+      - .github/workflows/shyt-v106-real-windows-bbnet-only.yml
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/package-v41/patch_bbnet_only_v106.py
+      - tools/poc/yharnam/package-v41/test_bbnet_only_v106.py
+      - .github/workflows/shyt-v106-real-windows-bbnet-only.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-v106-real-bbnet-only-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  exact-source-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: V106 reject default-GPU drift, require real original bbnet archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_bbnet_only_v106.py' -v
+          python - <<'PY'
+          from pathlib import Path
+          w=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text(encoding='utf-8')
+          assert 'SHYT_BBNET_ONLY:' in w
+          assert 'Compile real native Windows renderer and game loader' in w
+          assert "if: ${{ !inputs.bbnet_only }}" in w
+          assert "if: ${{ inputs.bbnet_only && success() }}" in w
+          assert 'pinned-upstream/bbport/out/gpu/libbbnet.a' in w
+          assert "SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED" in w
+          assert 'shyt-v101-gameplay-source.json' in w
+          print('SHYT_V106_SHARED_REAL_NATIVE_BBNET_ONLY_ISOLATED_PROOF_PASS')
+          PY
+  compile-genuine-native-game-cxx:
+    needs: exact-source-proof
+    # Uses the SAME original pinned Windows CMake, Qt/Yharnam game patch
+    # staging and CLANG64 as the GPU release candidate. Only the final
+    # GPU/render/ZIP steps are excluded when bbnet_only=true.
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
+    with:
+      bbnet_only: true
