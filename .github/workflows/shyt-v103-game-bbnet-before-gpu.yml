@@ -9,6 +9,7 @@ on:
       - tools/poc/yharnam/package-v41/test_bbnet_only_v106.py
       - tools/poc/yharnam/package-v41/verify_bbnet_archive_v108.py
       - tools/poc/yharnam/package-v41/test_verify_bbnet_archive_v108.py
+      - tools/poc/yharnam/package-v41/test_composed_native_build_v113.py
       - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
       - .github/workflows/shyt-v103-game-bbnet-before-gpu.yml
       - .github/workflows/shyt-v36-composed-windows-client.yml
@@ -102,6 +103,9 @@ jobs:
           python -m unittest discover \
             -s tools/poc/yharnam/package-v41 \
             -p 'test_verify_bbnet_archive_v108.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_composed_native_build_v113.py' -v
           python - <<'PY'
           from pathlib import Path
           s=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text(encoding='utf-8')
