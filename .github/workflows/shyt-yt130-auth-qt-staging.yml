@@ -1,0 +1,92 @@
+name: Yharnam Together v1.3 clean Qt game-server baseline
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - tools/poc/yharnam/yt130-auth-stage/**
+      - tools/poc/yharnam/yt130-reference/**
+      - .github/workflows/shyt-yt130-auth-qt-staging.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-yt130-auth-qt-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile-real-shadnet-and-sqlite-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Source-stage and clean-checkout safety tests
+        run: |
+          python -m unittest discover -s tools/poc/yharnam/yt130-auth-stage -p 'test_stage_auth.py' -v
+          python -m compileall -q tools/poc/yharnam/yt130-auth-stage
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p 'test_*.py' -v
+      - name: Install Qt6 and native server compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config qt6-base-dev \
+            qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite ccache
+      - name: Restore reusable Qt C++ object cache across staging runs
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: qt6-yt130-auth-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            qt6-yt130-auth-${{ runner.os }}-
+      - name: Checkout exact CURRENT upstream, not outdated game pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
+          git -C "$RUNNER_TEMP/yt-src" submodule update --init --recursive \
+            server/externals/protobuf
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
+          test -z "$(git -C "$RUNNER_TEMP/yt-src" status --porcelain)"
+      - name: Apply ONLY source-verified Qt auth fixes to disposable checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py \
+            "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 5
+          echo SHYT_YT130_REAL_STAGING_ALL_FIVE_SOURCE_FILES_APPLIED
+      - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" \
+            -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
+            "-DCMAKE_CXX_FLAGS_DEBUG=-O0 -g0" \
+            "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache" \
+            "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          ccache --max-size 1300M
+      - name: Build true Qt shadNet plus broad network/world/authorization tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target \
+            shadnet test_accounts test_server_link test_admission test_region \
+            test_packet_routes test_rpc_tunnel test_bloodborne_world \
+            test_team_lobby test_invasions test_bloodborne_duel \
+            test_stream_extractor
+          ccache --show-stats
+      - name: Run actual SQLite plus network protocol, admission and gameplay regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir "$RUNNER_TEMP/yt-build" \
+            -R '^(accounts|server_link|admission|region|packet_routes|rpc_tunnel|bloodborne_world|team_lobby|invasions|bloodborne_duel|stream_extractor) \
+            --output-on-failure --timeout 120 -j 2
+          echo SHYT_YT130_REAL_QT_NETWORK_WORLD_AND_ACCOUNT_MATRIX_PASS
