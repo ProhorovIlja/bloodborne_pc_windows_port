@@ -21,3 +21,34 @@ The narrow source regression test is **not** the Windows bbnet binary compilatio
 Even a successful `libbbnet.a` does NOT prove GPU renderer C++, native Windows EXE, archive, gameplay, original server interop, BL/Discord RPC, Save/Restore, player death or boss AI in a two-PC game. Native encrypted Direct gameplay P2P remains OFF and no server-load gains are claimed.
 
 Original full Windows workflow stays available and independent. Fornex, CLS Friends, master, accounts, saves and production firewall unchanged, all branches DRAFT.
+
+
+## V108: verify actual linked-in gameplay translation units
+
+A nonempty `libbbnet.a` is necessary but not sufficient evidence that the
+V97–V99 game sources reached the real native static library. V108 adds a
+**diagnostic-only post-compile gate** to the same original Windows workflow,
+after the real `bbnet` Ninja step and before the internal-only evidence upload.
+
+`verify_bbnet_archive_v108.py` calls `llvm-ar t` on the built archive and
+requires **exactly one** object member each for
+`bloodborne_re.cpp`, `bloodborne_party.cpp`,
+`bloodborne_party_death.cpp` and `bloodborne_flags_store.cpp`.
+It also checks the pinned upstream revision, development-only and Direct-OFF
+settings in the V101 manifest, then recomputes SHA-256 of all seven patched
+original-game source files. Missing/duplicate objects, source drift or
+unsafe/malformed manifest fields reject the build.
+
+`test_verify_bbnet_archive_v108.py` exercises the validator against explicit
+positive, missing, duplicate, empty archive, source tamper and unsafe manifest
+fixtures. It runs in the existing V103 Windows/Ubuntu source-test matrix.
+The *real* archive verification runs only after actual Windows Clang64 C++
+compilation. The ordinary full-game workflow remains unmodified by this
+extra diagnostic gate, and the new checks do not claim a playable EXE.
+
+### V107 CI queue behavior
+
+The V103/V106/V108 diagnostic caller coalesces superseded **pending** runs
+for the same feature branch using a dedicated concurrency group with
+`cancel-in-progress: false`. Already-running compilers are not cancelled.
+The complete GPU/EXE workflow retains its independent scheduling.
