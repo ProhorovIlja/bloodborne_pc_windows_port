@@ -210,6 +210,15 @@ jobs:
             -I "$sirit/externals/SPIRV-Headers/include" \
             "$sirit/src/instructions/constant.cpp"
           echo SHYT_V100_ACTUAL_CLANG64_SIRIT_CONSTANT_CPP_PASS
+      - name: V103 pin-check actual Windows native game's bbnet-first compilation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_bbnet_first_v103.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V103 native bbnet-first source guard test failed' }
+          python tools/poc/yharnam/package-v41/patch_bbnet_first_v103.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V103 pinned bbnet build shell unexpected' }
+          Write-Host 'SHYT_V103_ACTUAL_NATIVE_GAME_BBNET_FIRST_STAGED'
       - name: Compile real native Windows renderer and game loader
         id: native_build
         # Reserve job time to upload compiler evidence if GPU compilation stalls.
