@@ -30,4 +30,11 @@ Original source-file Git blobs (verified via connected GitHub at this pin):
 - server/src/link_server.cpp: b5c9bdcfcbfe6730689ae70459e85775bb1d8dc8
 - server/tests/test_accounts.cpp: f22ab39b1e1c973573ca1ccf8e6dee06b0283d06
 
-This staging source is not yet compiled and contains no claim of executable/game-ready code.
+## Genuine CI evidence
+
+At GitHub Actions run [40354786453](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/40354786453), the isolated upstream Qt6 shadNet binary **compiled and linked all 740/740 steps**, and actual `ctest -R '^accounts
+` **PASSED** using synthetic SQLite data. This verifies compilation and DB regression, not that the entire native Bloodborne game or online connectivity works. It is not a deployed release.
+
+The next isolated CI suite compiles 11 real C++ test targets plus shadNet and runs account, server-link, packet/frame route, RPC, admission, region, game-world, team-lobby, invasion, duel and stream-extractor tests. This is broader source-level regression evidence, **not** a substitute for hosted multi-shard, two-PC gameplay, Direct UDP, soak tests, or Fornex migration. It uses ccache to avoid rebuilding unchanged protobuf/Qt code every iteration.
+
+Production Fornex, user passwords and actual player saves remain untouched.
