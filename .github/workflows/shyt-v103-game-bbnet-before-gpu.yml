@@ -7,6 +7,8 @@ on:
       - tools/poc/yharnam/package-v41/test_bbnet_first_v103.py
       - tools/poc/yharnam/package-v41/patch_bbnet_only_v106.py
       - tools/poc/yharnam/package-v41/test_bbnet_only_v106.py
+      - tools/poc/yharnam/package-v41/verify_bbnet_archive_v108.py
+      - tools/poc/yharnam/package-v41/test_verify_bbnet_archive_v108.py
       - tools/poc/yharnam/package-v41/stage_gameplay_v101.py
       - .github/workflows/shyt-v103-game-bbnet-before-gpu.yml
       - .github/workflows/shyt-v36-composed-windows-client.yml
@@ -97,12 +99,17 @@ jobs:
           python -m unittest discover \
             -s tools/poc/yharnam/package-v41 \
             -p 'test_bbnet_only_v106.py' -v
+          python -m unittest discover \
+            -s tools/poc/yharnam/package-v41 \
+            -p 'test_verify_bbnet_archive_v108.py' -v
           python - <<'PY'
           from pathlib import Path
           s=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text(encoding='utf-8')
           assert 'SHYT_BBNET_ONLY:' in s
           assert 'SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED' in s
           assert 'pinned-upstream/bbport/out/gpu/libbbnet.a' in s
+          assert 'SHYT_V108_NATIVE_BBNET_PATCHED_GAME_OBJECTS_VERIFIED' in s
+          assert 'verify_bbnet_archive_v108.py' in s
           assert "SHYT_V101_ALL_SEVEN_ACTUAL_NATIVE_BBNET_GAME_SOURCE_SHA256_PASS" in s
           print('SHYT_V106_REUSABLE_ORIGINAL_GAME_COMPILER_INPUT_PASS')
           PY
