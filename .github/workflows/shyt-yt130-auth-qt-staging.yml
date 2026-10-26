@@ -130,6 +130,20 @@ jobs:
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
             --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
             --report yt130-capacity-curve.jsonl
+      - name: Differential reduced-rate synthetic traffic diagnostic (NOT capacity PASS)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -x "$RUNNER_TEMP/yt-build/bbload" || ! test -x "$RUNNER_TEMP/yt-build/shadnet"; then
+            echo "No built generator/server: skip reduced-rate diagnosis"
+            exit 0
+          fi
+          timeout 260s python tools/poc/yharnam/yt130-reference/run_capacity_curve.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --profile reduced --diagnostic --report yt130-reduced-rate.jsonl
       - name: Preserve synthetic 200-peer CPU and latency evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -137,6 +151,7 @@ jobs:
           name: yt130-loopback-200-peer-metrics
           path: |
             yt130-capacity-curve.jsonl
+            yt130-reduced-rate.jsonl
             yt130-smoke4.jsonl
             yt130-smoke4.stderr
             yt130-load200.stderr
