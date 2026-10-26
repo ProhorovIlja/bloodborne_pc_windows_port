@@ -157,7 +157,8 @@ void ClearStaleDeathMarks() {
         if(found==bodies.end())continue;
         if(!InPartyHere() || CurrentPlace().visit!=visit ||
            std::ranges::find(invaders,handle)!=invaders.end())continue;
-        // Refresh original-game world player snapshot, then recheck target,\n        // object identity, state and access right
+        // Refresh original-game world player snapshot, then recheck target,
+        // object identity, state and access right
         // before write. A recycled handle cannot inherit the old proof.
         bool still_living=false;
         for(const OtherPlayer& p:OtherPlayers()) {
