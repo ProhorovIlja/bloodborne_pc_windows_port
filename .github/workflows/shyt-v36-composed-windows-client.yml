@@ -240,6 +240,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_native_ninja_jobs_v111.py' -v
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_composed_native_build_v113.py' -v
           if ($LASTEXITCODE -ne 0) { throw 'V111 source exact Ninja job regression failed' }
           python tools/poc/yharnam/package-v41/patch_native_ninja_jobs_v111.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'V111 original Windows Ninja build drift detected' }
