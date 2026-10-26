@@ -718,15 +718,27 @@ ServerLink::Redirect LinkServer::RedirectTo(const Region::Shard& shard, const QB
 
 void LinkServer::SendOn(const BloodborneWorld::Service::Move& move) {
     const Region::Shard* shard = m_region.Find(move.shard);
-    const QByteArray hash = m_signedIn.value(move.online_id);
-    if (!shard || hash.isEmpty()) {
+    // SHYT-AUTH-2026: cross-shard redirect must use the cached *client*
+    // secret hash, not the database credential stamp. Do not forward a
+    // revoked credential to another shard either.
+    const auto verified = m_signedIn.constFind(move.online_id);
+    if (!shard || verified == m_signedIn.constEnd()) {
         qWarning().noquote() << QStringLiteral("Region: %1 stays: shard %2 is not in the view")
                                     .arg(QString::fromUtf8(move.online_id),
                                          QString::fromStdString(move.shard));
         return;
     }
+    const auto current = m_db.CurrentCredentialStatus(QString::fromUtf8(move.online_id));
+    if (!current || current->banned ||
+        current->db_hash != verified->db_hash_at_signin ||
+        verified->secret_sha256.isEmpty()) {
+        m_signedIn.remove(move.online_id);
+        qWarning() << "Region: refusing redirect using revoked cached credentials";
+        return;
+    }
     const QByteArray plain = ServerLink::Encode(
-        RedirectTo(*shard, move.online_id, hash, move.requests, "to your team's shard"));
+        RedirectTo(*shard, move.online_id, verified->secret_sha256, move.requests,
+                   "to your team's shard"));
     if (const auto sealed = m_link.Seal(move.link, plain))
         m_socket->writeDatagram(*sealed, QHostAddress(move.link.ipv4), move.link.port);
     // Said again until the game goes (a datagram may be lost); then its link here is forgotten.

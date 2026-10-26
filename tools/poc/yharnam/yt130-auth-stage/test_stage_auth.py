@@ -58,6 +58,19 @@ class PinnedAuthStageSafety(unittest.TestCase):
                 self.call(overrides, checkout, hashes)
             self.assertNotIn(b"SHYT-AUTH-2026", (checkout / names[0]).read_bytes())
 
+    def test_region_handover_uses_live_verified_secret_not_database_hash(self):
+        # This is a source-level guard; real hosted two-shard integration still required.
+        text = (SCRIPT.parent / "overrides/server/src/link_server.cpp").read_text()
+        start = text.index("void LinkServer::SendOn(")
+        end = text.index("void LinkServer::ResendRedirects()", start)
+        handoff = text[start:end]
+        self.assertNotIn("m_signedIn.value(move.online_id)", handoff)
+        self.assertIn("CurrentCredentialStatus(QString::fromUtf8(move.online_id))", handoff)
+        self.assertIn("current->db_hash != verified->db_hash_at_signin", handoff)
+        self.assertIn("current->banned", handoff)
+        self.assertIn("verified->secret_sha256", handoff)
+        self.assertIn("m_signedIn.remove(move.online_id)", handoff)
+
     def test_reject_missing_override_and_same_directory(self):
         with tempfile.TemporaryDirectory() as td:
             checkout, overrides, hashes, names = self.make_fixtures(td)
