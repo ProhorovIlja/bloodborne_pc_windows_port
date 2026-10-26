@@ -31,12 +31,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/poc/yharnam/unified-v9/compose_sources.py \
-            --upstream pinned-upstream --repo . --out v101-inspected
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v101-inspected
           python3 - <<'PY'
           from pathlib import Path
           import difflib
           base=Path('pinned-upstream')
-          overlay=Path('v101-inspected')
+          overlay=Path('/tmp/shyt-v101-inspected')
           paths=[
               'emulator/src/core/bloodborne_flags.h',
               'emulator/src/core/bloodborne_flags_store.cpp',
