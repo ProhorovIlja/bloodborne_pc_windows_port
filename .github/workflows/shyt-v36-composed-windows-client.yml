@@ -257,6 +257,10 @@ jobs:
           ccache --max-size 1600M
           ccache --show-stats
           cd pinned-upstream/bbport
+          # The exact original builder was patched V103->V106->V111:
+          # fail before a 165-min compile if the resulting Bash is invalid.
+          bash -n build.sh
+          echo SHYT_V111_ORIGINAL_NATIVE_GAME_BUILD_BASH_SYNTAX_PASS
           # The upstream build redirects ALL Ninja output to gpu-build.log.
           # Without a heartbeat GitHub shows nothing for 90 minutes and the
           # former job limit cancelled, losing the only useful diagnostics.
