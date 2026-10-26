@@ -8,7 +8,8 @@
 using namespace Core::Bloodborne;
 static_assert(RuleFor(6700).owner == FlagOwner::PerPlayer);
 static_assert(RuleFor(6700).behaviour == 0u);
-static_assert(RowFor(6700)!=nullptr);
+// Dereferencing in constant evaluation also proves the row exists without
+// triggering GCC -Werror=address on the non-null constexpr std::array.
 static_assert(RowFor(6700)->first==6700 && RowFor(6700)->last==6700);
 static_assert(RuleFor(6680).owner==FlagOwner::PerPlayer);
 static_assert(RuleFor(9180).owner==FlagOwner::Session);
