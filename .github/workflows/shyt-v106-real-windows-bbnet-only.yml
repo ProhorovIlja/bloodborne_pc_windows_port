@@ -42,7 +42,51 @@ jobs:
           w=Path('.github/workflows/shyt-v36-composed-windows-client.yml').read_text(encoding='utf-8')
           assert 'SHYT_BBNET_ONLY:' in w
           assert 'Compile real native Windows renderer and game loader' in w
-          assert "if: ${{ !inputs.bbnet_only }}" in w
+          assert ('if: 
+          assert ('if: 
+          assert 'pinned-upstream/bbport/out/gpu/libbbnet.a' in w
+          assert "SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED" in w
+          assert 'shyt-v101-gameplay-source.json' in w
+          print('SHYT_V106_SHARED_REAL_NATIVE_BBNET_ONLY_ISOLATED_PROOF_PASS')
+          PY
+  compile-genuine-native-game-cxx:
+    needs: exact-source-proof
+    # Uses the SAME original pinned Windows CMake, Qt/Yharnam game patch
+    # staging and CLANG64 as the GPU release candidate. Only the final
+    # GPU/render/ZIP steps are excluded when bbnet_only=true.
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
+    with:
+      bbnet_only: true
++'{{ !inputs.bbnet_only }}') in w
+          assert "if: ${{ inputs.bbnet_only && success() }}" in w
+          assert 'pinned-upstream/bbport/out/gpu/libbbnet.a' in w
+          assert "SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED" in w
+          assert 'shyt-v101-gameplay-source.json' in w
+          print('SHYT_V106_SHARED_REAL_NATIVE_BBNET_ONLY_ISOLATED_PROOF_PASS')
+          PY
+  compile-genuine-native-game-cxx:
+    needs: exact-source-proof
+    # Uses the SAME original pinned Windows CMake, Qt/Yharnam game patch
+    # staging and CLANG64 as the GPU release candidate. Only the final
+    # GPU/render/ZIP steps are excluded when bbnet_only=true.
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
+    with:
+      bbnet_only: true
++'{{ inputs.bbnet_only && success() }}') in w
+          assert 'pinned-upstream/bbport/out/gpu/libbbnet.a' in w
+          assert "SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED" in w
+          assert 'shyt-v101-gameplay-source.json' in w
+          print('SHYT_V106_SHARED_REAL_NATIVE_BBNET_ONLY_ISOLATED_PROOF_PASS')
+          PY
+  compile-genuine-native-game-cxx:
+    needs: exact-source-proof
+    # Uses the SAME original pinned Windows CMake, Qt/Yharnam game patch
+    # staging and CLANG64 as the GPU release candidate. Only the final
+    # GPU/render/ZIP steps are excluded when bbnet_only=true.
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
+    with:
+      bbnet_only: true
++'{{ !inputs.bbnet_only }}') in w
           assert "if: ${{ inputs.bbnet_only && success() }}" in w
           assert 'pinned-upstream/bbport/out/gpu/libbbnet.a' in w
           assert "SHYT_V106_ACTUAL_NATIVE_GAME_BBNET_ARCHIVE_BUILT_GPU_SKIPPED" in w
