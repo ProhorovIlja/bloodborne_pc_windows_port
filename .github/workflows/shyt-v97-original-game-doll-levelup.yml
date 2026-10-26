@@ -72,7 +72,7 @@ jobs:
           assert 'ClearStuckDollLevelUpFlag();' in patched
           assert 'party_controller.has_value(), EventFlagOn(DollLevelUpFlag)' in patched
           assert fixed[v97.PARTY_CPP].decode().count('return party_configured && flag_on;')==1
-          assert 'v97.patch(files)' in Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
+          assert 'v97.patch(doll_sources)' in Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
           print('SHYT_V97_ORIGINAL_GAME_FOUR_SOURCE_PATCH_PASS')
           PY
       - name: Linux compile actual original native flag table
