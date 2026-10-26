@@ -46,7 +46,7 @@ jobs:
           from pathlib import Path
           import ast
           p=Path('v96-pinned/bbport/launcher/bbport_launcher_win.py')
-          source=p.read_text()
+          source=p.read_text(encoding='utf-8')
           ast.parse(source)
           assert source.count('SHYT-V96-HUDSIGHT-CRASHING-VULKAN-LAYER')==1
           game=source[source.index('def game_environment('):source.index('\n# ',source.index('def game_environment('))]
