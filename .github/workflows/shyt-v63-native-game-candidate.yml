@@ -19,8 +19,11 @@ permissions:
 # intermediate source commit from scheduling another duplicate 180-min
 # renderer build. GitHub retains the latest pending run per branch, but
 # NEVER cancels an already-running compilation with useful cache/results.
+# V114: github.ref differs on push (refs/heads/...) versus pull_request
+# (refs/pull/20/merge). Use the same actual source branch name for both,
+# or the same change schedules TWO 180-minute Windows builds concurrently.
 concurrency:
-  group: shyt-v105-native-full-game-${{ github.ref }}
+  group: shyt-v105-native-full-game-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: false
 jobs:
   native-game-client:
