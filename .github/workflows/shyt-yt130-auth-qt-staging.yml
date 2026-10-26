@@ -96,6 +96,11 @@ jobs:
           cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target bbload
           test -x "$RUNNER_TEMP/yt-build/shadnet"
           test -x "$RUNNER_TEMP/yt-build/bbload"
+      - name: Patch disposable bbload argument parser to preserve v1.3 fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
       - name: Diagnose real synthetic 4-peer sign-in before large load
         shell: bash
         run: |
@@ -108,6 +113,7 @@ jobs:
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
             --players 4 --team-size 2 --processes 1 \
             --seconds 15 --ramp-ms 10 --cfg CheckServerBuild=false \
+            --extra "--build 'bb-build 1;version=dev;protocol=9;'" \
             --keep > yt130-smoke4.jsonl 2> yt130-smoke4.stderr
           cat yt130-smoke4.jsonl
           python tools/poc/yharnam/yt130-reference/collect_load_diagnostics.py \
@@ -123,6 +129,7 @@ jobs:
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
             --players 200 --team-size 2 --processes 2 \
             --seconds 25 --ramp-ms 10 --cfg CheckServerBuild=false \
+            --extra "--build 'bb-build 1;version=dev;protocol=9;'" \
             --keep > yt130-load200.jsonl 2> yt130-load200.stderr
           cat yt130-load200.jsonl
           python tools/poc/yharnam/yt130-reference/collect_load_diagnostics.py \
