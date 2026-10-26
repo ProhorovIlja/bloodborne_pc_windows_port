@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 
 FOLDER = re.compile(r"(?m)^server folder:\s+(/tmp/shadnet-load-[A-Za-z0-9_-]+)\s*$")
-SENSITIVE = re.compile(r"(?i)(password|authorization|bearer|secret|private.key|api.token)(\s*[:=]\s*)(\S+)")
+SENSITIVE = re.compile(r"(?i)(password|authorization|bearer|secret|private[._-]?key|api[._-]?token|token)(\s*[:=]\s*)(\S+)")
 MAX_SOURCE = 2 * 1024 * 1024
 
 def collect(stderr: Path) -> str:
