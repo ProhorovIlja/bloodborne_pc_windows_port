@@ -62,6 +62,15 @@ jobs:
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 5
           echo SHYT_YT130_REAL_STAGING_ALL_FIVE_SOURCE_FILES_APPLIED
+      - name: EXPERIMENTAL source-exact no-duplicate lobby state on disposable upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_lobby_dedupe.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 6
+          echo SHYT_YT130_NONHOSTED_LOBBY_DEDUP_EXPERIMENT_NOT_PRODUCTION
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
