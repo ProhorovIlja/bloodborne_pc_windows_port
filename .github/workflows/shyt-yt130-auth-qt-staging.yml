@@ -67,8 +67,9 @@ jobs:
         run: |
           set -euo pipefail
           cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" \
-            -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
-            "-DCMAKE_CXX_FLAGS_DEBUG=-O0 -g0" \
+            -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+            "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" \
+            "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0" \
             "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache" \
             "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
           echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
@@ -120,29 +121,22 @@ jobs:
             yt130-smoke4.stderr --output yt130-smoke4-diagnostics.log
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
             yt130-smoke4.jsonl --expected-players 4
-      - name: Benchmark 200 synthetic co-op peers on loopback only
+      - name: Measure actual optimized shadNet capacity 4 to 200 players
         shell: bash
         run: |
           set -euo pipefail
-          timeout 180s python3 "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+          timeout 330s python tools/poc/yharnam/yt130-reference/run_capacity_curve.py \
             --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
-            --players 200 --team-size 2 --processes 2 \
-            --seconds 25 --ramp-ms 10 --cfg CheckServerBuild=false \
-            --extra "--build 'bb-build 1;version=dev;protocol=9;'" \
-            --keep > yt130-load200.jsonl 2> yt130-load200.stderr
-          cat yt130-load200.jsonl
-          python tools/poc/yharnam/yt130-reference/collect_load_diagnostics.py \
-            yt130-load200.stderr --output yt130-load200-diagnostics.log
-          python tools/poc/yharnam/yt130-reference/verify_load_report.py \
-            yt130-load200.jsonl --expected-players 200
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --report yt130-capacity-curve.jsonl
       - name: Preserve synthetic 200-peer CPU and latency evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: yt130-loopback-200-peer-metrics
           path: |
-            yt130-load200.jsonl
+            yt130-capacity-curve.jsonl
             yt130-smoke4.jsonl
             yt130-smoke4.stderr
             yt130-load200.stderr
