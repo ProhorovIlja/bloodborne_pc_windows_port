@@ -72,8 +72,8 @@ def integrate(root: Path) -> dict:
     # the patch, never the provenance .patch committed in GitHub.
     with tempfile.TemporaryDirectory(prefix="yt-429-patch-") as temp:
         source_patch = trust.PATCH.read_bytes()
-        if b"\\r\\n" in source_patch:
-            source_patch = source_patch.replace(b"\\r\\n", b"\\n")
+        if b"\r\n" in source_patch:
+            source_patch = source_patch.replace(b"\r\n", b"\n")
         normalized = Path(temp) / "upstream-YT-PR429-LF.patch"
         normalized.write_bytes(source_patch)
         trust.PATCH = normalized
