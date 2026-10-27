@@ -19,6 +19,8 @@ class Pr433ImportSecurity(unittest.TestCase):
         self.assertEqual(stage.PIN, "0645740a33ae21c56df3b4a0d9777086dbca6053")
         self.assertEqual(stage.BLOB, "b54974c649610bef59e53a61ae294edc2d386cda")
         self.assertEqual(len(stage.HEADER.findall(self.patch)), 2)
+        self.assertNotIn('sys.argv[1:]})', stage.NEW_MAIN)
+        self.assertIn('command-line arguments withheld for privacy', stage.NEW_MAIN)
 
     def test_never_accepts_unrelated_game_or_server_files(self):
         with self.assertRaises(ValueError):
