@@ -165,7 +165,7 @@ jobs:
           NOTE
           python -c "import hashlib,pathlib; p=pathlib.Path(r'$RUNNER_TEMP/launcher-dist/BLauncher/BLauncher.exe'); print('BLauncher.exe SHA256',hashlib.sha256(p.read_bytes()).hexdigest())"
       - name: Preserve self-contained frozen Windows launcher QA package (NOT PLAYABLE)
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: yt130-windows-BLauncher-EXE-QA-NOT-PLAYABLE
