@@ -71,6 +71,15 @@ jobs:
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 6
           echo SHYT_YT130_NONHOSTED_LOBBY_DEDUP_EXPERIMENT_NOT_PRODUCTION
+      - name: EXPERIMENTAL kind-wise UDP wire counters on disposable YT1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_wire_traffic.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 6
+          echo SHYT_YT130_WIRE_COUNTERS_ONLY_NOT_PRODUCTION
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
@@ -153,6 +162,20 @@ jobs:
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
             --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
             --profile reduced --diagnostic --report yt130-reduced-rate.jsonl
+      - name: Attribute real server wire kind bytes at 32-200 peers (diagnostic only)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -x "$RUNNER_TEMP/yt-build/shadnet" || ! test -x "$RUNNER_TEMP/yt-build/bbload"; then
+            echo "Missing compiled real Qt source, traffic study unavailable"
+            exit 0
+          fi
+          timeout 270s python tools/poc/yharnam/yt130-reference/measure_wire_traffic.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --output yt130-wire-logs
       - name: Preserve synthetic 200-peer CPU and latency evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -161,6 +184,7 @@ jobs:
           path: |
             yt130-capacity-curve.jsonl
             yt130-reduced-rate.jsonl
+            yt130-wire-logs/
             yt130-smoke4.jsonl
             yt130-smoke4.stderr
             yt130-load200.stderr
