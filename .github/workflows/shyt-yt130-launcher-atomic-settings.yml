@@ -1,5 +1,9 @@
 name: Native YT1.3 Windows atomic launcher files (real Python)
 on:
+  # Explicit feature branch trigger: no production/master writes, even if
+  # new workflow registration misses the first PR synchronize event.
+  push:
+    branches: [feature/yt130-native-launcher-atomic-settings-20261027]
   pull_request:
     branches: [feature/yt130-clean-native-baseline]
     paths:
