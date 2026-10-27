@@ -155,7 +155,7 @@ jobs:
           python -c "import json,os; o=json.load(open(os.environ['YT_NATIVE_SMOKE_JSON'], encoding='utf-8')); assert o['strict_tls'] and o['cyrillic_script_path'] and o['frozen_native_windows']"
           echo YT130_FROZEN_WINDOWS_EXE_UNICODE_AND_TLS_SMOKE_PASS
       - name: Preserve non-playable QA evidence only, not a user-facing game release
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: yt130-native-windows-launcher-frozen-smoke
