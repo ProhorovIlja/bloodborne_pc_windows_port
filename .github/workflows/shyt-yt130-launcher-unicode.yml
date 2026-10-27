@@ -1,7 +1,7 @@
 name: Frozen native YT1.3 Windows BLauncher QA via established workflow
 on:
   pull_request:
-    branches: [feature/yt130-native-launcher-integrated-qa-20261027]
+    branches: [feature/yt130-clean-native-baseline]
     paths:
       - 'tools/poc/yharnam/launcher-unicode/**'
       - 'tools/poc/yharnam/launcher-truststore/**'
