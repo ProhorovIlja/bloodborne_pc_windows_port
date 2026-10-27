@@ -239,6 +239,22 @@
       "area": "release-license-compliance",
       "priority": "P1",
       "action": "VERIFY_DISTRIBUTED_LICENSE_TEXTS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 433,
+      "last_seen": "open",
+      "area": "native-windows-unicode-paths-cp1251-startup-crash-logs",
+      "priority": "P1",
+      "action": "INTEGRATE_STANDALONE_WINDOWS_TESTED_BACKPORT_PR29_NOT_UNVERIFIED_FROZEN_BINARY"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 131,
+      "last_seen": "open",
+      "area": "vulkan-discrete-vram-budget-warning-overlay-and-fps-profiler",
+      "priority": "P1",
+      "action": "REVIEW_VK_EXT_MEMORY_BUDGET_WARN_BEFORE_CRASH_NO_FALSE_GPU_VRAM_CLAIMS"
     }
   ]
 }
