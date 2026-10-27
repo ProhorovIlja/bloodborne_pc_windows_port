@@ -1,7 +1,7 @@
 name: BLauncher.exe native Windows frozen QA (NOT PLAYABLE)
 on:
   pull_request:
-    branches: [feature/yt130-native-launcher-integrated-qa-20261027]
+    branches: [feature/yt130-clean-native-baseline]
     paths:
       - '.github/workflows/shyt-yt130-frozen-launcher-qa.yml'
   workflow_dispatch:
