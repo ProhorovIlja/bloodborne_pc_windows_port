@@ -45,7 +45,7 @@
       "full_name": "Mrsuss60/bloodborne_pc_windows_port",
       "category": "native-win-launcher-memory-vulkan",
       "known_head": "7b4bb9576cdb95521347f3a512ccf93f31201da5",
-      "known_release_tag": "v0.6.2",
+      "known_release_tag": "v0.7.1",
       "compatibility": "SELECTIVE_WINDOWS_FIXES_WITH_SOURCE_TESTS"
     },
     {
@@ -191,6 +191,54 @@
       "area": "revive-standing-last-lamp",
       "priority": "P1",
       "action": "VERIFY_PERSISTENT_LAMP_RESTART"
+    },
+    {
+      "repo": "Mrsuss60/bloodborne_pc_windows_port",
+      "number": 170,
+      "last_seen": "merged",
+      "area": "native-mouse-menu-hover-refresh",
+      "priority": "P1",
+      "action": "UI_GAMEPLAY_SMOKE_INVENTORY_SCROLL_FOCUS"
+    },
+    {
+      "repo": "Mrsuss60/bloodborne_pc_windows_port",
+      "number": 164,
+      "last_seen": "merged",
+      "area": "native-mouse-rightclick-storage",
+      "priority": "P1",
+      "action": "ITEM_DEPOSIT_WITHDRAWAL_RELIABLE"
+    },
+    {
+      "repo": "Mrsuss60/bloodborne_pc_windows_port",
+      "number": 157,
+      "last_seen": "merged",
+      "area": "mouse-lock-on-flick-and-delta",
+      "priority": "P2",
+      "action": "TEST_MOUSE_LOCK_REACQUIRE_AND_CAMERA"
+    },
+    {
+      "repo": "Mrsuss60/bloodborne_pc_windows_port",
+      "number": 161,
+      "last_seen": "merged",
+      "area": "monocular-camera-mouse-look",
+      "priority": "P2",
+      "action": "CHECK_AIM_CAMERA_ASLR_AND_FOV"
+    },
+    {
+      "repo": "Mrsuss60/bloodborne_pc_windows_port",
+      "number": 150,
+      "last_seen": "merged",
+      "area": "native-menu-mouse-pointer",
+      "priority": "P1",
+      "action": "VERIFY_MENU_HOVER_CLICK_SCROLL_GAMEPAD_COMPAT"
+    },
+    {
+      "repo": "Mrsuss60/bloodborne_pc_windows_port",
+      "number": 152,
+      "last_seen": "merged",
+      "area": "release-license-compliance",
+      "priority": "P1",
+      "action": "VERIFY_DISTRIBUTED_LICENSE_TEXTS"
     }
   ]
 }
