@@ -50,9 +50,9 @@ NEW_ROLE_EXCEPTION = """    except SystemExit as stop:
 OLD_MAIN = """def main():
     global LANG"""
 NEW_MAIN = """def main():
-    \\"\\"\\"start_launcher, with any failure (Tcl that cannot start, --play, the uninstaller, an update) written to
+    \"\"\"start_launcher, with any failure (Tcl that cannot start, --play, the uninstaller, an update) written to
     user/log/launcher-errors.txt and shown: frozen and windowed, an uncaught error was only PyInstaller's popup,
-    and before the window no log was kept at all (Kaniel 2026-10-27: "writes 0 logs").\\"\\"\\"
+    and before the window no log was kept at all (Kaniel 2026-10-27: "writes 0 logs").\"\"\"
     try:
         start_launcher()
     except SystemExit:
@@ -68,8 +68,8 @@ NEW_MAIN = """def main():
 
 
 def record_startup_failure(text):
-    \\"\\"\\"Adds TEXT to user/log/launcher-errors.txt, or to %TEMP% when that folder cannot be written (an install
-    under Program Files, a read-only drive). Returns the file written, None when neither could be.\\"\\"\\"
+    \"\"\"Adds TEXT to user/log/launcher-errors.txt, or to %TEMP% when that folder cannot be written (an install
+    under Program Files, a read-only drive). Returns the file written, None when neither could be.\"\"\"
     stamp = f'--- launcher failed {time.strftime("%Y-%m-%d %H:%M:%S")} (arguments: {sys.argv[1:]})\\n'
     for log in (DATA_DIR / 'user' / 'log' / 'launcher-errors.txt',
                 Path(tempfile.gettempdir()) / 'BLauncher-errors.txt'):
@@ -114,8 +114,8 @@ NEW_TK = """    log = open_launcher_errors()  # before Tk: a crash while Tcl sta
             log.close()"""
 
 OLD_KEEP_ERRORS = """def keep_launcher_errors(root):
-    \\"\\"\\"The windowed launcher has no console: a fault of the process and an error in a window callback go
-    to user/log/launcher-errors.txt, so a crash leaves its cause behind (Kaniel 2026-10-17).\\"\\"\\"
+    \"\"\"The windowed launcher has no console: a fault of the process and an error in a window callback go
+    to user/log/launcher-errors.txt, so a crash leaves its cause behind (Kaniel 2026-10-17).\"\"\"
     import faulthandler
     import traceback
     try:
@@ -132,8 +132,8 @@ OLD_KEEP_ERRORS = """def keep_launcher_errors(root):
     root.report_callback_exception = report
     root.launcher_errors = log  # kept open for faulthandler while the window lives"""
 NEW_KEEP_ERRORS = """def open_launcher_errors():
-    \\"\\"\\"user/log/launcher-errors.txt, open for the window's life with faulthandler writing to it; None when it
-    cannot be opened.\\"\\"\\"
+    \"\"\"user/log/launcher-errors.txt, open for the window's life with faulthandler writing to it; None when it
+    cannot be opened.\"\"\"
     import faulthandler
     try:
         folder = DATA_DIR / 'user' / 'log'
@@ -147,8 +147,8 @@ NEW_KEEP_ERRORS = """def open_launcher_errors():
 
 
 def keep_launcher_errors(root, log):
-    \\"\\"\\"The windowed launcher has no console: a fault of the process and an error in a window callback go
-    to user/log/launcher-errors.txt, so a crash leaves its cause behind (Kaniel 2026-10-17).\\"\\"\\"
+    \"\"\"The windowed launcher has no console: a fault of the process and an error in a window callback go
+    to user/log/launcher-errors.txt, so a crash leaves its cause behind (Kaniel 2026-10-17).\"\"\"
     import traceback
     if log is None:
         return
