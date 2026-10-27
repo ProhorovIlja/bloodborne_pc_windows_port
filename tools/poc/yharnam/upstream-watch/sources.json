@@ -257,6 +257,54 @@
       "area": "vulkan-discrete-vram-budget-warning-overlay-and-fps-profiler",
       "priority": "P1",
       "action": "REVIEW_VK_EXT_MEMORY_BUDGET_WARN_BEFORE_CRASH_NO_FALSE_GPU_VRAM_CLAIMS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 434,
+      "last_seen": "open",
+      "area": "arm64-docker-native-micromamba",
+      "priority": "P3",
+      "action": "SERVER_BUILD_ONLY_SKIP_ON_AMD64_FORNEX_UNLESS_ARM64_TARGET"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 435,
+      "last_seen": "open",
+      "area": "docker-source-revision-and-ten-suite-test-stage",
+      "priority": "P2",
+      "action": "REVIEW_CONTAINER_PROVENANCE_BEFORE_ADOPT_NO_LIVE_DEPLOY"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 436,
+      "last_seen": "open",
+      "area": "optin-invasion-reward-mailbox-new-protocol-5",
+      "priority": "P1",
+      "action": "HOLD_UNTIL_ALL_DEPENDENT_PR_438_DURABILITY_AND_CLIENT_ATOMIC_APPLY_COMPAT"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 437,
+      "last_seen": "open",
+      "area": "covenant-blood-dregs-from-frozen-oath",
+      "priority": "P2",
+      "action": "DEPENDENT_ON_436_438_NO_PREMATURE_PROTOCOL_IMPORT"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 438,
+      "last_seen": "open",
+      "area": "durable-mailbox-commit-before-reward-publish-and-ack",
+      "priority": "P0",
+      "action": "SOURCE_AUDIT_FULL_DEPENDENCY_SERIES_WINDOWS_FLUSH_AND_2PC_KILL_RESTART_THEN_OPT_IN"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 439,
+      "last_seen": "open",
+      "area": "downed-event-area-yg-lift-bell-woman-summon-stability",
+      "priority": "P1",
+      "action": "PORT_GAME_HOOK_SEMANTICS_ONLY_AFTER_NATIVE_CODE_ADDRESS_QA_NO_EMULATOR_RUNTIME"
     }
   ]
 }
