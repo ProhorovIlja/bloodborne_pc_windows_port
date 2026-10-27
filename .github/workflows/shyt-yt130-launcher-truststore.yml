@@ -48,6 +48,11 @@ jobs:
       - name: Run original official native launcher and TLS regression tests
         run: |
           set -euo pipefail
+          # Native launcher tests walk the install's grandparents while looking
+          # for a game. GitHub's shared /tmp contains permission-denied Snap
+          # sandboxes, unrelated to TLS. Keep test fixture trees isolated.
+          mkdir -p "$RUNNER_TEMP/yt-launcher-temp"
+          export TMPDIR="$RUNNER_TEMP/yt-launcher-temp"
           python3 -m unittest discover \
             -s "$RUNNER_TEMP/yt-src/bbport/tests" -p 'test_coop_launcher.py' -v
           echo YT130_NATIVE_LAUNCHER_PR429_PYTHON_QA_ONLY_PASS
