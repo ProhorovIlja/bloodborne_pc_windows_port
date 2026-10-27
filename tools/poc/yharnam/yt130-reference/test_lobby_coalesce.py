@@ -28,7 +28,7 @@ class NonHostedCoalesceTests(unittest.TestCase):
         for altered in (self.source.replace("lobby_interval_ms", "different"),
                         self.source + mod.OLD,
                         self.source.replace("if (arrived)", "if (false)"),
-                        self.source.replace("TeamStart", "TeamUnknown")):
+                        self.source.replace("mutable_team_start", "mutable_team_unknown")):
             with self.subTest(changed=altered[-80:]):
                 with self.assertRaises(ValueError):
                     mod.patch_text(altered)
