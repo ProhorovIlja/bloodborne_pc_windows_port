@@ -25,6 +25,13 @@ COOP = re.compile(
     r" blocked_members=(\d+) active_members=(\d+)"
 )
 ORIGIN = re.compile(r"YT130_COOP_ORIGIN kind=(\d+) sends=(\d+)")
+EVENTLOOP = re.compile(
+    r"YT130_EVENTLOOP read_batches=(\d+) read_datagrams=(\d+)"
+    r" read_busy_us=(\d+) max_read_batch_us=(\d+)"
+    r" max_read_batch_datagrams=(\d+) world_ticks=(\d+)"
+    r" world_busy_us=(\d+) max_world_busy_us=(\d+)"
+    r" max_world_gap_us=(\d+) late_world_ticks=(\d+)"
+)
 FOLDER = re.compile(r"server folder:\s+(/tmp/shadnet-load-[a-zA-Z0-9_-]+)")
 STAGES = (32, 64, 100, 200)
 BUILD = "bb-build 1;version=dev;protocol=9;"
@@ -99,6 +106,31 @@ def aggregate(lines: list[str]) -> dict[str, dict[str, int]]:
     return total
 
 
+def aggregate_eventloop(lines: list[str]) -> dict:
+    """5s bucket timing: summed busy time, max single callback and timer gap.
+
+    No packet bodies, player identities, credentials or user IPs.
+    """
+    fields = (
+        "read_batches", "read_datagrams", "read_busy_us", "max_read_batch_us",
+        "max_read_batch_datagrams", "world_ticks", "world_busy_us",
+        "max_world_busy_us", "max_world_gap_us", "late_world_ticks",
+    )
+    maximums = {
+        "max_read_batch_us", "max_read_batch_datagrams",
+        "max_world_busy_us", "max_world_gap_us",
+    }
+    totals = dict.fromkeys(fields, 0)
+    windows = 0
+    for line in lines:
+        if m := EVENTLOOP.search(line):
+            windows += 1
+            for name, value in zip(fields, m.groups()):
+                number = int(value)
+                totals[name] = max(totals[name], number) if name in maximums else totals[name] + number
+    return {"observed_windows": windows, "metrics": totals}
+
+
 def aggregate_coop(lines: list[str]) -> dict:
     """Plaintext reliable frame diagnostics: per-window snapshot max for queues."""
     fields = ("frames", "body_bytes", "reliable_entries", "fresh_entries",
@@ -120,6 +152,7 @@ def aggregate_coop(lines: list[str]) -> dict:
             origins[key] = origins.get(key, 0) + int(count)
     return {"intervals": intervals, "metrics": totals,
             "envelope_body_case_sends": origins,
+            "eventloop": aggregate_eventloop(lines),
             "envelope_type_sends": {
                 ENVELOPE_NAMES.get(int(kind), "Unknown_" + kind): count
                 for kind, count in origins.items()
@@ -139,7 +172,8 @@ def extract_server_counters(stderr: str, output: Path) -> tuple[str, dict, dict]
             for line in stream:
                 if any(tag in line for tag in ("YT130_WIRE_TRAFFIC kind=",
                                            "YT130_COOP_RELIABILITY frames=",
-                                           "YT130_COOP_ORIGIN kind=")):
+                                           "YT130_COOP_ORIGIN kind=",
+                                           "YT130_EVENTLOOP read_batches=")):
                     lines.append(line)
         output.write_text("".join(lines), encoding="utf-8")
     finally:
