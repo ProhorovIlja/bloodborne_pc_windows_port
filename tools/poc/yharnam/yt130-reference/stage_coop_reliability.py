@@ -150,7 +150,7 @@ H_PATCHES = (
     // Only the members sent something""",
         """    void Flush(qint64 now_ms, Result& result);
     // Disposable measurement only: no wire format, state, logic, identity changes.
-    void CountDiagnosticFrame(const std::vector<BloodborneCoop::u8>& body);
+    void CountDiagnosticFrame(const std::vector<u8>& body);
     void ReportDiagnostics(qint64 now_ms);
     // Only the members sent something""",
     ),
