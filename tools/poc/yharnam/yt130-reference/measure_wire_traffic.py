@@ -32,6 +32,11 @@ EVENTLOOP = re.compile(
     r" world_busy_us=(\d+) max_world_busy_us=(\d+)"
     r" max_world_gap_us=(\d+) late_world_ticks=(\d+)"
 )
+FAIR_QUEUE = re.compile(
+    r"YT130_UDP_FAIR_QUEUE slices=(\d+) handled=(\d+)"
+    r" max_slice_us=(\d+) max_queued=(\d+)"
+    r" overload_drops=(\d+) queued=(\d+)"
+)
 FOLDER = re.compile(r"server folder:\s+(/tmp/shadnet-load-[a-zA-Z0-9_-]+)")
 STAGES = (32, 64, 100, 200)
 BUILD = "bb-build 1;version=dev;protocol=9;"
@@ -131,6 +136,27 @@ def aggregate_eventloop(lines: list[str]) -> dict:
     return {"observed_windows": windows, "metrics": totals}
 
 
+def aggregate_fair_queue(lines: list[str]) -> dict:
+    """Sum completed slices, handled packets and drops, max queue depth."""
+    values = {
+        "slices": 0, "handled": 0, "max_slice_us": 0,
+        "max_queued": 0, "overload_drops": 0, "queued": 0,
+    }
+    buckets = 0
+    for line in lines:
+        m = FAIR_QUEUE.search(line)
+        if not m:
+            continue
+        buckets += 1
+        for key, number in zip(values, m.groups()):
+            n = int(number)
+            if key in ("max_slice_us", "max_queued", "queued"):
+                values[key] = max(values[key], n)
+            else:
+                values[key] += n
+    return {"observed_windows": buckets, "metrics": values}
+
+
 def aggregate_coop(lines: list[str]) -> dict:
     """Plaintext reliable frame diagnostics: per-window snapshot max for queues."""
     fields = ("frames", "body_bytes", "reliable_entries", "fresh_entries",
@@ -153,6 +179,7 @@ def aggregate_coop(lines: list[str]) -> dict:
     return {"intervals": intervals, "metrics": totals,
             "envelope_body_case_sends": origins,
             "eventloop": aggregate_eventloop(lines),
+            "fair_queue": aggregate_fair_queue(lines),
             "envelope_type_sends": {
                 ENVELOPE_NAMES.get(int(kind), "Unknown_" + kind): count
                 for kind, count in origins.items()
@@ -173,7 +200,8 @@ def extract_server_counters(stderr: str, output: Path) -> tuple[str, dict, dict]
                 if any(tag in line for tag in ("YT130_WIRE_TRAFFIC kind=",
                                            "YT130_COOP_RELIABILITY frames=",
                                            "YT130_COOP_ORIGIN kind=",
-                                           "YT130_EVENTLOOP read_batches=")):
+                                           "YT130_EVENTLOOP read_batches=",
+                                           "YT130_UDP_FAIR_QUEUE slices=")):
                     lines.append(line)
         output.write_text("".join(lines), encoding="utf-8")
     finally:
