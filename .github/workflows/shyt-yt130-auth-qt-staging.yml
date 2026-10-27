@@ -80,6 +80,15 @@ jobs:
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 6
           echo SHYT_YT130_WIRE_COUNTERS_ONLY_NOT_PRODUCTION
+      - name: EXPERIMENTAL per-world reliable CoopStream resend / ACK / origin counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_coop_reliability.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 7
+          echo SHYT_YT130_COOP_RELIABILITY_DIAGNOSTIC_ONLY_NO_DEPLOY
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
