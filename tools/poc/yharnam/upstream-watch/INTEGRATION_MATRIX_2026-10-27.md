@@ -33,6 +33,16 @@ Reviewed **2026-10-27** from upstream GitHub PRs, release notes and verified rep
 - **P1 observability:** redact IPv6, local player paths, account/party/join codes before copying logs or assembling a user-controlled report ZIP. No automatic upload.
 - **Explicit gate:** Nightwatch's firewall helper manipulates user firewall block rules. Never run it in our build without explicit user opt-in, verified app-specific rules and administrator permission.
 
+### New official YT 1.3.1 candidate PRs (#434–439, reviewed 2026-10-27)
+
+| Priority | Upstream source change | Compatibility / staging decision |
+|---|---|---|
+| P0 data integrity | [YT #438 reward mailbox durable commit and ACK](https://github.com/lKaniel/bloodborne-server/pull/438) **OPEN** | Requires **both** [#436 invasion rewards](https://github.com/lKaniel/bloodborne-server/pull/436) and [#437 covenant dregs](https://github.com/lKaniel/bloodborne-server/pull/437). Their branch heads and reported native Windows Qt/ARM64 functional tests are upstream contributor evidence, not QA of our v1.3 deployment. Crucial `WorldWriter` synchronous ordering, Windows directory handle `GENERIC_WRITE` for directory flush, replay/resume safety, corrupt ledger fail-closed. **No partial cherry-picks and NO capability advertisement** until client atomic save grant/replay and protocol/version negotiation, disk-failure+crash/restart+two-PC tests. Original server remains authoritative. |
+| P1 gameplay | [YT #439 Yahar'gul downed-area/bell woman summons](https://github.com/lKaniel/bloodborne-server/pull/439) **OPEN** | Downed bodies must not trigger `EntityInArea` events, except kill volumes; guest generator rise waits for local flag, resurrections do not repeatedly die/burst. Depends on **game hook addresses**, state replication, event labels: adapt semantics to our native PC engine, do not import shadPS4 emulator runtime. Gate with real two-PC downed lift, summoned red skeleton tests, EBOOT patch-region checks. |
+| P2 ops | [YT #435 Docker source revision + optional focused tests target](https://github.com/lKaniel/bloodborne-server/pull/435) **OPEN** | Pin source revision metadata, separate server tests from lean runtime. Useful auditability if our owned server ever uses this Docker target, no gameplay/P2P changes. |
+| P3 infrastructure | [YT #434 ARM64 micromamba in Docker](https://github.com/lKaniel/bloodborne-server/pull/434) **OPEN** | Only if deploying an actual ARM64 Linux server; not relevant to running native Windows game or x86_64 Fornex today. |
+| P1 packaging | [YT #430 pinned PyInstaller, EXE version resource, `--noupx`](https://github.com/lKaniel/bloodborne-server/pull/430) **OPEN** | Reported Defender ML flag on unsigned BLauncher in official 1.3.0; no-UPX and version stamping improve provenance but **cannot guarantee antivirus clean verdict without signing/reputation**. Original upstream-author GPL metadata generator imported unchanged to [experimental frozen Windows QA PR #33](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/pull/33), guarded Windows version and no-UPX checks. **No confirmed compiled EXE/artifact yet.** |
+
 ## High-value native YT gameplay and launcher work, prioritized
 
 | Priority | Upstream references and verified state (2026-10-27) | Review gate / acceptance |
