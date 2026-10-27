@@ -1,18 +1,22 @@
-name: Native YT1.3 Windows UTF-8 codepage and startup crash log QA
+name: Integrated native YT1.3 Windows launcher TLS Unicode discovery atomic QA
 on:
   pull_request:
     branches: [feature/yt130-clean-native-baseline]
     paths:
       - 'tools/poc/yharnam/launcher-unicode/**'
+      - 'tools/poc/yharnam/launcher-truststore/**'
+      - 'tools/poc/yharnam/launcher-game-search/**'
+      - 'tools/poc/yharnam/launcher-atomic-settings/**'
+      - 'tools/poc/yharnam/launcher-integrated/**'
       - '.github/workflows/shyt-yt130-launcher-unicode.yml'
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: yt130-native-unicode-${{ github.ref }}
+  group: yt130-native-launcher-composition-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  windows-native-unicode-and-crash-logs:
+  windows-native-launcher-full-composition:
     runs-on: windows-2022
     timeout-minutes: 18
     defaults:
@@ -27,11 +31,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Strict original author patch, Unicode, PII safety tests
+      - name: Source SHA, security, Unicode, folder permissions and atomic write guards
         run: |
           set -euo pipefail
           python -m unittest discover -s tools/poc/yharnam/launcher-unicode -p 'test_stage.py' -v
+          for item in launcher-truststore launcher-game-search launcher-atomic-settings; do
+            python -m unittest discover -s "tools/poc/yharnam/$item" -p 'test_stage.py' -v
+          done
           python -m compileall -q tools/poc/yharnam/launcher-unicode
+          python -m compileall -q tools/poc/yharnam/launcher-truststore
+          python -m compileall -q tools/poc/yharnam/launcher-game-search
+          python -m compileall -q tools/poc/yharnam/launcher-atomic-settings
+          python -m compileall -q tools/poc/yharnam/launcher-integrated
       - name: Exact official native YT1.3.0 source checkout (disposable)
         run: |
           set -euo pipefail
@@ -41,14 +52,16 @@ jobs:
           git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
           test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
           test -z "$(git -C "$RUNNER_TEMP/yt-src" status --porcelain)"
-      - name: Apply author PR433 patch to native launcher only
+      - name: Apply FOUR reviewed YT fixes to ONE original native Windows launcher source
         run: |
           set -euo pipefail
-          python tools/poc/yharnam/launcher-unicode/stage.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/launcher-integrated/stage.py "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test -f "$RUNNER_TEMP/yt-src/bbport/tests/test_launcher_code_page.py"
           python -m compileall -q \
             "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_launcher_win.py" \
+            "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_coop.py" \
+            "$RUNNER_TEMP/yt-src/bbport/tests/test_coop_launcher.py" \
             "$RUNNER_TEMP/yt-src/bbport/tests/test_launcher_code_page.py"
       - name: Run real Windows 1251/1252 Cyrillic startup and error-log regressions
         run: |
@@ -65,6 +78,13 @@ jobs:
             -s tools/poc/yharnam/launcher-unicode \
             -p 'test_windows_log_privacy.py' -v
           echo YT130_WIN_LAUNCHER_PRIVATE_COMMAND_LINE_LOG_QA_PASS
+      - name: Functional Windows permissions/atomic-fs-failure tests on actual integrated YT source
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/yt-src/bbport/launcher"
+          python -m unittest discover -s tools/poc/yharnam/launcher-game-search -p 'test_native_game_search.py' -v
+          python -m unittest discover -s tools/poc/yharnam/launcher-atomic-settings -p 'test_native_atomic.py' -v
+          echo YT130_WIN_NATIVE_FOUR_WAY_COMPOSITION_FUNCTIONAL_QA_PASS
       - name: Run full original native launcher co-op and game discovery tests
         run: |
           set -euo pipefail
@@ -74,5 +94,5 @@ jobs:
           echo YT130_WIN_NATIVE_ORIGINAL_LAUNCHER_TESTS_PASS
       - name: Explicit deployment limitation
         run: |
-          echo 'WINDOWS_SOURCE_TESTS_ONLY_NO_FROZEN_INSTALLER_GAMEPLAY_OR_REAL_SAVES'
+          echo 'FOUR_PATCHES_ONE_NATIVE_WINDOWS_SOURCE_CHECKOUT_NO_FROZEN_INSTALLER_GAMEPLAY_OR_REAL_SAVES'
           echo 'DO_NOT_MERGE_DEPLOY_WITHOUT_WINDOWS_FROZEN_BIN_AND_2PC_QA'
