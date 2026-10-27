@@ -18,7 +18,7 @@ concurrency:
 jobs:
   windows-native-launcher-full-composition:
     runs-on: windows-2022
-    timeout-minutes: 18
+    timeout-minutes: 27
     defaults:
       run:
         shell: bash
@@ -92,6 +92,77 @@ jobs:
             -s "$RUNNER_TEMP/yt-src/bbport/tests" \
             -p 'test_coop_launcher.py' -v
           echo YT130_WIN_NATIVE_ORIGINAL_LAUNCHER_TESTS_PASS
+      - name: Build a Windows frozen BLauncher.exe from four integrated fixes, NO game assets
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check \
+            pyinstaller==6.16.0 pillow==11.3.0 truststore==0.10.4
+          python -m PyInstaller --noconfirm --clean --log-level WARN \
+            --windowed --name BLauncher \
+            --distpath "$RUNNER_TEMP/launcher-dist" \
+            --workpath "$RUNNER_TEMP/launcher-pyi-work" \
+            --specpath "$RUNNER_TEMP/launcher-pyi-spec" \
+            --paths "$RUNNER_TEMP/yt-src/bbport/launcher" \
+            --paths "$RUNNER_TEMP/yt-src/bbport/scripts" \
+            --paths "$RUNNER_TEMP/yt-src/bbport/tools" \
+            --hidden-import fetch_fsr4vk \
+            --hidden-import bbport_icons \
+            --hidden-import truststore \
+            --hidden-import urllib.request \
+            --hidden-import ctypes.wintypes \
+            --hidden-import sqlite3 \
+            "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_launcher_win.py"
+          test -s "$RUNNER_TEMP/launcher-dist/BLauncher/BLauncher.exe"
+          echo YT130_NATIVE_WINDOWS_FROZEN_BLAUNCHER_COMPILED_NO_GAME
+      - name: Real frozen Windows EXE offline smoke: Unicode --script and strict system TLS
+        env:
+          YT_NATIVE_SMOKE_JSON: ${{ runner.temp }}/yt130-native-launcher-frozen-smoke.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/Охотник-Тест"
+          cat > "$RUNNER_TEMP/Охотник-Тест/probe.py" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import ssl
+          import urllib.request
+          import bbport_coop
+          import truststore
+          assert bbport_coop.use_system_certificates()
+          contexts = [
+              handler._context
+              for handler in urllib.request._opener.handlers
+              if isinstance(handler, urllib.request.HTTPSHandler)
+          ]
+          assert len(contexts) == 1
+          assert contexts[0].verify_mode == ssl.CERT_REQUIRED
+          assert contexts[0].check_hostname is True
+          result = {
+              "frozen_native_windows": True,
+              "cyrillic_script_path": "Охотник-Тест" in str(Path(__file__)),
+              "strict_tls": True,
+              "truststore_import_in_frozen_exe": bool(truststore),
+              "game_assets_bundled": False,
+              "release_readiness": "NOT_PLAYABLE_FROZEN_LAUNCHER_QA_ONLY",
+          }
+          Path(os.environ["YT_NATIVE_SMOKE_JSON"]).write_text(
+              json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          PY
+          # Native launcher PyInstaller windowed runs external prep scripts via --script.
+          "$RUNNER_TEMP/launcher-dist/BLauncher/BLauncher.exe" \
+            --script "$RUNNER_TEMP/Охотник-Тест/probe.py"
+          python -c "import json,os; o=json.load(open(os.environ['YT_NATIVE_SMOKE_JSON'], encoding='utf-8')); assert o['strict_tls'] and o['cyrillic_script_path'] and o['frozen_native_windows']"
+          echo YT130_FROZEN_WINDOWS_EXE_UNICODE_AND_TLS_SMOKE_PASS
+      - name: Preserve non-playable QA evidence only, not a user-facing game release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-native-windows-launcher-frozen-smoke
+          path: |
+            ${{ runner.temp }}/yt130-native-launcher-frozen-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Explicit deployment limitation
         run: |
           echo 'FOUR_PATCHES_ONE_NATIVE_WINDOWS_SOURCE_CHECKOUT_NO_FROZEN_INSTALLER_GAMEPLAY_OR_REAL_SAVES'
