@@ -22,7 +22,8 @@ class EventLoopTimingTests(unittest.TestCase):
                          "Apply(m_world.Tick(QDateTime::currentMSecsSinceEpoch()));",
                          "FlushRpc(*end);",
                          "while (m_socket->hasPendingDatagrams())",
-                         "m_socket->readDatagram(raw.data(), raw.size(), &sender, &senderPort);",
+                         "const qint64 received = m_socket->readDatagram(",
+                         "RecordWire(raw, true);",
                          "Busy(busy);"):
             self.assertIn(original, changed)
         for forbidden in ("m_socket->close()", "QTimer::singleShot", "break;",
