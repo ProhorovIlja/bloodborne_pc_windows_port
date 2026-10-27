@@ -1,0 +1,266 @@
+diff --git a/bbport/launcher/bbport_launcher_win.py b/bbport/launcher/bbport_launcher_win.py
+--- a/bbport/launcher/bbport_launcher_win.py
++++ b/bbport/launcher/bbport_launcher_win.py
+@@ -162,9 +162,12 @@ def attach_stdio():
+ def run_role(argv):
+     """--run [args]: run.py; --script <file> [args]: a preparation script. Returns an exit code."""
+     attach_stdio()
+-    for stream in (sys.stdout, sys.stderr):  # keep messages in order with the game's output
++    # UTF-8 whatever the Windows code page, as run.py reads it: a frozen launcher ignores PYTHONIOENCODING, and
++    # on a Russian Windows mods.py's game view path reached run.py as '????' (Kaniel 2026-10-27: Cyrillic user
++    # names, "the game doesn't start at all"). Line by line, to keep messages in order with the game's output.
++    for stream in (sys.stdout, sys.stderr):
+         try:
+-            stream.reconfigure(line_buffering=True)
++            stream.reconfigure(encoding='utf-8', errors='replace', line_buffering=True)
+         except (AttributeError, ValueError):
+             pass
+     if argv[0] == '--script':
+@@ -179,7 +182,14 @@ def run_role(argv):
+     try:
+         runpy.run_path(path, run_name='__main__')
+     except SystemExit as stop:
+-        return stop.code if isinstance(stop.code, int) else (0 if stop.code is None else 1)
++        if stop.code is None or isinstance(stop.code, int):
++            return stop.code or 0
++        print(stop.code, file=sys.stderr)  # sys.exit('message'), as python prints it
++        return 1
++    except Exception:  # into the log: frozen, it was PyInstaller's popup and an empty log
++        import traceback
++        traceback.print_exc(file=sys.stderr)
++        return 1
+     return 0
+ 
+ 
+@@ -7135,6 +7145,47 @@ def restart_without_redirection_guard():
+ 
+ 
+ def main():
++    """start_launcher, with any failure (Tcl that cannot start, --play, the uninstaller, an update) written to
++    user/log/launcher-errors.txt and shown: frozen and windowed, an uncaught error was only PyInstaller's popup,
++    and before the window no log was kept at all (Kaniel 2026-10-27: "writes 0 logs")."""
++    try:
++        start_launcher()
++    except SystemExit:
++        raise
++    except BaseException:
++        import traceback
++        details = traceback.format_exc()
++        log = record_startup_failure(details)
++        where = str(log) if log else _('no log could be written', 'журнал записать не удалось')
++        show_error_box(_('The launcher could not start. The details are in:\n{}\n\n{}',
++                         'Лаунчер не смог запуститься. Подробности в файле:\n{}\n\n{}').format(where, details[-1500:]))
++        sys.exit(1)
++
++
++def record_startup_failure(text):
++    """Adds TEXT to user/log/launcher-errors.txt, or to %TEMP% when that folder cannot be written (an install
++    under Program Files, a read-only drive). Returns the file written, None when neither could be."""
++    stamp = f'--- launcher failed {time.strftime("%Y-%m-%d %H:%M:%S")} (arguments: {sys.argv[1:]})\n'
++    for log in (DATA_DIR / 'user' / 'log' / 'launcher-errors.txt',
++                Path(tempfile.gettempdir()) / 'BLauncher-errors.txt'):
++        try:
++            log.parent.mkdir(parents=True, exist_ok=True)
++            with open(log, 'a', encoding='utf-8') as file:
++                file.write(stamp + text + ('' if text.endswith('\n') else '\n'))
++            return log
++        except OSError:
++            continue
++    return None
++
++
++def show_error_box(text):
++    try:
++        ctypes.windll.user32.MessageBoxW(None, text, COOP_NAME if COOP_INSTALL else 'Bloodborne', 0x10)  # MB_ICONERROR
++    except (AttributeError, OSError):
++        pass
++
++
++def start_launcher():
+     global LANG
+     args = sys.argv[1:]
+     if args and args[0] in ('--run', '--script'):
+@@ -7165,27 +7216,42 @@ def main():
+         ctypes.windll.shcore.SetProcessDpiAwareness(1)  # sharp text on scaled displays
+     except (AttributeError, OSError):
+         pass
+-    import tkinter as tk
+-    from tkinter import filedialog, messagebox, ttk
+-    root = tk.Tk()
+-    keep_launcher_errors(root)
+-    Launcher(root, tk, ttk, filedialog, messagebox)
+-    root.mainloop()
++    log = open_launcher_errors()  # before Tk: a crash while Tcl starts leaves its trace too
++    try:
++        import tkinter as tk
++        from tkinter import filedialog, messagebox, ttk
++        root = tk.Tk()
++        keep_launcher_errors(root, log)
++        Launcher(root, tk, ttk, filedialog, messagebox)
++        root.mainloop()
++    finally:
++        if log is not None:  # main() appends what went wrong to the same file
++            import faulthandler
++            faulthandler.disable()
++            log.close()
+ 
+ 
+-def keep_launcher_errors(root):
+-    """The windowed launcher has no console: a fault of the process and an error in a window callback go
+-    to user/log/launcher-errors.txt, so a crash leaves its cause behind (Kaniel 2026-10-17)."""
++def open_launcher_errors():
++    """user/log/launcher-errors.txt, open for the window's life with faulthandler writing to it; None when it
++    cannot be opened."""
+     import faulthandler
+-    import traceback
+     try:
+         folder = DATA_DIR / 'user' / 'log'
+         folder.mkdir(parents=True, exist_ok=True)
+         log = open(folder / 'launcher-errors.txt', 'a', encoding='utf-8', buffering=1)
+     except OSError:
+-        return
++        return None
+     log.write(f'--- launcher started {time.strftime("%Y-%m-%d %H:%M:%S")}\n')
+     faulthandler.enable(log)
++    return log
++
++
++def keep_launcher_errors(root, log):
++    """The windowed launcher has no console: a fault of the process and an error in a window callback go
++    to user/log/launcher-errors.txt, so a crash leaves its cause behind (Kaniel 2026-10-17)."""
++    import traceback
++    if log is None:
++        return
+ 
+     def report(kind, value, trace):
+         log.write(''.join(traceback.format_exception(kind, value, trace)))
+diff --git a/bbport/tests/test_launcher_code_page.py b/bbport/tests/test_launcher_code_page.py
+--- a/bbport/tests/test_launcher_code_page.py
++++ b/bbport/tests/test_launcher_code_page.py
+@@ -0,0 +1,126 @@
++"""Players with a Cyrillic Windows user name or game folder (Kaniel 2026-10-27): "the game doesn't start at all and
++writes 0 logs". BLauncher.exe runs run.py and the preparation scripts itself (--run, --script). PyInstaller ignores
++PYTHONIOENCODING, so their output was in the Windows code page: on a Russian Windows (1251) run.py read mods.py's
++game view path as UTF-8, got '????' and the preparation stopped ("prepare failed: No such file"); a letter outside
++the code page (Cyrillic on 1252) stopped the script with UnicodeEncodeError and PyInstaller's popup, no log. The
++roles now write UTF-8 whatever the code page, and a failure of any role leaves its cause in a log."""
++import io
++import os
++import subprocess
++import sys
++import tempfile
++import textwrap
++import unittest
++from pathlib import Path
++from unittest import mock
++
++LAUNCHER_DIR = Path(__file__).resolve().parents[1] / 'launcher'
++sys.path.insert(0, str(LAUNCHER_DIR))
++
++if sys.platform == 'win32':
++    import bbport_launcher_win as launcher
++
++CYRILLIC = 'C:\\Users\\\u0418\u0432\u0430\u043d\\\u0442\u0435\u0441\u0442'  # C:\Users\Иван\тест
++OUTSIDE_1251 = '\u0395\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac \u6d4b\u8bd5'  # Greek and Chinese
++
++
++def run_launcher(args, code_page, env=None):
++    """The launcher started as BLauncher.exe starts: its output in `code_page`, as a frozen launcher's is
++    (PYTHONIOENCODING stands in for the code page here; the frozen one ignores the variable)."""
++    environment = {**os.environ, **(env or {}), 'PYTHONIOENCODING': code_page, 'PYTHONUTF8': '0'}
++    return subprocess.run([sys.executable, str(LAUNCHER_DIR / 'bbport_launcher_win.py'), *args],
++                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
++                          env=environment, timeout=60)
++
++
++@unittest.skipUnless(sys.platform == 'win32', 'the Windows launcher')
++class CodePageTests(unittest.TestCase):
++    def script(self, directory, body):
++        path = Path(directory) / 'probe.py'
++        path.write_text(textwrap.dedent(body), encoding='utf-8')
++        return path
++
++    def test_a_script_prints_a_cyrillic_path_in_utf8_on_a_russian_windows(self):
++        with tempfile.TemporaryDirectory() as directory:
++            probe = self.script(directory, 'import sys\nprint(sys.argv[1])\n')
++            result = run_launcher(['--script', str(probe), CYRILLIC], 'cp1251')
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertEqual(result.stdout.decode('utf-8').strip(), CYRILLIC)
++
++    def test_a_script_prints_letters_outside_the_code_page(self):
++        with tempfile.TemporaryDirectory() as directory:
++            probe = self.script(directory, 'import sys\nprint(sys.argv[1])\nprint("x", file=sys.stderr)\n')
++            result = run_launcher(['--script', str(probe), CYRILLIC + OUTSIDE_1251], 'cp1252')
++        self.assertEqual(result.returncode, 0, result.stderr)
++        self.assertEqual(result.stdout.decode('utf-8').strip(), CYRILLIC + OUTSIDE_1251)
++
++    def test_a_failing_script_writes_its_traceback_to_the_log_and_returns_1(self):
++        # Frozen, an exception leaving the role became PyInstaller's modal popup and the log stayed empty.
++        with tempfile.TemporaryDirectory() as directory:
++            probe = self.script(directory, f'raise RuntimeError({CYRILLIC!r})\n')
++            stderr = io.StringIO()
++            with mock.patch.object(launcher, 'attach_stdio', lambda: None), \
++                    mock.patch.object(sys, 'stderr', stderr), mock.patch.object(sys, 'argv', list(sys.argv)):
++                code = launcher.run_role(['--script', str(probe)])
++        self.assertEqual(code, 1)
++        self.assertIn('RuntimeError', stderr.getvalue())
++        self.assertIn(CYRILLIC, stderr.getvalue())
++
++
++@unittest.skipUnless(sys.platform == 'win32', 'the Windows launcher')
++class StartupFailureTests(unittest.TestCase):
++    def test_a_failure_before_the_window_is_logged_and_shown(self):
++        with tempfile.TemporaryDirectory() as directory:
++            data = Path(directory) / CYRILLIC.rsplit('\\', 1)[1]
++            shown = []
++            # tkinter that cannot start (Tcl's library not found): no window ever opens in this test.
++            with mock.patch.object(launcher, 'DATA_DIR', data), \
++                    mock.patch.dict(sys.modules, {'tkinter': None}), \
++                    mock.patch.object(launcher, 'load_app_settings', lambda: dict(launcher.APP_DEFAULTS)), \
++                    mock.patch.object(launcher, 'show_error_box', lambda text: shown.append(text), create=True), \
++                    mock.patch.object(sys, 'argv', ['BLauncher.exe']):
++                with self.assertRaises(SystemExit) as stop:
++                    launcher.main()
++            log = data / 'user' / 'log' / 'launcher-errors.txt'
++            self.assertNotEqual(stop.exception.code, 0)
++            self.assertIn('tkinter', log.read_text(encoding='utf-8'))
++            self.assertEqual(len(shown), 1)
++            self.assertIn(str(log), shown[0])
++
++    def test_the_log_goes_to_temp_when_the_install_cannot_be_written(self):
++        with tempfile.TemporaryDirectory() as directory:
++            blocked = Path(directory) / 'blocked'
++            blocked.write_text('a file where the folder would be', encoding='utf-8')
++            temp = Path(directory) / 'temp'
++            temp.mkdir()
++            with mock.patch.object(launcher, 'DATA_DIR', blocked), \
++                    mock.patch.object(launcher.tempfile, 'gettempdir', lambda: str(temp)):
++                log = launcher.record_startup_failure('boom ' + CYRILLIC)
++            self.assertEqual(log.parent, temp)
++            self.assertIn('boom ' + CYRILLIC, log.read_text(encoding='utf-8'))
++
++    def test_play_failures_are_logged_too(self):
++        # Bloodborne.exe and Steam shortcuts start `BLauncher.exe --play`: no window to show a traceback in.
++        with tempfile.TemporaryDirectory() as directory:
++            data = Path(directory)
++            shown = []
++            settings = {**launcher.APP_DEFAULTS, 'game_dir': directory}
++            (data / 'eboot.bin').write_bytes(b'')
++
++            def broken(_settings):
++                raise OSError('could not start run.py')
++            with mock.patch.object(launcher, 'DATA_DIR', data), \
++                    mock.patch.dict(sys.modules, {'tkinter': None}), \
++                    mock.patch.object(launcher, 'load_app_settings', lambda: settings), \
++                    mock.patch.object(launcher, 'play_without_window', broken), \
++                    mock.patch.object(launcher, 'show_error_box', lambda text: shown.append(text), create=True), \
++                    mock.patch.object(sys, 'argv', ['BLauncher.exe', '--play']):
++                with self.assertRaises(SystemExit):
++                    launcher.main()
++            text = (data / 'user' / 'log' / 'launcher-errors.txt').read_text(encoding='utf-8')
++            self.assertIn('could not start run.py', text)
++            self.assertEqual(len(shown), 1)
++
++
++if __name__ == '__main__':
++    unittest.main()
