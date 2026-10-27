@@ -1,0 +1,180 @@
+name: BLauncher.exe native Windows frozen QA (NOT PLAYABLE)
+on:
+  pull_request:
+    branches: [feature/yt130-native-launcher-integrated-qa-20261027]
+    paths:
+      - '.github/workflows/shyt-yt130-frozen-launcher-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-frozen-windows-qa-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-native-launcher-full-composition:
+    runs-on: windows-2022
+    timeout-minutes: 27
+    defaults:
+      run:
+        shell: bash
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Source SHA, security, Unicode, folder permissions and atomic write guards
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/launcher-unicode -p 'test_stage.py' -v
+          for item in launcher-truststore launcher-game-search launcher-atomic-settings; do
+            python -m unittest discover -s "tools/poc/yharnam/$item" -p 'test_stage.py' -v
+          done
+          python -m compileall -q tools/poc/yharnam/launcher-unicode
+          python -m compileall -q tools/poc/yharnam/launcher-truststore
+          python -m compileall -q tools/poc/yharnam/launcher-game-search
+          python -m compileall -q tools/poc/yharnam/launcher-atomic-settings
+          python -m compileall -q tools/poc/yharnam/launcher-integrated
+      - name: Exact official native YT1.3.0 source checkout (disposable)
+        run: |
+          set -euo pipefail
+          git -c core.autocrlf=false clone --filter=blob:none --no-checkout \
+            https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" config core.autocrlf false
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
+          test -z "$(git -C "$RUNNER_TEMP/yt-src" status --porcelain)"
+      - name: Apply FOUR reviewed YT fixes to ONE original native Windows launcher source
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/launcher-integrated/stage.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test -f "$RUNNER_TEMP/yt-src/bbport/tests/test_launcher_code_page.py"
+          python -m compileall -q \
+            "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_launcher_win.py" \
+            "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_coop.py" \
+            "$RUNNER_TEMP/yt-src/bbport/tests/test_coop_launcher.py" \
+            "$RUNNER_TEMP/yt-src/bbport/tests/test_launcher_code_page.py"
+      - name: Run real Windows 1251/1252 Cyrillic startup and error-log regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s "$RUNNER_TEMP/yt-src/bbport/tests" \
+            -p 'test_launcher_code_page.py' -v
+          echo YT130_WIN_NATIVE_UNICODE_CODEPAGE_AND_CRASHLOG_TESTS_PASS
+      - name: Native Windows launch-error logs do not leak raw command-line secrets
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/yt-src/bbport/launcher"
+          python -m unittest discover \
+            -s tools/poc/yharnam/launcher-unicode \
+            -p 'test_windows_log_privacy.py' -v
+          echo YT130_WIN_LAUNCHER_PRIVATE_COMMAND_LINE_LOG_QA_PASS
+      - name: Functional Windows permissions/atomic-fs-failure tests on actual integrated YT source
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/yt-src/bbport/launcher"
+          python -m unittest discover -s tools/poc/yharnam/launcher-game-search -p 'test_native_game_search.py' -v
+          python -m unittest discover -s tools/poc/yharnam/launcher-atomic-settings -p 'test_native_atomic.py' -v
+          echo YT130_WIN_NATIVE_FOUR_WAY_COMPOSITION_FUNCTIONAL_QA_PASS
+      - name: Run full original native launcher co-op and game discovery tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s "$RUNNER_TEMP/yt-src/bbport/tests" \
+            -p 'test_coop_launcher.py' -v
+          echo YT130_WIN_NATIVE_ORIGINAL_LAUNCHER_TESTS_PASS
+      - name: Build a Windows frozen BLauncher.exe from four integrated fixes, NO game assets
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check \
+            pyinstaller==6.16.0 pillow==11.3.0 truststore==0.10.4
+          python -m PyInstaller --noconfirm --clean --log-level WARN \
+            --windowed --name BLauncher \
+            --distpath "$RUNNER_TEMP/launcher-dist" \
+            --workpath "$RUNNER_TEMP/launcher-pyi-work" \
+            --specpath "$RUNNER_TEMP/launcher-pyi-spec" \
+            --paths "$RUNNER_TEMP/yt-src/bbport/launcher" \
+            --paths "$RUNNER_TEMP/yt-src/bbport/scripts" \
+            --paths "$RUNNER_TEMP/yt-src/bbport/tools" \
+            --hidden-import fetch_fsr4vk \
+            --hidden-import bbport_icons \
+            --hidden-import truststore \
+            --hidden-import urllib.request \
+            --hidden-import ctypes.wintypes \
+            --hidden-import sqlite3 \
+            "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_launcher_win.py"
+          test -s "$RUNNER_TEMP/launcher-dist/BLauncher/BLauncher.exe"
+          echo YT130_NATIVE_WINDOWS_FROZEN_BLAUNCHER_COMPILED_NO_GAME
+      - name: Real frozen Windows EXE offline smoke: Unicode --script and strict system TLS
+        env:
+          YT_NATIVE_SMOKE_JSON: ${{ runner.temp }}/yt130-native-launcher-frozen-smoke.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/Охотник-Тест"
+          cat > "$RUNNER_TEMP/Охотник-Тест/probe.py" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import ssl
+          import urllib.request
+          import bbport_coop
+          import truststore
+          assert bbport_coop.use_system_certificates()
+          contexts = [
+              handler._context
+              for handler in urllib.request._opener.handlers
+              if isinstance(handler, urllib.request.HTTPSHandler)
+          ]
+          assert len(contexts) == 1
+          assert contexts[0].verify_mode == ssl.CERT_REQUIRED
+          assert contexts[0].check_hostname is True
+          result = {
+              "frozen_native_windows": True,
+              "cyrillic_script_path": "Охотник-Тест" in str(Path(__file__)),
+              "strict_tls": True,
+              "truststore_import_in_frozen_exe": bool(truststore),
+              "game_assets_bundled": False,
+              "release_readiness": "NOT_PLAYABLE_FROZEN_LAUNCHER_QA_ONLY",
+          }
+          Path(os.environ["YT_NATIVE_SMOKE_JSON"]).write_text(
+              json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          PY
+          # Native launcher PyInstaller windowed runs external prep scripts via --script.
+          "$RUNNER_TEMP/launcher-dist/BLauncher/BLauncher.exe" \
+            --script "$RUNNER_TEMP/Охотник-Тест/probe.py"
+          python -c "import json,os; o=json.load(open(os.environ['YT_NATIVE_SMOKE_JSON'], encoding='utf-8')); assert o['strict_tls'] and o['cyrillic_script_path'] and o['frozen_native_windows']"
+          echo YT130_FROZEN_WINDOWS_EXE_UNICODE_AND_TLS_SMOKE_PASS
+      - name: Record exact ZIP-able frozen EXE distribution test limitations
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/launcher-dist/BLauncher/QA-NOT-PLAYABLE.txt" <<'NOTE'
+          TEST ARTIFACT ONLY, NOT A GAME, SERVER OR WINDOWS PORT RELEASE.
+          Original native YT 1.3 pinned commit: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          Experimental integrated launcher PR32 and frozen Windows packaging PR33.
+          No game assets, no Bloodborne.exe, no runtime port, no shadNet server,
+          no legal game dump, no save migration, no system install and no signing.
+          This onedir PyInstaller BLauncher.exe alone cannot launch Bloodborne.
+          Do not copy into a real game folder or overwrite an installed launcher.
+          YT author GPL-2.0-or-later applies. For source see upstream pinned SHA
+          and user-owned GitHub experimental source PR32/PR33.
+          NOTE
+          python -c "import hashlib,pathlib; p=pathlib.Path(r'$RUNNER_TEMP/launcher-dist/BLauncher/BLauncher.exe'); print('BLauncher.exe SHA256',hashlib.sha256(p.read_bytes()).hexdigest())"
+      - name: Preserve self-contained frozen Windows launcher QA package (NOT PLAYABLE)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-windows-BLauncher-EXE-QA-NOT-PLAYABLE
+          path: |
+            ${{ runner.temp }}/launcher-dist/BLauncher/
+            ${{ runner.temp }}/yt130-native-launcher-frozen-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Explicit deployment limitation
+        run: |
+          echo 'FOUR_PATCHES_ONE_NATIVE_WINDOWS_SOURCE_CHECKOUT_NO_FROZEN_INSTALLER_GAMEPLAY_OR_REAL_SAVES'
+          echo 'DO_NOT_MERGE_DEPLOY_WITHOUT_WINDOWS_FROZEN_BIN_AND_2PC_QA'
