@@ -1,0 +1,42 @@
+name: Bloodborne six-port and YT upstream watch (read-only)
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'tools/poc/yharnam/upstream-watch/**'
+      - '.github/workflows/shyt-crossfork-upstream-watch.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '11 6 * * *'
+permissions:
+  contents: read
+jobs:
+  upstream-readonly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline safety, source registry, drift classification tests
+        run: |
+          python -m unittest discover -s tools/poc/yharnam/upstream-watch -p 'test_*.py' -v
+          python -m compileall -q tools/poc/yharnam/upstream-watch
+      - name: Fetch public metadata without writing to repos or game servers
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python tools/poc/yharnam/upstream-watch/watch.py --output upstream-drift-report
+          test -s upstream-drift-report/upstreams.json
+          test -s upstream-drift-report/UPSTREAMS.md
+      - name: Preserve new commit, tag and PR drift evidence for manual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bloodborne-crossfork-upstream-drift
+          path: upstream-drift-report/
+          if-no-files-found: warn
+          retention-days: 14
+# Schedule only runs after this workflow is deliberately merged to the default branch.
+# A DRAFT PR has no active recurring monitor. NEVER auto-merge, auto-cherry-pick
+# or auto-deploy from this workflow, even if upstream changed.
