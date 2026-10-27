@@ -28,6 +28,60 @@ ORIGIN = re.compile(r"YT130_COOP_ORIGIN kind=(\d+) sends=(\d+)")
 FOLDER = re.compile(r"server folder:\s+(/tmp/shadnet-load-[a-zA-Z0-9_-]+)")
 STAGES = (32, 64, 100, 200)
 BUILD = "bb-build 1;version=dev;protocol=9;"
+# Names are source-pinned to official server/coop/coop.proto Envelope.oneof body.
+# Never read message contents or display private player identifiers.
+ENVELOPE_NAMES = {
+    1: "Hello",
+    2: "Welcome",
+    3: "Lifecycle",
+    4: "KillProposal",
+    5: "Entries",
+    6: "SnapshotRequest",
+    7: "Snapshot",
+    8: "ShownReport",
+    9: "FlagProposal",
+    10: "MapStateReport",
+    11: "ReturnPointReport",
+    12: "HpProposal",
+    13: "MemberMap",
+    14: "MapBoard",
+    15: "Rest",
+    16: "RestBoard",
+    17: "Trophies",
+    18: "Echoes",
+    19: "Vitals",
+    20: "VitalsBoard",
+    21: "Portrait",
+    22: "EnemyOwners",
+    23: "LobbyHello",
+    24: "TeamRequest",
+    25: "LobbyState",
+    26: "TeamStart",
+    27: "TradeOffer",
+    28: "TradeStatus",
+    29: "TradeAsk",
+    30: "TradeAnswer",
+    31: "TradeCancel",
+    32: "TradeClosed",
+    33: "TradeGrant",
+    34: "TradeGranted",
+    35: "TeamWorld",
+    36: "TeamSession",
+    37: "LoadProgress",
+    39: "EnemyHit",
+    40: "ResumeAt",
+    41: "Ping",
+    42: "AltarRecord",
+    43: "InvadeRequest",
+    44: "InvasionNotice",
+    45: "InvasionStart",
+    46: "InvaderJoined",
+    47: "InvasionEnd",
+    48: "TeamTravel",
+    49: "DuelRequest",
+    50: "DuelState",
+}
+
 
 
 def aggregate(lines: list[str]) -> dict[str, dict[str, int]]:
@@ -64,7 +118,12 @@ def aggregate_coop(lines: list[str]) -> dict:
         if m := ORIGIN.search(line):
             key, count = m.groups()
             origins[key] = origins.get(key, 0) + int(count)
-    return {"intervals": intervals, "metrics": totals, "envelope_body_case_sends": origins}
+    return {"intervals": intervals, "metrics": totals,
+            "envelope_body_case_sends": origins,
+            "envelope_type_sends": {
+                ENVELOPE_NAMES.get(int(kind), "Unknown_" + kind): count
+                for kind, count in origins.items()
+            }}
 
 
 def extract_server_counters(stderr: str, output: Path) -> tuple[str, dict, dict]:
