@@ -56,7 +56,8 @@ jobs:
             stage_coop_reliability.py \
             stage_lobby_coalesce.py \
             stage_lobby_coalesce_cpp_test.py \
-            stage_eventloop_timing.py; do
+            stage_eventloop_timing.py \
+            stage_buffered_udp_fairness.py; do
             python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
           git -C "$RUNNER_TEMP/yt-src" diff --check
@@ -65,6 +66,8 @@ jobs:
           grep -q 'YT130_EVENTLOOP read_batches=' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'RecordWire(raw, true)' \
+            "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -q 'YT130_UDP_FAIR_QUEUE slices=' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'NonHostedTeamEditsAreCoalescedAndStartStillWorks' \
             "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
@@ -174,6 +177,18 @@ jobs:
           # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
           echo SHYT_YT130_QT_EVENTLOOP_OBSERVE_ONLY_NO_SCHEDULING_CHANGE
+      - name: EXPERIMENTAL schedule encrypted gameplay with bounded FIFO AFTER fully draining UDP socket
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_buffered_udp_fairness.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
+          grep -q 'RecordWire(raw, true)' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -q 'HandleLink(item.body, item.sender, item.port)' \
+            "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          echo YT130_BUFFERED_UDP_FAIR_EXPERIMENT_ONLY_MUST_PASS_FOUR_PEER_SMOKE
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
