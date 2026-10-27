@@ -18,6 +18,13 @@ WIRE = re.compile(
     r"YT130_WIRE_TRAFFIC kind=(\d+) in_packets=(\d+) in_bytes=(\d+)"
     r" out_packets=(\d+) out_bytes=(\d+)"
 )
+COOP = re.compile(
+    r"YT130_COOP_RELIABILITY frames=(\d+) body_bytes=(\d+)"
+    r" reliable_entries=(\d+) fresh_entries=(\d+) resent_entries=(\d+)"
+    r" ack_only_frames=(\d+) pending_chunks=(\d+) pending_bytes=(\d+)"
+    r" blocked_members=(\d+) active_members=(\d+)"
+)
+ORIGIN = re.compile(r"YT130_COOP_ORIGIN kind=(\d+) sends=(\d+)")
 FOLDER = re.compile(r"server folder:\s+(/tmp/shadnet-load-[a-zA-Z0-9_-]+)")
 STAGES = (32, 64, 100, 200)
 BUILD = "bb-build 1;version=dev;protocol=9;"
@@ -38,23 +45,47 @@ def aggregate(lines: list[str]) -> dict[str, dict[str, int]]:
     return total
 
 
-def extract_server_counters(stderr: str, output: Path) -> tuple[str, dict]:
+def aggregate_coop(lines: list[str]) -> dict:
+    """Plaintext reliable frame diagnostics: per-window snapshot max for queues."""
+    fields = ("frames", "body_bytes", "reliable_entries", "fresh_entries",
+              "resent_entries", "ack_only_frames", "pending_chunks",
+              "pending_bytes", "blocked_members", "active_members")
+    totals = {k: 0 for k in fields}
+    origins: dict[str, int] = {}
+    intervals = 0
+    for line in lines:
+        if m := COOP.search(line):
+            intervals += 1
+            for key, value in zip(fields, m.groups()):
+                if key.startswith("pending_") or key in ("blocked_members", "active_members"):
+                    totals[key] = max(totals[key], int(value))
+                else:
+                    totals[key] += int(value)
+        if m := ORIGIN.search(line):
+            key, count = m.groups()
+            origins[key] = origins.get(key, 0) + int(count)
+    return {"intervals": intervals, "metrics": totals, "envelope_body_case_sends": origins}
+
+
+def extract_server_counters(stderr: str, output: Path) -> tuple[str, dict, dict]:
     folders = FOLDER.findall(stderr)
     if len(folders) != 1:
-        return "MISSING_SERVER_FOLDER", {}
+        return "MISSING_SERVER_FOLDER", {}, {}
     home = Path(folders[0])
     if home.is_symlink() or not home.is_dir() or home.parent != Path("/tmp"):
-        return "UNSAFE_SERVER_FOLDER", {}
+        return "UNSAFE_SERVER_FOLDER", {}, {}
     lines = []
     try:
         with (home / "shadnet.log").open(encoding="utf-8", errors="replace") as stream:
             for line in stream:
-                if "YT130_WIRE_TRAFFIC kind=" in line:
+                if any(tag in line for tag in ("YT130_WIRE_TRAFFIC kind=",
+                                           "YT130_COOP_RELIABILITY frames=",
+                                           "YT130_COOP_ORIGIN kind=")):
                     lines.append(line)
         output.write_text("".join(lines), encoding="utf-8")
     finally:
         shutil.rmtree(home)
-    return ("RECORDED" if lines else "NO_WIRE_COUNTERS"), aggregate(lines)
+    return ("RECORDED" if lines else "NO_WIRE_COUNTERS"), aggregate(lines), aggregate_coop(lines)
 
 
 def run(args) -> int:
@@ -91,7 +122,7 @@ def run(args) -> int:
                 continue
             stdout = [json.loads(line) for line in completed.stdout.splitlines()
                       if line.startswith("{")]
-            evidence, kinds = extract_server_counters(
+            evidence, kinds, reliability = extract_server_counters(
                 completed.stderr, args.output / f"wire-{players}.log"
             )
             summary = stdout[0] if len(stdout) == 1 else {}
@@ -100,6 +131,7 @@ def run(args) -> int:
                 "run_returncode": completed.returncode,
                 "evidence": evidence,
                 "wire_kind_packets_and_bytes": kinds,
+                "coop_reliability": reliability,
                 "synthetic": {
                     k: summary.get(k) for k in (
                         "players", "playing", "packets_sent", "packets_received",
@@ -108,7 +140,9 @@ def run(args) -> int:
                 },
                 "scope": "DISPOSABLE_SYNTHETIC_SERVER_ONLY; main link read/"
                          "Hub Apply and world Apply; not all direct sends, "
-                         "not NIC accounting; reporting full 5-second windows",
+                         "not NIC accounting; reporting full 5-second windows;"
+                         " Coop metrics count raw reliable stream chunks and ACK-only"
+                         " frames; not end-user gameplay packet delivery",
             }
             out.write(json.dumps(item, sort_keys=True) + "\n")
             out.flush()
