@@ -11,9 +11,59 @@ permissions:
   contents: read
 concurrency:
   group: shyt-yt130-auth-qt-${{ github.ref }}
-  cancel-in-progress: true
+  # Avoid losing a 20-minute isolated native Qt build when GitHub sees an
+  # unrelated PR refresh. These runners never touch the live server.
+  cancel-in-progress: false
 jobs:
+  verify-disposable-source-stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run ALL original and experimental source guards before Qt packages
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-auth-stage -p 'test_stage_auth.py' -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p 'test_*.py' -v
+          python -m compileall -q tools/poc/yharnam/yt130-reference
+      - name: Fetch exact real official source with no Qt dependency
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
+          test -z "$(git -C "$RUNNER_TEMP/yt-src" status --porcelain)"
+      - name: Stage actual ten pinned original Qt source edits before costly compilation
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py \
+            "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" \
+            "$RUNNER_TEMP/yt-src"
+          for stage in \
+            stage_lobby_dedupe.py \
+            stage_wire_traffic.py \
+            stage_coop_reliability.py \
+            stage_lobby_coalesce.py \
+            stage_lobby_coalesce_cpp_test.py \
+            stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 10
+          grep -q 'YT130_EVENTLOOP read_batches=' \
+            "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -q 'RecordWire(raw, true)' \
+            "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -q 'NonHostedTeamEditsAreCoalescedAndStartStillWorks' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          echo YT130_SOURCE_EXACT_10_FILE_FULL_STAGE_PASS_NO_QT_BUILD_NO_PRODUCTION
   compile-real-shadnet-and-sqlite-tests:
+    needs: verify-disposable-source-stage
     runs-on: ubuntu-24.04
     timeout-minutes: 65
     env:
