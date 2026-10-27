@@ -50,6 +50,40 @@ class WireAggregationTests(unittest.TestCase):
         self.assertEqual(m.ENVELOPE_NAMES[5], "Entries")
         self.assertEqual(m.ENVELOPE_NAMES[25], "LobbyState")
 
+    def test_qt_world_timer_starvation_source_counters(self):
+        source = [
+            "INFO YT130_EVENTLOOP read_batches=300 read_datagrams=10000"
+            " read_busy_us=500000 max_read_batch_us=120000"
+            " max_read_batch_datagrams=800 world_ticks=87"
+            " world_busy_us=170000 max_world_busy_us=6200"
+            " max_world_gap_us=161000 late_world_ticks=7",
+            "INFO YT130_EVENTLOOP read_batches=400 read_datagrams=12000"
+            " read_busy_us=600000 max_read_batch_us=60000"
+            " max_read_batch_datagrams=900 world_ticks=90"
+            " world_busy_us=200000 max_world_busy_us=8000"
+            " max_world_gap_us=90000 late_world_ticks=4",
+            "YT130_EVENTLOOP player=secret token=unrelated",
+        ]
+        result = m.aggregate_eventloop(source)
+        self.assertEqual(result["observed_windows"], 2)
+        c = result["metrics"]
+        self.assertEqual(c["read_datagrams"], 22000)
+        self.assertEqual(c["read_busy_us"], 1100000)
+        self.assertEqual(c["max_read_batch_us"], 120000)
+        self.assertEqual(c["max_read_batch_datagrams"], 900)
+        self.assertEqual(c["max_world_gap_us"], 161000)
+        self.assertEqual(c["late_world_ticks"], 11)
+        self.assertEqual(c["world_ticks"], 177)
+        self.assertEqual(m.aggregate_coop(source)["eventloop"], result)
+
+    def test_bad_eventloop_rows_fail_closed(self):
+        output = m.aggregate_eventloop([
+            "YT130_EVENTLOOP read_batches=100 leaking_username=someone",
+            "YT130_EVENTLOOP read_batches=x read_datagrams=42",
+        ])
+        self.assertEqual(output["observed_windows"], 0)
+        self.assertEqual(output["metrics"]["read_busy_us"], 0)
+
     def test_bad_coop_line_is_not_a_false_interval(self):
         self.assertEqual(m.aggregate_coop([
             "YT130_COOP_RELIABILITY frames=19 secret=password",
