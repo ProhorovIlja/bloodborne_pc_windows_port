@@ -1,0 +1,70 @@
+name: Native YT1.3 Windows UTF-8 codepage and startup crash log QA
+on:
+  pull_request:
+    branches: [feature/yt130-clean-native-baseline]
+    paths:
+      - 'tools/poc/yharnam/launcher-unicode/**'
+      - '.github/workflows/shyt-yt130-launcher-unicode.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-native-unicode-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-native-unicode-and-crash-logs:
+    runs-on: windows-2022
+    timeout-minutes: 18
+    defaults:
+      run:
+        shell: bash
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Strict original author patch, Unicode, PII safety tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/launcher-unicode -p 'test_stage.py' -v
+          python -m compileall -q tools/poc/yharnam/launcher-unicode
+      - name: Exact official native YT1.3.0 source checkout (disposable)
+        run: |
+          set -euo pipefail
+          git -c core.autocrlf=false clone --filter=blob:none --no-checkout \
+            https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" config core.autocrlf false
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
+          test -z "$(git -C "$RUNNER_TEMP/yt-src" status --porcelain)"
+      - name: Apply author PR433 patch to native launcher only
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/launcher-unicode/stage.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test -f "$RUNNER_TEMP/yt-src/bbport/tests/test_launcher_code_page.py"
+          python -m compileall -q \
+            "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_launcher_win.py" \
+            "$RUNNER_TEMP/yt-src/bbport/tests/test_launcher_code_page.py"
+      - name: Run real Windows 1251/1252 Cyrillic startup and error-log regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s "$RUNNER_TEMP/yt-src/bbport/tests" \
+            -p 'test_launcher_code_page.py' -v
+          echo YT130_WIN_NATIVE_UNICODE_CODEPAGE_AND_CRASHLOG_TESTS_PASS
+      - name: Run full original native launcher co-op and game discovery tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s "$RUNNER_TEMP/yt-src/bbport/tests" \
+            -p 'test_coop_launcher.py' -v
+          echo YT130_WIN_NATIVE_ORIGINAL_LAUNCHER_TESTS_PASS
+      - name: Explicit deployment limitation
+        run: |
+          echo 'WINDOWS_SOURCE_TESTS_ONLY_NO_FROZEN_INSTALLER_GAMEPLAY_OR_REAL_SAVES'
+          echo 'DO_NOT_MERGE_DEPLOY_WITHOUT_WINDOWS_FROZEN_BIN_AND_2PC_QA'
