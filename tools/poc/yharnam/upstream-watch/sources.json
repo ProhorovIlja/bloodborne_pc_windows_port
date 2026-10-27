@@ -47,6 +47,20 @@
       "known_head": "7b4bb9576cdb95521347f3a512ccf93f31201da5",
       "known_release_tag": "v0.6.2",
       "compatibility": "SELECTIVE_WINDOWS_FIXES_WITH_SOURCE_TESTS"
+    },
+    {
+      "full_name": "vladtepes22/NightwatchCoop",
+      "category": "independent-bloodborne-party-coop",
+      "known_head": "ce1f1738a15afb8bfd62f4d40bb4d57f9d4f454c",
+      "known_release_tag": "unverified",
+      "compatibility": "GAMEPLAY_LESSONS_ONLY_DIFFERENT_WIRE_NO_BLIND_P2P_COPY"
+    },
+    {
+      "full_name": "shadps4-emu/shadPS4",
+      "category": "graphics-vulkan-upstream-emulator-source",
+      "known_head": "3eecea94ddaca360b19f4b800523b609a8b2ffcc",
+      "known_release_tag": "unverified",
+      "compatibility": "SELECTIVE_RENDERER_BUG_FIXES_ONLY_NO_EMULATION_IN_NATIVE_CLIENT"
     }
   ],
   "pull_requests": [
