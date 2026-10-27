@@ -59,6 +59,18 @@ class NativeAtomicFileTests(unittest.TestCase):
             self.assertFalse(path.exists())
             self.assertEqual(list(Path(folder).iterdir()), [])
 
+    def test_does_not_replace_symlinked_configuration(self):
+        # Mock link detection rather than requiring Windows developer-mode
+        # permissions to create a real symlink.
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "settings.json"
+            target.write_bytes(b'{"keep":true}')
+            with mock.patch.object(Path, "is_symlink", return_value=True):
+                with self.assertRaises(OSError):
+                    launcher.atomic_utf8_write(target, '{"keep":false}')
+            self.assertEqual(target.read_bytes(), b'{"keep":true}')
+            self.assertEqual(list(Path(folder).iterdir()), [target])
+
     def test_settings_write_requires_existing_parent(self):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "missing" / "settings.json"
