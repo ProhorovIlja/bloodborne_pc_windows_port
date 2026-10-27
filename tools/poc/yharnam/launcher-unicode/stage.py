@@ -70,7 +70,7 @@ NEW_MAIN = """def main():
 def record_startup_failure(text):
     \"\"\"Adds TEXT to user/log/launcher-errors.txt, or to %TEMP% when that folder cannot be written (an install
     under Program Files, a read-only drive). Returns the file written, None when neither could be.\"\"\"
-    stamp = f'--- launcher failed {time.strftime("%Y-%m-%d %H:%M:%S")} (arguments: {sys.argv[1:]})\\n'
+    stamp = f'--- launcher failed {time.strftime("%Y-%m-%d %H:%M:%S")} (command-line arguments withheld for privacy)\\n'
     for log in (DATA_DIR / 'user' / 'log' / 'launcher-errors.txt',
                 Path(tempfile.gettempdir()) / 'BLauncher-errors.txt'):
         try:
