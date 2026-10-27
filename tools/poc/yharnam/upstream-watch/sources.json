@@ -51,9 +51,11 @@
     {
       "full_name": "vladtepes22/NightwatchCoop",
       "category": "independent-bloodborne-party-coop",
-      "known_head": "ce1f1738a15afb8bfd62f4d40bb4d57f9d4f454c",
+      "known_head": "fd7ba2aa04faab6dda16ccbb393209577281f565",
       "known_release_tag": "unverified",
-      "compatibility": "GAMEPLAY_LESSONS_ONLY_DIFFERENT_WIRE_NO_BLIND_P2P_COPY"
+      "compatibility": "GAMEPLAY_LESSONS_ONLY_DIFFERENT_WIRE_NO_BLIND_P2P_COPY",
+      "previous_reviewed_head": "ce1f1738a15afb8bfd62f4d40bb4d57f9d4f454c",
+      "review_notes": "2026-10-27: 35 commits ahead/0 behind. See NIGHTWATCH_DELTA_2026-10-27.md. Atomic writes, safe full update rollback, VRAM 1-min counters, PII-scrubbed logs; no auto import or incompatible engine/net wire."
     },
     {
       "full_name": "shadps4-emu/shadPS4",
