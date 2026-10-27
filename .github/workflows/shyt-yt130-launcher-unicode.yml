@@ -1,7 +1,7 @@
-name: Integrated native YT1.3 Windows launcher TLS Unicode discovery atomic QA
+name: Frozen native YT1.3 Windows BLauncher QA via established workflow
 on:
   pull_request:
-    branches: [feature/yt130-clean-native-baseline]
+    branches: [feature/yt130-native-launcher-integrated-qa-20261027]
     paths:
       - 'tools/poc/yharnam/launcher-unicode/**'
       - 'tools/poc/yharnam/launcher-truststore/**'
@@ -13,7 +13,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: yt130-native-launcher-composition-${{ github.ref }}
+  group: yt130-established-frozen-blauncher-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   windows-native-launcher-full-composition:
