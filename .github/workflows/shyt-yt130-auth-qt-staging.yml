@@ -98,6 +98,15 @@ jobs:
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 7
           echo SHYT_YT130_LOBBY_50MS_COALESCE_EXPERIMENT_DO_NOT_DEPLOY
+      - name: Stage actual original C++ functional lobby batch / invite / start test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_lobby_coalesce_cpp_test.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
+          echo SHYT_YT130_LOBBY_REAL_CPP_FUNCTIONAL_TEST_READY
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
