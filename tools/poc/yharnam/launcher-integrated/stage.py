@@ -14,6 +14,7 @@ import argparse
 from pathlib import Path
 import importlib.util
 import subprocess
+import tempfile
 
 PIN = "0645740a33ae21c56df3b4a0d9777086dbca6053"
 HERE = Path(__file__).resolve().parent
@@ -64,7 +65,19 @@ def integrate(root: Path) -> dict:
 
     # Exact original upstream #429 patch includes PyInstaller packaging and
     # truststore verification from frozen BLauncher.exe; requires CLEAN tree.
-    trust.run(root)
+    # Actions checkout of THIS PR on Windows may convert .patch to CRLF,
+    # while its deliberately pinned upstream clone is checked out with LF.
+    # git apply interprets CR in context lines literally and then fails all
+    # five original hunks. Normalize only the disposable *working copy* of
+    # the patch, never the provenance .patch committed in GitHub.
+    with tempfile.TemporaryDirectory(prefix="yt-429-patch-") as temp:
+        source_patch = trust.PATCH.read_bytes()
+        if b"\\r\\n" in source_patch:
+            source_patch = source_patch.replace(b"\\r\\n", b"\\n")
+        normalized = Path(temp) / "upstream-YT-PR429-LF.patch"
+        normalized.write_bytes(source_patch)
+        trust.PATCH = normalized
+        trust.run(root)
     # Apply the three other self-contained patches to the exact same binary/
     # installer source checkout. Conflict guards trigger rather than guessing.
     coop_patched = game.patch_text(coop.read_text(encoding="utf-8"))
