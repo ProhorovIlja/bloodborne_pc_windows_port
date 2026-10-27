@@ -51,6 +51,10 @@ class CoopReliabilityTests(unittest.TestCase):
         self.assertIn("member.stream.Flush(now_ms)", cpp)
         marker = cpp.split('<< "YT130_COOP_RELIABILITY frames="', 1)[1]
         marker = marker.split("m_diagAt = now_ms;", 1)[0]
+        # Only executable QDebug expressions matter: ordinary comments
+        # mentioning excluded fields are not emitted into the runtime log.
+        marker = "\n".join(line for line in marker.splitlines()
+                           if not line.lstrip().startswith("//"))
         for secret_field in ('online_id', 'password', 'secret', 'packet_body',
                              'member.name', 'toString()', 'toHex()'):
             self.assertNotIn(secret_field, marker)
