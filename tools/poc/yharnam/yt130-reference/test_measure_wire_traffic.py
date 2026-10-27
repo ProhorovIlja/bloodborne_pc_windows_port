@@ -76,6 +76,24 @@ class WireAggregationTests(unittest.TestCase):
         self.assertEqual(c["world_ticks"], 177)
         self.assertEqual(m.aggregate_coop(source)["eventloop"], result)
 
+    def test_fair_queue_observations_keep_backlog_max_and_count_drops(self):
+        lines = [
+            "YT130_UDP_FAIR_QUEUE slices=30 handled=4100 max_slice_us=2100"
+            " max_queued=200 overload_drops=4 queued=13",
+            "YT130_UDP_FAIR_QUEUE slices=40 handled=5200 max_slice_us=1200"
+            " max_queued=300 overload_drops=2 queued=12",
+            "noise or YT130_UDP_FAIR_QUEUE slices=foo",
+        ]
+        r = m.aggregate_fair_queue(lines)
+        self.assertEqual(r["observed_windows"], 2)
+        self.assertEqual(r["metrics"]["slices"], 70)
+        self.assertEqual(r["metrics"]["handled"], 9300)
+        self.assertEqual(r["metrics"]["max_slice_us"], 2100)
+        self.assertEqual(r["metrics"]["max_queued"], 300)
+        self.assertEqual(r["metrics"]["overload_drops"], 6)
+        self.assertEqual(r["metrics"]["queued"], 13)
+        self.assertEqual(m.aggregate_coop(lines)["fair_queue"], r)
+
     def test_bad_eventloop_rows_fail_closed(self):
         output = m.aggregate_eventloop([
             "YT130_EVENTLOOP read_batches=100 leaking_username=someone",
