@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bloodborne cross-fork source monitor (GitHub read-only; never auto-cherry-pick).
 
-Compares 6 source HEADs, latest releases and 16 key YT PRs against a manually
+Compares 8 source HEADs, latest releases and 22 cross-fork PRs against a manually
 reviewed inventory. Writes JSON and Markdown in the output folder; never
 writes to GitHub, tests locally only, and cannot touch game/server state.
 """
@@ -149,7 +149,7 @@ def markdown(report: dict) -> str:
                      ("YES REVIEW REQUIRED" if r["head_changed"] else
                       ("unchanged" if r["evidence_complete"] else "unknown")) + " | " +
                      md_safe(r["compatibility"]) + " |")
-    lines += ["", "## Individual Yharnam Together PR watch", "",
+    lines += ["", "## Reviewed native Bloodborne cross-fork PR watch", "",
               "| PR | Area | Old → current | Priority | Gate |",
               "|---|---|---|---|---|"]
     for p in report["pull_requests"]:
