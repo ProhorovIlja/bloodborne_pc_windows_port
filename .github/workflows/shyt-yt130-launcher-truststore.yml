@@ -1,0 +1,62 @@
+name: Official YT1.3 Windows launcher TLS truststore candidate (Python only)
+on:
+  pull_request:
+    branches: [feature/yt130-clean-native-baseline]
+    paths:
+      - 'tools/poc/yharnam/launcher-truststore/**'
+      - '.github/workflows/shyt-yt130-launcher-truststore.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-launcher-tls-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify-official-launcher-pr429:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assert exact YT PR429 diff and TLS fail-closed security gates
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/launcher-truststore -p 'test_*.py' -v
+          python3 -m compileall -q tools/poc/yharnam/launcher-truststore
+      - name: Checkout exact official YT v1.3.0 native launcher (temporary only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
+          test -z "$(git -C "$RUNNER_TEMP/yt-src" status --porcelain)"
+      - name: Apply only five source verified upstream launcher files in temp tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/launcher-truststore/stage.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 5
+          python3 -m compileall -q \
+            "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_coop.py" \
+            "$RUNNER_TEMP/yt-src/bbport/launcher/bbport_launcher_win.py"
+      - name: Run original official native launcher and TLS regression tests
+        run: |
+          set -euo pipefail
+          # Native launcher tests walk the install's grandparents while looking
+          # for a game. GitHub's shared /tmp contains permission-denied Snap
+          # sandboxes, unrelated to TLS. Keep test fixture trees isolated.
+          mkdir -p "$RUNNER_TEMP/yt-launcher-temp"
+          export TMPDIR="$RUNNER_TEMP/yt-launcher-temp"
+          python3 -m unittest discover \
+            -s "$RUNNER_TEMP/yt-src/bbport/tests" -p 'test_coop_launcher.py' -v
+          echo YT130_NATIVE_LAUNCHER_PR429_PYTHON_QA_ONLY_PASS
+      - name: Never report a Windows binary without Windows packaging QA
+        run: |
+          echo 'WIN_BINARY_AND_ACTUAL_WINDOWS_CERT_STORE_NOT_VERIFIED'
+          echo 'DO_NOT_DEPLOY_OR_MERGE_UNTIL_WINDOWS_SIGNED_RELEASE_TLS_QA'
