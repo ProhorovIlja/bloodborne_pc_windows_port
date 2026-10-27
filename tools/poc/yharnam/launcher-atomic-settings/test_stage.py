@@ -1,6 +1,10 @@
 """Fail-closed original-source guard tests for native launcher file write stability."""
 import importlib.util
+import json
+import os
 from pathlib import Path
+import tempfile
+from unittest import mock
 import unittest
 
 src = Path(__file__).with_name("stage.py")
@@ -29,6 +33,40 @@ class AtomicSourceStageTests(unittest.TestCase):
         self.assertNotIn("CONFIG_FILE.write_text(", changed)
         with self.assertRaises(ValueError):
             m.patch_text(changed)
+
+    def test_executable_actual_staged_helper_preserves_old_config_on_failures(self):
+        # Run exactly INSERT (not a reimplementation), even when the full
+        # native Windows launcher environment is unavailable.
+        ns = {"os": os, "Path": Path, "tempfile": tempfile}
+        exec(m.INSERT, ns)
+        atomic = ns["atomic_utf8_write"]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "settings.json"
+            old = b'{"saved":true}\\n'
+            path.write_bytes(old)
+            for syscall in ("replace", "fsync"):
+                with self.subTest(syscall=syscall):
+                    with mock.patch.object(os, syscall,
+                                           side_effect=OSError("simulated interruption")):
+                        with self.assertRaises(OSError):
+                            atomic(path, '{"new":true}')
+                    self.assertEqual(path.read_bytes(), old)
+                    self.assertEqual(list(Path(folder).iterdir()), [path])
+            data = {"hunter": "Охотник 🎮"}
+            atomic(path, json.dumps(data, ensure_ascii=False))
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), data)
+            self.assertEqual(list(Path(folder).iterdir()), [path])
+
+    def test_atomic_staging_rejects_symlink_without_overwrite(self):
+        ns = {"os": os, "Path": Path, "tempfile": tempfile}
+        exec(m.INSERT, ns)
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "settings.json"
+            target.write_text("keep", encoding="utf-8")
+            with mock.patch.object(Path, "is_symlink", return_value=True):
+                with self.assertRaises(OSError):
+                    ns["atomic_utf8_write"](target, "overwrite")
+            self.assertEqual(target.read_text(encoding="utf-8"), "keep")
 
     def test_ambiguous_or_drifted_file_fails(self):
         original = "\n\nUNRELATED\n".join(old for old, _ in m.REPLACEMENTS)
