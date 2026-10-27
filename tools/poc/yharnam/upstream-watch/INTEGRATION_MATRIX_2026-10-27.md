@@ -23,6 +23,16 @@ Reviewed **2026-10-27** from upstream GitHub PRs, release notes and verified rep
 
 `sources.json` records complete 40-character SHA pins, PR statuses and candidate grades. Head or release/tag drift means **manual audit pending**, not automatic cherry-pick. A GitHub HEAD change alone does not mean it is safe or even relevant.
 
+### Fresh NightwatchCoop change series (35 commits, 2026-10-27)
+
+[Reviewed commit comparison](https://github.com/vladtepes22/NightwatchCoop/compare/ce1f1738a15afb8bfd62f4d40bb4d57f9d4f454c...fd7ba2aa04faab6dda16ccbb393209577281f565): 35 ahead, 0 behind. A dedicated [source-driven matrix](./NIGHTWATCH_DELTA_2026-10-27.md) breaks down the independently relevant changes:
+
+- **P0 native launcher:** atomic `settings.json`/INI, full update rollback, race-safe process exit and safe mode. We implemented *atomic writes only* in [draft PR #31](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/pull/31), subject to Windows validation. Full package update rollback is not implemented yet.
+- **P0 data safety:** running-game detection must be verified before touching saves or applying package update.
+- **P1 long-session stutter:** driver-based VRAM budget, time spent re-resident, freed/reacquired GPU blocks once per minute. Compare independent Supermedo #131. No emulator runtime in our build.
+- **P1 observability:** redact IPv6, local player paths, account/party/join codes before copying logs or assembling a user-controlled report ZIP. No automatic upload.
+- **Explicit gate:** Nightwatch's firewall helper manipulates user firewall block rules. Never run it in our build without explicit user opt-in, verified app-specific rules and administrator permission.
+
 ## High-value native YT gameplay and launcher work, prioritized
 
 | Priority | Upstream references and verified state (2026-10-27) | Review gate / acceptance |
