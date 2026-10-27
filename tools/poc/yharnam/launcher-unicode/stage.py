@@ -221,8 +221,10 @@ def apply(root: Path):
     rebase = backport(f.read_text(encoding="utf-8"))
     tests = original_tests(patch)
     # All source validation above completes before either file can be modified.
-    f.write_text(rebase, encoding="utf-8")
-    test_path.write_text(tests, encoding="utf-8")
+    # On Windows write_text() translates LF into CRLF, making pinned Git
+    # diffs fail whitespace checks. Preserve original repository LF bytes.
+    f.write_bytes(rebase.encode("utf-8"))
+    test_path.write_bytes(tests.encode("utf-8"))
     subprocess.run(["git", "-C", str(root), "diff", "--check"], check=True)
     print("YT130_PR433_SOURCE_EXACT_ADAPTED_UTF8_LOGS_AND_AUTHOR_TESTS_STAGED")
 
