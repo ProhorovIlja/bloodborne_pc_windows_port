@@ -1,0 +1,182 @@
+{
+  "schema": 1,
+  "recorded_utc_date": "2026-10-27",
+  "policy": "REPORT_ONLY_NEVER_AUTOMATICALLY_IMPORT_OR_DEPLOY",
+  "source_revision": "7a0135bcfe0e8e7afc1a9372902abfffcad3d3f8",
+  "pinned_yt_game_server": "0645740a33ae21c56df3b4a0d9777086dbca6053",
+  "repositories": [
+    {
+      "full_name": "lKaniel/bloodborne-server",
+      "category": "yt-native-coop-server-launcher",
+      "known_head": "8d5e54fee50e1d7c9dd25ba0a32f224b1d76b6f1",
+      "known_release_tag": "v1.3.0",
+      "compatibility": "SAME_UPSTREAM_FAMILY_PIN_REQUIRED",
+      "owner": "official"
+    },
+    {
+      "full_name": "visy/bloodborne_pc_windows_port",
+      "category": "native-win-bbport-directparty",
+      "known_head": "88f06059762b3c95347e6ed71c67724dcee25e50",
+      "known_release_tag": "v0.7.6",
+      "compatibility": "RUNTIME_AND_UI_IDEAS_ONLY; DIFFERENT_PARTY_WIRE"
+    },
+    {
+      "full_name": "Supermedo/bloodborne_pc",
+      "category": "native-win-launcher-graphics-bbport",
+      "known_head": "5adea35dbd38851339b63773c1245c02a314f094",
+      "known_release_tag": "windows-v1.9.4",
+      "compatibility": "SELECTIVE_RENDERER_LAUNCHER_FORK; NOT_YT_WIRE"
+    },
+    {
+      "full_name": "deadinside28/bloodborne_pc",
+      "category": "native-linux-bbport-memory-renderer",
+      "known_head": "8185b88d80573fa300595d5c54450183b4109935",
+      "known_release_tag": "0.6",
+      "compatibility": "PLATFORM_ADAPTATION_REQUIRED_NO_LINUX_BINARY"
+    },
+    {
+      "full_name": "droogie/bbhost",
+      "category": "native-pc-runtime-renderer",
+      "known_head": "3a9248f4c8d1bce7b503e274c5e891850f20a11d",
+      "known_release_tag": "v0.2.21",
+      "compatibility": "ENGINE_DIAGNOSTIC_IDEAS_AND_LICENSE_CHECK"
+    },
+    {
+      "full_name": "Mrsuss60/bloodborne_pc_windows_port",
+      "category": "native-win-launcher-memory-vulkan",
+      "known_head": "7b4bb9576cdb95521347f3a512ccf93f31201da5",
+      "known_release_tag": "v0.6.2",
+      "compatibility": "SELECTIVE_WINDOWS_FIXES_WITH_SOURCE_TESTS"
+    }
+  ],
+  "pull_requests": [
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 423,
+      "last_seen": "open",
+      "area": "friends-search-open-teams",
+      "priority": "P1",
+      "action": "REVIEW_SECURITY_AND_PROTOCOL_FIELDS_FIRST"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 424,
+      "last_seen": "open",
+      "area": "mingw-tk-runtime-packaging",
+      "priority": "P2",
+      "action": "REVIEW_WINDOWS_BUILD_ONLY"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 429,
+      "last_seen": "open",
+      "area": "windows-https-truststore",
+      "priority": "P1",
+      "action": "REVIEW_CERT_VALIDATION_TESTS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 430,
+      "last_seen": "open",
+      "area": "launcher-defender-exe-signing-build",
+      "priority": "P1",
+      "action": "REVIEW_PACKAGING_SOURCE"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 431,
+      "last_seen": "open",
+      "area": "dlss-preset-and-sharpening",
+      "priority": "P2",
+      "action": "REVIEW_GPU_AND_DRIVER_MATRIX"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 432,
+      "last_seen": "open",
+      "area": "chalice-shop-unlock-own-character",
+      "priority": "P1",
+      "action": "REVIEW_PER_PLAYER_GAMEPLAY_FLAGS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 397,
+      "last_seen": "merged",
+      "area": "spectator-free-camera-death-mode",
+      "priority": "P1",
+      "action": "CHECK_PINNED_RELEASE_CONTAINS_IT_BEFORE_PORTING"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 414,
+      "last_seen": "merged",
+      "area": "boss-death-spectator",
+      "priority": "P1",
+      "action": "CHECK_BOSS_LIFECYCLE_AND_REVIVE_TESTS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 393,
+      "last_seen": "merged",
+      "area": "save-backup-restore",
+      "priority": "P1",
+      "action": "PRESERVE_SAVES_ADD_SAFE_ROLLBACK_TESTS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 418,
+      "last_seen": "merged",
+      "area": "third-party-vulkan-layer-crashes",
+      "priority": "P1",
+      "action": "GATE_OPTIONALLY_NOT_SILENTLY_DISABLE_ALL_LAYERS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 417,
+      "last_seen": "merged",
+      "area": "join-compat-fingerprint-classification",
+      "priority": "P1",
+      "action": "TEST_AUTH_PROTOCOL_STILL_FAIL_CLOSED"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 400,
+      "last_seen": "merged",
+      "area": "ultrawide-guest-hook-map",
+      "priority": "P2",
+      "action": "VERIFY_WINDOWS_ASLR_ALLOCATOR"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 404,
+      "last_seen": "merged",
+      "area": "forbidden-woods-srt-texture-recovery",
+      "priority": "P1",
+      "action": "RENDERER_COMPARE_AND_STRESS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 421,
+      "last_seen": "merged",
+      "area": "enemy-scaling-locale-save",
+      "priority": "P2",
+      "action": "TEST_ROUNDTRIP_DECIMAL_COMMA"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 426,
+      "last_seen": "merged",
+      "area": "death-give-up-revive",
+      "priority": "P1",
+      "action": "VERIFY_GIVE_UP_AND_TEAM_DEATH"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 410,
+      "last_seen": "merged",
+      "area": "revive-standing-last-lamp",
+      "priority": "P1",
+      "action": "VERIFY_PERSISTENT_LAMP_RESTART"
+    }
+  ]
+}
