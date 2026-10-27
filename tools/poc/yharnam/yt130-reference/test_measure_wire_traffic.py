@@ -45,6 +45,10 @@ class WireAggregationTests(unittest.TestCase):
         self.assertEqual(out["metrics"]["pending_chunks"], 22)
         self.assertEqual(out["metrics"]["pending_bytes"], 3300)
         self.assertEqual(out["envelope_body_case_sends"]["14"], 110)
+        self.assertEqual(out["envelope_type_sends"]["MapBoard"], 110)
+        self.assertEqual(out["envelope_type_sends"]["Portrait"], 2)
+        self.assertEqual(m.ENVELOPE_NAMES[5], "Entries")
+        self.assertEqual(m.ENVELOPE_NAMES[25], "LobbyState")
 
     def test_bad_coop_line_is_not_a_false_interval(self):
         self.assertEqual(m.aggregate_coop([
