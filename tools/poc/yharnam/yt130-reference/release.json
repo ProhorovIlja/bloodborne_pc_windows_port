@@ -1,0 +1,12 @@
+{
+  "name": "Yharnam Together v1.3.0",
+  "tag": "v1.3.0",
+  "source_sha": "0645740a33ae21c56df3b4a0d9777086dbca6053",
+  "published_at": "2026-10-26T15:59:58Z",
+  "installer_name": "YharnamTogether-v1.3.0-setup.exe",
+  "installer_bytes": 126842039,
+  "installer_sha256": "9482f2d0c2cee0bd637f79db463d6efe63cace52ac39a69ad88bf8471b431a55",
+  "release_url": "https://github.com/lKaniel/bloodborne-server/releases/tag/v1.3.0",
+  "installer_url": "https://github.com/lKaniel/bloodborne-server/releases/download/v1.3.0/YharnamTogether-v1.3.0-setup.exe",
+  "notes": "Hash and size published by GitHub Releases; verifying this manifest alone is not verifying a downloaded EXE. No commercial game assets included."
+}

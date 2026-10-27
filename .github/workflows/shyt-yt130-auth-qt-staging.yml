@@ -1,0 +1,203 @@
+name: Yharnam Together v1.3 clean Qt game-server baseline
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - tools/poc/yharnam/yt130-auth-stage/**
+      - tools/poc/yharnam/yt130-reference/**
+      - .github/workflows/shyt-yt130-auth-qt-staging.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-yt130-auth-qt-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile-real-shadnet-and-sqlite-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Source-stage and clean-checkout safety tests
+        run: |
+          python -m unittest discover -s tools/poc/yharnam/yt130-auth-stage -p 'test_stage_auth.py' -v
+          python -m compileall -q tools/poc/yharnam/yt130-auth-stage
+          python -m unittest discover -s tools/poc/yharnam/yt130-auth-stage -p 'test_ci_workflow_shell.py' -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p 'test_*.py' -v
+      - name: Install Qt6 and native server compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config qt6-base-dev \
+            qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite ccache
+      - name: Restore reusable Qt C++ object cache across staging runs
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: qt6-yt130-auth-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            qt6-yt130-auth-${{ runner.os }}-
+      - name: Checkout exact CURRENT upstream, not outdated game pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
+          git -C "$RUNNER_TEMP/yt-src" submodule update --init --recursive \
+            server/externals/protobuf
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
+          test -z "$(git -C "$RUNNER_TEMP/yt-src" status --porcelain)"
+      - name: Apply ONLY source-verified Qt auth fixes to disposable checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py \
+            "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 5
+          echo SHYT_YT130_REAL_STAGING_ALL_FIVE_SOURCE_FILES_APPLIED
+      - name: EXPERIMENTAL source-exact no-duplicate lobby state on disposable upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_lobby_dedupe.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 6
+          echo SHYT_YT130_NONHOSTED_LOBBY_DEDUP_EXPERIMENT_NOT_PRODUCTION
+      - name: EXPERIMENTAL kind-wise UDP wire counters on disposable YT1.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_wire_traffic.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 6
+          echo SHYT_YT130_WIRE_COUNTERS_ONLY_NOT_PRODUCTION
+      - name: EXPERIMENTAL per-world reliable CoopStream resend / ACK / origin counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_coop_reliability.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 7
+          echo SHYT_YT130_COOP_RELIABILITY_DIAGNOSTIC_ONLY_NO_DEPLOY
+      - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" \
+            -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+            "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" \
+            "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0" \
+            "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache" \
+            "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          ccache --max-size 1300M
+      - name: Build true Qt shadNet plus broad network/world/authorization tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target \
+            shadnet test_accounts test_server_link test_admission test_region \
+            test_packet_routes test_rpc_tunnel test_bloodborne_world \
+            test_team_lobby test_invasions test_bloodborne_duel \
+            test_stream_extractor
+          ccache --show-stats
+      - name: Run actual SQLite plus network protocol, admission and gameplay regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(accounts|server_link|admission|region|packet_routes|rpc_tunnel|bloodborne_world|team_lobby|invasions|bloodborne_duel|stream_extractor)$'
+          echo SHYT_YT130_REAL_QT_NETWORK_WORLD_AND_ACCOUNT_MATRIX_PASS
+      - name: Compile ORIGINAL upstream synthetic player generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target bbload
+          test -x "$RUNNER_TEMP/yt-build/shadnet"
+          test -x "$RUNNER_TEMP/yt-build/bbload"
+      - name: Patch disposable bbload argument parser to preserve v1.3 fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
+      - name: Diagnose real synthetic 4-peer sign-in before large load
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only a disposable local server: 'bbload' is a synthetic build id,
+          # not the v1.3.0 game BuildFingerprint; disable the release build
+          # gate ONLY in its ephemeral temporary shadnet.cfg, never production.
+          timeout 90s python3 "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --players 4 --team-size 2 --processes 1 \
+            --seconds 15 --ramp-ms 10 --cfg CheckServerBuild=false \
+            --extra "--build 'bb-build 1;version=dev;protocol=9;'" \
+            --keep > yt130-smoke4.jsonl 2> yt130-smoke4.stderr
+          cat yt130-smoke4.jsonl
+          python tools/poc/yharnam/yt130-reference/collect_load_diagnostics.py \
+            yt130-smoke4.stderr --output yt130-smoke4-diagnostics.log
+          python tools/poc/yharnam/yt130-reference/verify_load_report.py \
+            yt130-smoke4.jsonl --expected-players 4
+      - name: Measure actual optimized shadNet capacity 4 to 200 players
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 330s python tools/poc/yharnam/yt130-reference/run_capacity_curve.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --report yt130-capacity-curve.jsonl
+      - name: Differential reduced-rate synthetic traffic diagnostic (NOT capacity PASS)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -x "$RUNNER_TEMP/yt-build/bbload" || ! test -x "$RUNNER_TEMP/yt-build/shadnet"; then
+            echo "No built generator/server: skip reduced-rate diagnosis"
+            exit 0
+          fi
+          timeout 260s python tools/poc/yharnam/yt130-reference/run_capacity_curve.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --profile reduced --diagnostic --report yt130-reduced-rate.jsonl
+      - name: Attribute real server wire kind bytes at 32-200 peers (diagnostic only)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -x "$RUNNER_TEMP/yt-build/shadnet" || ! test -x "$RUNNER_TEMP/yt-build/bbload"; then
+            echo "Missing compiled real Qt source, traffic study unavailable"
+            exit 0
+          fi
+          timeout 270s python tools/poc/yharnam/yt130-reference/measure_wire_traffic.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --output yt130-wire-logs
+      - name: Preserve synthetic 200-peer CPU and latency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-loopback-200-peer-metrics
+          path: |
+            yt130-capacity-curve.jsonl
+            yt130-reduced-rate.jsonl
+            yt130-wire-logs/
+            yt130-smoke4.jsonl
+            yt130-smoke4.stderr
+            yt130-load200.stderr
+            yt130-smoke4-diagnostics.log
+            yt130-load200-diagnostics.log
+          if-no-files-found: ignore
+          retention-days: 7
