@@ -57,6 +57,14 @@ jobs:
             -s "$RUNNER_TEMP/yt-src/bbport/tests" \
             -p 'test_launcher_code_page.py' -v
           echo YT130_WIN_NATIVE_UNICODE_CODEPAGE_AND_CRASHLOG_TESTS_PASS
+      - name: Native Windows launch-error logs do not leak raw command-line secrets
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$RUNNER_TEMP/yt-src/bbport/launcher"
+          python -m unittest discover \
+            -s tools/poc/yharnam/launcher-unicode \
+            -p 'test_windows_log_privacy.py' -v
+          echo YT130_WIN_LAUNCHER_PRIVATE_COMMAND_LINE_LOG_QA_PASS
       - name: Run full original native launcher co-op and game discovery tests
         run: |
           set -euo pipefail
