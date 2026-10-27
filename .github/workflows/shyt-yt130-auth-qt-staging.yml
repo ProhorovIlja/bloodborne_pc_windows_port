@@ -7,6 +7,12 @@ on:
       - tools/poc/yharnam/yt130-reference/**
       - .github/workflows/shyt-yt130-auth-qt-staging.yml
   workflow_dispatch:
+    inputs:
+      extreme_2000:
+        description: 'Opt-in 2000/2048-player isolated synthetic stage (never live server)'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -66,7 +72,7 @@ jobs:
   compile-real-shadnet-and-sqlite-tests:
     needs: verify-disposable-source-stage
     runs-on: ubuntu-24.04
-    timeout-minutes: 65
+    timeout-minutes: 85
     env:
       YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
     steps:
@@ -264,12 +270,59 @@ jobs:
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
             --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
             --output yt130-wire-logs
+      - name: Scale ACTUAL original YT bbload GAMEPLAY packets to 1000/1024, diagnostic only
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -x "$RUNNER_TEMP/yt-build/shadnet" || \
+             ! test -x "$RUNNER_TEMP/yt-build/bbload"; then
+            echo "Original optimized source did not compile: cannot run scale test"
+            exit 0
+          fi
+          # All calls use original run_load.py spawning ONLY 127.0.0.1 and a
+          # temporary shadNet, never Fornex, CLS Friends, or game accounts.
+          # 30/8 owner/follower fps is upstream's ACTIVE original default.
+          timeout 420s python tools/poc/yharnam/yt130-reference/run_scale_1000.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --profile active --team-size 2 --peak 1000 --timeout 115 \
+            --output yt130-scale-active-duo-1000.jsonl
+          timeout 420s python tools/poc/yharnam/yt130-reference/run_scale_1000.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --profile reduced --team-size 2 --peak 1000 --timeout 115 \
+            --output yt130-scale-reduced-duo-1000.jsonl
+          timeout 420s python tools/poc/yharnam/yt130-reference/run_scale_1000.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --profile reduced --team-size 4 --peak 1024 --timeout 115 \
+            --output yt130-scale-reduced-quartet-1024.jsonl
+          echo "YT130_DIAGNOSTIC_1000_NOT_PASSED_UNLESS_METRICS_PROVE_HEALTH"
+      - name: Extreme 2000/2048-player active & presence scaling ONLY by manual explicit opt-in
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.extreme_2000 == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for item in '2 2000 active' '4 2048 presence'; do
+            read -r team peak mode <<< "$item"
+            timeout 680s python tools/poc/yharnam/yt130-reference/run_scale_1000.py \
+              --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+              --bbload "$RUNNER_TEMP/yt-build/bbload" \
+              --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+              --profile "$mode" --team-size "$team" --peak "$peak" \
+              --timeout 130 --output "yt130-scale-extreme-${mode}-${peak}.jsonl"
+          done
       - name: Preserve synthetic 200-peer CPU and latency evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yt130-loopback-200-peer-metrics
+          name: yt130-loopback-1000-plus-scaling-and-eventloop-metrics
           path: |
+            yt130-scale-*.jsonl
             yt130-capacity-curve.jsonl
             yt130-reduced-rate.jsonl
             yt130-wire-logs/
