@@ -54,7 +54,8 @@ jobs:
             python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 10
+          # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
           grep -q 'YT130_EVENTLOOP read_batches=' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'RecordWire(raw, true)' \
@@ -164,7 +165,8 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_eventloop_timing.py \
             "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 10
+          # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
           echo SHYT_YT130_QT_EVENTLOOP_OBSERVE_ONLY_NO_SCHEDULING_CHANGE
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
