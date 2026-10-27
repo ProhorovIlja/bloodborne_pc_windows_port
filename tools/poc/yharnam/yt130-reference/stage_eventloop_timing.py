@@ -119,6 +119,18 @@ MEASURED_WORLD = """void LinkServer::OnWorldTick() {
     Busy(busy);
 }"""
 
+# Earlier PR24 instruments this EXACT original read call to count UDP wire kind.
+# Keep the existing RecordWire() functionality, rather than replacing it or
+# requiring an impossible unmodified callback after the source staging chain.
+WIRE_READ = "        m_socket->readDatagram(raw.data(), raw.size(), &sender, &senderPort);"
+WIRE_MEASURE = """        const qint64 received = m_socket->readDatagram(
+            raw.data(), raw.size(), &sender, &senderPort);
+        if (received > 0)
+            RecordWire(raw, true);"""
+assert ORIGINAL_READ.count(WIRE_READ) == 1 and MEASURED_READ.count(WIRE_READ) == 1
+ORIGINAL_READ = ORIGINAL_READ.replace(WIRE_READ, WIRE_MEASURE)
+MEASURED_READ = MEASURED_READ.replace(WIRE_READ, WIRE_MEASURE)
+
 HEADER_ANCHOR = """    QElapsedTimer m_clock;
     Database m_db;"""
 HEADER_NEW = """    QElapsedTimer m_clock;
