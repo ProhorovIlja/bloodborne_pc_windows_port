@@ -108,12 +108,17 @@ def report(stdout: str, code: int, expected: int, shard_count: int) -> dict:
     if (any(type(shard_id) is not str or not shard_id or len(shard_id) > 128
             for shard_id in shard_ids) or len(set(shard_ids)) != shard_count):
         return {"quality": "NO_PER_SHARD_EVIDENCE", "measured": False}
-    got = item.get("packets_received", 0)
-    lost = item.get("packets_lost", 0)
-    playing = item.get("playing", 0)
-    p99 = item.get("relay_ms_p99", 1e9)
-    if not all(type(x) in (int, float) and math.isfinite(x) and x >= 0 for x in
-               (got, lost, playing, p99)):
+    got = item.get("packets_received")
+    lost = item.get("packets_lost")
+    playing = item.get("playing")
+    refused = item.get("refused")
+    drops = item.get("udp_buffer_drops")
+    p99 = item.get("relay_ms_p99")
+    # Original run_shards.py always emits integer game counters/refusals and
+    # host-wide Linux UDP receive drops; missing evidence is NOT healthy.
+    if (any(type(x) is not int or x < 0 for x in
+            (got, lost, playing, refused, drops)) or
+        type(p99) not in (int, float) or not math.isfinite(p99) or p99 < 0):
         return {"quality": "INVALID_COUNTERS", "measured": False}
     redirect_count = item.get("redirects")
     redirect_p99 = item.get("redirect_ms_p99")
@@ -133,6 +138,10 @@ def report(stdout: str, code: int, expected: int, shard_count: int) -> dict:
         quality = "INSUFFICIENT_GAME_FRAMES"
     elif got / max(1, got + lost) < 0.99:
         quality = "GAME_PACKET_LOSS"
+    elif drops > 0:
+        # Kernel drops can be absent from the synthetic client's packet
+        # accounting; a green 1000-player score must not conceal them.
+        quality = "HOST_KERNEL_UDP_DROPS"
     elif p99 > 50:
         quality = "RELAY_P99_OVER_50MS"
     elif any(shard["link_thread_cpu_avg"] >= 75 for shard in got_shards):
