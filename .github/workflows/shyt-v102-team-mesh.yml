@@ -7,6 +7,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_team_registry_v102.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
@@ -19,6 +20,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_team_registry_v102.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
@@ -108,6 +110,45 @@ jobs:
             -o /tmp/shyt-v102-team
           /tmp/shyt-v102-team
           echo SHYT_V102_THREE_HUNTER_512_PAIRS_NATIVE_CRYPTO_PASS
+      - name: Provision CI-only CA, server IP SAN and THREE distinct TLS clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v102-certs
+          cd /tmp/shyt-v102-certs
+          openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 \
+            -keyout ca.key -out ca.pem -subj '/CN=V102 test CA' \
+            -addext 'basicConstraints=critical,CA:TRUE'
+          openssl req -newkey rsa:2048 -sha256 -nodes \
+            -keyout server.key -out server.csr -subj '/CN=127.0.0.1'
+          printf 'subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > server.ext
+          openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key \
+            -CAcreateserial -out server.pem -days 1 -sha256 -extfile server.ext
+          printf 'extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n' > client.ext
+          for hunter in a b c; do
+            openssl req -newkey rsa:2048 -sha256 -nodes \
+              -keyout "$hunter.key" -out "$hunter.csr" \
+              -subj "/CN=V102 test client $hunter"
+            openssl x509 -req -in "$hunter.csr" -CA ca.pem -CAkey ca.key \
+              -CAserial ca.srl -out "$hunter.pem" -days 1 -sha256 -extfile client.ext
+          done
+          chmod 600 *.key
+      - name: THREE real native TLS clients list and exchange 3 SHG2 READY grants
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_real_mtls_team_v102.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -lssl -lcrypto -pthread -o /tmp/shyt-v102-three-real-tls
+          dir=/tmp/shyt-v102-certs
+          /tmp/shyt-v102-three-real-tls \
+            "$dir/server.pem" "$dir/server.key" "$dir/ca.pem" \
+            "$dir/a.pem" "$dir/a.key" \
+            "$dir/b.pem" "$dir/b.key" \
+            "$dir/c.pem" "$dir/c.key"
+          echo SHYT_V102_THREE_REAL_TLS_NATIVE_PAIR_READY_PASS
       - name: Compose immutable original YT and compile actual Qt main
         shell: bash
         run: |
