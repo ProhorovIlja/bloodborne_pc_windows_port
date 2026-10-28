@@ -39,7 +39,9 @@ def verify():
     if argv != ["--build", BUILD, "--owner-fps", "30",
                 "--follower-fps", "8"]:
         raise ValueError("Hosted fixture loses original required build fingerprint")
-    if "--build '" + BUILD + "'".split() == ["--build", BUILD]:
+    # Parenthesize the complete token before splitting. The unparenthesized
+    # form called str.split() only on the last quote and raised TypeError.
+    if ("--build '" + BUILD + "'").split() == ["--build", BUILD]:
         raise ValueError("Regression: raw split unexpectedly works on build token")
 
 def stage(root: Path):
