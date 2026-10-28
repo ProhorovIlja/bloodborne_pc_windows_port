@@ -242,13 +242,13 @@ f'''int AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams() {{
 int ATeamFormsAndStartsThroughTheService() {{
 ''',"original Qt world real team and intruder isolation")
     test=one(test,
-'''       {{"ATeamFormsAndStartsThroughTheService",
-        ATeamFormsAndStartsThroughTheService}},
+'''       {"ATeamFormsAndStartsThroughTheService",
+        ATeamFormsAndStartsThroughTheService},
 ''',
-'''       {{"AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams",
-        AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams}},
-       {{"ATeamFormsAndStartsThroughTheService",
-        ATeamFormsAndStartsThroughTheService}},
+'''       {"AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams",
+        AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams},
+       {"ATeamFormsAndStartsThroughTheService",
+        ATeamFormsAndStartsThroughTheService},
 ''',"include actual authenticated team isolation regression")
     # Replace LOCAL 3-way hardcoded enumeration with real current signed-in
     # shadNet world. For this dev test, only exactly operator-pinned A/B/C
