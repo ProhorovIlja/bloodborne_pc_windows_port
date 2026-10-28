@@ -45,7 +45,7 @@
       "full_name": "Mrsuss60/bloodborne_pc_windows_port",
       "category": "native-win-launcher-memory-vulkan",
       "known_head": "7b4bb9576cdb95521347f3a512ccf93f31201da5",
-      "known_release_tag": "v0.7.1",
+      "known_release_tag": "v0.7.2",
       "compatibility": "SELECTIVE_WINDOWS_FIXES_WITH_SOURCE_TESTS"
     },
     {
