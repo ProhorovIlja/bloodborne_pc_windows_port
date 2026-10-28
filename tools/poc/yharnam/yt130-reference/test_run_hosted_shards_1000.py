@@ -60,6 +60,8 @@ class HostedShards1000Tests(unittest.TestCase):
         return {
             "players": players, "shards": shards,
             "playing": playing, "relay_ms_p99": p99,
+            "redirects": 0 if shards == 1 else 100,
+            "redirect_ms_p99": 0 if shards == 1 else 120,
             "packets_received": received, "packets_lost": lost,
             "udp_buffer_drops": 0,
             "per_shard": [
@@ -80,6 +82,18 @@ class HostedShards1000Tests(unittest.TestCase):
                          ["quality"], "GAME_PACKET_LOSS")
         self.assertEqual(m.report(json.dumps(self.sample(p99=200)), 0, 1000, 3)
                          ["quality"], "RELAY_P99_OVER_50MS")
+        highcpu = self.sample()
+        highcpu["per_shard"][0]["link_thread_cpu_avg"] = 92
+        self.assertEqual(m.report(json.dumps(highcpu), 0, 1000, 3)
+                         ["quality"], "SHARD_MAIN_CPU_SATURATED")
+        not_crossed = self.sample()
+        not_crossed["redirects"] = 0
+        self.assertEqual(m.report(json.dumps(not_crossed), 0, 1000, 3)
+                         ["quality"], "CROSS_SHARD_NOT_EXERCISED")
+        too_slow_join = self.sample()
+        too_slow_join["redirect_ms_p99"] = 23000
+        self.assertEqual(m.report(json.dumps(too_slow_join), 0, 1000, 3)
+                         ["quality"], "CROSS_SHARD_JOIN_TOO_SLOW")
 
     def test_missing_invalid_artifact_fails_closed(self):
         self.assertEqual(m.report("", 124, 250, 1)["quality"], "TIMEOUT")
@@ -96,6 +110,29 @@ class HostedShards1000Tests(unittest.TestCase):
         dup = json.dumps(src) + "\n" + json.dumps(src)
         self.assertEqual(m.report(dup, 0, 1000, 3)["quality"],
                          "MISSING_OR_DUPLICATE_JSON")
+
+    def test_nonfinite_or_fabricated_shard_json_never_green(self):
+        cases = [
+            ("relay_ms_p99", float("nan"), "INVALID_COUNTERS"),
+            ("relay_ms_p99", float("inf"), "INVALID_COUNTERS"),
+            ("packets_received", True, "INVALID_COUNTERS"),
+            ("redirects", float("nan"), "INVALID_CROSS_SHARD_COUNTERS"),
+            ("redirect_ms_p99", float("inf"), "INVALID_CROSS_SHARD_COUNTERS"),
+        ]
+        for key, invalid, expected in cases:
+            with self.subTest(key=key, invalid=invalid):
+                source = self.sample()
+                source[key] = invalid
+                self.assertEqual(
+                    m.report(json.dumps(source), 0, 1000, 3)["quality"], expected)
+        source = self.sample()
+        source["per_shard"][0]["link_thread_cpu_avg"] = float("nan")
+        self.assertEqual(m.report(json.dumps(source), 0, 1000, 3)
+                         ["quality"], "INVALID_PER_SHARD_CPU")
+        source = self.sample()
+        source["per_shard"][1]["shard"] = source["per_shard"][0]["shard"]
+        self.assertEqual(m.report(json.dumps(source), 0, 1000, 3)
+                         ["quality"], "NO_PER_SHARD_EVIDENCE")
 
     def test_timeout_kills_all_original_server_directory_redis_descendants(self):
         class Fake:
