@@ -826,6 +826,18 @@ def run(checkout:Path, repo:Path, out:Path):
     meta["applied"].append("V100 original Qt server current YT game pair auto-stage only under two pinned local mTLS test identities; Direct OFF")
     meta["applied"].append("V101 original Qt TLS server bounded 512 independent SHG2 pair leases with scoped replay revocation; Direct OFF")
     meta["applied"].append("V102 original Qt team 3+ peer P2P pair registry: 512 grants, 16 peers/account, independent random selectors; Direct OFF")
+    # The original YT server already knows each live game UDP endpoint.
+    # Find current mutually opted-in team members from that authoritative
+    # world, not from legacy shadNet STUN's self-asserted 16-byte NP ID or
+    # a developer's manually enumerated A/B/C test identity list.
+    discover_path=metrics_dir/"patch_server_live_direct_team_discovery.py"
+    discovery=types.ModuleType("sh_current_world_direct_pair_directory")
+    discovery.__file__=str(discover_path)
+    exec(compile(discover_path.read_text("utf-8"),str(discover_path),"exec"),discovery.__dict__)
+    inputs={p:files[p].decode("utf-8") for p in discovery.FILES}
+    for name,body in discovery.patch(inputs).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("Original YT shadNet current signed-in real-world Direct pair discovery, 512 edges/16 per peer; no new STUN; Direct OFF")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
