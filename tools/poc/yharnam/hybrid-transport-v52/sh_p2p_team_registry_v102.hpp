@@ -40,7 +40,13 @@ public:
         if(!now_ms || now_ms>std::numeric_limits<std::uint64_t>::max()-kLeaseMs ||
            first.isEmpty() || second.isEmpty() || first==second ||
            first.size()>64 || second.size()>64 || !authoritative)return false;
-        Sweep(now_ms);
+        // A full scan per Begin would be O(P^2) while a 200-player
+        // server stages hundreds of edges on the same 1s timer tick.
+        // Individual OFFER/LIST/READY always revalidate current world.
+        // Garbage collection remains bounded to one scan per second.
+        if(!last_sweep_ms_ || now_ms<last_sweep_ms_ ||
+           now_ms-last_sweep_ms_>=1000)
+            Sweep(now_ms);
         if(Count()>=kMaxPairs ||
            by_member_.value(first).size()>=static_cast<qsizetype>(kMaxPeersPerAccount) ||
            by_member_.value(second).size()>=static_cast<qsizetype>(kMaxPeersPerAccount))
@@ -161,6 +167,7 @@ public:
         return removed;
     }
     void Sweep(std::uint64_t now_ms) {
+        last_sweep_ms_=now_ms;
         QVector<std::uint64_t> expired;
         for(auto it=by_pair_.cbegin();it!=by_pair_.cend();++it) {
             const auto& e=*it.value();
@@ -174,6 +181,7 @@ public:
         for(auto it=by_pair_.begin();it!=by_pair_.end();++it)
             it.value()->lease.Clear();
         by_pair_.clear();by_member_.clear();
+        last_sweep_ms_=0;
     }
     std::size_t Count() const noexcept {
         return static_cast<std::size_t>(by_pair_.size());
@@ -199,5 +207,6 @@ private:
     }
     QHash<std::uint64_t,std::shared_ptr<Entry>> by_pair_{};
     QHash<QByteArray,QSet<std::uint64_t>> by_member_{};
+    std::uint64_t last_sweep_ms_=0;
 };
 } // namespace SeamlessHunt::Hybrid
