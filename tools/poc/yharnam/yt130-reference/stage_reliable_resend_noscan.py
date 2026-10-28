@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Drop provably redundant O(entries × retransmits) duplicate scan in YT1.3.
+"""Eliminate O(entries × retransmits) scan while preserving quiet-recovery.
 
-The original fresh-to-unacked transition sets sent_ms=now and a strictly
-positive resend delay before traversing unacked. Therefore freshly emitted
-reliable sequences cannot also be due for resend in the SAME flush; all old
-unacked entries are map-key unique. Keep existing exact wire and backoff.
+The original post-quiet Flush forces all unacked entries (including just-fresh)
+to be resend-due. So NO-SCAN was incorrect: a fresh reliable could be emitted
+twice in one flush. Index just the fresh reliable sequence IDs; older unacked
+map keys are already unique. No changes to backoff, wire, authentication.
 """
 from pathlib import Path
 import argparse
@@ -21,11 +21,25 @@ OLD_SCAN = """            if (now_ms - out.sent_ms >= out.wait_ms &&
                 std::ranges::none_of(entries, [&](const GameFrameEntry& entry) {
                     return entry.packet_class == PacketClass::Reliable && entry.seq == seq;
                 })) {"""
-NEW_SCAN = """            // fresh reliable entries were inserted into unacked with
-            // sent_ms=now_ms and positive resend_ms, so they cannot be due
-            // during this same Flush. Older unacked entries have unique seq
-            // map keys. No linear scan of all just-emitted frames is needed.
-            if (now_ms - out.sent_ms >= out.wait_ms) {"""
+NEW_SCAN = """            // Quiet-peer recovery can make even freshly emitted entries
+            // immediately due. Never duplicate those in the same frame.
+            // Older unacked entries have distinct map keys; only check the
+            // reliable sequences freshly sent in this particular Flush.
+            if (now_ms - out.sent_ms >= out.wait_ms &&
+                !fresh_reliable.contains(seq)) {"""
+OLD_INCLUDE = "#include <span>\\n#include <string>"
+NEW_INCLUDE = "#include <span>\\n#include <string>\\n#include <unordered_set>"
+OLD_FRESH = """        std::vector<GameFrameEntry> entries;
+        for (Outgoing& out : fresh) {
+            entries.push_back({out.packet_class, out.seq, out.packet});
+            if (out.packet_class == PacketClass::Reliable) {"""
+NEW_FRESH = """        std::vector<GameFrameEntry> entries;
+        std::unordered_set<u32> fresh_reliable;
+        fresh_reliable.reserve(fresh.size());
+        for (Outgoing& out : fresh) {
+            entries.push_back({out.packet_class, out.seq, out.packet});
+            if (out.packet_class == PacketClass::Reliable) {
+                fresh_reliable.insert(out.seq);"""
 FRESH_INVARIANT = """                out.sent_ms = now_ms;
                 out.wait_ms = settings.resend_ms;
                 unacked.emplace(out.seq, std::move(out));"""
@@ -76,6 +90,37 @@ int GameLinkBurstResendSequenceDedupAndAck() {
 }
 
 """
+CPP_TEST += """// A peer returning from silence makes even NEW unacked entries due immediately.
+// The fresh set must suppress a second copy of that new sequence in this Flush.
+int GameLinkQuietPeerResumeKeepsNewPacketUnique() {
+  GameLinkPeer sender{"sender", 71};
+  const std::vector<u8> old_packet{1};
+  const std::vector<u8> new_packet{2};
+  sender.Send(PacketClass::Reliable, old_packet, 0);
+  CHECK(sender.Flush(0).size() == 1);
+  // A peer was heard, then went silent long enough for quiet_ms.
+  GameFrame ping{"receiver", 72, 0, 0, {}};
+  sender.Receive(ping, 100);
+  CHECK(!sender.Flush(10200).empty());
+  sender.Receive(ping, 10210); // Sets heard_since_quiet.
+  sender.Send(PacketClass::Reliable, new_packet, 10211);
+  const auto resumed = sender.Flush(10211);
+  std::set<u32> sequences;
+  size_t packets = 0;
+  for (const auto &frame : resumed) {
+    for (const auto &entry : frame.entries) {
+      CHECK(entry.packet_class == PacketClass::Reliable);
+      CHECK(sequences.insert(entry.seq).second);
+      ++packets;
+    }
+  }
+  CHECK(packets == 2);  // new #1 plus retry of old #0
+  CHECK(sequences.count(0) == 1 && sequences.count(1) == 1);
+  CHECK(sender.Resends() == 1); // never count fresh #1 as a resend
+  return 0;
+}
+
+"""
 OLD_TEST = """int main() {
   const std::vector<std::pair<const char *, std::function<int()>>> tests{
 """
@@ -83,6 +128,8 @@ NEW_TEST = CPP_TEST + """int main() {
   const std::vector<std::pair<const char *, std::function<int()>>> tests{
       {"GameLinkBurstResendSequenceDedupAndAck",
        GameLinkBurstResendSequenceDedupAndAck},
+      {"GameLinkQuietPeerResumeKeepsNewPacketUnique",
+       GameLinkQuietPeerResumeKeepsNewPacketUnique},
 """
 
 def once(source, old, new, area):
@@ -99,6 +146,8 @@ def rewrite(header, test):
         raise ValueError("Original native functional world test stage is required")
     if "s64 resend_ms = 150;" not in header or "size_t max_resends = 64;" not in header:
         raise ValueError("Original no-storm reliability limits changed")
+    header = once(header, OLD_INCLUDE, NEW_INCLUDE, "unordered sequence include")
+    header = once(header, OLD_FRESH, NEW_FRESH, "only fresh seq index")
     return once(header, OLD_SCAN, NEW_SCAN, "GameLinkPeer::Flush"), once(test, OLD_TEST, NEW_TEST, "real C++ test main")
 
 def git(root, *args):
