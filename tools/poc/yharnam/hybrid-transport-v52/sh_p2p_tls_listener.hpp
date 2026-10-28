@@ -84,6 +84,16 @@ public:
                                     static_cast<std::uint64_t>(now),out_pair_id);
     }
 
+    std::size_t ReconcileLocalTeamPairsV102(
+        const std::vector<std::pair<QByteArray,QByteArray>>& live_pairs) {
+        // The caller is the same trusted Qt server event loop that discovers
+        // the real current signed-in YT team. Never trust a TLS request here.
+        if(QThread::currentThread()!=thread() ||
+           (isListening() && serverAddress()!=QHostAddress::LocalHost))
+            return 0;
+        return team_registry_.RevokeNotIn(live_pairs);
+    }
+
     // An explicitly enabled, isolated loopback smoke-test endpoint. Production
     // Internet listening requires an audited certificate-to-current-account
     // mapping, replay-safe grant issuer, throttling and client provisioning.
