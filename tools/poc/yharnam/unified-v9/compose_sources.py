@@ -729,6 +729,8 @@ def run(checkout:Path, repo:Path, out:Path):
     # leases, isolated per member pair. Existing client wire remains V90.
     files["server/src/sh_p2p_pair_registry_v101.hpp"]=(
         metrics_dir/"sh_p2p_pair_registry_v101.hpp").read_bytes()
+    files["server/src/sh_p2p_team_registry_v102.hpp"]=(
+        metrics_dir/"sh_p2p_team_registry_v102.hpp").read_bytes()
     files["emulator/src/core/libraries/network/sh_native_tls_local_client_v90.hpp"]=(
         metrics_dir/"sh_native_tls_local_client_v90.hpp").read_bytes()
     meta["applied"].append("V90 original Qt loopback mTLS two-client one-use paired SHG2 lease; game UDP remains relay")
@@ -823,6 +825,7 @@ def run(checkout:Path, repo:Path, out:Path):
     files[v100.MAIN]=v100.patch_main(files[v100.MAIN].decode("utf-8")).encode("utf-8")
     meta["applied"].append("V100 original Qt server current YT game pair auto-stage only under two pinned local mTLS test identities; Direct OFF")
     meta["applied"].append("V101 original Qt TLS server bounded 512 independent SHG2 pair leases with scoped replay revocation; Direct OFF")
+    meta["applied"].append("V102 original Qt team 3+ peer P2P pair registry: 512 grants, 16 peers/account, independent random selectors; Direct OFF")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
