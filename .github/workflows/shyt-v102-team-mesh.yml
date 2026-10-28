@@ -11,6 +11,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
@@ -27,6 +28,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
@@ -200,6 +202,12 @@ jobs:
           world=(root/'server/src/bloodborne_world.cpp').read_text()
           link=(root/'server/src/link_server.cpp').read_text()
           assert 'Service::DiscoverLiveDirectPairs()' in world
+          assert 'member.online_id.toHex().toStdString()' in world
+          assert 'require_authenticated_identity' in world
+          assert 'not in the team that plays this world' in world
+          assert 'RequireAuthenticatedIdentity();' in link
+          assert 'service.RequireAuthenticatedIdentity();' in tests
+          assert 'forged.mutable_lobby_hello()->set_member(identity(a));' in tests
           assert 'LinkServer::DiscoverLiveDirectPairs()' in link
           assert 'm_signedIn.contains(pair.first)' in link
           assert 'SHYT_P2P_TLS_LOCAL_TEST' in main
