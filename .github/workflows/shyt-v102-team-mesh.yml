@@ -13,6 +13,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_five_hunter_capacity.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
@@ -30,6 +31,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_five_hunter_capacity.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
@@ -209,6 +211,15 @@ jobs:
           assert 'GuestSigns{7, 6, 5, 4}' in signs
           assert 'TeamHoldsFive()' in tests
           assert 'SignOf(lobby, "e") == 4' in tests
+          native_party=(root/'emulator/src/core/bloodborne_party.cpp').read_text()
+          native_join=(root/'emulator/src/core/bloodborne_join.cpp').read_text()
+          room_test=(root/'emulator/tests/bloodborne/test_bloodborne_three_players.cpp').read_text()
+          sign_test=(root/'emulator/tests/bloodborne/test_bloodborne_team.cpp').read_text()
+          assert 'constexpr size_t MaxPlayers = 5; // the host and FOUR cooperators' in native_party
+          assert 'fewer than five in the session' in native_join
+          assert 'RoomForMore(true, 4, 5)' in room_test
+          assert 'RoomForMore(true, 5, 6)' in room_test
+          assert 'TeamGuestSign(lobby, "e"), 4u' in sign_test
           assert 'CHECK(valid.size()==10)' in tests
           assert 'CHECK(service.DiscoverLiveDirectPairs().size()==6)' in tests
           world=(root/'server/src/bloodborne_world.cpp').read_text()
