@@ -64,7 +64,7 @@ class HostedShards1000Tests(unittest.TestCase):
             "redirects": 0 if shards == 1 else 100,
             "redirect_ms_p99": 0 if shards == 1 else 120,
             "packets_received": received, "packets_lost": lost,
-            "udp_buffer_drops": 0,
+            "refused": 0, "udp_buffer_drops": 0,
             "per_shard": [
                 {"shard": f"lt-{i}", "players_at_end": int(players/shards),
                  "link_thread_cpu_avg": 19, "link_thread_cpu_max": 70}
@@ -81,6 +81,10 @@ class HostedShards1000Tests(unittest.TestCase):
                          ["quality"], "INSUFFICIENT_GAME_FRAMES")
         self.assertEqual(m.report(json.dumps(self.sample(lost=900)), 0, 1000, 3)
                          ["quality"], "GAME_PACKET_LOSS")
+        overloaded = self.sample()
+        overloaded["udp_buffer_drops"] = 2
+        self.assertEqual(m.report(json.dumps(overloaded), 0, 1000, 3)
+                         ["quality"], "HOST_KERNEL_UDP_DROPS")
         self.assertEqual(m.report(json.dumps(self.sample(p99=200)), 0, 1000, 3)
                          ["quality"], "RELAY_P99_OVER_50MS")
         highcpu = self.sample()
@@ -117,6 +121,10 @@ class HostedShards1000Tests(unittest.TestCase):
             ("relay_ms_p99", float("nan"), "INVALID_COUNTERS"),
             ("relay_ms_p99", float("inf"), "INVALID_COUNTERS"),
             ("packets_received", True, "INVALID_COUNTERS"),
+            ("packets_lost", -1, "INVALID_COUNTERS"),
+            ("playing", 1000.0, "INVALID_COUNTERS"),
+            ("refused", float("nan"), "INVALID_COUNTERS"),
+            ("udp_buffer_drops", float("inf"), "INVALID_COUNTERS"),
             ("redirects", float("nan"), "INVALID_CROSS_SHARD_COUNTERS"),
             ("redirect_ms_p99", float("inf"), "INVALID_CROSS_SHARD_COUNTERS"),
         ]
@@ -126,6 +134,13 @@ class HostedShards1000Tests(unittest.TestCase):
                 source[key] = invalid
                 self.assertEqual(
                     m.report(json.dumps(source), 0, 1000, 3)["quality"], expected)
+        for missing in ("playing", "packets_received", "packets_lost",
+                        "refused", "udp_buffer_drops", "relay_ms_p99"):
+            with self.subTest(missing=missing):
+                source = self.sample()
+                del source[missing]
+                self.assertEqual(m.report(json.dumps(source), 0, 1000, 3)
+                                 ["quality"], "INVALID_COUNTERS")
         source = self.sample()
         source["per_shard"][0]["link_thread_cpu_avg"] = float("nan")
         self.assertEqual(m.report(json.dumps(source), 0, 1000, 3)
