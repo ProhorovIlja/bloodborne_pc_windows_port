@@ -13,7 +13,7 @@ class AdaptiveLobbyTests(unittest.TestCase):
         cpp = ("void Service::OnLobbyHello() {\n" + m.ORIGINAL_JOIN_STATE +
                "\n}\nvoid Service::Settle() {}\n" +
                "void Service::SendLobby(qint64 now_ms) {\n" +
-               m.ORIGINAL_FULL_SEND + "\n}\n" + m.OLD_TICK)
+               m.dedupe.AFTER + "\n}\n" + m.OLD_TICK)
         test = ("int NonHostedTeamEditsAreCoalescedAndStartStillWorks() { return 0; }\n"
                 + m.OLD_TEST)
         return cpp, test
@@ -35,7 +35,8 @@ class AdaptiveLobbyTests(unittest.TestCase):
         self.assertIn("lobby_sent[member.lobby] = envelope.lobby_state().SerializeAsString();", cpp)
         self.assertIn("if (sent == bytes)", cpp)
         self.assertIn("SendTo(member, envelope, now_ms);", cpp)
-        self.assertNotIn(m.ORIGINAL_FULL_SEND, cpp)
+        self.assertEqual(cpp.count(m.dedupe.AFTER), 1)
+        self.assertIn("if (sent == bytes)", m.dedupe.AFTER)
 
     def test_fails_closed_if_upstream_or_previous_stage_drifted(self):
         src = self.original()
@@ -51,7 +52,7 @@ class AdaptiveLobbyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.rewrite(src[0].replace(m.ORIGINAL_JOIN_STATE, "BAD"), src[1])
         with self.assertRaises(ValueError):
-            m.rewrite(src[0].replace(m.ORIGINAL_FULL_SEND, "BAD"), src[1])
+            m.rewrite(src[0].replace(m.dedupe.AFTER, "BAD"), src[1])
 
     def test_exact_official_original_yt130_source_pins(self):
         self.assertEqual(m.PIN, "0645740a33ae21c56df3b4a0d9777086dbca6053")
