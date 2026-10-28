@@ -191,7 +191,9 @@ def patch_game(src):
     // NO GameLink migration and no UDP gameplay authorization.
     bool SameSocketNatProbeVerifiedForTest() {
         std::lock_guard lock(native_grant_mutex);
-        return nat_probe_v92 && nat_probe_v92->InitiatorVerified();
+        return nat_probe_v92 &&
+               (nat_probe_v92->InitiatorVerified() ||
+                nat_probe_v92->ResponderVerified());
     }
 '''
     # A manually invoked old V85 one-sided offer must never be permitted
@@ -232,6 +234,7 @@ private:
         SeamlessHunt::Hybrid::NatProbeCodecV91::Wire response{};
         sockaddr_in destination{};
         bool send=false;
+        bool send_receipt=false;
         const auto now=static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
@@ -252,15 +255,20 @@ private:
                 nat_probe_link_generation_v92=0;
                 return true; // consume only the SHN1 control prefix
             }
-            // ReadyAck must go DIRECTLY to Complete(). Calling Reply()
-            // first would consume its valid sequence in the one-use
-            // anti-replay window and falsely reject the final proof.
-            // The kind byte selects a handler, NOT an authorization:
-            // both handlers verify full HMAC, IDs, candidate and nonce.
+            // Route each signed control kind to its one-use parser.
+            // Complete() consumes ReadyAck and PREPARES the fifth Receipt;
+            // receipt success is committed only after native socket sendto.
+            // All paths check full HMAC, account pair, nonce and endpoint.
             if(bytes.size()==SeamlessHunt::Hybrid::NatProbeCodecV91::kWireBytes &&
                bytes[5]==static_cast<std::uint8_t>(
                  SeamlessHunt::Hybrid::NatProbeKindV91::ReadyAck)) {
-                (void)nat_probe_v92->Complete(
+                send=nat_probe_v92->Complete(
+                    bytes,source_ip_nbo,source_port_nbo,now,response);
+                send_receipt=send;
+            } else if(bytes.size()==SeamlessHunt::Hybrid::NatProbeCodecV91::kWireBytes &&
+               bytes[5]==static_cast<std::uint8_t>(
+                 SeamlessHunt::Hybrid::NatProbeKindV91::Receipt)) {
+                (void)nat_probe_v92->CompleteResponder(
                     bytes,source_ip_nbo,source_port_nbo,now);
             } else {
                 send=nat_probe_v92->Reply(
@@ -274,8 +282,15 @@ private:
         }
         if(send) {
             // Use the EXISTING UDP host_socket, never open a new socket.
-            (void)Transmit(destination,
+            const bool written=Transmit(destination,
                 std::vector<u8>(response.begin(),response.end()));
+            if(send_receipt && written) {
+                // The native lock may have been revoked during sendto.
+                // ReceiptSent rejects any new grant (different signed wire).
+                std::lock_guard lock(native_grant_mutex);
+                if(nat_probe_v92)
+                    (void)nat_probe_v92->ReceiptSent(response);
+            }
         }
         return true;
     }
