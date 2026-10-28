@@ -154,3 +154,12 @@ Verified public [Mrsuss60 Windows port v0.7.2](https://github.com/Mrsuss60/blood
 - Launcher hotkeys (F1, F4, Insert/L3+R3, F11) are UX references, not default controls to grab without conflict checking.
 
 Release does NOT prove our server capacity, authenticated Direct P2P or seamless cross-runtime compatibility. Source/licence review, minimal patches, native shader/physics regression, 2-PC PvE/PvP timings, and safe backup/rollback remain mandatory.
+
+### Extra renderer and FSR4 cross-fork source review 2026-10-28
+
+Review of 2026-10-28 GitHub PR metadata (NOT integrated into the YT native runtime):
+- [shadPS4 #5463](https://github.com/shadps4-emu/shadPS4/pull/5463), **MERGED**: zeroes stale `DingDong` compute queue pointer when remapping a GPU queue slot. PR author reports a GT7 world-map freeze, not a confirmed Bloodborne/Yharnam port bug. Compare native GNM compute queue lifecycle before adapting.
+- [shadPS4 #5486](https://github.com/shadps4-emu/shadPS4/pull/5486), **OPEN**: handle PM4 Type 2 padding and CE rewind with atomic acquire. Might matter to native command decoders but game-path and memory ordering compatibility must be proved.
+- [shadPS4 #5547](https://github.com/shadps4-emu/shadPS4/pull/5547), **OPEN**: page tracking must retain execute permission when code and GPU-tracked memory overlap, otherwise repeated CPU faults can freeze frame despite audio/game logic. Potentially relevant to a native Windows port's memory tracker, NOT to YT game-server TCP/UDP.
+- [Supermedo #103](https://github.com/Supermedo/bloodborne_pc/pull/103), **OPEN and already registered**: AMD Windows FSR4 shader compiler materializes duplicate large `const` weight arrays after `fsr4_optimize.sh`, causing reported 25–60x slower optimized passes; original PR gives RX6700XT 1080p 47.9ms/frame (~18FPS) and changes one build line. Verify compiled SPIR-V variable declarations and GPU timings before cross-porting any FSR optimization.
+Registry updated from 41 to **44 selected PRs** by adding three previously untracked shadPS4 candidates; #103 was already watched. No runtime/emulator binary or server code copied, and this watch is independent of server CPU and packet-loss experiments.
