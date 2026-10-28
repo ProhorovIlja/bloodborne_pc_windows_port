@@ -224,7 +224,7 @@ protected:
                     session->Clear();s->abort();return;
                 }
                 std::fill(reply.begin(),reply.end(),char(0));
-            } else if (*pending=="YT-P2P/V102 LIST\\n") {
+            } else if (*pending=="YT-P2P/V102 LIST\n") {
                 // Only one currently authenticated original YT account may
                 // discover its server-issued opaque pair selectors.
                 const auto bound=identity_.Resolve(s->peerCertificate());
@@ -235,7 +235,7 @@ protected:
                 QByteArray response="YT-P2P/V102 PAIRS";
                 for(const auto id:ids)
                     response+=" "+QByteArray::number(id,16).rightJustified(16,'0');
-                response+='\\n';
+                response+='\n';
                 pending->clear();
                 s->write(response);
                 s->disconnectFromHost();
@@ -243,7 +243,7 @@ protected:
                 static const QByteArray prefix="YT-P2P/V102 OFFER ";
                 std::uint64_t id=0;
                 if(pending->size()!=prefix.size()+16+1 ||
-                   !pending->endsWith('\\n') ||
+                   !pending->endsWith('\n') ||
                    !ParsePairSelectorV102(pending->mid(prefix.size(),16),id)) {
                     session->Clear();s->abort();return;
                 }
@@ -283,7 +283,7 @@ protected:
                     session->Clear();s->abort();return;
                 }
                 if(pending->size()!=prefix.size()+16+1+64+1 ||
-                   !pending->endsWith('\\n') ||
+                   !pending->endsWith('\n') ||
                    !ParsePairSelectorV102(pending->mid(prefix.size(),16),id) ||
                    id!=*v102_selected) {
                     team_registry_.RevokePair(*v102_selected);
@@ -310,8 +310,8 @@ protected:
                 if(!accepted) {s->abort();return;}
                 // This confirms PAIR possession only; not UDP reachability
                 // or GameLink ACK handover. Still no Direct authorization.
-                s->write(both_ready?"YT-P2P/V102 BOTH_READY\\n":
-                                    "YT-P2P/V102 PENDING\\n");
+                s->write(both_ready?"YT-P2P/V102 BOTH_READY\n":
+                                    "YT-P2P/V102 PENDING\n");
                 s->disconnectFromHost();
             } else if (*pending=="YT-P2P/V90 OFFER\n") {
                 // This intentionally cannot be requested with client-chosen
