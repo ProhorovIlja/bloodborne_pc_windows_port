@@ -852,6 +852,18 @@ def run(checkout:Path, repo:Path, out:Path):
     for name,body in five.patch(five_inputs).items():
         files[name]=body.encode("utf-8")
     meta["applied"].append("5-hunter YT native lobby candidate: host+4, unique co-op signs 7/6/5/4, 6th denied; game full-party rig validation pending")
+    # Upstream YT PR #423 narrow security backport: real LinkServer rejects
+    # spoofed lobby/game names and uninvited game-world members.
+    # This must be last, after prior source patches to the SAME world Hello
+    # and the 5-hunter authenticated fixture. No friends or invasions merged.
+    auth_path=metrics_dir/"patch_hosted_identity_authority.py"
+    auth=types.ModuleType("sh_upstream_authenticated_lobby_authority")
+    auth.__file__=str(auth_path)
+    exec(compile(auth_path.read_text("utf-8"),str(auth_path),"exec"),auth.__dict__)
+    auth_inputs={p:files[p].decode("utf-8") for p in auth.FILES}
+    for name,body in auth.patch(auth_inputs).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("Upstream PR423 authenticated game-world/lobby identity backport: live signed-in LinkServer only; uninvited team-world joins denied")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
