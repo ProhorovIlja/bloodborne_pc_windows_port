@@ -10,6 +10,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
@@ -24,6 +25,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
@@ -168,6 +170,13 @@ jobs:
           assert main.count('p2p_tls.ConfigureLocalTeamPairV102(')==1
           assert 'server.DiscoverLiveDirectPairs()' in main
           assert 'SHYT-LIVE-YT-WORLD-PAIR-DISCOVERY' in main
+          team=(root/'server/coop/team_lobby.h').read_text()
+          signs=(root/'server/coop/team_lobby.cpp').read_text()
+          tests=(root/'server/tests/test_team_lobby.cpp').read_text()
+          assert 'constexpr size_t TeamSize = 5;' in team
+          assert 'GuestSigns{7, 6, 5, 4}' in signs
+          assert 'TeamHoldsFive()' in tests
+          assert 'SignOf(lobby, "e") == 4' in tests
           world=(root/'server/src/bloodborne_world.cpp').read_text()
           link=(root/'server/src/link_server.cpp').read_text()
           assert 'Service::DiscoverLiveDirectPairs()' in world
@@ -207,3 +216,18 @@ jobs:
             /tmp/shyt-v102-real/server/src/link_server.cpp \
             /tmp/shyt-v102-real/server/src/bloodborne_world.cpp
           echo SHYT_V102_ORIGINAL_QT_SERVER_TEAM_TLS_SYNTAX_PASS
+      - name: Compile and run original YT five-hunter lobby with 4 unique guest slots
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=/tmp/shyt-v102-real/server
+          proto=/tmp/shyt-v102-proto
+          c++ -std=c++20 -O0 -fPIC -Wall -Wextra -Werror \
+            -I "$root/src" -I "$proto" -I "$root" \
+            "$root/tests/test_team_lobby.cpp" \
+            "$root/coop/team_lobby.cpp" \
+            "$proto/coop.pb.cc" \
+            $(pkg-config --cflags --libs Qt6Core) -lprotobuf -pthread \
+            -o /tmp/shyt-v102-five-hunter-lobby
+          /tmp/shyt-v102-five-hunter-lobby
+          echo SHYT_V102_FIVE_HUNTER_ORIGINAL_QT_TEAM_TEST_PASS
