@@ -27,8 +27,8 @@ NEW_SCAN = """            // Quiet-peer recovery can make even freshly emitted e
             // reliable sequences freshly sent in this particular Flush.
             if (now_ms - out.sent_ms >= out.wait_ms &&
                 !fresh_reliable.contains(seq)) {"""
-OLD_INCLUDE = "#include <span>\\n#include <string>"
-NEW_INCLUDE = "#include <span>\\n#include <string>\\n#include <unordered_set>"
+OLD_INCLUDE = "#include <span>\n#include <string>"
+NEW_INCLUDE = "#include <span>\n#include <string>\n#include <unordered_set>"
 OLD_FRESH = """        std::vector<GameFrameEntry> entries;
         for (Outgoing& out : fresh) {
             entries.push_back({out.packet_class, out.seq, out.packet});
