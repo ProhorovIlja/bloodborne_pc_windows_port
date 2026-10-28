@@ -114,10 +114,10 @@ NEW_INCLUDES = """#include <deque>
 #include <map>
 #include <memory>"""
 
-OLD_EVENTLOG = """            << " read_batches=" << m_diagReadBatches"""
+OLD_EVENTLOG = """            << " read_datagrams=" << m_diagReadDatagrams"""
 NEW_EVENTLOG = """            << " udp_queue_max=" << m_udpMaxPending
             << " udp_queue_pressure=" << m_udpQueuePressure
-            << " read_batches=" << m_diagReadBatches"""
+            << " read_datagrams=" << m_diagReadDatagrams"""
 
 OLD_RESET = """        m_diagReadBatches = m_diagReadDatagrams = m_diagReadBusyUs = 0;"""
 NEW_RESET = """        m_udpMaxPending = m_udpPending.size();
