@@ -1,0 +1,238 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// V102: five distinct native hunters, original Qt TLS1.3 server event loop,
+// ten cert-pinned SHG2 exchanges; no cross-team pair selector. Direct OFF.
+#include "sh_p2p_tls_listener.hpp"
+#include "sh_native_tls_local_client_v91.hpp"
+#include "sh_pair_key_schedule_v89.hpp"
+#include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QFile>
+#include <QSslConfiguration>
+#include <QSslKey>
+#include <QSslSocket>
+#include <QTimer>
+#include <atomic>
+#include <array>
+#include <optional>
+#include <thread>
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <string>
+
+using namespace SeamlessHunt::Hybrid;
+static QSslCertificate Leaf(const QString& path) {
+    QFile f(path);
+    assert(f.open(QIODevice::ReadOnly));
+    QSslCertificate cert(&f,QSsl::Pem);
+    assert(!cert.isNull());
+    return cert;
+}
+static QByteArray Pin(const QString& path) {
+    return QCryptographicHash::hash(Leaf(path).toDer(),
+                                    QCryptographicHash::Sha256).toHex();
+}
+static std::string HexId(std::uint64_t id) {
+    char hex[16]{};
+    constexpr char lut[]="0123456789abcdef";
+    for(unsigned i=0;i<16;++i)
+        hex[15U-i]=lut[(id>>(4U*i))&0x0fU];
+    return std::string(hex,sizeof(hex));
+}
+static bool ListFromActualTls(const QString& ca,const QString& cert,
+                              const QString& key,quint16 port,
+                              QByteArray& response) {
+    response.clear();
+    QFile f(key);
+    if(!f.open(QIODevice::ReadOnly))return false;
+    const QSslKey private_key(&f,QSsl::Rsa,QSsl::Pem,QSsl::PrivateKey);
+    if(private_key.isNull())return false;
+    QSslConfiguration cfg=QSslConfiguration::defaultConfiguration();
+    cfg.setProtocol(QSsl::TlsV1_3);
+    cfg.setCaCertificates({Leaf(ca)});
+    cfg.setLocalCertificate(Leaf(cert));
+    cfg.setPrivateKey(private_key);
+    cfg.setPeerVerifyMode(QSslSocket::VerifyPeer);
+    QSslSocket s;
+    s.setSslConfiguration(cfg);
+    s.connectToHostEncrypted("127.0.0.1",port);
+    if(!s.waitForEncrypted(3000))return false;
+    constexpr char cmd[]="YT-P2P/V102 LIST\n";
+    if(s.write(cmd,sizeof(cmd)-1)!=sizeof(cmd)-1 ||
+       !s.waitForBytesWritten(3000))return false;
+    for(int i=0;i<4 && !response.contains('\n');++i) {
+        if(!s.waitForReadyRead(1500))break;
+        response+=s.readAll();
+    }
+    if(response.contains('\n')) {
+        response=response.left(response.indexOf('\n')+1);
+        return response.startsWith("YT-P2P/V102 PAIRS") &&
+               response.endsWith('\n');
+    }
+    return false;
+}
+struct GameState {
+    NativeOfferIdentityV84 current{};
+    std::atomic<bool> live{true};
+};
+static bool Refresh(NativeOfferIdentityV84& out,void* arg) noexcept {
+    const auto& state=*static_cast<GameState*>(arg);
+    if(!state.live.load())return false;
+    out=state.current;
+    return true;
+}
+static std::uint64_t Now() {
+    return static_cast<std::uint64_t>(QDateTime::currentMSecsSinceEpoch());
+}
+static bool RealEdge(const NativeTlsLocalConfig& x,
+                     const NativeTlsLocalConfig& y,
+                     const QByteArray& name_x,const QByteArray& name_y,
+                     quint64 epoch_x,quint64 epoch_y,
+                     std::uint64_t selector) {
+    const auto ax=P2PFullIdentityIssuerV84::AccountDigest(name_x);
+    const auto by=P2PFullIdentityIssuerV84::AccountDigest(name_y);
+    if(!ax || !by || !selector)return false;
+    GameState first{{*ax,*by,epoch_x,303,true}};
+    GameState second{{*by,*ax,epoch_y,303,true}};
+    NativeSealedGrantInboxV84 inbox_x,inbox_y;
+    bool ready_x=false,ready_y=false;
+    SecurePeerOfferV84 grant_x{},grant_y{};
+    bool ok=NativeTlsLocalOfferClientV91::Request(
+        x,inbox_x,first.current,1,Refresh,&first,Now(),
+        ready_x,nullptr,selector) && !ready_x;
+    const auto* px=inbox_x.PendingForNat(Now());
+    ok=ok && px;
+    if(px)grant_x=*px;
+    if(ok) {
+        ok=NativeTlsLocalOfferClientV91::Request(
+            y,inbox_y,second.current,1,Refresh,&second,Now(),
+            ready_y,nullptr,selector) && ready_y;
+    }
+    const auto* py=inbox_y.PendingForNat(Now());
+    ok=ok && py;
+    if(py)grant_y=*py;
+    std::array<std::uint8_t,32> x_send{},y_receive{},x_game{};
+    if(ok) {
+        ok=grant_x.pair_binding==selector &&
+           grant_y.pair_binding==selector &&
+           grant_x.direction_key==grant_y.direction_key &&
+           grant_x.sender_account==grant_y.recipient_account &&
+           grant_y.sender_account==grant_x.recipient_account &&
+           PairKeyScheduleV89::Derive(
+               grant_x,true,PairKeyPurposeV89::NatProbe,Now(),x_send) &&
+           PairKeyScheduleV89::Derive(
+               grant_y,false,PairKeyPurposeV89::NatProbe,Now(),y_receive) &&
+           PairKeyScheduleV89::Derive(
+               grant_x,true,PairKeyPurposeV89::GameData,Now(),x_game) &&
+           x_send==y_receive && x_send!=x_game;
+    }
+    CryptoDetail::Erase(x_send);
+    CryptoDetail::Erase(y_receive);
+    CryptoDetail::Erase(x_game);
+    CryptoDetail::Erase(grant_x.direction_key);
+    CryptoDetail::Erase(grant_y.direction_key);
+    inbox_x.Revoke();inbox_y.Revoke();
+    std::fprintf(stderr,"V102 real mTLS edge %s -> %s: %s\n",
+                 name_x.constData(),name_y.constData(),ok?"PASS":"FAIL");
+    return ok;
+}
+int main(int argc,char** argv) {
+    QCoreApplication app(argc,argv);
+    // server cert/key, CA, then FIVE distinct cert/key pairs, all loopback.
+    assert(argc==14);
+    P2PTlsListener server;
+    const std::array<QByteArray,5> hunter{
+        "hunter-A","hunter-B","hunter-C","hunter-D","hunter-E"};
+    const std::array<quint64,5> epochs{101,202,303,404,505};
+    const auto index=[&](const QByteArray& account)->int {
+        for(int i=0;i<5;++i)
+            if(hunter[static_cast<size_t>(i)]==account)return i;
+        return -1;
+    };
+    const auto live=[&](const QByteArray& account)->quint64 {
+        const int i=index(account);
+        return i<0?0:epochs[static_cast<size_t>(i)];
+    };
+    for(int i=0;i<5;++i) {
+        const int cert=4+i*2;
+        assert(server.ConfigureLocalIdentity(
+            Pin(argv[cert]),hunter[static_cast<size_t>(i)],live));
+    }
+    const auto scoped=[&](const QByteArray& a,const QByteArray& b)
+        ->std::optional<P2PLocalOfferScope> {
+        const int ia=index(a),ib=index(b);
+        if(ia<0 || ib<0 || ia==ib)return std::nullopt;
+        const auto target_port=
+            static_cast<quint16>(45000+ib+1);
+        return P2PLocalOfferScope{
+            a,b,epochs[static_cast<size_t>(ia)],
+            epochs[static_cast<size_t>(ib)],303,
+            0x7f000001u,target_port,
+            0x0a000001u+static_cast<quint32>(target_port),31314};
+    };
+    assert(server.StartLocal(argv[1],argv[2],argv[3],0));
+    assert(server.serverAddress()==QHostAddress::LocalHost);
+    std::uint64_t grant[5][5]{};
+    for(int i=0;i<5;++i)
+        for(int j=i+1;j<5;++j) {
+            assert(server.ConfigureLocalTeamPairV102(
+                hunter[static_cast<size_t>(i)],
+                hunter[static_cast<size_t>(j)],
+                scoped,grant[i][j]));
+            assert(grant[i][j]);
+            for(int earlier=0;earlier<j;++earlier)
+                for(int earlier_peer=earlier+1;earlier_peer<5;++earlier_peer)
+                    if(earlier<i || (earlier==i && earlier_peer<j))
+                        assert(grant[i][j]!=grant[earlier][earlier_peer]);
+        }
+    std::uint64_t invalid=1;
+    assert(!server.ConfigureLocalTeamPairV102(
+        "hunter-A","hunter-E",scoped,invalid));
+    assert(invalid==0);
+    const auto port=server.serverPort();
+    std::array<NativeTlsLocalConfig,5> configs{};
+    for(int i=0;i<5;++i)
+        configs[static_cast<size_t>(i)]=
+            NativeTlsLocalConfig{argv[3],argv[4+i*2],argv[5+i*2],port};
+    std::atomic<int> exit_code{-1};
+    std::thread worker;
+    QTimer::singleShot(0,&app,[&] {
+        worker=std::thread([&] {
+            std::array<QByteArray,5> lists{};
+            bool good=true;
+            for(int i=0;i<5 && good;++i)
+                good=ListFromActualTls(
+                    argv[3],argv[4+i*2],argv[5+i*2],port,
+                    lists[static_cast<size_t>(i)]);
+            for(int who=0;who<5;++who)
+                for(int i=0;i<5;++i)
+                    for(int j=i+1;j<5;++j) {
+                        const auto id=QByteArray::fromStdString(HexId(grant[i][j]));
+                        const bool authorized=(who==i || who==j);
+                        if(lists[static_cast<size_t>(who)].contains(id)!=authorized)
+                            good=false;
+                    }
+            std::fprintf(stderr,"V102 actual TLS five-client scoped LIST: %s\n",
+                         good?"PASS":"FAIL");
+            // Five independent certificate identities, ten different
+            // pair grants, one SHG2 master per edge, mutual dual READY.
+            for(int i=0;i<5 && good;++i)
+                for(int j=i+1;j<5 && good;++j)
+                    good=RealEdge(
+                        configs[static_cast<size_t>(i)],
+                        configs[static_cast<size_t>(j)],
+                        hunter[static_cast<size_t>(i)],
+                        hunter[static_cast<size_t>(j)],
+                        epochs[static_cast<size_t>(i)],
+                        epochs[static_cast<size_t>(j)],
+                        grant[i][j]);
+            exit_code.store(good?0:1);
+            QMetaObject::invokeMethod(&app,[&] {app.quit();},
+                                      Qt::QueuedConnection);
+        });
+    });
+    QTimer::singleShot(90000,&app,[&]{app.exit(9);});
+    const int event=app.exec();
+    if(worker.joinable())worker.join();
+    return event==0 && exit_code.load()==0?0:1;
+}
