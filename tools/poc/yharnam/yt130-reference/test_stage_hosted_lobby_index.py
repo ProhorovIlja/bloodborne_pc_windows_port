@@ -13,7 +13,7 @@ class HostedSourceIndexTests(unittest.TestCase):
     def original(self):
         cpp = "start\n" + m.OLD_INDEX + "\n" + m.OLD_STATE + "\nend"
         header = m.OLD_SET_HOSTED + "\n" + m.OLD_HEADER
-        tests = m.TEST_INSERT
+        tests = m.OLD_MAIN
         return cpp, header, tests
 
     def test_removes_repeated_full_roster_and_invite_scans(self):
@@ -52,7 +52,7 @@ class HostedSourceIndexTests(unittest.TestCase):
             m.rewrite(cpp, header.replace("this->lobby_players = lobby_players;",
                                           "this->lobby_players = 0;"), test)
         with self.assertRaises(ValueError):
-            m.rewrite(cpp, header, test + m.TEST_INSERT)
+            m.rewrite(cpp, header, test + m.OLD_MAIN)
 
     def test_pins_exact_original_three_cpp_files(self):
         self.assertEqual(m.PIN, "0645740a33ae21c56df3b4a0d9777086dbca6053")
