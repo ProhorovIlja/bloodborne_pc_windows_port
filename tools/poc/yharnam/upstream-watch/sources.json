@@ -422,6 +422,30 @@
       "area": "Linux FreeBSD FS-to-GS TLS patch rewriting",
       "priority": "P3",
       "action": "LINUX_ONLY_SKIP_WINDOWS_CLIENT_UNLESS_MATCHING_NATIVE_TLS_PROBLEM_PROVEN"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5463,
+      "last_seen": "merged",
+      "area": "reset remapped compute ring offset before first GPU submission",
+      "priority": "P2",
+      "action": "SOURCE_COMPARE_ONLY_REQUIRE_NATIVE_QUEUE_REMAP_FAILURE_REPRO"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5486,
+      "last_seen": "open",
+      "area": "PM4 Type2 padding and rewind command decode under atomic synchronization",
+      "priority": "P2",
+      "action": "REVIEW_GAME_COMMAND_FORMAT_NO_EMULATOR_OR_UNVERIFIED_REWIND_PORT"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5547,
+      "last_seen": "open",
+      "area": "preserve execute permission across tracked page protection",
+      "priority": "P1",
+      "action": "COMPARE_NATIVE_TRACKER_EXECUTE_FAULT_BEFORE_ADAPTATION"
     }
   ],
   "branches": [
