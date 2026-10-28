@@ -19,6 +19,8 @@ import sys
 import tempfile
 import time
 
+from run_capacity_curve import BUILD
+
 PIN = "0645740a33ae21c56df3b4a0d9777086dbca6053"
 TEAM_SIZES = {2: (250, 500, 1000, 2000), 4: (256, 512, 1024, 2048)}
 FPS = {"active": (30, 8), "reduced": (10, 3)}
@@ -53,7 +55,7 @@ def build_command(args, shards: int, players: int, index: int) -> list[str]:
         "--ramp-ms", str(args.ramp_ms),
         "--processes", str(min(20, max(2, (players + 149) // 150))),
         "--port", str(38314 + index * 20),
-        "--extra", (f"--owner-fps {fps_owner} "
+        "--extra", (f"--build '{BUILD}' --owner-fps {fps_owner} "
                     f"--follower-fps {fps_follower}"),
     ]
 
