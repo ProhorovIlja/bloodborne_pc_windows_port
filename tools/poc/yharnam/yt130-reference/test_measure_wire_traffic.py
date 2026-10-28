@@ -76,6 +76,51 @@ class WireAggregationTests(unittest.TestCase):
         self.assertEqual(c["world_ticks"], 177)
         self.assertEqual(m.aggregate_coop(source)["eventloop"], result)
 
+    def test_fifo_qt_eventloop_counters_keep_read_and_world_timing(self):
+        rows = [
+            "INFO YT130_EVENTLOOP read_batches=200 udp_queue_max=300 udp_queue_pressure=4"
+            " read_datagrams=8000 read_busy_us=400000 max_read_batch_us=67000"
+            " max_read_batch_datagrams=500 world_ticks=95"
+            " world_busy_us=170000 max_world_busy_us=6200"
+            " max_world_gap_us=81000 late_world_ticks=3",
+            "INFO YT130_EVENTLOOP read_batches=100 udp_queue_max=420 udp_queue_pressure=9"
+            " read_datagrams=9000 read_busy_us=500000 max_read_batch_us=40000"
+            " max_read_batch_datagrams=600 world_ticks=97"
+            " world_busy_us=90000 max_world_busy_us=4000"
+            " max_world_gap_us=75000 late_world_ticks=1",
+            "INFO YT130_EVENTLOOP read_batches=100 udp_queue_max=bad udp_queue_pressure=0"
+            " read_datagrams=2 read_busy_us=1 max_read_batch_us=1"
+            " max_read_batch_datagrams=1 world_ticks=1"
+            " world_busy_us=1 max_world_busy_us=1 max_world_gap_us=1 late_world_ticks=1",
+        ]
+        evidence = m.aggregate_eventloop(rows)
+        self.assertEqual(evidence["observed_windows"], 2)
+        self.assertEqual(evidence["queue_evidence_windows"], 2)
+        metrics = evidence["metrics"]
+        self.assertEqual(metrics["udp_queue_max"], 420)
+        self.assertEqual(metrics["udp_queue_pressure"], 13)
+        self.assertEqual(metrics["read_batches"], 300)
+        self.assertEqual(metrics["read_datagrams"], 17000)
+        self.assertEqual(metrics["max_read_batch_us"], 67000)
+        self.assertEqual(metrics["world_ticks"], 192)
+        self.assertEqual(metrics["max_world_gap_us"], 81000)
+        self.assertEqual(metrics["late_world_ticks"], 4)
+        # CRITICAL: the 5s source logs are accepted unchanged by
+        # the same Coop diagnostic parser consumed in CI artifacts.
+        self.assertEqual(m.aggregate_coop(rows)["eventloop"], evidence)
+
+    def test_legacy_eventloop_is_readable_but_fifo_evidence_missing(self):
+        row = ("YT130_EVENTLOOP read_batches=9 read_datagrams=12"
+               " read_busy_us=100 max_read_batch_us=80"
+               " max_read_batch_datagrams=7 world_ticks=10"
+               " world_busy_us=40 max_world_busy_us=20"
+               " max_world_gap_us=55 late_world_ticks=1")
+        got = m.aggregate_eventloop([row])
+        self.assertEqual(got["observed_windows"], 1)
+        self.assertEqual(got["queue_evidence_windows"], 0)
+        self.assertEqual(got["metrics"]["udp_queue_max"], 0)
+        self.assertEqual(got["metrics"]["read_datagrams"], 12)
+
     def test_bad_eventloop_rows_fail_closed(self):
         output = m.aggregate_eventloop([
             "YT130_EVENTLOOP read_batches=100 leaking_username=someone",
