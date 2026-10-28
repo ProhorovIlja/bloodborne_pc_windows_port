@@ -117,12 +117,20 @@ def patch(src):
 """,
 """      game->Hello(Now+20,party,true,true);
 ""","send actual signed-in identity through the original world")
-    # Exercise both unauthenticated mutations separately, AND ensure the
-    # forged same-world outsider never receives a valid game Welcome.
+    # Exercise both unauthorized mutations separately, including
+    # attempting to impersonate the leader using another valid signed-in link.
     test=one(test,
 """  const auto valid=service.DiscoverLiveDirectPairs();
   CHECK(valid.size()==10);""",
 """  CHECK(c.welcome && !c.welcome->accepted());
+  bbcoop::Envelope forged;
+  forged.mutable_lobby_hello()->set_protocol(CoopProtocol);
+  forged.mutable_lobby_hello()->set_member(identity(a));
+  forged.mutable_lobby_hello()->set_name("forged host");
+  c.Send(forged,Now+21);
+  Pump(service,games,Now+21);
+  CHECK(c.lobby.notice()=="member identity does not match the signed-in account");
+  CHECK(a.lobby.team().members_size()==5);
   const auto valid=service.DiscoverLiveDirectPairs();
-  CHECK(valid.size()==10);""","sixth member's game Hello rejected despite knowing the world key")
+  CHECK(valid.size()==10);""","outsider world rejection and attempted leader impersonation")
     return dict(zip(FILES,(h,cpp,link,test)))
