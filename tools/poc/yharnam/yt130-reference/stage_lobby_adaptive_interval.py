@@ -10,6 +10,7 @@ immediate in original C++, with 50ms cadence for fewer than 64 connections.
 from pathlib import Path
 import argparse
 import subprocess
+import stage_lobby_dedupe as dedupe
 
 PIN = "0645740a33ae21c56df3b4a0d9777086dbca6053"
 CPP = "server/src/bloodborne_world.cpp"
@@ -122,7 +123,6 @@ def rewrite(cpp, test):
     # Stage_lobby_dedupe.py, applied earlier, ALREADY compares the complete
     # original state bytes for all recipients. Only the first-join cache was
     # missing. Require the earlier change rather than stage it twice.
-    import stage_lobby_dedupe as dedupe
     if cpp.count(dedupe.AFTER) != 1:
         raise ValueError("Required existing nonHosted full-snapshot dedupe missing")
     return cpp, once(test, OLD_TEST, NEW_TEST, "native 65/130 member test")
