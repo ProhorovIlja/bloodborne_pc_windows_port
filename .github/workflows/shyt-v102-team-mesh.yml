@@ -231,3 +231,25 @@ jobs:
             -o /tmp/shyt-v102-five-hunter-lobby
           /tmp/shyt-v102-five-hunter-lobby
           echo SHYT_V102_FIVE_HUNTER_ORIGINAL_QT_TEAM_TEST_PASS
+      - name: Execute real Qt world game tests with signed-in team and outsider P2P denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRV=/tmp/shyt-v102-real/server
+          ROOT=pinned-upstream/server
+          c++ -std=c++20 -O0 -g0 -fPIC \
+            -I "$SRV/src" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v102-proto \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql) \
+            "$SRV/tests/test_bloodborne_world.cpp" \
+            "$SRV/src/bloodborne_world.cpp" \
+            "$SRV/src/bloodborne_party_boards.cpp" \
+            "$SRV/src/server_link.cpp" \
+            "$ROOT/coop/world_log.cpp" \
+            "$ROOT/coop/coop_messages.cpp" \
+            "$SRV/coop/team_lobby.cpp" \
+            "$ROOT/coop/trade.cpp" \
+            /tmp/shyt-v102-proto/coop.pb.cc \
+            $(pkg-config --libs Qt6Core Qt6Network Qt6Sql) -lprotobuf \
+            -o /tmp/shyt-v102-authenticated-teams-world-test
+          /tmp/shyt-v102-authenticated-teams-world-test
+          echo SHYT_V102_AUTHENTICATED_TEAM_DIRECT_DISCOVERY_QT_PASS
