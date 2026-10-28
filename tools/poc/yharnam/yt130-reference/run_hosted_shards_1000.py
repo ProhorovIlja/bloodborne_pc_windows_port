@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -96,15 +97,28 @@ def report(stdout: str, code: int, expected: int, shard_count: int) -> dict:
     if item.get("players") != expected or item.get("shards") != shard_count:
         return {"quality": "WRONG_POPULATION_OR_SHARDS", "measured": False}
     got_shards = item.get("per_shard", [])
-    if not isinstance(got_shards, list) or len(got_shards) != shard_count:
+    if (not isinstance(got_shards, list) or len(got_shards) != shard_count or
+        any(type(shard) is not dict for shard in got_shards) or
+        len({shard.get("shard") for shard in got_shards}) != shard_count):
         return {"quality": "NO_PER_SHARD_EVIDENCE", "measured": False}
     got = item.get("packets_received", 0)
     lost = item.get("packets_lost", 0)
     playing = item.get("playing", 0)
     p99 = item.get("relay_ms_p99", 1e9)
-    if not all(isinstance(x, (int, float)) and x >= 0 for x in
+    if not all(type(x) in (int, float) and math.isfinite(x) and x >= 0 for x in
                (got, lost, playing, p99)):
         return {"quality": "INVALID_COUNTERS", "measured": False}
+    redirect_count = item.get("redirects")
+    redirect_p99 = item.get("redirect_ms_p99")
+    if shard_count > 1 and (type(redirect_count) not in (int, float) or
+                            not math.isfinite(redirect_count) or redirect_count < 0 or
+                            type(redirect_p99) not in (int, float) or
+                            not math.isfinite(redirect_p99) or redirect_p99 < 0):
+        return {"quality": "INVALID_CROSS_SHARD_COUNTERS", "measured": False}
+    if any(type(shard.get("link_thread_cpu_avg")) not in (int, float) or
+           not math.isfinite(shard["link_thread_cpu_avg"]) or
+           shard["link_thread_cpu_avg"] < 0 for shard in got_shards):
+        return {"quality": "INVALID_PER_SHARD_CPU", "measured": False}
     quality = "FULL_GAMEPLAY"
     if playing != expected:
         quality = "PARTIAL_PLAYING"
@@ -114,11 +128,18 @@ def report(stdout: str, code: int, expected: int, shard_count: int) -> dict:
         quality = "GAME_PACKET_LOSS"
     elif p99 > 50:
         quality = "RELAY_P99_OVER_50MS"
+    elif any(shard["link_thread_cpu_avg"] >= 75 for shard in got_shards):
+        quality = "SHARD_MAIN_CPU_SATURATED"
+    elif shard_count > 1 and redirect_count == 0:
+        # Without a genuine redirect, a 3-shard test could have stayed local.
+        quality = "CROSS_SHARD_NOT_EXERCISED"
+    elif shard_count > 1 and redirect_p99 > 2000:
+        quality = "CROSS_SHARD_JOIN_TOO_SLOW"
     return {
         "quality": quality, "measured": True,
         "players": item["players"], "playing": playing,
         "refused": item.get("refused"), "redirects": item.get("redirects"),
-        "redirect_ms_p99": item.get("redirect_ms_p99"),
+        "redirect_ms_p99": redirect_p99,
         "relay_ms_p99": p99, "packets_received": got,
         "packets_lost": lost, "udp_buffer_drops_host_wide": item.get("udp_buffer_drops"),
         "cpu_load_host_wide": item.get("load_avg"), "cores_host": item.get("cores"),
