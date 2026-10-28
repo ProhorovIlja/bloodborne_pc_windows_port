@@ -102,9 +102,14 @@ static void IndependentPairsAndReceipt() {
     world.epochs.insert(b,88);
     assert(!registry.Take(a,1,1012,stranger)); // changed world generation
     assert(registry.Count()==0);
-    assert(!registry.Begin(a,b,world.Resolver(),1013)); // changed reciprocal epoch?
-    // The world resolver is internally consistent; new epoch is allowed
-    // for a NEW lease, never to resurrect an old grant.
+    // A NEW grant with matching current epochs must succeed. Old master
+    // must not survive a revoked generation change.
+    assert(registry.Begin(a,b,world.Resolver(),1013));
+    assert(registry.Take(a,1,1014,offer_a));
+    assert(registry.Take(b,88,1014,offer_b));
+    assert(offer_a.pair_binding==offer_b.pair_binding);
+    assert(offer_a.session_epoch==1 && offer_b.session_epoch==88);
+    registry.ClearAll();
 }
 static void CapacityExpiryAndConsent() {
     LiveWorld world;
