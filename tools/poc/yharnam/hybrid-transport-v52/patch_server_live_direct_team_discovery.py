@@ -70,6 +70,9 @@ f'''{TYPE} Service::{API}() const {{
     }}
     std::map<QByteArray,std::size_t> degrees;
     for(auto& [party,players]:teams) {{
+        // Full team means host + four hunters, not arbitrarily large
+        // user-claimed parties. Refuse a malformed 6+ member world.
+        if(players.size()>5)continue;
         std::sort(players.begin(),players.end());
         for(std::size_t i=0;i<players.size() && result.size()<kMaxPairs;++i) {{
             if(degrees[players[i]]>=kMaxPeersPerAccount)continue;
