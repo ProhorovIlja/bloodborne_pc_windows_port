@@ -56,6 +56,7 @@ jobs:
             stage_coop_reliability.py \
             stage_lobby_coalesce.py \
             stage_lobby_coalesce_cpp_test.py \
+            stage_lobby_adaptive_interval.py \
             stage_eventloop_timing.py \
             stage_hosted_lobby_index.py; do
             python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
@@ -174,6 +175,17 @@ jobs:
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
           echo SHYT_YT130_LOBBY_REAL_CPP_FUNCTIONAL_TEST_READY
+      - name: Stage adaptive nonHosted LobbyState 64/128 threshold and native first-hello regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_lobby_adaptive_interval.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
+          grep -q 'NonHostedFullLobbyIsAdaptiveWithoutDelayingFirstHello' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          echo YT130_NONHOSTED_FULL_LOBBY_ADAPTIVE_NATIVE_CPP_TEST_READY
       - name: Instrument original Qt UDP read callback and 50ms world Timer WITHOUT changing flow
         shell: bash
         run: |
