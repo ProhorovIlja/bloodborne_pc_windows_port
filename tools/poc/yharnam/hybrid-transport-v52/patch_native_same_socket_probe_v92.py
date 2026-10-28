@@ -289,19 +289,24 @@ private:
     void ReceiveMain() {
 ''',
         "original game receive helper")
-    src=one(src,
-        '''            const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
-            // SHYT-V70-NATIVE-RECV-HMAC: the existing real recvfrom() host
-''',
-        '''            const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
-#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
-            // SHN1 is an authenticated out-of-band control frame. It is
-            // checked AFTER firewall and BEFORE the guest vport decoder.
-            // With default build flag OFF this block does not even exist.
+    # Demand the pinned firewall immediately before the original datagram
+    # construction; a source rearrangement must fail closed rather than
+    # admitting SHN1 control before firewall policy.
+    firewall_and_frame='''            if (!FirewallAllows(from.sin_addr.s_addr, from.sin_port, "a datagram from")) {
+                continue;
+            }
+            const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
+'''
+    if src.count('            if (const auto server = LinkServer();\n') != 1:
+        raise ValueError("V92 requires original server link demux")
+    src=one(src,firewall_and_frame,
+        firewall_and_frame+'''#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
+            // SHN1 is authenticated out-of-band control, AFTER the original
+            // firewall and BEFORE server link, SHP1 and guest vport demux.
+            // With default build flag OFF this block does not exist.
             if(ReceiveNativeSignedProbeV92(from.sin_addr.s_addr,from.sin_port,
                                            datagram))continue;
 #endif
-            // SHYT-V70-NATIVE-RECV-HMAC: the existing real recvfrom() host
 ''',
-        "after-firewall, before-V70/direct and original game relay demux")
+        "original firewall and UDP frame before server and Direct demux")
     return src
