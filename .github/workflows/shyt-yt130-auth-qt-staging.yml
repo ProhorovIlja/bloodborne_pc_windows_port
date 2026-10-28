@@ -317,6 +317,23 @@ jobs:
             --profile reduced --team-size 4 --peak 1024 --timeout 115 \
             --output yt130-scale-reduced-quartet-1024.jsonl
           echo "YT130_DIAGNOSTIC_1000_NOT_PASSED_UNLESS_METRICS_PROVE_HEALTH"
+      - name: Diagnose 250 real game peers: isolated slow arrival vs burst, no raw player logs
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x "$RUNNER_TEMP/yt-build/shadnet" || exit 0
+          test -x "$RUNNER_TEMP/yt-build/bbload" || exit 0
+          for ramp in 150 500; do
+            timeout 140s python tools/poc/yharnam/yt130-reference/run_scale_1000.py \
+              --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+              --bbload "$RUNNER_TEMP/yt-build/bbload" \
+              --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+              --team-size 2 --profile active --peak 250 \
+              --timeout 125 --ramp-ms "$ramp" \
+              --output "yt130-scale-250-active-ramp-${ramp}.jsonl"
+          done
+          echo YT130_250_ARRIVAL_PRESSURE_DIAGNOSTIC_NO_CAPACITY_PASS
       - name: Extreme 2000/2048-player active & presence scaling ONLY by manual explicit opt-in
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.extreme_2000 == true }}
         shell: bash
