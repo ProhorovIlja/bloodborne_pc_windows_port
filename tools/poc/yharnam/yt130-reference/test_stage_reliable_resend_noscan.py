@@ -10,9 +10,11 @@ spec.loader.exec_module(m)
 
 class ReliableNoScanTests(unittest.TestCase):
     def original(self):
-        head = ("    s64 resend_ms = 150;\n"
+        head = (m.OLD_INCLUDE + "\n"
+                "    s64 resend_ms = 150;\n"
                 "    size_t max_resends = 64;\n" +
-                m.FRESH_INVARIANT + "\n" + m.OLD_SCAN)
+                m.OLD_FRESH + "\n" + m.FRESH_INVARIANT +
+                "\n" + m.OLD_SCAN)
         test = ("// NonHostedTeamEditsAreCoalescedAndStartStillWorks\n" +
                 m.OLD_TEST)
         return head, test
@@ -20,10 +22,14 @@ class ReliableNoScanTests(unittest.TestCase):
     def test_unchanged_wire_retry_ack_and_limit(self):
         head, test = m.rewrite(*self.original())
         self.assertNotIn("std::ranges::none_of(entries", head)
-        self.assertIn("if (now_ms - out.sent_ms >= out.wait_ms)", head)
+        self.assertIn("!fresh_reliable.contains(seq)", head)
+        self.assertIn("fresh_reliable.insert(out.seq);", head)
+        self.assertIn("#include <unordered_set>", head)
         self.assertIn(m.FRESH_INVARIANT, head)
         self.assertIn("size_t max_resends = 64;", head)
         self.assertIn("GameLinkBurstResendSequenceDedupAndAck", test)
+        self.assertIn("GameLinkQuietPeerResumeKeepsNewPacketUnique", test)
+        self.assertIn("CHECK(sender.Resends() == 1)", test)
         self.assertIn("CHECK(retry_seq.size() == 64)", test)
         self.assertIn("CHECK(sender.Unacked() == 0)", test)
         self.assertIn("CHECK(delivered == 320)", test)
