@@ -10,7 +10,7 @@ KEYS = ("players","playing","refused","packets_sent","packets_received",
         "server_rss_mb_max","relay_ms_p50","relay_ms_p99",
         "server_in_mbit","server_out_mbit")
 
-def load(path: Path, expected_players: int) -> dict:
+def load(path: Path, expected_players: int, require_full_gameplay: bool = False) -> dict:
     if not path.is_file() or path.is_symlink() or path.stat().st_size > 1024 * 1024:
         raise ValueError("Invalid bbload JSON-lines evidence")
     results = []
@@ -37,14 +37,26 @@ def load(path: Path, expected_players: int) -> dict:
         raise ValueError("No synthetic player reached the PLAYING state; do not publish performance results")
     if r["packets_sent"] == 0 or r["packets_lost"] > r["packets_sent"]:
         raise ValueError("No valid actual game traffic")
+    if require_full_gameplay:
+        # A synthetic client can report PLAYING after entering a team and
+        # still lose nearly all subsequent game traffic: real PR45 delivered
+        # only 264/2091 (12.63%) while 4/4 reported PLAYING.
+        if (r["playing"] != expected_players or
+            r["packets_sent"] < expected_players * 20 or
+            r["packets_received"] * 100 < r["packets_sent"] * 99 or
+            r["packets_lost"] != 0 or r["udp_buffer_drops"] != 0 or
+            r["relay_ms_p99"] > 50):
+            raise ValueError("4-peer smoke has incomplete game packet delivery, "
+                             "missing players, Linux UDP drops or relay p99 >50ms")
     return r
 
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("report",type=Path)
     p.add_argument("--expected-players",type=int,default=200)
+    p.add_argument("--require-full-gameplay",action="store_true")
     a=p.parse_args()
-    r=load(a.report,a.expected_players)
+    r=load(a.report,a.expected_players,a.require_full_gameplay)
     print("SHYT_YT130_REAL_SYNTHETIC_LOAD200_RESULTS")
     for k in KEYS:
         print(f"{k}={r[k]}")
