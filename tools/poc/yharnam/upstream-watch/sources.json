@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "recorded_utc_date": "2026-10-27",
+  "recorded_utc_date": "2026-10-28",
   "policy": "REPORT_ONLY_NEVER_AUTOMATICALLY_IMPORT_OR_DEPLOY",
   "source_revision": "7a0135bcfe0e8e7afc1a9372902abfffcad3d3f8",
   "pinned_yt_game_server": "0645740a33ae21c56df3b4a0d9777086dbca6053",
@@ -305,6 +305,54 @@
       "area": "downed-event-area-yg-lift-bell-woman-summon-stability",
       "priority": "P1",
       "action": "PORT_GAME_HOOK_SEMANTICS_ONLY_AFTER_NATIVE_CODE_ADDRESS_QA_NO_EMULATOR_RUNTIME"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 440,
+      "last_seen": "open",
+      "area": "native-bbport-vulkan-image-buffer-write-mark-lifecycle-pixel-format",
+      "priority": "P1",
+      "action": "STUDY_NATIVE_GPU_GC_POLICY_TEST_AND_CORRECT_STALE_WRITEBACK_WITHOUT_EMULATOR_RUNTIME"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 126,
+      "last_seen": "open",
+      "area": "occlusion-query-results-ordered-vram-long-session-28min-crash",
+      "priority": "P0",
+      "action": "SOURCE_EXACT_45_MIN_CATHEDRAL_WARD_STRESS_AND_SAVED_SESSIONS_NO_BLIND_GPU_COPY"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 103,
+      "last_seen": "open",
+      "area": "fsr4-glsl-constant-array-driver-25x-scratch-slowdown",
+      "priority": "P1",
+      "action": "PORT_ONLY_WITH_SHADER_BINARY_GOLDEN_AND_AMD_WINDOWS_DRIVER_BENCHMARK"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 128,
+      "last_seen": "open",
+      "area": "windows-fsr4-1-2-mlfg-4-0-2-controls",
+      "priority": "P2",
+      "action": "REVIEW_DEPENDENCIES_DRIVER_AND_IMAGE_PACING_NO_DEFAULT_ACTIVATION"
+    },
+    {
+      "repo": "droogie/bbhost",
+      "number": 188,
+      "last_seen": "open",
+      "area": "native-controller-remap-hold-time-regional-ab-swap",
+      "priority": "P2",
+      "action": "CHECK_NATIVE_INPUT_MENU_AND_REGIONAL_PARAM_SFO_INDEPENDENT_YT_WIRE"
+    },
+    {
+      "repo": "visy/bloodborne_pc_windows_port",
+      "number": 21,
+      "last_seen": "closed",
+      "area": "lift-vertical-speed-rider-guard-0-25s",
+      "priority": "P1",
+      "action": "REVIEW_CLOSED_UNMERGED_BEFORE_ADOPT_AND_NATIVE_TWO_PC_LIFT_REPLAY"
     }
   ]
 }
