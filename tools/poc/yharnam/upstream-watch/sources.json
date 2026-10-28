@@ -69,7 +69,7 @@
       "category": "native-lantern-engine-windows-linux-bbport",
       "known_head": "3860021d6550f95397ba74d046fb14498816a534",
       "known_release_tag": "unverified",
-      "compatibility": "GPU_LAUNCHER_IDEAS_ONLY_NOT_YT_AUTH_WIRE; GPL3_ADDITIONAL_TERMS_REVIEW",
+      "compatibility": "GPU_LAUNCHER_IDEAS_ONLY_NO_YT_AUTH_WIRE; GPL3_ADDITIONAL_TERMS_REVIEW",
       "review_notes": "Awaken's Lantern Engine (formerly BloodBorneButPc), full engine and launcher source; do not import bbhost/The Hunter's Dream networking into YT."
     },
     {
