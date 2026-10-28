@@ -130,6 +130,16 @@ def patch(src):
   c.Send(forged,Now+21);
   Pump(service,games,Now+21);
   CHECK(c.lobby.notice()=="member identity does not match the signed-in account");
+  bbcoop::Envelope forged_world;
+  auto* forged_hello=forged_world.mutable_hello();
+  forged_hello->set_protocol(CoopProtocol);
+  forged_hello->set_party(party.toStdString());
+  forged_hello->set_member(identity(a));
+  forged_hello->set_run(c.run);
+  forged_hello->set_direct_p2p_opt_in(true);
+  c.Send(forged_world,Now+22);
+  Pump(service,games,Now+22);
+  CHECK(c.welcome && !c.welcome->accepted());
   CHECK(a.lobby.team().members_size()==5);
   const auto valid=service.DiscoverLiveDirectPairs();
   CHECK(valid.size()==10);""","outsider world rejection and attempted leader impersonation")
