@@ -33,6 +33,19 @@ Reviewed **2026-10-27** from upstream GitHub PRs, release notes and verified rep
 - **P1 observability:** redact IPv6, local player paths, account/party/join codes before copying logs or assembling a user-controlled report ZIP. No automatic upload.
 - **Explicit gate:** Nightwatch's firewall helper manipulates user firewall block rules. Never run it in our build without explicit user opt-in, verified app-specific rules and administrator permission.
 
+### Source verification 2026-10-28: long-session crashes, GPU cache, FSR and input
+
+| Priority | Source | What it changes and why it matters | Porting gate |
+|---|---|---|---|
+| P0 native long-play stability | [Supermedo PR #126](https://github.com/Supermedo/bloodborne_pc/pull/126), **OPEN** | Reports a reproducible Cathedral Ward crash at ~1691/1694 s in v1.9.4, CPU `memcpy` into null due to 256 KiB per-frame parent linear heap exhausted by incomplete occlusion results. Fix orders query status completion relative to guest writes; may explain the user's "gets laggier the longer you play" symptom, **not yet proven in our Windows YT native build** | Review exact amended Vulkan `EventWrite ZPASS_DONE`, original test repro, >=45-minute game session and transition scenes; ensure native Windows render code matches; no blind merge |
+| P1 native rendering correctness | [YT #440](https://github.com/lKaniel/bloodborne-server/pull/440), **OPEN** | Preserves image buffer-write `gpu_hash` until actual `RefreshImage`; prevents stale texture writeback overwriting guest memory; Ubscaled format name and texture GC unit tests from shadPS4 #5504/#5509 | The official YT bbport native GPU counterpart can be selectively sourced, but **do not import emulator runtime**; pin exact original 1.3.0 GPU source and validate image write ownership, UV, shader/texture restore |
+| P1 AMD Windows GPU | [Supermedo #103](https://github.com/Supermedo/bloodborne_pc/pull/103), **OPEN** | Repeated global FSR4 GLSL `const` weight tables exploded driver scratch copies, causing 25–60x slowdowns in optimized passes on AMD; optimization uses one shared table | `spirv-val`, shader-output/image A/B & measured frame timings on AMD Windows required; FSR4 must not silently enable incompatible drivers |
+| P2 new upscaling | [Supermedo #128](https://github.com/Supermedo/bloodborne_pc/pull/128), **OPEN** | FSR 4.1.2 and ML-FG 4.0.2 Windows modes and shared controls | Explicit user opt-in, driver/VRAM/frametime matrix before distribution |
+| P2 controller | [bbhost #188](https://github.com/droogie/bbhost/pull/188), **OPEN**, replaces #178 | Native configurable gamepad mapping including hold-time actions, Asian CUSA A/B swap with `param.sfo` locale auto | Adapt only native PC input layer, preserve gamepad, controller disconnect, menus, YT hotkeys and alternate CUSA handling |
+| P1 lift/physics | [visy #21](https://github.com/visy/bloodborne_pc_windows_port/pull/21), **CLOSED UNMERGED** | 250 ms lift rider-speed test intended to prevent descending-lift fall-through | Review closure reason before copying; multi-player lifts and map loading on 2 real PCs required |
+
+**No source code from these new PRs has been cherry-picked into any native game binary.** This is a read-only controlled import queue. They do not solve 1,000 multiplayer capacity: server needs Qt UDP backpressure and protocol-versioned interest/delta lobby replication. Last parent [PR38](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/pull/38) new FIFO degraded p99 at 200 to ~3747ms, and at 250 no synthetic client was PLAYING, though 4-player smoke passed; [new PR39](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/pull/39) investigates admission pressure and 337,382 overload drops rather than increasing the queue size.
+
 ### New official YT 1.3.1 candidate PRs (#434–439, reviewed 2026-10-27)
 
 | Priority | Upstream source change | Compatibility / staging decision |
