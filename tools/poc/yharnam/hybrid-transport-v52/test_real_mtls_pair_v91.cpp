@@ -122,10 +122,10 @@ int main(int argc,char** argv) {
             // can revoke the separate waiting A/B lease.
             bool good=RejectUnpairedCommand(
                 argv[3],argv[4],argv[5],port,
-                "YT-P2P/V91 READY "+QByteArray(64,'a')+"\\n");
+                "YT-P2P/V91 READY "+QByteArray(64,'a')+"\n");
             good=good && RejectUnpairedCommand(
-                argv[3],argv[4],argv[5],port,"YT-P2P/V90 OFFER\\n");
-            std::fprintf(stderr,"V101 real TLS unissued OFFER/READY denial: %s\\n",
+                argv[3],argv[4],argv[5],port,"YT-P2P/V90 OFFER\n");
+            std::fprintf(stderr,"V101 real TLS unissued OFFER/READY denial: %s\n",
                          good?"PASS":"FAIL");
             good=good && NativeTlsLocalOfferClientV91::Request(
                 config_a,box_a,first.current,1,Refresh,&first,now(),ready_a);
