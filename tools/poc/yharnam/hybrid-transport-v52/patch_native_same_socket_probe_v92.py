@@ -22,6 +22,7 @@ def patch_game(src):
     if TAG in src:raise ValueError("V92 already applied")
     if ("SHYT-V87-TRUSTED-SERVER-LINK" not in src or
         "SHYT-V70-NATIVE-RECV-HMAC" not in src or
+        "SeamlessHunt::Hybrid::IsSHP1(datagram)" not in src or
         "native_grant_inbox_v84" not in src or
         "shyt_link_generation_v87" not in src):
         raise ValueError("V92 requires original game and V84-V87 verified integration")
