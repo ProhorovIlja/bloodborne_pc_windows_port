@@ -100,8 +100,13 @@ def report(stdout: str, code: int, expected: int, shard_count: int) -> dict:
         return {"quality": "WRONG_POPULATION_OR_SHARDS", "measured": False}
     got_shards = item.get("per_shard", [])
     if (not isinstance(got_shards, list) or len(got_shards) != shard_count or
-        any(type(shard) is not dict for shard in got_shards) or
-        len({shard.get("shard") for shard in got_shards}) != shard_count):
+        any(type(shard) is not dict for shard in got_shards)):
+        return {"quality": "NO_PER_SHARD_EVIDENCE", "measured": False}
+    # JSON is untrusted diagnostic input. Check types before hashing shard IDs:
+    # lists/dicts must fail closed, not crash with TypeError and lose all evidence.
+    shard_ids = [shard.get("shard") for shard in got_shards]
+    if (any(type(shard_id) is not str or not shard_id or len(shard_id) > 128
+            for shard_id in shard_ids) or len(set(shard_ids)) != shard_count):
         return {"quality": "NO_PER_SHARD_EVIDENCE", "measured": False}
     got = item.get("packets_received", 0)
     lost = item.get("packets_lost", 0)
