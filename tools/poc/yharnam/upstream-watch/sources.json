@@ -63,6 +63,28 @@
       "known_head": "3eecea94ddaca360b19f4b800523b609a8b2ffcc",
       "known_release_tag": "unverified",
       "compatibility": "SELECTIVE_RENDERER_BUG_FIXES_ONLY_NO_EMULATION_IN_NATIVE_CLIENT"
+    },
+    {
+      "full_name": "Awakenchan/LanternEngine",
+      "category": "native-lantern-engine-windows-linux-bbport",
+      "known_head": "3860021d6550f95397ba74d046fb14498816a534",
+      "known_release_tag": "unverified",
+      "compatibility": "GPU_LAUNCHER_IDEAS_ONLY_NOT_YT_AUTH_WIRE; GPL3_ADDITIONAL_TERMS_REVIEW",
+      "review_notes": "Awaken's Lantern Engine (formerly BloodBorneButPc), full engine and launcher source; do not import bbhost/The Hunter's Dream networking into YT."
+    },
+    {
+      "full_name": "DarkIzuku/bloodborne_pc",
+      "category": "native-runtime-lantern-foundation",
+      "known_head": "2f9f1c049442ba07bb4c041de2296e18a97c7b0a",
+      "known_release_tag": "unverified",
+      "compatibility": "PERF_AND_STABILITY_SOURCE_REVIEW_ONLY_NO_P2P_WIRE_REPLACEMENT"
+    },
+    {
+      "full_name": "Wozzardman/shadnet-p2p",
+      "category": "separate-shadnet-p2p-transport",
+      "known_head": "5a849a192fd4450593c57b10697316ac324c856e",
+      "known_release_tag": "unverified",
+      "compatibility": "RESEARCH_NAT_TRAVERSAL_ONLY_NO_YT_PROTOCOL_OR_SERVER_AUTH_BYPASS"
     }
   ],
   "pull_requests": [
