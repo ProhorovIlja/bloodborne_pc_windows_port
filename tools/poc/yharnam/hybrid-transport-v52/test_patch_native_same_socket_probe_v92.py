@@ -38,14 +38,20 @@ private:
     static bool TrustedReverseDirectReady(
     void ReceiveMain() {
         const auto rc = ::recvfrom(host_socket, nullptr,0,0,nullptr,nullptr);
-        if (!FirewallAllows(from.sin_addr.s_addr, from.sin_port, "a datagram from")) {
+            if (!FirewallAllows(from.sin_addr.s_addr, from.sin_port, "a datagram from")) {
                 continue;
             }
             const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
-            // SHYT-V70-NATIVE-RECV-HMAC: the existing real recvfrom() host
-            if (SeamlessHunt::Hybrid::IsSHP1(datagram))continue;
             if (const auto server = LinkServer();
                 server.addr_nbo == from.sin_addr.s_addr && server.port_nbo == from.sin_port) {
+                if (const auto kind = Link::KindOf(datagram)) {
+                    OnLinkDatagram(*kind, datagram);
+                    continue;
+                }
+            }
+            // SHYT-V70-NATIVE-RECV-HMAC: the existing real recvfrom() host
+            if (SeamlessHunt::Hybrid::IsSHP1(datagram))continue;
+            if (!Link::TakesDatagramFrom(LinkServer(), from.sin_addr.s_addr, from.sin_port)) {
                 continue;
             }
     }
@@ -90,11 +96,13 @@ class V92Tests(unittest.TestCase):
         # original LinkServer relayed/guest vport processing.
         check=result.index("if(ReceiveNativeSignedProbeV92(from.sin_addr.s_addr")
         firewall=result.index('if (!FirewallAllows(from.sin_addr.s_addr')
-        direct_demux=result.index("SeamlessHunt::Hybrid::IsSHP1(datagram)",check)
-        deliver=result.index("if (const auto server = LinkServer();",direct_demux)
+        server_demux=result.index("if (const auto server = LinkServer();",check)
+        direct_demux=result.index("SeamlessHunt::Hybrid::IsSHP1(datagram)",server_demux)
+        guest_demux=result.index("if (!Link::TakesDatagramFrom(",direct_demux)
         self.assertLess(firewall,check)
-        self.assertLess(check,direct_demux)
-        self.assertLess(direct_demux,deliver)
+        self.assertLess(check,server_demux)
+        self.assertLess(server_demux,direct_demux)
+        self.assertLess(direct_demux,guest_demux)
         self.assertIn("#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS\n            // SHN1",result)
         self.assertIn("#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS\n    // V92",result)
         with self.assertRaisesRegex(ValueError,"already applied"):
@@ -111,6 +119,8 @@ class V92Tests(unittest.TestCase):
             SOURCE.replace("V86 account/server change","V80 relink"),
             SOURCE.replace("void ReceiveMain()","void ReceiveGame()"),
             SOURCE.replace("P2PTransport() = default;","P2PTransport() noexcept = default;"),
+            SOURCE.replace('if (!FirewallAllows(from.sin_addr.s_addr, from.sin_port, "a datagram from"))', 'if (true)'),
+            SOURCE.replace('const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};', 'const std::span<const u8> bytes{buffer.data(), static_cast<size_t>(rc)};'),
             SOURCE.replace('if (const auto server = LinkServer();',
                            'if (auto server = LinkServer();'),
         ]
