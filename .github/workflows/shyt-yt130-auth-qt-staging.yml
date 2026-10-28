@@ -54,6 +54,7 @@ jobs:
             stage_lobby_dedupe.py \
             stage_wire_traffic.py \
             stage_coop_reliability.py \
+            stage_coop_encoded_bytes.py \
             stage_lobby_coalesce.py \
             stage_lobby_coalesce_cpp_test.py \
             stage_eventloop_timing.py \
@@ -153,9 +154,12 @@ jobs:
           set -euo pipefail
           python tools/poc/yharnam/yt130-reference/stage_coop_reliability.py \
             "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_coop_encoded_bytes.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 7
-          echo SHYT_YT130_COOP_RELIABILITY_DIAGNOSTIC_ONLY_NO_DEPLOY
+          grep -q 'encoded_bytes=' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          echo SHYT_YT130_COOP7_ORIGIN_ENCODED_BYTES_ONLY_NO_DEPLOY
       - name: EXPERIMENTAL coalesce unrelated lobby edits to the 50ms world Tick
         shell: bash
         run: |
