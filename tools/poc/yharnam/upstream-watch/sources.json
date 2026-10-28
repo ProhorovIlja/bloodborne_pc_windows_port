@@ -85,6 +85,13 @@
       "known_head": "5a849a192fd4450593c57b10697316ac324c856e",
       "known_release_tag": "unverified",
       "compatibility": "RESEARCH_NAT_TRAVERSAL_ONLY_NO_YT_PROTOCOL_OR_SERVER_AUTH_BYPASS"
+    },
+    {
+      "full_name": "Jgamrot/yharnam-pc",
+      "category": "native-windows-bbport-discord-presence",
+      "known_head": "080938728432eb6f3c1a474a375bd2c8212dc963",
+      "known_release_tag": "unverified",
+      "compatibility": "DISCORD_STATS_READONLY_AND_SOURCE_LICENSE_QA; NEVER_COPY_UNVERIFIED_MEMORY_OFFSETS"
     }
   ],
   "pull_requests": [
@@ -375,6 +382,46 @@
       "area": "lift-vertical-speed-rider-guard-0-25s",
       "priority": "P1",
       "action": "REVIEW_CLOSED_UNMERGED_BEFORE_ADOPT_AND_NATIVE_TWO_PC_LIFT_REPLAY"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 77,
+      "last_seen": "merged",
+      "area": "standalone read-only native Discord Rich Presence BL area boss echoes insight",
+      "priority": "P1",
+      "action": "REVIEW_NATIVE_READPROCESSMEMORY_POINTER_OFFSETS_LIFECYCLE_AND_GAME_PID_LICENSE"
+    },
+    {
+      "repo": "Awakenchan/LanternEngine",
+      "number": 80,
+      "last_seen": "closed",
+      "area": "Discord companion adaptation proposal closed unmerged",
+      "priority": "P2",
+      "action": "REVIEW_CLOSURE_AND_MERGED_JGAMROT_PR77_NO_DOUBLE_IMPORT"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5368,
+      "last_seen": "merged",
+      "area": "Vulkan CopyImageWithBuffer preserve all mip levels",
+      "priority": "P1",
+      "action": "COMPARE_NATIVE_BBPORT_VULKAN_MIP_COPY_IMAGES_AND_GUEST_MEMORY_TESTS"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5462,
+      "last_seen": "merged",
+      "area": "correct direct memory overlap unmap range",
+      "priority": "P1",
+      "action": "COMPARE_NATIVE_GUEST_ALLOCATION_LIFETIME_BEFORE_PLATFORM_ADAPTATION"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5548,
+      "last_seen": "open",
+      "area": "Linux FreeBSD FS-to-GS TLS patch rewriting",
+      "priority": "P3",
+      "action": "LINUX_ONLY_SKIP_WINDOWS_CLIENT_UNLESS_MATCHING_NATIVE_TLS_PROBLEM_PROVEN"
     }
   ],
   "branches": [
