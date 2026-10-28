@@ -58,12 +58,13 @@ jobs:
             stage_lobby_coalesce_cpp_test.py \
             stage_eventloop_timing.py \
             stage_hosted_lobby_index.py \
-            stage_hosted_world_index.py; do
+            stage_hosted_world_index.py \
+            stage_reliable_resend_index.py; do
             python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
           git -C "$RUNNER_TEMP/yt-src" diff --check
           # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 11
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 12
           grep -q 'YT130_EVENTLOOP read_batches=' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'RecordWire(raw, true)' \
@@ -193,12 +194,16 @@ jobs:
             "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_hosted_world_index.py \
             "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_reliable_resend_index.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 11
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 12
           grep -q 'HostedLargeTeamsKeepRosterBoundedThroughChanges' \
             "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
           grep -q 'HostedWorldIndexKeepsFortyPartiesPrivateAfterRestoreAndUpdate' \
             "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
+          grep -q 'GameLinkBurstResendSequenceDedupAndAck' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
           echo YT130_HOSTED_INDEX_512_PLAYERS_REAL_CPP_SOURCE_STAGED
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
