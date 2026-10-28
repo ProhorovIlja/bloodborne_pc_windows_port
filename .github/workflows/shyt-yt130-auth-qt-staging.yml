@@ -56,19 +56,20 @@ jobs:
             stage_coop_reliability.py \
             stage_lobby_coalesce.py \
             stage_lobby_coalesce_cpp_test.py \
-            stage_eventloop_timing.py; do
+            stage_eventloop_timing.py \
+            stage_hosted_lobby_index.py; do
             python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
           git -C "$RUNNER_TEMP/yt-src" diff --check
           # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 11
           grep -q 'YT130_EVENTLOOP read_batches=' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'RecordWire(raw, true)' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'NonHostedTeamEditsAreCoalescedAndStartStillWorks' \
             "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
-          echo YT130_SOURCE_EXACT_10_FILE_FULL_STAGE_PASS_NO_QT_BUILD_NO_PRODUCTION
+          echo YT130_SOURCE_EXACT_11_FILE_HOSTED_INDEX_STAGE_PASS_NO_QT_BUILD
   compile-real-shadnet-and-sqlite-tests:
     needs: verify-disposable-source-stage
     runs-on: ubuntu-24.04
@@ -175,6 +176,17 @@ jobs:
           # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
           echo SHYT_YT130_QT_EVENTLOOP_OBSERVE_ONLY_NO_SCHEDULING_CHANGE
+      - name: Native Hosted C++ roster index and 512-player functional regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_hosted_lobby_index.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 11
+          grep -q 'HostedLargeTeamsKeepRosterBoundedThroughChanges' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
+          echo YT130_HOSTED_INDEX_512_PLAYERS_REAL_CPP_SOURCE_STAGED
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
