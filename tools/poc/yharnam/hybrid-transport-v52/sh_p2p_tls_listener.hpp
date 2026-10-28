@@ -234,7 +234,7 @@ protected:
                     bound->account,static_cast<std::uint64_t>(stamp));
                 QByteArray response="YT-P2P/V102 PAIRS";
                 for(const auto id:ids)
-                    response+=" "+QByteArray::number(id,16).rightJustified(16,'0');
+                    response+=" "+QByteArray::number(static_cast<qulonglong>(id),16).rightJustified(16,'0');
                 response+='\n';
                 pending->clear();
                 s->write(response);
