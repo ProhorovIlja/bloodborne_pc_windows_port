@@ -26,8 +26,9 @@ COOP = re.compile(
 )
 ORIGIN = re.compile(r"YT130_COOP_ORIGIN kind=(\d+) sends=(\d+)")
 EVENTLOOP = re.compile(
-    r"YT130_EVENTLOOP read_batches=(\d+) read_datagrams=(\d+)"
-    r" read_busy_us=(\d+) max_read_batch_us=(\d+)"
+    r"YT130_EVENTLOOP read_batches=(\d+)"
+    r"(?: udp_queue_max=(\d+) udp_queue_pressure=(\d+))?"
+    r" read_datagrams=(\d+) read_busy_us=(\d+) max_read_batch_us=(\d+)"
     r" max_read_batch_datagrams=(\d+) world_ticks=(\d+)"
     r" world_busy_us=(\d+) max_world_busy_us=(\d+)"
     r" max_world_gap_us=(\d+) late_world_ticks=(\d+)"
@@ -112,23 +113,33 @@ def aggregate_eventloop(lines: list[str]) -> dict:
     No packet bodies, player identities, credentials or user IPs.
     """
     fields = (
-        "read_batches", "read_datagrams", "read_busy_us", "max_read_batch_us",
+        "read_batches", "udp_queue_max", "udp_queue_pressure",
+        "read_datagrams", "read_busy_us", "max_read_batch_us",
         "max_read_batch_datagrams", "world_ticks", "world_busy_us",
         "max_world_busy_us", "max_world_gap_us", "late_world_ticks",
     )
     maximums = {
-        "max_read_batch_us", "max_read_batch_datagrams",
+        "max_read_batch_us", "max_read_batch_datagrams", "udp_queue_max",
         "max_world_busy_us", "max_world_gap_us",
     }
     totals = dict.fromkeys(fields, 0)
     windows = 0
+    queue_windows = 0
     for line in lines:
         if m := EVENTLOOP.search(line):
             windows += 1
-            for name, value in zip(fields, m.groups()):
+            groups = m.groups()
+            if groups[1] is not None and groups[2] is not None:
+                queue_windows += 1
+            for name, value in zip(fields, groups):
+                # Original observations have no FIFO metrics. Keep missing
+                # evidence distinct from a measured queue size of zero.
+                if value is None:
+                    continue
                 number = int(value)
                 totals[name] = max(totals[name], number) if name in maximums else totals[name] + number
-    return {"observed_windows": windows, "metrics": totals}
+    return {"observed_windows": windows, "queue_evidence_windows": queue_windows,
+            "metrics": totals}
 
 
 def aggregate_coop(lines: list[str]) -> dict:
