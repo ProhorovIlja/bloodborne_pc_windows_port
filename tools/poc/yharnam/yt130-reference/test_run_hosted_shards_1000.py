@@ -45,11 +45,12 @@ class HostedShards1000Tests(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--players")+1], "1000")
         self.assertEqual(cmd[cmd.index("--capacity")+1], "800")
         self.assertEqual(cmd[cmd.index("--cross")+1], "mixed")
-        self.assertEqual(cmd[-1], "--owner-fps 30 --follower-fps 8")
-        self.assertNotIn("--build", cmd[-1])
+        self.assertEqual(cmd[-1], "--build '" + m.BUILD + "' --owner-fps 30 --follower-fps 8")
+        import shlex
+        self.assertEqual(shlex.split(cmd[-1])[1], m.BUILD)
         args.profile = "reduced"
         self.assertEqual(m.build_command(args, 1, 250, 0)[-1],
-                         "--owner-fps 10 --follower-fps 3")
+                         "--build '" + m.BUILD + "' --owner-fps 10 --follower-fps 3")
         with self.assertRaises(ValueError):
             m.build_command(args, 5, 1000, 3)
 
