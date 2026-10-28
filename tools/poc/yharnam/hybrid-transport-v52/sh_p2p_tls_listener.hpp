@@ -212,7 +212,10 @@ protected:
                 // names, peers, endpoints, epoch or pair binding.
                 const auto bound=identity_.Resolve(s->peerCertificate());
                 if(!bound || !session->StillBound(identity_,s->peerCertificate())) {
-                    pair_lease_.Clear();session->Clear();s->abort();return;
+                    // An unbound/replayed TLS session never received a pair
+                    // half. It has NO authority to revoke another pair.
+                    // Take() alone validates/revokes the actual recipients.
+                    session->Clear();s->abort();return;
                 }
                 const qint64 stamp=QDateTime::currentMSecsSinceEpoch();
                 SeamlessHunt::Hybrid::SecurePeerOfferV84 grant{};
@@ -240,9 +243,15 @@ protected:
                 // V85/V84 standalone grants or a TLS session rebind.
                 static const QByteArray prefix="YT-P2P/V91 READY ";
                 const auto bound=identity_.Resolve(s->peerCertificate());
+                // An unrelated verified TLS session, including a fresh
+                // session for A/B without a delivered V90 offer, cannot
+                // revoke an already issued pair by sending READY directly.
+                // An actual issued pair member's invalid proof still revokes.
                 if(!session->PairedIssued() || !bound ||
-                   !session->StillBound(identity_,s->peerCertificate()) ||
-                   pending->size()!=prefix.size()+64+1 ||
+                   !session->StillBound(identity_,s->peerCertificate())) {
+                    session->Clear();s->abort();return;
+                }
+                if(pending->size()!=prefix.size()+64+1 ||
                    !pending->endsWith('\n')) {
                     pair_lease_.Clear();session->Clear();s->abort();return;
                 }
