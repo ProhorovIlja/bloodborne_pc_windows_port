@@ -848,7 +848,7 @@ def run(checkout:Path, repo:Path, out:Path):
     (out/"SEAMLESS-HUNT-COMPOSE-MANIFEST.json").write_text(
         json.dumps(meta,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
     print("COMPOSE_PASS",len(files),"files; pinned source",PIN)
-    print("NOT A GAME BUILD. Server-side authenticated P2P and Qt lobby are missing.")
+    print("NOT A GAME BUILD. YT server has authoritative peer discovery; public Direct UDP / ACK handover remain OFF.")
     return meta
 
 if __name__=="__main__":
