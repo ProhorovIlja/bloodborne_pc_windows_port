@@ -1,0 +1,85 @@
+name: Seamless Hunt V101 512 isolated original Qt P2P pair leases
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_pair_registry_v101.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_pair_registry_v101.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v101-independent-pair-registry.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_pair_registry_v101.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_pair_registry_v101.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v101-independent-pair-registry.yml
+permissions:
+  contents: read
+jobs:
+  source-guard:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify original TLS listener uses independent scoped leases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          root=Path('tools/poc/yharnam/hybrid-transport-v52')
+          header=(root/'sh_p2p_tls_listener.hpp').read_text()
+          registry=(root/'sh_p2p_pair_registry_v101.hpp').read_text()
+          compose=Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
+          assert '#include "sh_p2p_pair_registry_v101.hpp"' in header
+          assert 'P2PPairRegistryV101 pair_registry_{};' in header
+          assert 'pair_registry_.Begin(' in header
+          assert 'pair_registry_.Take(' in header
+          assert 'pair_registry_.MarkReady(' in header
+          assert header.count('pair_registry_.RevokeRecipient(bound->account)')==4
+          assert 'pair_lease_.Clear();' not in header
+          assert 'pair_lease_.Take(' not in header
+          assert 'pair_lease_.MarkReady(' not in header
+          assert 'kMaxPairs=512' in registry
+          assert 'by_member_.contains(first) || by_member_.contains(second)' in registry
+          assert 'RevokeRecipient(member);' in registry
+          assert 'entry->lease.Clear();' in registry
+          assert 'sh_p2p_pair_registry_v101.hpp' in compose
+          assert 'direct_egress.Arm(' not in header
+          assert 'listen(QHostAddress::Any' not in header
+          print('SHYT_V101_SCOPED_MULTI_PAIR_NO_PUBLIC_DIRECT_SOURCE_PASS')
+          PY
+  qt-512-pair-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Qt6 and OpenSSL native server deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev libssl-dev pkg-config
+      - name: Compile and exercise 512 simultaneous real crypto leases
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_pair_registry_v101.cpp" \
+            $(pkg-config --cflags --libs Qt6Core) -lcrypto \
+            -o /tmp/shyt-v101-512-pairs
+          /tmp/shyt-v101-512-pairs
+          echo SHYT_V101_QT_512_PARALLEL_PAIR_GRANTS_EPOCH_REVOKE_PASS
