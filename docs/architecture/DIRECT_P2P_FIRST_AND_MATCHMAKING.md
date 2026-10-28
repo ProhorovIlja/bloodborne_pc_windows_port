@@ -64,3 +64,35 @@ Report at baseline, Direct established and mixed NAT fallback:
 - Current live Fornex CLS server SHA256 `8b4b29b3e56414aa60bb53baa28285242b9a482e0a11e8dfe732ddc553094633` from 2026-10-25 friends archive is **already active**, unchanged by this branch. Python game backend at :20443 also remains operational.
 - Real Direct P2P, NAT hole-punching, signed server grants and game-path integration are NOT shipped, regardless of isolated V52–V61 smoke tests.
 - PR #17 Direct transport, PR #19 one-server/CLS inventory, PR #20 Windows FidelityFX compile fix remain separate and unmerged into production.
+
+
+## Verified 2026-10-28 integration findings: don't ship centralized relay as the desired product
+
+This section updates the frozen 2026-10-25 plan with inspected upstream **code patches and test scopes**. It does not enable functionality.
+
+| Source (exact PR/branch) | Verified available | Unshipped or unsafe assumption |
+| --- | --- | --- |
+| Official Yharnam Together `lKaniel/bloodborne-server@v1.3.0` | Native PC launcher, team code/invites, world-authoritative server, encrypted link, relay routing. | Phase-9 peer firewall disables **all** Direct gameplay; server's UDP forwards every game packet. No true hybrid or full public quick-play matchmaking. |
+| CLS `lKaniel/bloodborne-server#412`, `CLSAMG22/amanises-friends` | Friends, requests, search, three join modes (invite only / ask to join / open) and Leave/Remove fix; 52 changed files and author-reported two-player tests. | **OPEN, not merged; WRONG wire values for v1.3!** TeamRequest 16–24 conflicts with 1.3 RULES/ROT/DEATH_MODE 16–18. NEVER merge this `coop.proto` into a v1.3 release. |
+| Kaniel `lKaniel/bloodborne-server#423` (head `14b8493f0d0fa402c33329939091082e2012e349`) | Actual v1.3.1 forward port: **43 files**; team operations 19–27, query field13, join field14, signed-in identity checks, bounded friend searches/requests, per-player friend cache. Author native server 29/29, port 38/38, emulator 1309/1309, headless leave/kick/smoke PASS. | **OPEN, not in v1.3.0 setup.** Open team join in active hunt / Ask accept+decline not run on actual rig. Must bundle matched future client and server, review accounts migration. These are Friends and discoverable/open **teams**, not yet random co-op/invasion/duel finder. |
+| `lKaniel/bloodborne-server#380` | Redis directory, shard discovery, cross-shard moves/invites/Redirect. | OPEN draft, full game cross-shard redirect untested and reported 1500-player synthetic p99 ~2.1s; sharding is NOT Direct P2P. |
+| `CLSAMG22/BBSC` `docs/NETWORK.md` | Independent BBSC game uses native peer gameplay UDP, shadNet STUN/Matching2/summon, host progress. | **Different network/game protocol** from YT 1.3; 0.0.2 BBSC does not mean v1.3 YT P2P/compatible. |
+| `visy/bloodborne_pc_windows_port` `docs/party/network_robustness.md` | Actual serverless peer UDP, NAT traversal, host/party-member relay and reliable party event stream with source and simulated/one-PC Internet tests. | Different host-authoritative world/party protocol. Its parity log acknowledges real two-PC strict NAT, four-player join and disconnect problems; cannot drop into YT without adaptation. |
+| Our existing `#17` | Source/tested secure pair grant, directional crypto, signed NAT probes on original socket, native Windows/Linux tests. | **Gameplay Direct OFF**, no remote X.509 enrollment, NAT candidate refresh, final-ready two-PC barrier, complete encrypted UDP game channel, reliable GameLink ACK/seq cutover or measured VPS egress drop. |
+| Our existing `#19` | Shared deny-by-default unified matchmaking policy for Co-op / Invasion / Duel across menu, bell, friends, room browser and quick play. | Only policy C++ tests: not connected to native Qt server, game-menu RPC or client UI, and no public room search implemented. |
+
+### One critical path, not another round of isolated micro-PRs
+
+1. **Direct data plane before public server release:** finish existing #17 on native YT game original `P2PTransport::host_socket`. Server grants pair/role/map/epoch scoped candidates only after authenticated room membership; two peers verify ICE-like probes and both-sided ready; encrypt gameplay, replay protection, revoke on map/host/party change. Offload peer-to-peer game frames **only** when the original channel policy and actual owner/map permit; world persistence, matchmaking/auth, authoritative kill/flag decisions stay on server. A safe path must fall back to relay under CGNAT, revoked grants or loss. Reliable channels require sequence/ACK/resend migration tests, not a switch toggled by an open socket. Full mesh only inside a small team, never 200x200.
+2. **Join and matchmaking on the SAME protocol:** use upstream #423, not #412, as base for Friends / Open Team / Ask-to-Join (v1.3.1 schema 19–27). Then wire #19 single server-authorized policy for random Co-op, Duel and opt-in Invasion; room size, account blocking, version, PvP consent, host migration and sharding cannot be client-supplied. Team listing is not automatic PvP matchmaking.
+3. **Measured release gate:** native Windows game + Linux shadNet + native launcher BUILT FROM SAME matched protocol; 2 real PCs on different NATs with actual direct frames and forced relay fallback, stable host/guest gameplay/lamps/bosses/saves for 2h, and 200 mixed pairs with VPS ingress/egress CPU vs relay-only measured. A green 4-player loopback smoke or 500-player centralized-relay stress is NOT sufficient. Privacy opt-out/relay-only; rollback, exact SHA and account migration preserve Fornex.
+4. **Reject false download guidance:** official YT v1.3 installer and current PR50 lab server remain **full relay**. They may be used for private play or diagnostics, but do NOT label either as the user's target scalable Direct/Hybrid + matchmaking product.
+
+Evidence:
+- https://github.com/lKaniel/bloodborne-server/pull/412
+- https://github.com/lKaniel/bloodborne-server/pull/423
+- https://github.com/lKaniel/bloodborne-server/pull/380
+- https://github.com/CLSAMG22/BBSC/blob/main/docs/NETWORK.md
+- https://github.com/visy/bloodborne_pc_windows_port/blob/master/docs/party/network_robustness.md
+- https://github.com/visy/bloodborne_pc_windows_port/blob/master/docs/party/ERSC_PARITY.md
+- https://github.com/ProhorovIlja/bloodborne_pc_windows_port/pull/17
