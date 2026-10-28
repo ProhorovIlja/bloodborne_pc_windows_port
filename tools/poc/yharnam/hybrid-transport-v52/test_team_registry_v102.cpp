@@ -111,6 +111,42 @@ static void ThreePlayerMeshIsolation() {
     assert(registry.Count()==0);
     assert(!registry.RevokePair(ab));
 }
+// A team is host + FOUR guests: 5*4/2=10 independent P2P pair routes.
+// A newcomer outside this team must NEVER inherit a former team's grant.
+static void FiveHunterFullMesh() {
+    World world;
+    const QVector<QByteArray> hunters={"host","guest1","guest2","guest3","guest4"};
+    for(int i=0;i<hunters.size();++i)
+        world.Add(hunters[i],static_cast<quint64>(101+i),
+                  static_cast<quint16>(43000+i));
+    P2PTeamPairRegistryV102 registry;
+    QSet<std::uint64_t> grants;
+    for(int i=0;i<hunters.size();++i)
+        for(int j=i+1;j<hunters.size();++j) {
+            std::uint64_t pair=0;
+            assert(registry.Begin(hunters[i],hunters[j],world.Resolve(),1000,pair));
+            assert(pair && !grants.contains(pair));
+            grants.insert(pair);
+        }
+    assert(grants.size()==10);
+    assert(registry.Count()==10);
+    for(const auto& member:hunters)
+        assert(registry.AvailableFor(member,1001).size()==4);
+    // Peer cannot claim a sixth team membership simply by asking TLS to
+    // look up or take a grant; team membership lives in YT BloodborneWorld.
+    assert(registry.AvailableFor("sixth",1001).empty());
+    SecurePeerOfferV84 forged{};
+    for(const auto grant:grants)
+        assert(!registry.Take("sixth",grant,888,1002,forged));
+    assert(registry.Count()==10);
+    assert(registry.RevokeAccount("guest4")==4);
+    assert(registry.Count()==6);
+    for(const auto& member:QVector<QByteArray>{"host","guest1","guest2","guest3"})
+        assert(registry.AvailableFor(member,1003).size()==3);
+    assert(registry.AvailableFor("guest4",1003).empty());
+    registry.Sweep(11000);
+    assert(registry.Count()==0);
+}
 static void EpochConsentAndLimits() {
     World world;
     world.Add("A",1,40001);world.Add("B",2,40002);
@@ -174,6 +210,7 @@ static void EpochConsentAndLimits() {
 }
 int main() {
     ThreePlayerMeshIsolation();
+    FiveHunterFullMesh();
     EpochConsentAndLimits();
     return 0;
 }
