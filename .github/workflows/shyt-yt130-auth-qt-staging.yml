@@ -259,7 +259,7 @@ jobs:
           python tools/poc/yharnam/yt130-reference/collect_load_diagnostics.py \
             yt130-smoke4.stderr --output yt130-smoke4-diagnostics.log
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
-            yt130-smoke4.jsonl --expected-players 4
+            yt130-smoke4.jsonl --expected-players 4 --require-full-gameplay
       - name: Compare ORIGINAL YT1.3 Hosted true 1 vs 3 shards at 250/500/1000 active gameplay
         if: always()
         shell: bash
