@@ -184,6 +184,58 @@ static void WorldRevocationIsImmediateEvenBeforeTimer() {
     assert(registry.Count()==0);
     assert(registry.AvailableFor("A",1005).empty());
 }
+// Capacity regression for 200 independent users distributed across 40
+// full five-hunter teams. This verifies bounded grant bookkeeping only,
+// NOT actual 200-PC game traffic, NAT, VPS latency, CPU or throughput.
+static void FortyIsolatedFiveHunterTeams() {
+    constexpr int kTeams=40,kHunters=5,kLinks=400;
+    std::array<World,kTeams> worlds{};
+    std::array<std::array<QByteArray,kHunters>,kTeams> names{};
+    P2PTeamPairRegistryV102 registry;
+    for(int t=0;t<kTeams;++t) {
+        for(int i=0;i<kHunters;++i) {
+            const auto member=QByteArray("team-")+QByteArray::number(t)+
+                QByteArray("-hunter-")+QByteArray::number(i);
+            names[static_cast<std::size_t>(t)][static_cast<std::size_t>(i)]
+                =member;
+            worlds[static_cast<std::size_t>(t)].Add(
+                member,static_cast<quint64>(t*100+i+1),
+                static_cast<quint16>(30000+t*5+i));
+        }
+        for(int i=0;i<kHunters;++i)
+            for(int j=i+1;j<kHunters;++j) {
+                std::uint64_t id=0;
+                auto& team=names[static_cast<std::size_t>(t)];
+                assert(registry.Begin(
+                    team[static_cast<std::size_t>(i)],
+                    team[static_cast<std::size_t>(j)],
+                    worlds[static_cast<std::size_t>(t)].Resolve(),
+                    3000,id));
+                assert(id);
+            }
+    }
+    assert(registry.Count()==kLinks);
+    for(const auto& team:names)
+        for(const auto& hunter:team)
+            assert(registry.AvailableFor(hunter,3001).size()==4);
+    // No grant for an unconnected outsider or for a member of
+    // a different full team. Reusing a single world resolver cannot
+    // accidentally authorize a cross-team link.
+    std::uint64_t bad=123;
+    assert(!registry.Begin(
+        names[0][0],names[1][0],worlds[0].Resolve(),3001,bad));
+    assert(bad==0 && registry.Count()==kLinks);
+    assert(registry.RevokeAccount(names[0][0])==4);
+    assert(registry.Count()==kLinks-4);
+    for(int i=1;i<kHunters;++i)
+        assert(registry.AvailableFor(names[0][static_cast<std::size_t>(i)],
+                                     3001).size()==3);
+    for(int t=1;t<kTeams;++t)
+        for(const auto& hunter:names[static_cast<std::size_t>(t)])
+            assert(registry.AvailableFor(hunter,3001).size()==4);
+    registry.Sweep(13000);
+    assert(registry.Count()==0);
+}
 static void EpochConsentAndLimits() {
     World world;
     world.Add("A",1,40001);world.Add("B",2,40002);
@@ -253,6 +305,7 @@ int main() {
     ThreePlayerMeshIsolation();
     FiveHunterFullMesh();
     WorldRevocationIsImmediateEvenBeforeTimer();
+    FortyIsolatedFiveHunterTeams();
     EpochConsentAndLimits();
     return 0;
 }
