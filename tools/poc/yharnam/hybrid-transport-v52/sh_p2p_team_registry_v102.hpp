@@ -73,7 +73,8 @@ public:
         for(const auto id:by_member_.value(member)) {
             const auto entry=by_pair_.value(id);
             if(entry && TimeValid(*entry,now_ms) &&
-               entry->lease.HasOutstanding(now_ms))
+               entry->lease.HasOutstanding(now_ms) &&
+               entry->lease.StillAuthorized())
                 result.append(id);
         }
         std::sort(result.begin(),result.end()); // stable LIST response
@@ -163,7 +164,8 @@ public:
         QVector<std::uint64_t> expired;
         for(auto it=by_pair_.cbegin();it!=by_pair_.cend();++it) {
             const auto& e=*it.value();
-            if(!TimeValid(e,now_ms) || !e.lease.HasOutstanding(now_ms))
+            if(!TimeValid(e,now_ms) || !e.lease.HasOutstanding(now_ms) ||
+               !e.lease.StillAuthorized())
                 expired.append(it.key());
         }
         for(const auto id:expired)RevokePair(id);
