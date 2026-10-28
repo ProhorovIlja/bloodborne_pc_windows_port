@@ -52,10 +52,10 @@ class ValidatorTests(unittest.TestCase):
                 "packets_lost": 0, "udp_buffer_drops": 0,
                 "relay_ms_p99": 0.4
             }
-            p.write_text(json.dumps(full) + "\\n")
+            p.write_text(json.dumps(full) + "\n")
             self.assertEqual(mod.load(p, 4, require_full_gameplay=True)["playing"], 4)
             partial = full | {"packets_sent": 2091, "packets_received": 264}
-            p.write_text(json.dumps(partial) + "\\n")
+            p.write_text(json.dumps(partial) + "\n")
             # This is precisely the false green reported by PR45.
             self.assertEqual(mod.load(p, 4)["playing"], 4)
             with self.assertRaises(ValueError):
@@ -69,7 +69,7 @@ class ValidatorTests(unittest.TestCase):
                 full | {"packets_sent": 1, "packets_received": 1}
             ):
                 with self.subTest(bad=bad):
-                    p.write_text(json.dumps(bad) + "\\n")
+                    p.write_text(json.dumps(bad) + "\n")
                     with self.assertRaises(ValueError):
                         mod.load(p, 4, require_full_gameplay=True)
 
