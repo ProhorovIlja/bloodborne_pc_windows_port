@@ -109,9 +109,12 @@ public:
         if(nonsecret_test_stage)*nonsecret_test_stage=6;
         // V102 pair binding is a server-issued opaque selector returned
         // through certificate-bound LIST; never an account or endpoint.
+        char pair_selector[16]{};
+        constexpr char selector_lut[]="0123456789abcdef";
+        for(unsigned i=0;i<16;++i)
+            pair_selector[15U-i]=selector_lut[(v102_pair_id>>(4U*i))&0x0fU];
         const std::string id_hex=v102_pair_id?
-            QByteArray::number(v102_pair_id,16).rightJustified(16,'0').toStdString():
-            std::string{};
+            std::string(pair_selector,sizeof(pair_selector)):std::string{};
         const std::string offer_command=v102_pair_id?
             "YT-P2P/V102 OFFER "+id_hex+"\n":
             "YT-P2P/V90 OFFER\n";
