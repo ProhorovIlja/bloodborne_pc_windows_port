@@ -25,7 +25,11 @@ class SourceWatchTests(unittest.TestCase):
                          "droogie/bbhost", "Mrsuss60/bloodborne_pc_windows_port",
                          "Awakenchan/LanternEngine", "DarkIzuku/bloodborne_pc",
                          "Wozzardman/shadnet-p2p"}.issubset(names))
-        self.assertGreaterEqual(len(names), 11)
+        self.assertGreaterEqual(len(names), 12)
+        self.assertGreaterEqual(len(self.data["pull_requests"]), 41)
+        self.assertIn("Jgamrot/yharnam-pc", names)
+        self.assertIn(("Jgamrot/yharnam-pc", 77),
+                      {(p["repo"], p["number"]) for p in self.data["pull_requests"]})
         self.assertGreaterEqual(len(self.data["branches"]), 8)
         self.assertIn(("Awakenchan/LanternEngine", "online-shadps4-0.20"),
                       {(x["repo"], x["branch"]) for x in self.data["branches"]})
