@@ -98,10 +98,23 @@ def patch_main(src: str) -> str:
             qgetenv("SHYT_P2P_TLS_THIRD_CLIENT_CERT_SHA256");
         const QByteArray third_account =
             qgetenv("SHYT_P2P_TLS_THIRD_LINKED_ONLINE_ID");
+        // Optional 4th/5th independent client certificates: stage ALL
+        // ten edges only when five live authenticated YT hunters consent.
+        const QByteArray fourth_pin =
+            qgetenv("SHYT_P2P_TLS_FOURTH_CLIENT_CERT_SHA256");
+        const QByteArray fourth_account =
+            qgetenv("SHYT_P2P_TLS_FOURTH_LINKED_ONLINE_ID");
+        const QByteArray fifth_pin =
+            qgetenv("SHYT_P2P_TLS_FIFTH_CLIENT_CERT_SHA256");
+        const QByteArray fifth_account =
+            qgetenv("SHYT_P2P_TLS_FIFTH_LINKED_ONLINE_ID");
         const QByteArray team_enabled=qgetenv("SHYT_P2P_TLS_AUTOTEAM_TEST");
         if ((!team_enabled.isEmpty() && team_enabled!="0" &&
              team_enabled!="1") ||
             (third_pin.isEmpty()!=third_account.isEmpty()) ||
+            (fourth_pin.isEmpty()!=fourth_account.isEmpty()) ||
+            (fifth_pin.isEmpty()!=fifth_account.isEmpty()) ||
+            (!fifth_pin.isEmpty() && fourth_pin.isEmpty()) ||
             (!third_account.isEmpty() &&
              (third_account==linked_account ||
               third_account==second_account))) {
@@ -117,6 +130,24 @@ def patch_main(src: str) -> str:
             qCritical() << "V102 third mTLS certificate/game account invalid";
             return 1;
         }
+        if(!fourth_pin.isEmpty() &&
+           !p2p_tls.ConfigureLocalIdentity(
+               fourth_pin,fourth_account,
+               [&server](const QByteArray& id) {
+                   return server.CurrentDirectAccountEpoch(id);
+               })) {
+            qCritical() << "V102 fourth pinned mTLS game identity invalid";
+            return 1;
+        }
+        if(!fifth_pin.isEmpty() &&
+           !p2p_tls.ConfigureLocalIdentity(
+               fifth_pin,fifth_account,
+               [&server](const QByteArray& id) {
+                   return server.CurrentDirectAccountEpoch(id);
+               })) {
+            qCritical() << "V102 fifth pinned mTLS game identity invalid";
+            return 1;
+        }
         if(team_enabled=="1") {
             if(cert_pin.isEmpty() || linked_account.isEmpty() ||
                second_pin.isEmpty() || second_account.isEmpty() ||
@@ -129,7 +160,8 @@ def patch_main(src: str) -> str:
             team_clock->setInterval(1000);
             QObject::connect(team_clock,&QTimer::timeout,&p2p_tls,
                 [&server,&p2p_tls,a=linked_account,b=second_account,
-                 c=third_account]() {
+                 c=third_account,d=fourth_account,
+                 e=fifth_account]() {
                     // Only original authenticated game parties + both
                     // players' live consent can materialize each edge.
                     // Repeated timer attempts never overwrite valid leases.
