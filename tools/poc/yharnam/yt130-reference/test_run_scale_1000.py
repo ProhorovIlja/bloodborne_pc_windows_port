@@ -30,11 +30,13 @@ class Scale1000PlanTests(unittest.TestCase):
             bbload = Path("/tmp/yt/bbload")
             team_size = 2
             profile = "active"
+            ramp_ms = 20
         command = m.make_command(Args(), 1000, 2)
         self.assertEqual(command[command.index("--players") + 1], "1000")
         self.assertEqual(command[command.index("--team-size") + 1], "2")
         self.assertEqual(command[command.index("--processes") + 1], "10")
         self.assertIn("--owner-fps 30 --follower-fps 8", command[-1])
+        self.assertEqual(command[command.index("--ramp-ms")+1], "20")
         self.assertIn("CheckServerBuild=false", command)
         self.assertEqual(m.processes(2048), 21)
         Args.profile = "reduced"
@@ -68,6 +70,38 @@ class Scale1000PlanTests(unittest.TestCase):
         self.assertEqual(
             m.inspect(json.dumps(self.playing(p99=225)), 0, 1000)["quality"],
             "RELAY_LATENCY_DEGRADED")
+
+    def test_private_temp_server_diagnostics_are_only_aggregate(self):
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="yt130-test-") as tmp:
+            root = Path(tmp)
+            sub = root / "shadnet-load-fixture"
+            sub.mkdir()
+            (sub / "shadnet.log").write_text(
+                "INFO YT130_EVENTLOOP read_batches=1 read_datagrams=8"
+                " read_busy_us=220 max_read_batch_us=220"
+                " max_read_batch_datagrams=8 world_ticks=1"
+                " world_busy_us=100 max_world_busy_us=100"
+                " max_world_gap_us=81000 late_world_ticks=1\n"
+                "YT130_UDP_FAIR_QUEUE slices=3 handled=8 max_slice_us=1300"
+                " max_queued=12 overload_drops=3 queued=1\n"
+                "refused player_secret abc123 at 192.0.2.55\n"
+                "hello player_secret abc123\n"
+            )
+            report = m.inspect_disposable_server_logs(root)
+            self.assertEqual(report["logs_found"], 1)
+            self.assertEqual(report["eventloop"]["metrics"]["late_world_ticks"], 1)
+            self.assertEqual(report["fair_queue"]["metrics"]["overload_drops"], 3)
+            self.assertEqual(report["server_log_events"]["refused"], 1)
+            self.assertNotIn("abc123", json.dumps(report))
+            self.assertNotIn("192.0.2.55", json.dumps(report))
+
+    def test_missing_temporary_source_never_fakes_diagnostics(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            report = m.inspect_disposable_server_logs(Path(tmp))
+            self.assertEqual(report["logs_found"], 0)
+            self.assertEqual(report["folder_count_mismatch"], 0)
 
     def test_no_green_when_generator_times_out_or_fakes_numbers(self):
         self.assertEqual(m.inspect("", 124, 1000)["quality"], "TIMEOUT")
