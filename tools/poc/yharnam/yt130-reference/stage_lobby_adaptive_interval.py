@@ -52,26 +52,6 @@ CACHED_JOIN_STATE = """    if (arrived) {
         SendTo(member, envelope, now_ms);
     }"""
 
-ORIGINAL_FULL_SEND = """            if (hosted.enabled) {
-                // Only to the players whose own state changed.
-                std::string bytes = envelope.lobby_state().SerializeAsString();
-                std::string& sent = lobby_sent[member.lobby];
-                if (sent == bytes) {
-                    continue;
-                }
-                sent = std::move(bytes);
-            }
-            SendTo(member, envelope, now_ms);"""
-DEDUP_FULL_SEND = """            // Only deliver a full original state if its content changed.
-            // Do not modify team, invitation, world or visibility contents.
-            std::string bytes = envelope.lobby_state().SerializeAsString();
-            std::string& sent = lobby_sent[member.lobby];
-            if (sent == bytes) {
-                continue;
-            }
-            sent = std::move(bytes);
-            SendTo(member, envelope, now_ms);"""
-
 CPP_TEST = r"""int NonHostedFullLobbyIsAdaptiveWithoutDelayingFirstHello() {
   Service service{{}};
   const qint64 now = 1'000'000;
@@ -130,7 +110,7 @@ def once(source, old, new, label):
     return source.replace(old, new)
 
 def rewrite(cpp, test):
-    if "nonhosted_lobby_interval_ms" in cpp or "NonHostedFullLobbyIsAdaptive" in test:
+    if "nonhosted_lobby_interval_ms" in cpp or "NonHostedFullLobbyIsAdaptive" in test or "first-join cache" in cpp:
         raise ValueError("Already staged")
     if "NonHostedTeamEditsAreCoalescedAndStartStillWorks" not in test:
         raise ValueError("Native first-join and synchronous TeamStart test missing")
@@ -139,8 +119,12 @@ def rewrite(cpp, test):
     cpp = once(cpp, OLD_TICK, NEW_TICK, "world Tick throttle")
     cpp = once(cpp, ORIGINAL_JOIN_STATE, CACHED_JOIN_STATE,
                "original immediate lobby Hello")
-    cpp = once(cpp, ORIGINAL_FULL_SEND, DEDUP_FULL_SEND,
-               "only send byte-different full lobby state")
+    # Stage_lobby_dedupe.py, applied earlier, ALREADY compares the complete
+    # original state bytes for all recipients. Only the first-join cache was
+    # missing. Require the earlier change rather than stage it twice.
+    import stage_lobby_dedupe as dedupe
+    if cpp.count(dedupe.AFTER) != 1:
+        raise ValueError("Required existing nonHosted full-snapshot dedupe missing")
     return cpp, once(test, OLD_TEST, NEW_TEST, "native 65/130 member test")
 
 def git(root, *args):
