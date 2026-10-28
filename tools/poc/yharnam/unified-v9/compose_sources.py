@@ -808,6 +808,16 @@ def run(checkout:Path, repo:Path, out:Path):
                 for name in v99.FILES}
     files.update(v99.patch(v99_inputs))
     meta["applied"].append("V99 upstream PR413 revived co-op guests regain boss AI targeting after stable 3s, map visit and info-pointer fail-closed guards")
+    # V100: the existing original Qt shadNet daemon may (only with an
+    # explicit local dev opt-in and two distinct pinned X509 certificates)
+    # stage a real current, mutually consenting YT world pair automatically.
+    # This is NOT a public Internet listener or Direct game authorization.
+    v100_path=metrics_dir/"patch_native_server_pair_autostage_v100.py"
+    v100=types.ModuleType("sh_v100_real_game_pair_local")
+    v100.__file__=str(v100_path)
+    exec(compile(v100_path.read_text("utf-8"),str(v100_path),"exec"),v100.__dict__)
+    files[v100.MAIN]=v100.patch_main(files[v100.MAIN].decode("utf-8")).encode("utf-8")
+    meta["applied"].append("V100 original Qt server current YT game pair auto-stage only under two pinned local mTLS test identities; Direct OFF")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
