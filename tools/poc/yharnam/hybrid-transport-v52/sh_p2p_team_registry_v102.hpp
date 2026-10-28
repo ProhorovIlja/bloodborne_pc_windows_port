@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <set>
+#include <vector>
 #include <utility>
 
 namespace SeamlessHunt::Hybrid {
@@ -123,6 +125,32 @@ public:
         drop(entry->a);drop(entry->b);
         by_pair_.erase(it);
         return true;
+    }
+    // Original game-world discovery is the ONLY source of permitted pairs.
+    // Drop pending mTLS grants as soon as a member leaves, opts out, loads,
+    // changes owner/map/party or loses its authenticated game link.
+    // This revokes SERVER pending grants, not game-client keys already issued.
+    std::size_t RevokeNotIn(
+        const std::vector<std::pair<QByteArray,QByteArray>>& live_pairs) {
+        using Key=std::pair<QByteArray,QByteArray>;
+        const auto canonical=[](QByteArray a,QByteArray b)->Key {
+            if(b<a)std::swap(a,b);
+            return {std::move(a),std::move(b)};
+        };
+        std::set<Key> permitted;
+        for(const auto& [a,b]:live_pairs)
+            if(!a.isEmpty() && !b.isEmpty() && a!=b)
+                permitted.insert(canonical(a,b));
+        QVector<std::uint64_t> outdated;
+        for(auto it=by_pair_.cbegin();it!=by_pair_.cend();++it) {
+            const auto& entry=*it.value();
+            if(!permitted.contains(canonical(entry.a,entry.b)))
+                outdated.push_back(it.key());
+        }
+        std::size_t revoked=0;
+        for(const auto id:outdated)
+            if(RevokePair(id))++revoked;
+        return revoked;
     }
     std::size_t RevokeAccount(const QByteArray& member) noexcept {
         const auto ids=by_member_.value(member);
