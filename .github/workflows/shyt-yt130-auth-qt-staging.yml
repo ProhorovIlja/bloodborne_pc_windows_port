@@ -272,6 +272,61 @@ jobs:
             yt130-smoke4.stderr --output yt130-smoke4-diagnostics.log
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
             yt130-smoke4.jsonl --expected-players 4
+          # Earlier smoke accepted 4 PLAYING with only 12.6% game packets delivered.
+          # Reject false positives before ever publishing an experimental binary.
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          reports = [json.loads(row) for row in Path("yt130-smoke4.jsonl").read_text().splitlines() if row.strip().startswith("{")]
+          if len(reports) != 1:
+              raise SystemExit("EXPECTED_EXACTLY_ONE_REAL_4_PEER_SMOKE_REPORT")
+          m = reports[0]
+          sent = m.get("packets_sent", 0)
+          received = m.get("packets_received", 0)
+          good = (m.get("players") == 4 and m.get("playing") == 4
+                  and m.get("refused", 0) == 0 and sent >= 80
+                  and received >= sent * 0.99 and m.get("packets_lost", 1) == 0
+                  and m.get("udp_buffer_drops", 1) == 0
+                  and m.get("relay_ms_p99", 999) <= 50)
+          if not good:
+              raise SystemExit(f"STRICT_4_PEER_DELIVERY_FAIL players={m.get('playing')} sent={sent} received={received}")
+          print(f"STRICT_4_PEER_DELIVERY_PASS players=4 sent={sent} received={received} p99_ms={m['relay_ms_p99']}")
+          PY
+      - name: Package reproducible native server candidate after real Qt CTests and strict 4-peer smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$GITHUB_WORKSPACE/yt130-native-candidate"
+          install -d "$stage"
+          install -m 0755 "$RUNNER_TEMP/yt-build/shadnet" "$stage/shadnet"
+          git -C "$RUNNER_TEMP/yt-src" diff --binary > "$stage/pinned-source-stage.patch"
+          test -s "$stage/pinned-source-stage.patch"
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "0645740a33ae21c56df3b4a0d9777086dbca6053"
+          ( cd "$stage" && sha256sum shadnet pinned-source-stage.patch > SHA256SUMS )
+          ldd "$stage/shadnet" > "$stage/dynamic-linker-dependencies.txt"
+          if grep -q "not found" "$stage/dynamic-linker-dependencies.txt"; then
+            echo "Native binary has unresolved shared libraries" >&2
+            exit 1
+          fi
+          cat > "$stage/EXPERIMENTAL-NOT-FOR-PRODUCTION.txt" <<EOF
+          GitHub commit: $GITHUB_SHA
+          Original Yharnam Together SHA: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          Native binary: Linux x86_64 Qt6 shadnet (NOT Windows game client)
+          CI tests: 11 original C++ CTests + strict synthetic 4-player game packet delivery
+          IMPORTANT: this candidate still FAILED strict 200-client/1000-client load
+          in independent runs; do NOT replace production seamlesshunt.com/Fornex.
+          Requires official upstream Qt6/runtime dependencies; not a portable static build.
+          No credentials, database, firewall or production configuration is included.
+          Compare SHA256SUMS and stage patch against the pinned original checkout.
+          EOF
+          echo "YT130_NATIVE_EXPERIMENTAL_BINARY_PACKAGED_AFTER_STRICT_SMOKE"
+      - name: Upload tested experimental Linux shadnet executable + SHA256 + exact source patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-native-shadnet-EXPERIMENTAL-do-not-deploy
+          path: yt130-native-candidate/
+          if-no-files-found: error
+          retention-days: 14
       - name: Compare ORIGINAL YT1.3 Hosted true 1 vs 3 shards at 250/500/1000 active gameplay
         if: always()
         shell: bash
