@@ -19,14 +19,15 @@
 #include <memory>
 #include "sh_p2p_tls_identity.hpp" // V79 pinned cert/account
 #include "sh_p2p_tls_key_session.hpp" // V80 per TLS connection ephemeral key
-#include "sh_p2p_pair_registry_v101.hpp" // bounded independent current-world grants
+#include "sh_p2p_pair_registry_v101.hpp" // legacy V90 one-pair account selection
+#include "sh_p2p_team_registry_v102.hpp" // V102 3+ native hunter team mesh
 
 namespace SeamlessHunt::Hybrid {
 class P2PTlsListener final : public QTcpServer {
 public:
     explicit P2PTlsListener(QObject* parent=nullptr) : QTcpServer(parent) {}
     static constexpr int kMaxSessions=32;
-    static constexpr int kMaxInputBytes=96; // V91 fixed 64-hex mTLS READY proof
+    static constexpr int kMaxInputBytes=128; // V102 pair ID + 64-hex HMAC proof
     bool ConfigureLocalIdentity(const QByteArray& pin_sha256_hex,
                                 const QByteArray& account,
                                 P2PTlsIdentity::LiveEpoch live) {
@@ -65,6 +66,22 @@ public:
         return pair_registry_.Begin(
             first,second,std::move(authoritative),
             static_cast<std::uint64_t>(now));
+    }
+
+    // V102: multiple disjoint SHG2 links may share a hunter in one team.
+    // Out-of-band operator/world ONLY. No client may stage any pair.
+    bool ConfigureLocalTeamPairV102(
+        const QByteArray& first,const QByteArray& second,
+        P2PTeamPairRegistryV102::Resolver authoritative,
+        std::uint64_t& out_pair_id) {
+        out_pair_id=0;
+        if(QThread::currentThread()!=thread() ||
+           (isListening() && serverAddress()!=QHostAddress::LocalHost))
+            return false;
+        const auto now=QDateTime::currentMSecsSinceEpoch();
+        if(now<=0)return false;
+        return team_registry_.Begin(first,second,std::move(authoritative),
+                                    static_cast<std::uint64_t>(now),out_pair_id);
     }
 
     // An explicitly enabled, isolated loopback smoke-test endpoint. Production
@@ -115,6 +132,7 @@ protected:
         s->setSslConfiguration(ssl_);
         const auto pending=std::make_shared<QByteArray>();
         const auto session=std::make_shared<P2PTlsKeySession>();
+        const auto v102_selected=std::make_shared<std::uint64_t>(0);
         QObject::connect(s,&QSslSocket::disconnected,this,[this,s] {
             clients_.remove(s);
             s->deleteLater();
@@ -129,7 +147,7 @@ protected:
                 s->sessionProtocol()!=QSsl::TlsV1_3)
                 s->abort();
         });
-        QObject::connect(s,&QSslSocket::readyRead,s,[this,s,pending,session] {
+        QObject::connect(s,&QSslSocket::readyRead,s,[this,s,pending,session,v102_selected] {
             if(!s->isEncrypted() ||
                s->sslConfiguration().peerCertificate().isNull() ||
                s->sessionProtocol()!=QSsl::TlsV1_3) {
@@ -206,6 +224,95 @@ protected:
                     session->Clear();s->abort();return;
                 }
                 std::fill(reply.begin(),reply.end(),char(0));
+            } else if (*pending=="YT-P2P/V102 LIST\\n") {
+                // Only one currently authenticated original YT account may
+                // discover its server-issued opaque pair selectors.
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                const auto stamp=QDateTime::currentMSecsSinceEpoch();
+                if(!bound || stamp<=0) {session->Clear();s->abort();return;}
+                const auto ids=team_registry_.AvailableFor(
+                    bound->account,static_cast<std::uint64_t>(stamp));
+                QByteArray response="YT-P2P/V102 PAIRS";
+                for(const auto id:ids)
+                    response+=" "+QByteArray::number(id,16).rightJustified(16,'0');
+                response+='\\n';
+                pending->clear();
+                s->write(response);
+                s->disconnectFromHost();
+            } else if (pending->startsWith("YT-P2P/V102 OFFER ")) {
+                static const QByteArray prefix="YT-P2P/V102 OFFER ";
+                std::uint64_t id=0;
+                if(pending->size()!=prefix.size()+16+1 ||
+                   !pending->endsWith('\\n') ||
+                   !ParsePairSelectorV102(pending->mid(prefix.size(),16),id)) {
+                    session->Clear();s->abort();return;
+                }
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                if(!bound || !session->StillBound(identity_,s->peerCertificate())) {
+                    session->Clear();s->abort();return;
+                }
+                const auto stamp=QDateTime::currentMSecsSinceEpoch();
+                SecurePeerOfferV84 grant{};
+                if(stamp<=0 || !team_registry_.Take(
+                    bound->account,id,bound->current_epoch,
+                    static_cast<std::uint64_t>(stamp),grant)) {
+                    session->Clear();s->abort();return;
+                }
+                QByteArray response;
+                const bool sealed=session->SealOnePairedOfferV90(
+                    identity_,s->peerCertificate(),grant,
+                    static_cast<std::uint64_t>(stamp),response);
+                CryptoDetail::Erase(grant.direction_key);
+                if(!sealed) {
+                    team_registry_.RevokePair(id);
+                    session->Clear();s->abort();return;
+                }
+                pending->clear();
+                if(s->write(response)!=response.size()) {
+                    team_registry_.RevokePair(id);
+                    session->Clear();s->abort();return;
+                }
+                *v102_selected=id; // READY must use this exact TLS ticket
+                std::fill(response.begin(),response.end(),char(0));
+            } else if (pending->startsWith("YT-P2P/V102 READY ")) {
+                static const QByteArray prefix="YT-P2P/V102 READY ";
+                std::uint64_t id=0;
+                const auto bound=identity_.Resolve(s->peerCertificate());
+                if(!session->PairedIssued() || !bound || !*v102_selected ||
+                   !session->StillBound(identity_,s->peerCertificate())) {
+                    session->Clear();s->abort();return;
+                }
+                if(pending->size()!=prefix.size()+16+1+64+1 ||
+                   !pending->endsWith('\\n') ||
+                   !ParsePairSelectorV102(pending->mid(prefix.size(),16),id) ||
+                   id!=*v102_selected) {
+                    team_registry_.RevokePair(*v102_selected);
+                    session->Clear();s->abort();return;
+                }
+                const auto hex=pending->mid(prefix.size()+17,64);
+                QByteArray proof=QByteArray::fromHex(hex);
+                if(proof.size()!=32 || proof.toHex()!=hex.toLower()) {
+                    std::fill(proof.begin(),proof.end(),char(0));
+                    team_registry_.RevokePair(id);
+                    session->Clear();s->abort();return;
+                }
+                const auto stamp=QDateTime::currentMSecsSinceEpoch();
+                bool both_ready=false;
+                const bool accepted=stamp>0 && team_registry_.MarkReady(
+                    bound->account,id,bound->current_epoch,
+                    std::span<const std::uint8_t>(
+                        reinterpret_cast<const std::uint8_t*>(proof.constData()),
+                        static_cast<std::size_t>(proof.size())),
+                    static_cast<std::uint64_t>(stamp),both_ready);
+                std::fill(proof.begin(),proof.end(),char(0));
+                *v102_selected=0;
+                pending->clear();session->Clear();
+                if(!accepted) {s->abort();return;}
+                // This confirms PAIR possession only; not UDP reachability
+                // or GameLink ACK handover. Still no Direct authorization.
+                s->write(both_ready?"YT-P2P/V102 BOTH_READY\\n":
+                                    "YT-P2P/V102 PENDING\\n");
+                s->disconnectFromHost();
             } else if (*pending=="YT-P2P/V90 OFFER\n") {
                 // This intentionally cannot be requested with client-chosen
                 // names, peers, endpoints, epoch or pair binding.
@@ -246,7 +353,7 @@ protected:
                 // session for A/B without a delivered V90 offer, cannot
                 // revoke an already issued pair by sending READY directly.
                 // An actual issued pair member's invalid proof still revokes.
-                if(!session->PairedIssued() || !bound ||
+                if(!session->PairedIssued() || !bound || *v102_selected ||
                    !session->StillBound(identity_,s->peerCertificate())) {
                     session->Clear();s->abort();return;
                 }
@@ -298,7 +405,21 @@ protected:
         s->startServerEncryption();
     }
 private:
+    static bool ParsePairSelectorV102(const QByteArray& hex,
+                                      std::uint64_t& id) {
+        id=0;
+        if(hex.size()!=16)return false;
+        for(const char ch:hex)
+            if(!((ch>='0' && ch<='9') || (ch>='a' && ch<='f')))
+                return false;
+        bool ok=false;
+        const auto n=hex.toULongLong(&ok,16);
+        if(!ok || !n)return false;
+        id=static_cast<std::uint64_t>(n);
+        return true;
+    }
     P2PPairRegistryV101 pair_registry_{};
+    P2PTeamPairRegistryV102 team_registry_{};
     QByteArray offer_peer_{};
     OfferScopeResolver offer_scope_{};
     P2PTlsIdentity identity_{};
