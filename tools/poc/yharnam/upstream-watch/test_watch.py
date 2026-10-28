@@ -26,6 +26,9 @@ class SourceWatchTests(unittest.TestCase):
                          "Awakenchan/LanternEngine", "DarkIzuku/bloodborne_pc",
                          "Wozzardman/shadnet-p2p"}.issubset(names))
         self.assertGreaterEqual(len(names), 11)
+        self.assertGreaterEqual(len(self.data["branches"]), 8)
+        self.assertIn(("Awakenchan/LanternEngine", "online-shadps4-0.20"),
+                      {(x["repo"], x["branch"]) for x in self.data["branches"]})
         # Comparing engines is allowed; the native YT auth/wire is never replaced.
         for name in ("Awakenchan/LanternEngine", "Wozzardman/shadnet-p2p"):
             entry = next(r for r in self.data["repositories"] if r["full_name"] == name)
@@ -50,6 +53,29 @@ class SourceWatchTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 m.load_inventory(file)
 
+    def test_rejects_unsafe_branch_names_and_missing_sha(self):
+        cases = ("../secrets", "/oops", "x//y", "branch?token=yes", "-bad")
+        for name in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                data = json.loads(json.dumps(self.data))
+                data["branches"][0]["branch"] = name
+                p = Path(tmp) / "bad.json"
+                p.write_text(json.dumps(data))
+                with self.assertRaises(ValueError):
+                    m.load_inventory(p)
+        with tempfile.TemporaryDirectory() as tmp:
+            data = json.loads(json.dumps(self.data))
+            data["branches"][0]["known_head"] = "main"
+            p = Path(tmp) / "bad.json"
+            p.write_text(json.dumps(data))
+            with self.assertRaises(ValueError):
+                m.load_inventory(p)
+            data = json.loads(json.dumps(self.data))
+            data["branches"][0]["repo"] = "attacker/unknown"
+            p.write_text(json.dumps(data))
+            with self.assertRaises(ValueError):
+                m.load_inventory(p)
+
     def test_reports_release_head_and_merged_pr_drift(self):
         observed = {}
         for row in self.data["repositories"]:
@@ -57,6 +83,12 @@ class SourceWatchTests(unittest.TestCase):
             observed["/repos/" + name + "/commits/HEAD"] = {"sha": row["known_head"]}
             observed["/repos/" + name + "/releases/latest"] = {
                 "tag_name": row["known_release_tag"]}
+        for row in self.data["branches"]:
+            observed["/repos/" + row["repo"] + "/branches/" + row["branch"]] = {
+                "name": row["branch"], "commit": {"sha": row["known_head"]}}
+        first_branch = self.data["branches"][0]
+        observed["/repos/" + first_branch["repo"] + "/branches/" +
+                 first_branch["branch"]] = {"commit": {"sha": "d" * 40}}
         for row in self.data["pull_requests"]:
             endpoint = "/repos/" + row["repo"] + "/pulls/" + str(row["number"])
             observed[endpoint] = {
@@ -73,6 +105,8 @@ class SourceWatchTests(unittest.TestCase):
         }
         report = m.survey(self.data, observed.__getitem__)
         self.assertTrue(report["repositories"][0]["head_changed"])
+        self.assertTrue(report["branches"][0]["head_changed"])
+        self.assertIn("## Selected active and historical branches", m.markdown(report))
         self.assertTrue(report["repositories"][0]["release_changed"])
         pr = next(p for p in report["pull_requests"] if p["number"] == 423)
         self.assertTrue(pr["state_changed"])
@@ -88,13 +122,31 @@ class SourceWatchTests(unittest.TestCase):
                 raise OSError("rate limited / not published")
             if "/pulls/" in path:
                 raise ValueError("missing PR")
+            if "/branches/" in path:
+                raise ValueError("missing branch")
             return {"sha": "b" * 40}
         report = m.survey(self.data, failing)
         self.assertEqual(len(report["errors"]), len(self.data["repositories"]) +
-                         len(self.data["pull_requests"]))
+                         len(self.data["branches"]) + len(self.data["pull_requests"]))
+        self.assertTrue(all(not b["evidence_complete"] for b in report["branches"]))
         self.assertTrue(all(not x["evidence_complete"] for x in report["repositories"]))
         self.assertTrue(all(not x["state_changed"] for x in report["pull_requests"]))
         self.assertNotIn("Bearer", json.dumps(report))
+
+    def test_branch_missing_or_broken_metadata_is_unknown_not_no_change(self):
+        def get(path):
+            if "/branches/" in path:
+                return {"name": "not-valid", "commit": {"sha": []}}
+            if "/pulls/" in path:
+                return {"state": "open"}
+            if "/releases/" in path:
+                return {"tag_name": "unverified"}
+            return {"sha": "f" * 40}
+        report = m.survey(self.data, get)
+        self.assertTrue(all(not b["evidence_complete"] for b in report["branches"]))
+        self.assertTrue(all(not b["head_changed"] for b in report["branches"]))
+        self.assertEqual(len(report["errors"]), 0)
+        self.assertIn("UNKNOWN", m.markdown(report))
 
     def test_fetch_refuses_arbitrary_urls_and_unsafe_paths(self):
         for path in ("https://evil.invalid/", "/users/oai", "/repos/a/b/../secrets",
