@@ -42,9 +42,13 @@ def patch(files):
         "int TeamHoldsFive() {",
         "renamed capacity test")
     test=one(test,
-        'for (const char *m : {"a", "b", "c", "d", "e"}) {',
-        'for (const char *m : {"a", "b", "c", "d", "e", "f"}) {',
-        "capacity test six players")
+        '''int TeamHoldsFive() {
+  TeamLobby lobby = NewLobby();
+  for (const char *m : {"a", "b", "c", "d", "e"}) {''',
+        '''int TeamHoldsFive() {
+  TeamLobby lobby = NewLobby();
+  for (const char *m : {"a", "b", "c", "d", "e", "f"}) {''',
+        "capacity test six players only inside five-hunter fixture")
     test=one(test,
         '''  for (const char *m : {"b", "c", "d"}) {
     lobby.Request("a", Request(Action::INVITE, m));
