@@ -144,12 +144,32 @@ int main(){
                                a.port_nbo,1004,answer));
         b.Send(answer,a.port_nbo);
         const auto wire_ready=a.Read(b.port_nbo);
+        assert(!initiator.InitiatorVerified());
+        assert(!responder.ResponderVerified());
+        NatProbeCodecV91::Wire receipt{};
         assert(initiator.Complete(wire_ready,htonl(INADDR_LOOPBACK),
-                                  b.port_nbo,1005));
-        assert(initiator.InitiatorVerified());
+                                  b.port_nbo,1005,receipt));
+        assert(!initiator.InitiatorVerified()); // send not reported yet
         assert(!initiator.Complete(wire_ready,htonl(INADDR_LOOPBACK),
-                                   b.port_nbo,1006));
-        assert(!responder.InitiatorVerified());
+                                   b.port_nbo,1006,packet)); // replay
+        assert(!initiator.ReceiptSent(wire_ready)); // wrong wire
+        assert(!responder.CompleteResponder(wire_ready,
+                    htonl(INADDR_LOOPBACK),a.port_nbo,1005));
+        auto forged=receipt;forged[143]^=1;
+        assert(!responder.CompleteResponder(forged,
+                    htonl(INADDR_LOOPBACK),a.port_nbo,1005));
+        assert(!responder.CompleteResponder(receipt,
+                    htonl(INADDR_LOOPBACK),htons(10000),1005));
+        a.Send(receipt,b.port_nbo);
+        assert(initiator.ReceiptSent(receipt));
+        assert(initiator.InitiatorVerified());
+        assert(!initiator.ReceiptSent(receipt));
+        const auto wire_receipt=b.Read(a.port_nbo);
+        assert(responder.CompleteResponder(wire_receipt,
+                    htonl(INADDR_LOOPBACK),a.port_nbo,1006));
+        assert(responder.ResponderVerified());
+        assert(!responder.CompleteResponder(wire_receipt,
+                    htonl(INADDR_LOOPBACK),a.port_nbo,1007));
         // A completed *proof* is NOT game routing permission.
         std::array<std::uint8_t,32> a_tx{},b_rx{},game{};
         assert(PairKeyScheduleV89::Derive(alice,true,PairKeyPurposeV89::NatProbe,
@@ -163,6 +183,7 @@ int main(){
         CryptoDetail::Erase(game);
         initiator.Reset();responder.Reset();
         assert(!initiator.InitiatorVerified());
+        assert(!responder.ResponderVerified());
 
         // Strict identity/pair/world/endpoint checks with REAL HMAC.
         NatProbeCodecV91::Wire good{};
