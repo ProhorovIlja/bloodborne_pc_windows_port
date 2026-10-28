@@ -91,6 +91,64 @@ def patch_main(src: str) -> str:
         }
 
 '''
+    # V102: local-only three-player source-driven team mesh. The three
+    # operator pins select test identities, NEVER the peer/client request.
+    # Each of 3 pair leases gets independent CSPRNG ID + native ready gate.
+    additions += '''        const QByteArray third_pin =
+            qgetenv("SHYT_P2P_TLS_THIRD_CLIENT_CERT_SHA256");
+        const QByteArray third_account =
+            qgetenv("SHYT_P2P_TLS_THIRD_LINKED_ONLINE_ID");
+        const QByteArray team_enabled=qgetenv("SHYT_P2P_TLS_AUTOTEAM_TEST");
+        if ((!team_enabled.isEmpty() && team_enabled!="0" &&
+             team_enabled!="1") ||
+            (third_pin.isEmpty()!=third_account.isEmpty()) ||
+            (!third_account.isEmpty() &&
+             (third_account==linked_account ||
+              third_account==second_account))) {
+            qCritical() << "V102 invalid third current-game test identity";
+            return 1;
+        }
+        if(!third_pin.isEmpty() &&
+           !p2p_tls.ConfigureLocalIdentity(
+               third_pin,third_account,
+               [&server](const QByteArray& signed_in_id) {
+                   return server.CurrentDirectAccountEpoch(signed_in_id);
+               })) {
+            qCritical() << "V102 third mTLS certificate/game account invalid";
+            return 1;
+        }
+        if(team_enabled=="1") {
+            if(cert_pin.isEmpty() || linked_account.isEmpty() ||
+               second_pin.isEmpty() || second_account.isEmpty() ||
+               third_pin.isEmpty() || third_account.isEmpty() ||
+               linked_account==second_account) {
+                qCritical() << "V102 requires three distinct pinned real hunters";
+                return 1;
+            }
+            auto* team_clock=new QTimer(&p2p_tls);
+            team_clock->setInterval(1000);
+            QObject::connect(team_clock,&QTimer::timeout,&p2p_tls,
+                [&server,&p2p_tls,a=linked_account,b=second_account,
+                 c=third_account]() {
+                    // Only original authenticated game parties + both
+                    // players' live consent can materialize each edge.
+                    // Repeated timer attempts never overwrite valid leases.
+                    const auto world_pair=[&server](
+                        const QByteArray& recipient,const QByteArray& peer) {
+                        return server.CaptureLocalP2POffer(recipient,peer);
+                    };
+                    std::uint64_t pair_id=0;
+                    (void)p2p_tls.ConfigureLocalTeamPairV102(
+                        a,b,world_pair,pair_id);
+                    (void)p2p_tls.ConfigureLocalTeamPairV102(
+                        a,c,world_pair,pair_id);
+                    (void)p2p_tls.ConfigureLocalTeamPairV102(
+                        b,c,world_pair,pair_id);
+                });
+            team_clock->start();
+        }
+
+'''
     return once(src, anchor, additions + anchor, "local Qt listener insertion")
 
 
