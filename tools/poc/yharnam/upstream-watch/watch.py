@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bloodborne cross-fork source monitor (GitHub read-only; never auto-cherry-pick).
 
-Compares 8 source HEADs, latest releases and 36 cross-fork PRs against a manually
+Compares pinned source HEADs, selected branches, releases and cross-fork PRs against a manually
 reviewed inventory. Writes JSON and Markdown in the output folder; never
 writes to GitHub, tests locally only, and cannot touch game/server state.
 """
@@ -21,6 +21,7 @@ REGISTRY = Path(__file__).with_name("sources.json")
 API = "https://api.github.com"
 SAFE_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHORT_SHA = re.compile(r"^[0-9a-f]{40}$")
+SAFE_BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$")
 
 
 def fetch(path: str, token: str = "") -> dict:
@@ -56,6 +57,20 @@ def load_inventory(path: Path = REGISTRY) -> dict:
             raise ValueError("Pinned review SHA required")
         if not row["known_release_tag"] or not row["compatibility"]:
             raise ValueError("Inventory must name release and compatibility constraint")
+    # Named non-default refs are not covered by HEAD monitoring. Validate
+    # repo and ref before building any public GitHub URL.
+    seen_branches = set()
+    for row in data.get("branches", []):
+        name, ref = row["repo"], row["branch"]
+        if (name not in repo_names or not isinstance(ref, str) or
+            not SAFE_BRANCH.fullmatch(ref) or ".." in ref or "//" in ref or
+            ref.endswith(("/", ".")) or ref.startswith("-")):
+            raise ValueError("Unsafe or untracked source branch")
+        if (name, ref) in seen_branches or not SHORT_SHA.fullmatch(row["known_head"]):
+            raise ValueError("Duplicate or unpinned source branch")
+        if not row.get("area") or not row.get("constraint"):
+            raise ValueError("Branch has no review rationale or wire constraint")
+        seen_branches.add((name, ref))
     seen = set()
     for row in data.get("pull_requests", []):
         key = (row["repo"], row["number"])
@@ -87,6 +102,7 @@ def survey(registry: dict, get) -> dict:
         "baseline_pin": registry["pinned_yt_game_server"],
         "safety": registry["policy"],
         "repositories": [],
+        "branches": [],
         "pull_requests": [],
         "errors": [],
     }
@@ -108,6 +124,23 @@ def survey(registry: dict, get) -> dict:
             "release_changed": bool(tag and tag != entry["known_release_tag"]),
             "evidence_complete": bool(head and tag),
             "url": "https://github.com/" + name,
+        })
+    for entry in registry.get("branches", []):
+        repo, ref = entry["repo"], entry["branch"]
+        # Original REST endpoint accepts slash-containing branch names.
+        path = "/repos/" + repo + "/branches/" + ref
+        item = _attempt(get, path, output["errors"])
+        commit = item.get("commit") if isinstance(item, dict) else None
+        head = commit.get("sha", "") if isinstance(commit, dict) else ""
+        verified = bool(SHORT_SHA.fullmatch(head))
+        output["branches"].append({
+            "repo": repo, "branch": ref, "area": entry["area"],
+            "constraint": entry["constraint"],
+            "reviewed_head": entry["known_head"],
+            "observed_head": head if verified else "",
+            "head_changed": bool(verified and head != entry["known_head"]),
+            "evidence_complete": verified,
+            "url": "https://github.com/" + repo + "/tree/" + ref,
         })
     for entry in registry["pull_requests"]:
         repo, n = entry["repo"], entry["number"]
@@ -149,6 +182,15 @@ def markdown(report: dict) -> str:
                      ("YES REVIEW REQUIRED" if r["head_changed"] else
                       ("unchanged" if r["evidence_complete"] else "unknown")) + " | " +
                      md_safe(r["compatibility"]) + " |")
+    lines += ["", "## Selected active and historical branches", "",
+              "| Branch | Area | SHA drift? | Porting constraint |",
+              "|---|---|---|---|"]
+    for b in report["branches"]:
+        lines.append("| [" + md_safe(b["repo"] + ":" + b["branch"]) + "](" +
+                     b["url"] + ") | " + md_safe(b["area"]) + " | " +
+                     ("YES REVIEW REQUIRED" if b["head_changed"] else
+                      ("unchanged" if b["evidence_complete"] else "UNKNOWN")) +
+                     " | " + md_safe(b["constraint"]) + " |")
     lines += ["", "## Reviewed native Bloodborne cross-fork PR watch", "",
               "| PR | Area | Old → current | Priority | Gate |",
               "|---|---|---|---|---|"]
@@ -192,9 +234,11 @@ def main() -> int:
     )
     (args.output / "UPSTREAMS.md").write_text(markdown(report), encoding="utf-8")
     changes = sum(r["head_changed"] or r["release_changed"] for r in report["repositories"])
+    changes += sum(b["head_changed"] for b in report["branches"])
     changes += sum(p["state_changed"] for p in report["pull_requests"])
     print("BLOODBORNE_CROSS_FORK_READ_ONLY_AUDIT sources=" +
-          str(len(report["repositories"])) + " prs=" +
+          str(len(report["repositories"])) + " branches=" +
+          str(len(report["branches"])) + " prs=" +
           str(len(report["pull_requests"])) + " changes_to_review=" + str(changes) +
           " unavailable=" + str(len(report["errors"])))
     if report["errors"]:
