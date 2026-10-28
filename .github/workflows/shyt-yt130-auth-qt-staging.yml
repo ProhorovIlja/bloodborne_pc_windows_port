@@ -70,6 +70,14 @@ jobs:
           grep -q 'NonHostedTeamEditsAreCoalescedAndStartStillWorks' \
             "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
           echo YT130_SOURCE_EXACT_11_FILE_HOSTED_INDEX_STAGE_PASS_NO_QT_BUILD
+      - name: Verify exact ORIGINAL Hosted shard build-fingerprint parser with no Qt build
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_hosted_fingerprint.py \
+            "$RUNNER_TEMP/yt-src"
+          grep -q 'shlex.split(args.extra)' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          echo YT130_REAL_HOSTED_SHARDS_PINNED_FINGERPRINT_PREFLIGHT_PASS
   compile-real-shadnet-and-sqlite-tests:
     needs: verify-disposable-source-stage
     runs-on: ubuntu-24.04
@@ -227,6 +235,8 @@ jobs:
         run: |
           set -euo pipefail
           python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_hosted_fingerprint.py "$RUNNER_TEMP/yt-src"
+          echo YT130_HOSTED_GENERATOR_ACCEPTS_FULL_BUILD_FINGERPRINT_WITHOUT_AUTH_BYPASS
       - name: Diagnose real synthetic 4-peer sign-in before large load
         shell: bash
         run: |
