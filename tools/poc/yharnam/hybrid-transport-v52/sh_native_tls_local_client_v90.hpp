@@ -24,7 +24,8 @@ public:
                         std::uint64_t now_ms,
                         std::uint8_t* nonsecret_test_stage=nullptr,
                         bool send_ready_proof=false,
-                        bool* both_received_ready=nullptr) {
+                        bool* both_received_ready=nullptr,
+                        std::uint64_t v102_pair_id=0) {
         // Test diagnostics report only milestone numbers, NEVER peer IP,
         // TLS keys, certificate contents, access tokens or secret bytes.
         if(nonsecret_test_stage)*nonsecret_test_stage=0;
@@ -106,7 +107,15 @@ public:
         }
         CryptoDetail::Erase(secret);
         if(nonsecret_test_stage)*nonsecret_test_stage=6;
-        if(!LocalTlsDetail::Send(tls.p,"YT-P2P/V90 OFFER\n")) {
+        // V102 pair binding is a server-issued opaque selector returned
+        // through certificate-bound LIST; never an account or endpoint.
+        const std::string id_hex=v102_pair_id?
+            QByteArray::number(v102_pair_id,16).rightJustified(16,'0').toStdString():
+            std::string{};
+        const std::string offer_command=v102_pair_id?
+            "YT-P2P/V102 OFFER "+id_hex+"\n":
+            "YT-P2P/V90 OFFER\n";
+        if(!LocalTlsDetail::Send(tls.p,offer_command)) {
             inbox.Revoke();return false;
         }
         if(nonsecret_test_stage)*nonsecret_test_stage=7;
@@ -146,7 +155,9 @@ public:
             inbox.Revoke();return false;
         }
         constexpr char lut[]="0123456789abcdef";
-        std::string message="YT-P2P/V91 READY ";
+        std::string message=v102_pair_id?
+            "YT-P2P/V102 READY "+id_hex+" ":
+            "YT-P2P/V91 READY ";
         for(const auto byte:proof){
             message.push_back(lut[byte>>4U]);
             message.push_back(lut[byte&0x0FU]);
@@ -158,8 +169,12 @@ public:
         if(!sent || !LocalTlsDetail::ReadLine(tls.p,line,40)) {
             inbox.Revoke();return false;
         }
-        const bool complete=line=="YT-P2P/V91 BOTH_READY\n";
-        const bool pending=line=="YT-P2P/V91 PENDING\n";
+        const bool complete=v102_pair_id?
+            line=="YT-P2P/V102 BOTH_READY\n":
+            line=="YT-P2P/V91 BOTH_READY\n";
+        const bool pending=v102_pair_id?
+            line=="YT-P2P/V102 PENDING\n":
+            line=="YT-P2P/V91 PENDING\n";
         std::fill(line.begin(),line.end(),char(0));
         if(!complete && !pending) {inbox.Revoke();return false;}
         if(both_received_ready)*both_received_ready=complete;
