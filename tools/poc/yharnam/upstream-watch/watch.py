@@ -132,7 +132,7 @@ def survey(registry: dict, get) -> dict:
         item = _attempt(get, path, output["errors"])
         commit = item.get("commit") if isinstance(item, dict) else None
         head = commit.get("sha", "") if isinstance(commit, dict) else ""
-        verified = bool(SHORT_SHA.fullmatch(head))
+        verified = isinstance(head, str) and bool(SHORT_SHA.fullmatch(head))
         output["branches"].append({
             "repo": repo, "branch": ref, "area": entry["area"],
             "constraint": entry["constraint"],
