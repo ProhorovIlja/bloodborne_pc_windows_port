@@ -126,7 +126,7 @@ jobs:
           SRV=/tmp/shyt-v72-composed/server
           ROOT=pinned-upstream/server
           c++ -std=c++20 -O0 -g0 -fPIC \
-            -I "$SRV/src" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v72-proto \
+            -I "$SRV/src" -I "$SRV" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v72-proto \
             $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql) \
             "$SRV/tests/test_bloodborne_world.cpp" \
             "$SRV/src/bloodborne_world.cpp" \
@@ -134,7 +134,7 @@ jobs:
             "$SRV/src/server_link.cpp" \
             "$ROOT/coop/world_log.cpp" \
             "$ROOT/coop/coop_messages.cpp" \
-            "$ROOT/coop/team_lobby.cpp" \
+            "$SRV/coop/team_lobby.cpp" \
             "$ROOT/coop/trade.cpp" \
             /tmp/shyt-v72-proto/coop.pb.cc \
             $(pkg-config --libs Qt6Core Qt6Network Qt6Sql) -lprotobuf \
@@ -148,7 +148,7 @@ jobs:
           SRV=/tmp/shyt-v72-composed/server
           ROOT=pinned-upstream/server
           c++ -std=c++20 -O0 -g0 -fPIC -fsyntax-only \
-            -I "$SRV/src" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v72-proto \
+            -I "$SRV/src" -I "$SRV" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v72-proto \
             $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6HttpServer) \
             "$SRV/src/link_server.cpp"
           echo SHYT_V72_QT_LINKSERVER_WIRING_COMPILED_PASS
