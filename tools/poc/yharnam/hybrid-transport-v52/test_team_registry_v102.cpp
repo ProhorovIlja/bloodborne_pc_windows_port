@@ -139,7 +139,13 @@ static void FiveHunterFullMesh() {
     for(const auto grant:grants)
         assert(!registry.Take("sixth",grant,888,1002,forged));
     assert(registry.Count()==10);
-    assert(registry.RevokeAccount("guest4")==4);
+    std::vector<std::pair<QByteArray,QByteArray>> survivors;
+    for(qsizetype i=0;i<4;++i)
+        for(qsizetype j=i+1;j<4;++j)
+            survivors.emplace_back(hunters[i],hunters[j]);
+    // Server now sees only FOUR surviving game accounts.
+    assert(registry.RevokeNotIn(survivors)==4);
+    assert(registry.RevokeNotIn(survivors)==0); // idempotent
     assert(registry.Count()==6);
     for(const auto& member:QVector<QByteArray>{"host","guest1","guest2","guest3"})
         assert(registry.AvailableFor(member,1003).size()==3);
