@@ -9,6 +9,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
@@ -22,6 +23,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
@@ -163,7 +165,14 @@ jobs:
           header=(root/'server/src/sh_p2p_tls_listener.hpp').read_text()
           manifest=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
           assert 'SHYT_P2P_TLS_AUTOTEAM_TEST' in main
-          assert main.count('p2p_tls.ConfigureLocalTeamPairV102(')==3
+          assert main.count('p2p_tls.ConfigureLocalTeamPairV102(')==1
+          assert 'server.DiscoverLiveDirectPairs()' in main
+          assert 'SHYT-LIVE-YT-WORLD-PAIR-DISCOVERY' in main
+          world=(root/'server/src/bloodborne_world.cpp').read_text()
+          link=(root/'server/src/link_server.cpp').read_text()
+          assert 'Service::DiscoverLiveDirectPairs()' in world
+          assert 'LinkServer::DiscoverLiveDirectPairs()' in link
+          assert 'm_signedIn.contains(pair.first)' in link
           assert 'SHYT_P2P_TLS_LOCAL_TEST' in main
           assert 'P2PTeamPairRegistryV102 team_registry_' in header
           assert 'V102 original Qt team 3+ peer P2P pair registry' in ' '.join(manifest['applied'])
