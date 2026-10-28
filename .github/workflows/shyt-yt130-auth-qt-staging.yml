@@ -7,6 +7,12 @@ on:
       - tools/poc/yharnam/yt130-reference/**
       - .github/workflows/shyt-yt130-auth-qt-staging.yml
   workflow_dispatch:
+    inputs:
+      extreme_hosted_2000:
+        description: 'Manual opt-in 2000/2048 hosted players; never a production server'
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -66,7 +72,7 @@ jobs:
   compile-real-shadnet-and-sqlite-tests:
     needs: verify-disposable-source-stage
     runs-on: ubuntu-24.04
-    timeout-minutes: 65
+    timeout-minutes: 85
     env:
       YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
     steps:
@@ -84,7 +90,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build g++ pkg-config qt6-base-dev \
-            qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite ccache
+            qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite ccache redis-server
+          python3 -m pip install --quiet --disable-pip-version-check redis==5.2.1
       - name: Restore reusable Qt C++ object cache across staging runs
         uses: actions/cache@v4
         with:
@@ -264,12 +271,45 @@ jobs:
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
             --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
             --output yt130-wire-logs
+      - name: Compare ORIGINAL YT1.3 Hosted true 1 vs 3 shards at 250/500/1000 active gameplay
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -x "$RUNNER_TEMP/yt-build/bbload" || \
+             ! test -x "$RUNNER_TEMP/yt-build/shadnet"; then
+            echo "Native source has not compiled; cannot claim hosted-shard benchmark"
+            exit 0
+          fi
+          # Original source-pinned run_shards.py runs REAL Redis, directory,
+          # shadNet and bbload only on 127.0.0.1; no production networks.
+          timeout 1100s python tools/poc/yharnam/yt130-reference/run_hosted_shards_1000.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+            --team-size 2 --profile active --peak 1000 \
+            --seconds 24 --timeout 150 --ramp-ms 30 \
+            --output yt130-hosted-shards-active-1000.jsonl
+          echo YT130_HOSTED_SHARDS_1000_DIAGNOSTIC_NOT_PUBLIC_CAPACITY
+      - name: Test 2000 players on 1 vs 3 ORIGINAL Hosted shards ONLY manually
+        if: \${{ github.event_name == 'workflow_dispatch' && inputs.extreme_hosted_2000 == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 1800s python tools/poc/yharnam/yt130-reference/run_hosted_shards_1000.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+            --team-size 2 --profile active --peak 2000 \
+            --seconds 24 --timeout 170 --ramp-ms 30 \
+            --output yt130-hosted-shards-extreme-2000.jsonl
       - name: Preserve synthetic 200-peer CPU and latency evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yt130-loopback-200-peer-metrics
+          name: yt130-hosted-1000-and-nonhosted-200-comparison
           path: |
+            yt130-hosted-shards-*.jsonl
             yt130-capacity-curve.jsonl
             yt130-reduced-rate.jsonl
             yt130-wire-logs/
