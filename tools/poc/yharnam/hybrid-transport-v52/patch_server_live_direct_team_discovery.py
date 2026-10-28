@@ -235,18 +235,23 @@ f'''int AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams() {{
   CHECK(valid.size()==10); // five approved hunters => 5*4/2
   for(const auto& edge:valid)
       CHECK(edge.first!="stranger" && edge.second!="stranger");
-  // Departures immediately remove every associated direct edge,
-  // WITHOUT giving a same-world outsider access.
-  b.Team(bbcoop::TeamRequest::LEAVE,Now+40);
+  // Host leaves first: TeamLobby must elect the next leader,
+  // and old-host direct grants disappear without tearing down the
+  // four surviving hunters' world. An outsider stays denied.
+  a.Team(bbcoop::TeamRequest::LEAVE,Now+40);
   Pump(service,games,Now+40);
-  CHECK(service.{API}().size()==6); // four players => 6 edges
-  d.Team(bbcoop::TeamRequest::LEAVE,Now+50);
+  CHECK(b.lobby.has_team());
+  CHECK(b.lobby.team().leader()==identity(b));
+  CHECK(service.{API}().size()==6); // four hunters still share six edges
+  b.Team(bbcoop::TeamRequest::LEAVE,Now+50);
   Pump(service,games,Now+50);
-  CHECK(service.{API}().size()==3); // three players => 3 edges
-  e.Team(bbcoop::TeamRequest::LEAVE,Now+60);
+  CHECK(d.lobby.has_team());
+  CHECK(d.lobby.team().leader()==identity(d));
+  CHECK(service.{API}().size()==3); // three hunters, three edges
+  d.Team(bbcoop::TeamRequest::LEAVE,Now+60);
   Pump(service,games,Now+60);
-  CHECK(service.{API}().size()==1); // two players => 1 edge
-  f.Team(bbcoop::TeamRequest::LEAVE,Now+70);
+  CHECK(service.{API}().size()==1); // e and f survive
+  e.Team(bbcoop::TeamRequest::LEAVE,Now+70);
   Pump(service,games,Now+70);
   CHECK(service.{API}().empty());
   return 0;
