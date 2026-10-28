@@ -24,7 +24,7 @@ COOP = re.compile(
     r" ack_only_frames=(\d+) pending_chunks=(\d+) pending_bytes=(\d+)"
     r" blocked_members=(\d+) active_members=(\d+)"
 )
-ORIGIN = re.compile(r"YT130_COOP_ORIGIN kind=(\d+) sends=(\d+)")
+ORIGIN = re.compile(r"YT130_COOP_ORIGIN kind=(\d+) sends=(\d+)(?: encoded_bytes=(\d+))?")
 EVENTLOOP = re.compile(
     r"YT130_EVENTLOOP read_batches=(\d+) read_datagrams=(\d+)"
     r" read_busy_us=(\d+) max_read_batch_us=(\d+)"
@@ -138,6 +138,7 @@ def aggregate_coop(lines: list[str]) -> dict:
               "pending_bytes", "blocked_members", "active_members")
     totals = {k: 0 for k in fields}
     origins: dict[str, int] = {}
+    bytes_by_kind: dict[str, int] = {}
     intervals = 0
     for line in lines:
         if m := COOP.search(line):
@@ -148,14 +149,21 @@ def aggregate_coop(lines: list[str]) -> dict:
                 else:
                     totals[key] += int(value)
         if m := ORIGIN.search(line):
-            key, count = m.groups()
+            key, count, encoded_bytes = m.groups()
             origins[key] = origins.get(key, 0) + int(count)
+            if encoded_bytes is not None:
+                bytes_by_kind[key] = bytes_by_kind.get(key, 0) + int(encoded_bytes)
     return {"intervals": intervals, "metrics": totals,
             "envelope_body_case_sends": origins,
+            "envelope_body_case_encoded_bytes": bytes_by_kind,
             "eventloop": aggregate_eventloop(lines),
             "envelope_type_sends": {
                 ENVELOPE_NAMES.get(int(kind), "Unknown_" + kind): count
                 for kind, count in origins.items()
+            },
+            "envelope_type_encoded_bytes": {
+                ENVELOPE_NAMES.get(int(kind), "Unknown_" + kind): count
+                for kind, count in bytes_by_kind.items()
             }}
 
 
