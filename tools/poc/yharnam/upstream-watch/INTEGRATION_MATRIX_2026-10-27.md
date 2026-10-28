@@ -96,3 +96,17 @@ Reviewed **2026-10-27** from upstream GitHub PRs, release notes and verified rep
 `python tools/poc/yharnam/upstream-watch/watch.py --output <destination>` uses **only public GitHub read-only requests**: per source `commits/HEAD` and `releases/latest` plus pinned YT and Windows native fork PR metadata. Failures are reported as **unknown**, never silently passed. It creates `upstreams.json` and `UPSTREAMS.md` for human review without downloads, builds, changes to source, GitHub writes or touching game servers.
 
 `.github/workflows/shyt-crossfork-upstream-watch.yml` runs offline tests and creates a report artifact on the candidate PR. Its daily schedule **does not activate while this workflow exists only in a DRAFT PR**; it would begin *only if this watcher workflow were deliberately reviewed and merged to the default branch*. Do not claim recurring surveillance until that happens, and do not merge without explicit authorization to modify master.
+
+### Added source watch: Awaken Lantern Engine, DarkIzuku, Wozzardman (2026-10-28)
+
+These **three additional upstream roots** are independently verified as GitHub repositories and added to `sources.json` with exact 40-character observed commit pins. The watcher now covers **11 source repositories**, preserving 36 selected PRs. Their release tags remain marked **unverified** until the public API confirms tags; the watcher must show missing release evidence, not a false green.
+
+| Source / observed SHA | Candidate improvements | Mandatory boundary |
+|---|---|---|
+| [Awakenchan/LanternEngine](https://github.com/Awakenchan/LanternEngine), `3860021d6550` | Former BloodBorneButPc: native engine performance, launcher, camera, controls, Vulkan/VRAM and long-session behavior | Lantern has its own engine, online implementation and GPL-3.0-or-later attribution/name conditions. Inspect license and source diffs before borrowing; **no YT account/Coop/RPC protocol substitution** |
+| [DarkIzuku/bloodborne_pc](https://github.com/DarkIzuku/bloodborne_pc), `2f9f1c049442` | Earlier native performance/stability branch used in the Lantern lineage | Compare allocator/rendering ownership, build model and license before adaptation; **do not import another online wire** |
+| [Wozzardman/shadnet-p2p](https://github.com/Wozzardman/shadnet-p2p), `5a849a192fd4` | Separate shadNet NAT and P2P ideas | Treat as research material only. A YT Direct P2P path needs **server-authenticated peers**, replay protection, NAT traversal tests, consent and bounded relay fallback; keep authoritative account/team/world/Coop(7)/RPC(8) on YT server |
+
+Also verified [deadinside28's BBSC integration documentation](https://github.com/deadinside28/bloodborne_pc/blob/master/docs/BBSC.md): its BBSC/shadNet mode coexists with a separate online stack and account flow. This is **not** automatically compatible with the native Yharnam Together 1.3.0 server/client protocol and must not be switched on as an unreviewed bridge.
+
+**State:** monitored only. No code imported, no unreviewed network paths enabled, no changes to live Fornex/CLS Friends, `master`, accounts or saves. Separate native runtime tests, permission/license review and real two-PC compatibility checks are required before any adoption.
