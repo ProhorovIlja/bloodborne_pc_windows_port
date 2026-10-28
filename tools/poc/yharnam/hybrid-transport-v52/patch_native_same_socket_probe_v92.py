@@ -21,6 +21,7 @@ def one(s,old,new,what):
 def patch_game(src):
     if TAG in src:raise ValueError("V92 already applied")
     if ("SHYT-V87-TRUSTED-SERVER-LINK" not in src or
+        "SHYT-V70-NATIVE-RECV-HMAC" not in src or
         "native_grant_inbox_v84" not in src or
         "shyt_link_generation_v87" not in src):
         raise ValueError("V92 requires original game and V84-V87 verified integration")
@@ -289,7 +290,7 @@ private:
         "original game receive helper")
     src=one(src,
         '''            const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
-            if (const auto server = LinkServer();
+            // SHYT-V70-NATIVE-RECV-HMAC: the existing real recvfrom() host
 ''',
         '''            const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
 #ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
@@ -299,7 +300,7 @@ private:
             if(ReceiveNativeSignedProbeV92(from.sin_addr.s_addr,from.sin_port,
                                            datagram))continue;
 #endif
-            if (const auto server = LinkServer();
+            // SHYT-V70-NATIVE-RECV-HMAC: the existing real recvfrom() host
 ''',
-        "original recvfrom pre-guest callback")
+        "after-firewall, before-V70/direct and original game relay demux")
     return src
