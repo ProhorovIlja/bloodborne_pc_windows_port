@@ -50,6 +50,23 @@ class WireAggregationTests(unittest.TestCase):
         self.assertEqual(m.ENVELOPE_NAMES[5], "Entries")
         self.assertEqual(m.ENVELOPE_NAMES[25], "LobbyState")
 
+    def test_encoded_bytes_are_aggregated_separately_from_message_count(self):
+        lines = [
+            "INFO YT130_COOP_ORIGIN kind=25 sends=10 encoded_bytes=15000",
+            "INFO YT130_COOP_ORIGIN kind=25 sends=7 encoded_bytes=13000",
+            "INFO YT130_COOP_ORIGIN kind=20 sends=8 encoded_bytes=300",
+            # Existing upstream log without byte field must stay readable.
+            "INFO YT130_COOP_ORIGIN kind=14 sends=3",
+            "INFO YT130_COOP_ORIGIN kind=bad sends=100 encoded_bytes=9999",
+        ]
+        result = m.aggregate_coop(lines)
+        self.assertEqual(result["envelope_type_sends"]["LobbyState"], 17)
+        self.assertEqual(result["envelope_type_encoded_bytes"]["LobbyState"], 28000)
+        self.assertEqual(result["envelope_type_encoded_bytes"]["VitalsBoard"], 300)
+        self.assertEqual(result["envelope_type_sends"]["MapBoard"], 3)
+        self.assertNotIn("MapBoard", result["envelope_type_encoded_bytes"])
+        self.assertEqual(sum(result["envelope_body_case_encoded_bytes"].values()), 28300)
+
     def test_qt_world_timer_starvation_source_counters(self):
         source = [
             "INFO YT130_EVENTLOOP read_batches=300 read_datagrams=10000"
