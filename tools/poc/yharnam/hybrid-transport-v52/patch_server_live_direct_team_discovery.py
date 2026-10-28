@@ -145,13 +145,17 @@ f'''  CHECK(service.CurrentDirectAccountEpoch("host")==0);
   CHECK(!service.PairDirectConsent("host","guest"));
 ''', "map-load revokes discovered edge")
     test=one(test,
-'''  CHECK(service.CurrentDirectAccountEpoch("guest")==0);
+'''  b.Hello(now+40,Party,false);
+  Pump(service,games,now+40);
+  CHECK(service.CurrentDirectAccountEpoch("guest")==0);
   CHECK(!service.PairDirectConsent("host","guest"));
 ''',
-f'''  CHECK(service.CurrentDirectAccountEpoch("guest")==0);
+f'''  b.Hello(now+40,Party,false);
+  Pump(service,games,now+40);
+  CHECK(service.CurrentDirectAccountEpoch("guest")==0);
   CHECK(service.{API}().empty());
   CHECK(!service.PairDirectConsent("host","guest"));
-''', "opt-out revokes discovered edge")
+''', "actual opt-out event uniquely revokes discovered edge")
     # Replace LOCAL 3-way hardcoded enumeration with real current signed-in
     # shadNet world. For this dev test, only exactly operator-pinned A/B/C
     # may consume the candidate offers. This does NOT make public TLS.
