@@ -16,11 +16,12 @@ public:
                         void* verified_game_state,
                         std::uint64_t now_ms,
                         bool& server_both_ready,
-                        std::uint8_t* nonsecret_test_stage=nullptr) {
+                        std::uint8_t* nonsecret_test_stage=nullptr,
+                        std::uint64_t v102_pair_id=0) {
         server_both_ready=false;
         return NativeTlsLocalOfferClientV90::Request(
             config,inbox,expected,tls_serial,refresh,verified_game_state,
-            now_ms,nonsecret_test_stage,true,&server_both_ready);
+            now_ms,nonsecret_test_stage,true,&server_both_ready,v102_pair_id);
     }
 };
 } // namespace SeamlessHunt::Hybrid
