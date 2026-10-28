@@ -67,7 +67,11 @@ public:
         }
         const bool a=authenticated_recipient==a_;
         const bool b=authenticated_recipient==b_;
-        if((!a && !b) || (a && issued_a_) || (b && issued_b_) ||
+        // A valid TLS account which is NOT one of the two grant recipients
+        // must not be able to erase somebody else's live pair lease.
+        // A revoked/invalid actual recipient still fails closed and clears it.
+        if(!a && !b)return false;
+        if((a && issued_a_) || (b && issued_b_) ||
            !recipient_current_epoch) {
             Clear();return false;
         }
@@ -106,8 +110,11 @@ public:
         // have received its own SHG2 ticket at this point.
         const bool reporting_a=authenticated_recipient==a_;
         const bool reporting_b=authenticated_recipient==b_;
-        if((!reporting_a && !reporting_b) ||
-           (reporting_a && !issued_a_) ||
+        // Never let a third authenticated TLS account revoke another
+        // pair's readiness by submitting an unrelated READY request.
+        // Bad proofs from a member of THIS pair still revoke both sides.
+        if(!reporting_a && !reporting_b)return false;
+        if((reporting_a && !issued_a_) ||
            (reporting_b && !issued_b_) ||
            !resolver_ || !ready_gate_.PairBinding() || !now_ms) {
             Clear();return false;
