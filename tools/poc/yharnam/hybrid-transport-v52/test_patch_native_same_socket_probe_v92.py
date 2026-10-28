@@ -42,6 +42,8 @@ private:
                 continue;
             }
             const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
+            // SHYT-V70-NATIVE-RECV-HMAC: the existing real recvfrom() host
+            if (SeamlessHunt::Hybrid::IsSHP1(datagram))continue;
             if (const auto server = LinkServer();
                 server.addr_nbo == from.sin_addr.s_addr && server.port_nbo == from.sin_port) {
                 continue;
@@ -88,9 +90,11 @@ class V92Tests(unittest.TestCase):
         # original LinkServer relayed/guest vport processing.
         check=result.index("if(ReceiveNativeSignedProbeV92(from.sin_addr.s_addr")
         firewall=result.index('if (!FirewallAllows(from.sin_addr.s_addr')
-        deliver=result.index("if (const auto server = LinkServer();",check)
+        direct_demux=result.index("SeamlessHunt::Hybrid::IsSHP1(datagram)",check)
+        deliver=result.index("if (const auto server = LinkServer();",direct_demux)
         self.assertLess(firewall,check)
-        self.assertLess(check,deliver)
+        self.assertLess(check,direct_demux)
+        self.assertLess(direct_demux,deliver)
         self.assertIn("#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS\n            // SHN1",result)
         self.assertIn("#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS\n    // V92",result)
         with self.assertRaisesRegex(ValueError,"already applied"):
@@ -99,6 +103,8 @@ class V92Tests(unittest.TestCase):
     def test_source_drift_and_missing_identity_rejected(self):
         invalid=[
             SOURCE.replace("SHYT-V87-TRUSTED-SERVER-LINK","missing"),
+            SOURCE.replace("SHYT-V70-NATIVE-RECV-HMAC","missing"),
+            SOURCE.replace("SeamlessHunt::Hybrid::IsSHP1","Unrelated"),
             SOURCE.replace("shyt_link_generation_v87","missing"),
             SOURCE.replace("NativeSealedGrantInboxV84","NativeSealedGrantInboxV82"),
             SOURCE.replace("V86 logout/sockets closed","V80 stop"),
