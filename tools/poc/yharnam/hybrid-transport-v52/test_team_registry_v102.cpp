@@ -153,6 +153,35 @@ static void FiveHunterFullMesh() {
     registry.Sweep(11000);
     assert(registry.Count()==0);
 }
+static void WorldRevocationIsImmediateEvenBeforeTimer() {
+    World world;
+    world.Add("A",101,41001);
+    world.Add("B",202,41002);
+    P2PTeamPairRegistryV102 registry;
+    std::uint64_t id=0;
+    assert(registry.Begin("A","B",world.Resolve(),1000,id));
+    assert(registry.AvailableFor("A",1001).size()==1);
+    // An opt-out or team/world departure must make an outstanding
+    // selector invisible immediately, without waiting for the
+    // server's once-per-second reconciliation timer.
+    world.consent=false;
+    assert(registry.AvailableFor("A",1001).empty());
+    assert(registry.AvailableFor("B",1001).empty());
+    world.consent=true;
+    assert(registry.AvailableFor("A",1001).size()==1);
+    const auto pair=Receive(registry,"A","B",id,101,202);
+    bool both=false;
+    assert(registry.MarkReady("A",id,101,pair.proof_a,1002,both) && !both);
+    assert(registry.MarkReady("B",id,202,pair.proof_b,1003,both) && both);
+    assert(registry.BothReady("A",id,1004));
+    // A new session generation or changed map/owner/world revokes
+    // readiness even though both HMAC proofs were valid previously.
+    world.epochs.insert("B",203);
+    assert(!registry.BothReady("A",id,1004));
+    registry.Sweep(1005);
+    assert(registry.Count()==0);
+    assert(registry.AvailableFor("A",1005).empty());
+}
 static void EpochConsentAndLimits() {
     World world;
     world.Add("A",1,40001);world.Add("B",2,40002);
@@ -217,6 +246,7 @@ static void EpochConsentAndLimits() {
 int main() {
     ThreePlayerMeshIsolation();
     FiveHunterFullMesh();
+    WorldRevocationIsImmediateEvenBeforeTimer();
     EpochConsentAndLimits();
     return 0;
 }
