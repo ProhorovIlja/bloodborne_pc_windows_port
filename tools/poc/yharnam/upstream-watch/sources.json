@@ -446,6 +446,142 @@
       "area": "preserve execute permission across tracked page protection",
       "priority": "P1",
       "action": "COMPARE_NATIVE_TRACKER_EXECUTE_FAULT_BEFORE_ADAPTATION"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 219,
+      "last_seen": "merged",
+      "area": "BBSC 0.0.2 native bbport setup download version alignment",
+      "priority": "P0",
+      "action": "VERIFY_CLS_BBSC_0_0_2_SERVER_CLIENT_COMPAT_NO_YT_PROTOCOL_AUTOMERGE"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 198,
+      "last_seen": "merged",
+      "area": "stop unsupported THD transport polling keepalives STUN relay",
+      "priority": "P1",
+      "action": "ADAPT_NEGATIVE_CAPABILITY_CACHE_AND_BACKOFF_ONLY_KEEP_FRIENDS_REACHABLE"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 199,
+      "last_seen": "merged",
+      "area": "disable unsupported THD mode by default in launcher",
+      "priority": "P2",
+      "action": "SHOW_ACCURATE_SERVICE_COMPATIBILITY_NO_IDENTITY_SPOOF"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 172,
+      "last_seen": "merged",
+      "area": "disable cheats camera debug menu for public online while private seamless party remains opt-in",
+      "priority": "P1",
+      "action": "PORT_SESSION_TRUST_POLICY_ONLY_WITH_USER_CONSENT_AND_NO_SERVER_PRIVILEGE_BYPASS"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 178,
+      "last_seen": "merged",
+      "area": "release render-job slots on failure and enlarge GPU resource cache to 512MiB",
+      "priority": "P1",
+      "action": "REPRO_LAURENCE_ABOVE30FPS_AND_PROFILE_GPU_MEMORY_BUDGET_FIRST"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 179,
+      "last_seen": "merged",
+      "area": "fix effects stepping faster than 30FPS including Ebrietas emitter crash",
+      "priority": "P1",
+      "action": "VERIFY_NATIVE_FRAME_DELTA_90FPS_PARTY_SYNC_AND_REGION_CODE_SIGNATURES"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 162,
+      "last_seen": "merged",
+      "area": "cloth simulation correction for 60 and 90fps presets",
+      "priority": "P2",
+      "action": "TEST_NATIVE_PHYSICS_TIMING_COLLISION_ON_30_60_90_120"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 201,
+      "last_seen": "merged",
+      "area": "dynamic FPS fallback when below cap preserving cloth grass turn rates",
+      "priority": "P1",
+      "action": "MEASURE_ACTUAL_FRAME_TIME_AND_NATIVE_GAME_TIMERS_NO_GUEST_MEMORY_BLIND_COPY"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 174,
+      "last_seen": "merged",
+      "area": "Windows truststore certificate validation without disabling peer verification",
+      "priority": "P1",
+      "action": "REVIEW_CHAIN_CERT_VALIDATION_AND_OPENSSL_NATIVE_WINDOWS_ONLY"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 196,
+      "last_seen": "merged",
+      "area": "launcher repair from version-matched release for missing files",
+      "priority": "P1",
+      "action": "PIN_MANIFEST_SIGNATURE_AND_ROLLBACK_NO_LATEST_DOWNLOAD_OR_SAVE_OVERWRITE"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 186,
+      "last_seen": "merged",
+      "area": "three input bindings per action chords and in-launcher key bindings page",
+      "priority": "P2",
+      "action": "CHECK_GAMEPAD_KEYBOARD_COMBINATION_CONFLICTS_AND_PERSISTENCE"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 187,
+      "last_seen": "merged",
+      "area": "hybrid GPU choose discrete Vulkan device instead of black screen",
+      "priority": "P1",
+      "action": "VERIFY_DEVICE_PROBE_DGPU_SELECTION_WITH_MANUAL_OVERRIDE"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 190,
+      "last_seen": "merged",
+      "area": "shader cache invalidation by recompiler build identity",
+      "priority": "P1",
+      "action": "PRESERVE_PLAYER_PREBUILD_AND_VALIDATE_NATIVE_CACHE_HASH"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 202,
+      "last_seen": "merged",
+      "area": "CC0 Xbox and keyboard button glyphs offline without Nexus",
+      "priority": "P2",
+      "action": "VERIFY_CC0_ASSETS_LICENSE_COPY_MOD_ONLY_NO_ORIGINAL_SAVE_TOUCH"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 194,
+      "last_seen": "merged",
+      "area": "repeatedly written GPU buffer pages tracked as hot pages",
+      "priority": "P2",
+      "action": "PROFILE_WRITE_FAULT_AND_TRANSFER_BANDWIDTH_WITH_NATIVE_VRAM_BUDGET"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 175,
+      "last_seen": "merged",
+      "area": "Yebis blur minimum 3 samples prevents guest debug exception and black screen",
+      "priority": "P1",
+      "action": "EXACT_REGION_SYMBOL_AND_POST_EFFECT_SHADER_TESTS"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 176,
+      "last_seen": "merged",
+      "area": "combined LDS barrier mipmap index and compute texture copy Vulkan repairs",
+      "priority": "P1",
+      "action": "COMPARE_NATIVE_VULKAN_RENDER_PATH_AND_DEDUP_SHADPS4_5368"
     }
   ],
   "branches": [
