@@ -136,8 +136,18 @@ public:
         both_ready=accepted==PairReadyGateV91::Result::BothReady;
         return true;
     }
-    bool BothReady(std::uint64_t now_ms) const noexcept {
-        return ready_gate_.BothReady(now_ms);
+    // Read-only authorization check: a stale pair selector is not an
+    // authorization token. Every successful LIST/READY query must still
+    // match BOTH original server-owned, reciprocal game snapshots.
+    bool StillAuthorized() const {
+        if(!resolver_ || a_.isEmpty() || b_.isEmpty())return false;
+        const auto current_a=resolver_(a_,b_);
+        const auto current_b=resolver_(b_,a_);
+        return current_a && current_b &&
+               Same(first_,*current_a) && Same(second_,*current_b);
+    }
+    bool BothReady(std::uint64_t now_ms) const {
+        return ready_gate_.BothReady(now_ms) && StillAuthorized();
     }
     // Opaque random 64-bit generation ID, never a client-chosen account.
     std::uint64_t PairBinding() const noexcept {
