@@ -110,3 +110,20 @@ These **three additional upstream roots** are independently verified as GitHub r
 Also verified [deadinside28's BBSC integration documentation](https://github.com/deadinside28/bloodborne_pc/blob/master/docs/BBSC.md): its BBSC/shadNet mode coexists with a separate online stack and account flow. This is **not** automatically compatible with the native Yharnam Together 1.3.0 server/client protocol and must not be switched on as an unreviewed bridge.
 
 **State:** monitored only. No code imported, no unreviewed network paths enabled, no changes to live Fornex/CLS Friends, `master`, accounts or saves. Separate native runtime tests, permission/license review and real two-PC compatibility checks are required before any adoption.
+
+### Branch-aware watch: eight pinned references (2026-10-28)
+
+The watcher now performs live read-only GitHub API checks for **8 named branches** in addition to 11 repository HEADs and 36 selected PRs. SHA mismatches are surfaced for review, with source lineage noted below. Branch tracking is not a claim that the branch is newer, supported, merged, or interchangeable with Yharnam Together.
+
+| Project | Branch / observed SHA | Compared with active branch | Engineering takeaway |
+|---|---|---|---|
+| Yharnam Together | `friends-open-teams` / `14b8493f0d0f` | Diverged from `main`, 6 ahead and 21 behind when checked | Study team requests, localized UI and account permissions together, never half-merge protocol 19–27 |
+| Yharnam Together | `hs-shards` / `de7af7991c4f` | Behind `main` by 87 | Hosted Redis/shard historical implementation and redirect tests; our pinned 1.3.0 already contains Hosted support |
+| Yharnam Together | `p2p-vitals-kills` / `c194460bf92c` | Behind `main` by 1016 | Historical P2P game-state experiments, not a secure plug-in for modern server-authoritative traffic |
+| Awaken Lantern Engine | `online-shadps4-0.20` / `918505b38450` | Diverged from `main`: 8 ahead, 33 behind; files include `engine/online/bbnet_glue.cpp`, `thd_net.cpp`, shadNet glue | Inspect native/shadNet integration for diagnostics and potential transport lessons only. Entire online implementation is **NOT** compatible with YT without explicit protocol work |
+| Wozzardman/shadnet-p2p | `dev/bloodborne-seamless-co-op` / `469e33679a34` | Behind `main` by 4 | Research NAT/peer discovery; not a supported secure YT direct route |
+| NightwatchCoop | `interactive-map` / `924ede3814d1` | Behind `main` by 144 | Historical map UX and redacted telemetry patterns, never share exact player location or game IDs automatically |
+| DarkIzuku | `seamless-dev` / `e090ac5e25fa` | Behind active branch by 108 | Old seamless co-op research; don't substitute wire protocol |
+| DarkIzuku | `launcher-redesign-v2` / `bf09c21e760f` | Behind active branch by 114 | Launcher design reference only; evaluate current implementation instead of old experimental binary |
+
+Implementation: `watch.py` now validates allowlisted repository/branch inputs, fetches the exact branch commit through `/branches/<ref>`, reports SHA drift with an explicit 'UNKNOWN' state for malformed/missing responses, emits dedicated Branches table in Markdown and counts branch drift separately in the CI summary. New `test_watch.py` regressions reject unsafe path traversal, duplicate or unpinned branches, malformed commit metadata. The index itself remains read-only; no branch is auto-merged, forked or deployed. Verify CI logs before calling the branch watcher tested.
