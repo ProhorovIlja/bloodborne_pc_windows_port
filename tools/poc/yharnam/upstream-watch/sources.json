@@ -376,5 +376,63 @@
       "priority": "P1",
       "action": "REVIEW_CLOSED_UNMERGED_BEFORE_ADOPT_AND_NATIVE_TWO_PC_LIFT_REPLAY"
     }
+  ],
+  "branches": [
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "branch": "friends-open-teams",
+      "known_head": "14b8493f0d0fa402c33329939091082e2012e349",
+      "area": "friends, open teams and native input",
+      "constraint": "NEW_YT_PROTOCOL_REQUIRES_MATCHING_SERVER_AND_CLIENT"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "branch": "hs-shards",
+      "known_head": "de7af7991c4f85df6e8791a60d87a451b437d087",
+      "area": "Hosted shard routing and Redis",
+      "constraint": "SERVER_SOURCE_REVIEW_ONLY_AUTHENTICATED_NATIVE_REDIRECT_QA"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "branch": "p2p-vitals-kills",
+      "known_head": "c194460bf92cb5b2522c9f005eeed47a3fd27d16",
+      "area": "game-to-game vital and kill message research",
+      "constraint": "EXPERIMENTAL_LEGACY_BRANCH_NEVER_REPLACE_AUTHORITY"
+    },
+    {
+      "repo": "Awakenchan/LanternEngine",
+      "branch": "online-shadps4-0.20",
+      "known_head": "918505b384502b896515cf3778c61a21a4fd7fbc",
+      "area": "diverged shadNet online glue",
+      "constraint": "OTHER_ENGINE_AND_WIRE_COMPARE_ONLY_NO_YT_IMPORT"
+    },
+    {
+      "repo": "Wozzardman/shadnet-p2p",
+      "branch": "dev/bloodborne-seamless-co-op",
+      "known_head": "469e33679a34818112e7530b6ae3147e8ec428b3",
+      "area": "experimental NAT and peer design",
+      "constraint": "BEHIND_MAIN_RESEARCH_ONLY_NOT_NATIVE_YT_PROTOCOL"
+    },
+    {
+      "repo": "vladtepes22/NightwatchCoop",
+      "branch": "interactive-map",
+      "known_head": "924ede3814d140ecb73c49854c6f25beb492337d",
+      "area": "map and online visualisation research",
+      "constraint": "BEHIND_MAIN_IDEAS_ONLY_DIFFERENT_DATA_SECURITY_MODEL"
+    },
+    {
+      "repo": "DarkIzuku/bloodborne_pc",
+      "branch": "seamless-dev",
+      "known_head": "e090ac5e25fab486dd9e113e3a6203fda24b8241",
+      "area": "experimental co-op integration",
+      "constraint": "BEHIND_ACTIVE_BRANCH_NO_YT_WIRE_COPY"
+    },
+    {
+      "repo": "DarkIzuku/bloodborne_pc",
+      "branch": "launcher-redesign-v2",
+      "known_head": "bf09c21e760f4907768b9aa92986693e5c4ad202",
+      "area": "native launcher UX",
+      "constraint": "OLDER_BRANCH_REVIEW_DESIGN_ONLY_NO_NETWORK_IMPORT"
+    }
   ]
 }
