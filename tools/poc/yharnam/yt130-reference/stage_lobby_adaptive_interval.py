@@ -34,6 +34,44 @@ NEW_TICK = """    // Non-Hosted still publishes the ORIGINAL full lobby for comp
         SendLobby(now_ms);
     }"""
 
+ORIGINAL_JOIN_STATE = """    if (arrived) {
+        // Its state even when nothing changed for the others.
+        bbcoop::Envelope envelope;
+        *envelope.mutable_lobby_state() = lobby.StateFor(member.lobby);
+        SendTo(member, envelope, now_ms);
+    }"""
+CACHED_JOIN_STATE = """    if (arrived) {
+        // Its state even when nothing changed for the others.
+        bbcoop::Envelope envelope;
+        *envelope.mutable_lobby_state() = lobby.StateFor(member.lobby);
+        // First connection's state is still sent immediately. The next
+        // global nonHosted snapshot need not repeat those exact bytes.
+        if (!hosted.enabled) {
+            lobby_sent[member.lobby] = envelope.lobby_state().SerializeAsString();
+        }
+        SendTo(member, envelope, now_ms);
+    }"""
+
+ORIGINAL_FULL_SEND = """            if (hosted.enabled) {
+                // Only to the players whose own state changed.
+                std::string bytes = envelope.lobby_state().SerializeAsString();
+                std::string& sent = lobby_sent[member.lobby];
+                if (sent == bytes) {
+                    continue;
+                }
+                sent = std::move(bytes);
+            }
+            SendTo(member, envelope, now_ms);"""
+DEDUP_FULL_SEND = """            // Only deliver a full original state if its content changed.
+            // Do not modify team, invitation, world or visibility contents.
+            std::string bytes = envelope.lobby_state().SerializeAsString();
+            std::string& sent = lobby_sent[member.lobby];
+            if (sent == bytes) {
+                continue;
+            }
+            sent = std::move(bytes);
+            SendTo(member, envelope, now_ms);"""
+
 CPP_TEST = r"""int NonHostedFullLobbyIsAdaptiveWithoutDelayingFirstHello() {
   Service service{{}};
   const qint64 now = 1'000'000;
@@ -98,7 +136,12 @@ def rewrite(cpp, test):
         raise ValueError("Native first-join and synchronous TeamStart test missing")
     if "void Service::SendLobby(qint64 now_ms)" not in cpp or        "void Service::OnLobbyHello(" not in cpp or        "void Service::Settle(" not in cpp:
         raise ValueError("No exact original lobby path")
-    return once(cpp, OLD_TICK, NEW_TICK, "world Tick throttle"),            once(test, OLD_TEST, NEW_TEST, "native 65/130 member test")
+    cpp = once(cpp, OLD_TICK, NEW_TICK, "world Tick throttle")
+    cpp = once(cpp, ORIGINAL_JOIN_STATE, CACHED_JOIN_STATE,
+               "original immediate lobby Hello")
+    cpp = once(cpp, ORIGINAL_FULL_SEND, DEDUP_FULL_SEND,
+               "only send byte-different full lobby state")
+    return cpp, once(test, OLD_TEST, NEW_TEST, "native 65/130 member test")
 
 def git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
