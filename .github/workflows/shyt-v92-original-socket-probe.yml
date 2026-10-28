@@ -42,7 +42,7 @@ jobs:
           from pathlib import Path
           code=Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
           assert 'v92.patch_game(files[v92.NETWORK]' in code
-          assert 'V92 game ORIGINAL UDP host_socket' in code
+          assert 'V92-V93 original UDP host_socket SHN1 probe dev-only' in code
           patch=Path('tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py').read_text()
           assert '::socket(AF_INET' not in patch
           assert '::recvfrom(host_socket' not in patch # reuse existing original call
