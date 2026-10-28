@@ -234,6 +234,26 @@ jobs:
             yt130-smoke4.stderr --output yt130-smoke4-diagnostics.log
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
             yt130-smoke4.jsonl --expected-players 4
+      - name: Compare ORIGINAL YT1.3 Hosted true 1 vs 3 shards at 250/500/1000 active gameplay
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -x "$RUNNER_TEMP/yt-build/bbload" || \
+             ! test -x "$RUNNER_TEMP/yt-build/shadnet"; then
+            echo "Native source has not compiled; cannot claim hosted-shard benchmark"
+            exit 0
+          fi
+          # Original source-pinned run_shards.py runs REAL Redis, directory,
+          # shadNet and bbload only on 127.0.0.1; no production networks.
+          timeout 1100s python tools/poc/yharnam/yt130-reference/run_hosted_shards_1000.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+            --team-size 2 --profile active --peak 1000 \
+            --seconds 24 --timeout 150 --ramp-ms 30 \
+            --output yt130-hosted-shards-active-1000.jsonl
+          echo YT130_HOSTED_SHARDS_1000_DIAGNOSTIC_NOT_PUBLIC_CAPACITY
       - name: Measure actual optimized shadNet capacity 4 to 200 players
         shell: bash
         run: |
@@ -271,26 +291,6 @@ jobs:
             --bbload "$RUNNER_TEMP/yt-build/bbload" \
             --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
             --output yt130-wire-logs
-      - name: Compare ORIGINAL YT1.3 Hosted true 1 vs 3 shards at 250/500/1000 active gameplay
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! test -x "$RUNNER_TEMP/yt-build/bbload" || \
-             ! test -x "$RUNNER_TEMP/yt-build/shadnet"; then
-            echo "Native source has not compiled; cannot claim hosted-shard benchmark"
-            exit 0
-          fi
-          # Original source-pinned run_shards.py runs REAL Redis, directory,
-          # shadNet and bbload only on 127.0.0.1; no production networks.
-          timeout 1100s python tools/poc/yharnam/yt130-reference/run_hosted_shards_1000.py \
-            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
-            --bbload "$RUNNER_TEMP/yt-build/bbload" \
-            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
-            --team-size 2 --profile active --peak 1000 \
-            --seconds 24 --timeout 150 --ramp-ms 30 \
-            --output yt130-hosted-shards-active-1000.jsonl
-          echo YT130_HOSTED_SHARDS_1000_DIAGNOSTIC_NOT_PUBLIC_CAPACITY
       - name: Test 2000 players on 1 vs 3 ORIGINAL Hosted shards ONLY manually
         if: \${{ github.event_name == 'workflow_dispatch' && inputs.extreme_hosted_2000 == true }}
         shell: bash
