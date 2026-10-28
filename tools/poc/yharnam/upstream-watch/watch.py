@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bloodborne cross-fork source monitor (GitHub read-only; never auto-cherry-pick).
 
-Compares 8 source HEADs, latest releases and 30 cross-fork PRs against a manually
+Compares 8 source HEADs, latest releases and 36 cross-fork PRs against a manually
 reviewed inventory. Writes JSON and Markdown in the output folder; never
 writes to GitHub, tests locally only, and cannot touch game/server state.
 """
