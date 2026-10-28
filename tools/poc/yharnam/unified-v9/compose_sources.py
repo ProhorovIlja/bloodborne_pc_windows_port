@@ -458,7 +458,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v8.__file__=str(patch_path)
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,HTTP_SESSION_CPP,HTTP_STATS_CPP,HTTP_BACKEND_CPP,HTTP_BLOODBORNE_CPP,WEB_AUTH_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c",
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,HTTP_SESSION_CPP,HTTP_STATS_CPP,HTTP_BACKEND_CPP,HTTP_BLOODBORNE_CPP,WEB_AUTH_CPP,SERVER_LINK_TEST,"server/src/stream_extractor.h","bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c",
         "emulator/src/core/bloodborne_flags.h",
         "emulator/src/core/bloodborne_flags_store.cpp",
         "emulator/src/core/bloodborne_party.h",
@@ -765,7 +765,12 @@ def run(checkout:Path, repo:Path, out:Path):
     v94=types.ModuleType("sh_v94_upstream_parser_bounds")
     v94.__file__=str(v94_path)
     exec(compile(v94_path.read_text("utf-8"),str(v94_path),"exec"),v94.__dict__)
-    files[v94.SERVER]=v94.patch_header(files[v94.SERVER].decode("utf-8")).encode("utf-8")
+    # This original Qt file is not part of earlier compose overlays.
+    # Require the pinned upstream original (or an already-staged overlay)
+    # before applying the fail-closed, exact-anchor security backport.
+    v94_input=(files[v94.SERVER].decode("utf-8") if v94.SERVER in files
+               else sources[v94.SERVER])
+    files[v94.SERVER]=v94.patch_header(v94_input).encode("utf-8")
     meta["applied"].append("V94 upstream PR365 shadNet pre-auth 2GB blob signed-overflow bounds fix, default enabled")
     # V97 upstream Kaniel PR407: Doll talk/menu flag 6700 must remain
     # PER PLAYER; stale host-world flag makes every guest unable to level
