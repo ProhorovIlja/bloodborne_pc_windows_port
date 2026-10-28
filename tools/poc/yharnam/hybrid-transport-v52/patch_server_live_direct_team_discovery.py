@@ -196,45 +196,58 @@ f'''  b.Hello(now+40,Party,false);
 f'''int AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams() {{
   Service service{{{{}}}};
   Game a{{1000,"host",11}}, b{{1001,"guest",12}}, c{{1002,"stranger",13}};
+  Game d{{1003,"guest2",14}}, e{{1004,"guest3",15}}, f{{1005,"guest4",16}};
   constexpr qint64 Now=1'000'000;
-  const std::vector<Game*> games{{&a,&b,&c}};
-  a.LobbyHello(false,Now,true);
-  b.LobbyHello(false,Now,true);
-  c.LobbyHello(false,Now,true);
+  const std::vector<Game*> games{{&a,&b,&c,&d,&e,&f}};
+  for(Game* game:games)game->LobbyHello(false,Now,true);
   Pump(service,games,Now);
-  const auto identity=[](const Game& g) {{
-      return QByteArray::fromStdString(g.name).toHex().toStdString();
+  const auto identity=[](const Game& game) {{
+      return QByteArray::fromStdString(game.name).toHex().toStdString();
   }};
   a.Team(bbcoop::TeamRequest::CREATE,Now);
   Pump(service,games,Now);
   CHECK(a.lobby.has_team());
   const auto team=a.lobby.team().id();
-  a.Team(bbcoop::TeamRequest::INVITE,Now,identity(b));
+  for(Game* guest:std::vector<Game*>{{&b,&d,&e,&f}}) {{
+      a.Team(bbcoop::TeamRequest::INVITE,Now,identity(*guest));
+      Pump(service,games,Now);
+      guest->Team(bbcoop::TeamRequest::ACCEPT,Now,{{}},team);
+      Pump(service,games,Now);
+  }}
+  CHECK(a.lobby.team().members_size()==5);
+  // A sixth player, even in the same world, MUST NOT inherit team grants.
+  a.Team(bbcoop::TeamRequest::INVITE,Now,identity(c));
   Pump(service,games,Now);
-  b.Team(bbcoop::TeamRequest::ACCEPT,Now,{{}},team);
-  Pump(service,games,Now);
-  CHECK(a.lobby.team().members_size()==2);
-  a.Team(bbcoop::TeamRequest::READY,Now,{{}},{{}},1);
-  b.Team(bbcoop::TeamRequest::READY,Now,{{}},{{}},1);
+  CHECK(c.lobby.invites_size()==0);
+  for(Game* member:std::vector<Game*>{{&a,&b,&d,&e,&f}})
+      member->Team(bbcoop::TeamRequest::READY,Now,{{}},{{}},1);
   Pump(service,games,Now);
   a.Team(bbcoop::TeamRequest::START,Now);
   Pump(service,games,Now);
   CHECK(!a.starts.empty() && !b.starts.empty());
   const auto party=QByteArray::fromStdString(a.starts.back().party());
-  // Deliberate attempted WORLD co-location by a third, NON-TEAM player:
-  // granting it P2P would leak direct peer addresses and session keys.
-  a.Hello(Now+20,party,true);
-  b.Hello(Now+20,party,true);
-  c.Hello(Now+20,party,true);
-  a.Map(0x18010000,Now+20);
-  b.Map(0x18010000,Now+20);
-  c.Map(0x18010000,Now+20);
+  for(Game* game:games) {{
+      game->Hello(Now+20,party,true);
+      game->Map(0x18010000,Now+20);
+  }}
   Pump(service,games,Now+20);
   const auto valid=service.{API}();
-  CHECK(valid.size()==1);
-  CHECK(valid[0].first=="guest" && valid[0].second=="host");
+  CHECK(valid.size()==10); // five approved hunters => 5*4/2
+  for(const auto& edge:valid)
+      CHECK(edge.first!="stranger" && edge.second!="stranger");
+  // Departures immediately remove every associated direct edge,
+  // WITHOUT giving a same-world outsider access.
   b.Team(bbcoop::TeamRequest::LEAVE,Now+40);
   Pump(service,games,Now+40);
+  CHECK(service.{API}().size()==6); // four players => 6 edges
+  d.Team(bbcoop::TeamRequest::LEAVE,Now+50);
+  Pump(service,games,Now+50);
+  CHECK(service.{API}().size()==3); // three players => 3 edges
+  e.Team(bbcoop::TeamRequest::LEAVE,Now+60);
+  Pump(service,games,Now+60);
+  CHECK(service.{API}().size()==1); // two players => 1 edge
+  f.Team(bbcoop::TeamRequest::LEAVE,Now+70);
+  Pump(service,games,Now+70);
   CHECK(service.{API}().empty());
   return 0;
 }}
