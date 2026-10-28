@@ -56,6 +56,7 @@ jobs:
             stage_coop_reliability.py \
             stage_lobby_coalesce.py \
             stage_lobby_coalesce_cpp_test.py \
+            stage_coop_shared_encode.py \
             stage_eventloop_timing.py \
             stage_hosted_lobby_index.py; do
             python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
@@ -174,6 +175,19 @@ jobs:
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
           echo SHYT_YT130_LOBBY_REAL_CPP_FUNCTIONAL_TEST_READY
+      - name: Stage native C++ same-protobuf Coop7 board and Entries encode reuse
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_coop_shared_encode.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
+          grep -q 'IdenticalCoopBroadcastsKeepPartyWorldAndReliableDelivery' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          grep -q 'void Service::SendEncoded' \
+            "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          echo YT130_COOP7_SHARED_ENCODE_REAL_CPP_TEST_READY
       - name: Instrument original Qt UDP read callback and 50ms world Timer WITHOUT changing flow
         shell: bash
         run: |
