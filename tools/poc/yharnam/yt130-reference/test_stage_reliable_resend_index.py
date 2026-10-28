@@ -11,7 +11,9 @@ spec.loader.exec_module(m)
 
 class NativeReliableResendTests(unittest.TestCase):
     def original(self):
-        header = "\n".join((m.OLD_INCLUDE, m.OLD_ENTRY, m.OLD_LOOKUP,\n                            "                out.wait_ms = (std::min)(out.wait_ms * 2, settings.max_resend_ms);",\n                            m.OLD_RESEND))
+        header = "\n".join((m.OLD_INCLUDE, m.OLD_ENTRY, m.OLD_LOOKUP,
+                            "                out.wait_ms = (std::min)(out.wait_ms * 2, settings.max_resend_ms);",
+                            m.OLD_RESEND))
         test = "// NonHostedTeamEditsAreCoalescedAndStartStillWorks\n" + m.OLD_TEST
         return header, test
 
