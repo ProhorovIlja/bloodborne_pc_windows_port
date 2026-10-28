@@ -116,13 +116,13 @@ static void ThreePlayerMeshIsolation() {
 static void FiveHunterFullMesh() {
     World world;
     const QVector<QByteArray> hunters={"host","guest1","guest2","guest3","guest4"};
-    for(int i=0;i<hunters.size();++i)
+    for(qsizetype i=0;i<hunters.size();++i)
         world.Add(hunters[i],static_cast<quint64>(101+i),
                   static_cast<quint16>(43000+i));
     P2PTeamPairRegistryV102 registry;
     QSet<std::uint64_t> grants;
-    for(int i=0;i<hunters.size();++i)
-        for(int j=i+1;j<hunters.size();++j) {
+    for(qsizetype i=0;i<hunters.size();++i)
+        for(qsizetype j=i+1;j<hunters.size();++j) {
             std::uint64_t pair=0;
             assert(registry.Begin(hunters[i],hunters[j],world.Resolve(),1000,pair));
             assert(pair && !grants.contains(pair));
