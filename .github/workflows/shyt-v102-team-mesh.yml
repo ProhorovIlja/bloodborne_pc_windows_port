@@ -1,0 +1,159 @@
+name: Seamless Hunt V102 authenticated 3-player team mesh grants
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_pair_lease_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_team_registry_v102.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v102-team-mesh.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_pair_lease_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_team_registry_v102.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v102-team-mesh.yml
+permissions:
+  contents: read
+jobs:
+  guard:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check identity, scoped ticket selection and no Direct activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          root=Path('tools/poc/yharnam/hybrid-transport-v52')
+          listener=(root/'sh_p2p_tls_listener.hpp').read_text()
+          registry=(root/'sh_p2p_team_registry_v102.hpp').read_text()
+          native=(root/'sh_native_tls_local_client_v90.hpp').read_text()
+          wrapper=(root/'sh_native_tls_local_client_v91.hpp').read_text()
+          adapter=(root/'patch_native_server_pair_autostage_v100.py').read_text()
+          assert 'P2PTeamPairRegistryV102 team_registry_{};' in listener
+          assert 'team_registry_.Take(' in listener
+          assert 'team_registry_.MarkReady(' in listener
+          assert 'team_registry_.AvailableFor(' in listener
+          assert 'ConfigureLocalTeamPairV102(' in listener
+          assert 'YT-P2P/V102 LIST\\n' in listener
+          assert 'YT-P2P/V102 OFFER ' in listener
+          assert 'YT-P2P/V102 READY ' in listener
+          assert 'if(!session->PairedIssued() || !bound || *v102_selected ||' in listener
+          assert 'team_registry_.RevokePair(*v102_selected)' in listener
+          assert 'std::uint64_t v102_pair_id=0' in native
+          assert 'std::string(pair_selector,sizeof(pair_selector))' in native
+          assert 'QByteArray::number' not in native
+          assert 'v102_pair_id' in wrapper
+          assert 'kMaxPairs=512' in registry
+          assert 'kMaxPeersPerAccount=16' in registry
+          assert 'SHYT_P2P_TLS_AUTOTEAM_TEST' in adapter
+          assert 'SHYT_P2P_TLS_THIRD_CLIENT_CERT_SHA256' in adapter
+          assert adapter.count('p2p_tls.ConfigureLocalTeamPairV102(')==3
+          assert 'direct_egress.Arm(' not in listener
+          assert 'listen(QHostAddress::Any' not in listener
+          print('SHYT_V102_NATIVE_TLS_PAIR_SCOPING_TEST_ONLY_PASS')
+          PY
+  qt-real-world:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Install real Qt6 server and protobuf dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev qt6-httpserver-dev qt6-websockets-dev \
+            libprotobuf-dev protobuf-compiler libssl-dev pkg-config
+      - name: Compile and execute A-B A-C B-C real crypto grant mesh
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_team_registry_v102.cpp" \
+            $(pkg-config --cflags --libs Qt6Core) -lcrypto \
+            -o /tmp/shyt-v102-team
+          /tmp/shyt-v102-team
+          echo SHYT_V102_THREE_HUNTER_512_PAIRS_NATIVE_CRYPTO_PASS
+      - name: Compose immutable original YT and compile actual Qt main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v102-real
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          root=Path('/tmp/shyt-v102-real')
+          main=(root/'server/src/main.cpp').read_text()
+          header=(root/'server/src/sh_p2p_tls_listener.hpp').read_text()
+          manifest=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          assert 'SHYT_P2P_TLS_AUTOTEAM_TEST' in main
+          assert main.count('p2p_tls.ConfigureLocalTeamPairV102(')==3
+          assert 'SHYT_P2P_TLS_LOCAL_TEST' in main
+          assert 'P2PTeamPairRegistryV102 team_registry_' in header
+          assert 'V102 original Qt team 3+ peer P2P pair registry' in ' '.join(manifest['applied'])
+          for name in ('server/src/main.cpp','server/src/sh_p2p_team_registry_v102.hpp'):
+              assert manifest['sha256'][name]==hashlib.sha256((root/name).read_bytes()).hexdigest()
+          print('SHYT_V102_PINNED_YT_TEAM_QT_COMPOSE_PASS')
+          PY
+          mkdir -p /tmp/shyt-v102-proto
+          protoc --proto_path=/tmp/shyt-v102-real/server/coop \
+            --cpp_out=/tmp/shyt-v102-proto /tmp/shyt-v102-real/server/coop/coop.proto
+          protoc --proto_path=pinned-upstream/server/src \
+            --cpp_out=/tmp/shyt-v102-proto pinned-upstream/server/src/shadnet.proto
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          source=Path('pinned-upstream/server/src')
+          dest=Path('/tmp/shyt-v102-real/server/src')
+          for item in source.rglob('*'):
+              if item.is_file():
+                  target=dest/item.relative_to(source)
+                  if not target.exists():
+                      target.parent.mkdir(parents=True,exist_ok=True)
+                      shutil.copy2(item,target)
+          PY
+          c++ -std=c++20 -O0 -fPIC -fsyntax-only \
+            -I /tmp/shyt-v102-real/server/src \
+            -I pinned-upstream/server \
+            -I /tmp/shyt-v102-proto \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6HttpServer) \
+            /tmp/shyt-v102-real/server/src/main.cpp \
+            /tmp/shyt-v102-real/server/src/server.cpp \
+            /tmp/shyt-v102-real/server/src/link_server.cpp \
+            /tmp/shyt-v102-real/server/src/bloodborne_world.cpp
+          echo SHYT_V102_ORIGINAL_QT_SERVER_TEAM_TLS_SYNTAX_PASS
