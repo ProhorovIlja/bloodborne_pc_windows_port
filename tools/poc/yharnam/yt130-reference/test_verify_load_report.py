@@ -43,6 +43,36 @@ class ValidatorTests(unittest.TestCase):
                 mod.load(f,200)
 
 
+    def test_four_player_smoke_must_include_actual_delivery_not_only_playing(self):
+        with TemporaryDirectory() as d:
+            p = Path(d) / "smoke.jsonl"
+            full = self.baseline() | {
+                "players": 4, "playing": 4, "refused": 0,
+                "packets_sent": 1948, "packets_received": 1948,
+                "packets_lost": 0, "udp_buffer_drops": 0,
+                "relay_ms_p99": 0.4
+            }
+            p.write_text(json.dumps(full) + "\\n")
+            self.assertEqual(mod.load(p, 4, require_full_gameplay=True)["playing"], 4)
+            partial = full | {"packets_sent": 2091, "packets_received": 264}
+            p.write_text(json.dumps(partial) + "\\n")
+            # This is precisely the false green reported by PR45.
+            self.assertEqual(mod.load(p, 4)["playing"], 4)
+            with self.assertRaises(ValueError):
+                mod.load(p, 4, require_full_gameplay=True)
+            for bad in (
+                full | {"playing": 3},
+                full | {"packets_lost": 1},
+                full | {"udp_buffer_drops": 1},
+                full | {"relay_ms_p99": 51},
+                full | {"packets_received": 1928},
+                full | {"packets_sent": 1, "packets_received": 1}
+            ):
+                with self.subTest(bad=bad):
+                    p.write_text(json.dumps(bad) + "\\n")
+                    with self.assertRaises(ValueError):
+                        mod.load(p, 4, require_full_gameplay=True)
+
     def test_refused_counts_retries_not_unique_hunters(self):
         with TemporaryDirectory() as d:
             p=Path(d)/"load.jsonl"
