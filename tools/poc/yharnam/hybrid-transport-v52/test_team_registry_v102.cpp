@@ -16,6 +16,7 @@ struct World {
     QHash<QByteArray,quint32> virtuals;
     quint64 revision=900;
     bool consent=true;
+    mutable std::size_t scope_captures=0;
     void Add(const QByteArray& account,quint64 epoch,quint16 port) {
         epochs.insert(account,epoch);
         ports.insert(account,port);
@@ -23,6 +24,7 @@ struct World {
     }
     std::optional<P2PLocalOfferScope> Scope(
         const QByteArray& a,const QByteArray& b) const {
+        ++scope_captures;
         if(!consent || a==b || !epochs.contains(a) || !epochs.contains(b))
             return std::nullopt;
         return P2PLocalOfferScope{
@@ -222,6 +224,9 @@ static void EpochConsentAndLimits() {
 
     // Global cap of 512 disjoint pairs, plus 513th refused, then reused
     // after an old generation expires. No uncontrolled memory growth.
+    // CPU guard: each Begin resolves each direction twice, not a full
+    // 512-pair scan on EVERY Begin. That would grow quadratically.
+    const auto before_bulk=world.scope_captures;
     for(int i=0;i<512;++i) {
         const auto a=QByteArray("P")+QByteArray::number(i);
         const auto b=QByteArray("Q")+QByteArray::number(i);
@@ -232,6 +237,7 @@ static void EpochConsentAndLimits() {
         assert(registry.Begin(a,b,world.Resolve(),20000,id));
     }
     assert(registry.Count()==512);
+    assert(world.scope_captures-before_bulk<=512U*5U);
     world.Add("overflowA",9001,43001);
     world.Add("overflowB",9002,43002);
     assert(!registry.Begin("overflowA","overflowB",world.Resolve(),20001,id));
