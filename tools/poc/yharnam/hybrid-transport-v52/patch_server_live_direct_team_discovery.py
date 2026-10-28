@@ -280,12 +280,19 @@ int ATeamFormsAndStartsThroughTheService() {{
                     const auto authorized=[&](const QByteArray& id) {
                         return id==a || id==b || id==c;
                     };
+                    std::vector<std::pair<QByteArray,QByteArray>> current;
                     for(const auto& edge:server.DiscoverLiveDirectPairs()) {
-                        if(!authorized(edge.first) ||
-                           !authorized(edge.second))continue;
+                        if(authorized(edge.first) &&
+                           authorized(edge.second))
+                            current.push_back(edge);
+                    }
+                    // Revoke pending grants before staging new ones;
+                    // otherwise old team edges can outlive departure.
+                    // Game-client revocation is separate and still needed.
+                    (void)p2p_tls.ReconcileLocalTeamPairsV102(current);
+                    for(const auto& edge:current)
                         (void)p2p_tls.ConfigureLocalTeamPairV102(
                             edge.first,edge.second,world_pair,pair_id);
-                    }
 '''
     main=one(main,old,new,"remove operator hardcoded three-pair staging")
     main=one(main,
