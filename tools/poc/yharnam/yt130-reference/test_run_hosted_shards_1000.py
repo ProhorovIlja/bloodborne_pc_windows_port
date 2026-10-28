@@ -134,6 +134,18 @@ class HostedShards1000Tests(unittest.TestCase):
         source["per_shard"][1]["shard"] = source["per_shard"][0]["shard"]
         self.assertEqual(m.report(json.dumps(source), 0, 1000, 3)
                          ["quality"], "NO_PER_SHARD_EVIDENCE")
+        # Broken or malicious JSON must not terminate the whole 1000-player
+        # benchmark while trying to hash an untrusted shard identifier.
+        for bad_id in ([], {}, None, 0, "", "x" * 129, float("nan")):
+            with self.subTest(shard_id=bad_id):
+                source = self.sample()
+                source["per_shard"][0]["shard"] = bad_id
+                self.assertEqual(m.report(json.dumps(source), 0, 1000, 3)
+                                 ["quality"], "NO_PER_SHARD_EVIDENCE")
+        source = self.sample()
+        del source["per_shard"][0]["shard"]
+        self.assertEqual(m.report(json.dumps(source), 0, 1000, 3)
+                         ["quality"], "NO_PER_SHARD_EVIDENCE")
 
     def test_timeout_kills_all_original_server_directory_redis_descendants(self):
         class Fake:
