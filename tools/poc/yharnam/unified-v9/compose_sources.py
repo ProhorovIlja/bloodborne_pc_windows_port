@@ -864,6 +864,19 @@ def run(checkout:Path, repo:Path, out:Path):
     for name,body in auth.patch(auth_inputs).items():
         files[name]=body.encode("utf-8")
     meta["applied"].append("Upstream PR423 authenticated game-world/lobby identity backport: live signed-in LinkServer only; uninvited team-world joins denied")
+    # 5-player session must also lift the ORIGINAL native game's
+    # RoomForMore() limit, else the host stops re-ringing at two guests.
+    # The server's sign 4 is already propagated by TeamGuestSign, tested
+    # against the original game. No new P2P game route is authorized.
+    native5_path=metrics_dir/"patch_native_five_hunter_capacity.py"
+    native5=types.ModuleType("sh_native_five_hunters_original_game")
+    native5.__file__=str(native5_path)
+    exec(compile(native5_path.read_text("utf-8"),str(native5_path),"exec"),native5.__dict__)
+    native5_inputs={p:(files[p] if p in files else (checkout/p).read_bytes()).decode("utf-8")
+                    for p in native5.FILES}
+    for name,body in native5.patch(native5_inputs).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("5-hunter original game candidate: host re-rings until five, fourth guest sign=4 in real TeamGate; live game rig pending")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
