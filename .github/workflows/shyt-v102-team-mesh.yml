@@ -79,6 +79,8 @@ jobs:
           assert 'v102_pair_id' in wrapper
           assert 'kMaxPairs=512' in registry
           assert 'kMaxPeersPerAccount=16' in registry
+          assert 'std::size_t RevokeNotIn(' in registry
+          assert 'ReconcileLocalTeamPairsV102(' in listener
           assert 'SHYT_P2P_TLS_AUTOTEAM_TEST' in adapter
           assert 'SHYT_P2P_TLS_THIRD_CLIENT_CERT_SHA256' in adapter
           assert adapter.count('p2p_tls.ConfigureLocalTeamPairV102(')==3
@@ -191,6 +193,7 @@ jobs:
           assert 'SHYT_P2P_TLS_AUTOTEAM_TEST' in main
           assert main.count('p2p_tls.ConfigureLocalTeamPairV102(')==1
           assert 'server.DiscoverLiveDirectPairs()' in main
+          assert 'p2p_tls.ReconcileLocalTeamPairsV102(current)' in main
           assert 'SHYT-LIVE-YT-WORLD-PAIR-DISCOVERY' in main
           team=(root/'server/coop/team_lobby.h').read_text()
           signs=(root/'server/coop/team_lobby.cpp').read_text()
@@ -199,6 +202,8 @@ jobs:
           assert 'GuestSigns{7, 6, 5, 4}' in signs
           assert 'TeamHoldsFive()' in tests
           assert 'SignOf(lobby, "e") == 4' in tests
+          assert 'CHECK(valid.size()==10)' in tests
+          assert 'CHECK(service.DiscoverLiveDirectPairs().size()==6)' in tests
           world=(root/'server/src/bloodborne_world.cpp').read_text()
           link=(root/'server/src/link_server.cpp').read_text()
           assert 'Service::DiscoverLiveDirectPairs()' in world
