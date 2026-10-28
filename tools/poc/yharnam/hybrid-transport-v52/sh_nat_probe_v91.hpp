@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
-// V91: source-only authenticated NAT probe codec & four-stage proof.
+// V91: source-only authenticated NAT probe codec & five-message proof.
 // Both parties MUST first receive the SAME short-lived V90 paired SHG2
 // master via their independently authenticated TLS 1.3 connections.
 // This does not create/send on ANY UDP socket or activate Direct gameplay.
@@ -15,7 +15,7 @@
 
 namespace SeamlessHunt::Hybrid {
 enum class NatProbeKindV91 : std::uint8_t {
-    Challenge=1, Response=2, Confirm=3, ReadyAck=4
+    Challenge=1, Response=2, Confirm=3, ReadyAck=4, Receipt=5
 };
 struct NatProbeFrameV91 {
     NatProbeKindV91 kind=NatProbeKindV91::Challenge;
@@ -130,7 +130,7 @@ public:
 private:
     static bool Good(const NatProbeFrameV91& f) noexcept {
         const auto kind=static_cast<std::uint8_t>(f.kind);
-        if(kind<1 || kind>4 || !f.seq ||
+        if(kind<1 || kind>5 || !f.seq ||
            !SecureOfferV84Detail::Nonzero(f.nonce))return false;
         const bool echo=SecureOfferV84Detail::Nonzero(f.echo);
         return kind==1?!echo:echo;
@@ -180,7 +180,8 @@ public:
     // A responder: receive A challenge, reply with new B nonce and A echo.
     // An initiator: receive B response, send A confirm with B echo.
     // A responder: receive A confirm, send B ReadyAck with A echo.
-    // An initiator: receive B ReadyAck, mark proof complete.
+    // Initiator sends a final signed Receipt after B ReadyAck.
+    // Responder must verify it; neither proof enables game Direct.
     bool Reply(std::span<const std::uint8_t> received,
                std::uint32_t source_ip_nbo,
                std::uint16_t source_port_nbo,
@@ -222,33 +223,68 @@ public:
         }
         return true;
     }
+    // Fifth message: a valid ReadyAck must not be confused with both-sided
+    // reachability. Do not commit a route until receipt sendto succeeds.
     bool Complete(std::span<const std::uint8_t> received,
-                  std::uint32_t source_ip_nbo,
-                  std::uint16_t source_port_nbo,
-                  std::uint64_t now_ms) noexcept {
+                  std::uint32_t source_ip_nbo,std::uint16_t source_port_nbo,
+                  std::uint64_t now_ms,NatProbeCodecV91::Wire& receipt) noexcept {
+        receipt.fill(0);
         if(!active_ || role_!=Role::Initiator || stage_!=2 ||
            complete_)return false;
         NatProbeFrameV91 frame{};
         if(!receiver_.Open(grant_,source_ip_nbo,source_port_nbo,
                            received,now_ms,frame) ||
            frame.kind!=NatProbeKindV91::ReadyAck ||
-           frame.echo!=mine_ || frame.nonce!=other_)
+           frame.echo!=mine_ || frame.nonce!=other_)return false;
+        NatProbeFrameV91 outgoing{};
+        outgoing.kind=NatProbeKindV91::Receipt;outgoing.seq=3;
+        outgoing.nonce=mine_;outgoing.echo=other_;
+        if(!NatProbeCodecV91::Encode(grant_,outgoing,now_ms,receipt))
             return false;
+        receipt_wire_=receipt;stage_=3;
+        return true;
+    }
+    // Only the exact grant-bound datagram handed to the native socket may
+    // confirm successful send. This also defeats an old send callback
+    // after the grant was revoked and replaced.
+    bool ReceiptSent(std::span<const std::uint8_t> sent) noexcept {
+        if(!active_ || role_!=Role::Initiator || stage_!=3 ||
+           complete_ || sent.size()!=receipt_wire_.size() ||
+           !std::equal(sent.begin(),sent.end(),receipt_wire_.begin()))
+            return false;
+        complete_=true;receipt_wire_.fill(0);return true;
+    }
+    bool CompleteResponder(std::span<const std::uint8_t> received,
+                           std::uint32_t source_ip_nbo,
+                           std::uint16_t source_port_nbo,
+                           std::uint64_t now_ms) noexcept {
+        if(!active_ || role_!=Role::Responder || stage_!=2 ||
+           complete_)return false;
+        NatProbeFrameV91 frame{};
+        if(!receiver_.Open(grant_,source_ip_nbo,source_port_nbo,
+                           received,now_ms,frame) ||
+           frame.kind!=NatProbeKindV91::Receipt ||
+           frame.nonce!=other_ || frame.echo!=mine_)return false;
         complete_=true;return true;
     }
     bool InitiatorVerified() const noexcept {
         return active_ && complete_ && role_==Role::Initiator;
     }
+    bool ResponderVerified() const noexcept {
+        return active_ && complete_ && role_==Role::Responder;
+    }
     void Reset() noexcept {
         CryptoDetail::Erase(grant_.direction_key);
         grant_={};
         CryptoDetail::Erase(mine_);CryptoDetail::Erase(other_);
-        receiver_.Reset();active_=false;complete_=false;stage_=0;
+        receiver_.Reset();receipt_wire_.fill(0);
+        active_=false;complete_=false;stage_=0;
     }
 private:
     SecurePeerOfferV84 grant_{};
     NatProbeCodecV91::Receiver receiver_{};
     NatProbeCodecV91::Nonce mine_{},other_{};
+    NatProbeCodecV91::Wire receipt_wire_{};
     Role role_;
     std::uint8_t stage_=0;
     bool active_=false,complete_=false;
