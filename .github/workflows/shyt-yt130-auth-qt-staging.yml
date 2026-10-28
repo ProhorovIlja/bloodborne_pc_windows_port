@@ -57,6 +57,7 @@ jobs:
             stage_lobby_coalesce.py \
             stage_lobby_coalesce_cpp_test.py \
             stage_eventloop_timing.py \
+            stage_udp_drain_fifo.py \
             stage_hosted_lobby_index.py; do
             python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
@@ -174,16 +175,19 @@ jobs:
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
           echo SHYT_YT130_LOBBY_REAL_CPP_FUNCTIONAL_TEST_READY
-      - name: Instrument original Qt UDP read callback and 50ms world Timer WITHOUT changing flow
+      - name: Drain original Qt UDP socket fully and time-slice FIFO game packet handling
         shell: bash
         run: |
           set -euo pipefail
           python tools/poc/yharnam/yt130-reference/stage_eventloop_timing.py \
             "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_udp_drain_fifo.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
-          echo SHYT_YT130_QT_EVENTLOOP_OBSERVE_ONLY_NO_SCHEDULING_CHANGE
+          grep -q 'DrainUdpPending' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          echo SHYT_YT130_QT_SOCKET_FULL_DRAIN_FIFO_BACKPRESSURE_STAGED
       - name: Native Hosted C++ roster index and 512-player functional regression
         shell: bash
         run: |
