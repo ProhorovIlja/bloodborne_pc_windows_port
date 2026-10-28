@@ -18,6 +18,9 @@ import signal
 import subprocess
 import sys
 import time
+import tempfile
+
+from measure_wire_traffic import aggregate_eventloop, aggregate_fair_queue
 
 from run_capacity_curve import BUILD, quality
 
@@ -48,19 +51,19 @@ def make_command(args, players: int, index: int) -> list[str]:
         "--team-size", str(args.team_size),
         "--processes", str(processes(players)),
         "--seconds", "22",
-        "--ramp-ms", "20",
+        "--ramp-ms", str(args.ramp_ms),
         "--port", str(36314 + index * 10),
         "--cfg", "CheckServerBuild=false",
         "--extra", f"--build '{BUILD}' --owner-fps {owner} --follower-fps {follower}",
     ]
 
 
-def measure(cmd: list[str], timeout: int) -> tuple[int, str, str]:
+def measure(cmd: list[str], timeout: int, environ=None) -> tuple[int, str, str]:
     """Kill whole local process group on timeout; don't strand server/bbload."""
     if not 20 <= timeout <= MAX_TIMEOUT:
         raise ValueError("Unsafe time limit")
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, start_new_session=True)
+                            text=True, start_new_session=True, env=environ)
     try:
         out, err = proc.communicate(timeout=timeout)
         return int(proc.returncode), out, err
@@ -68,6 +71,41 @@ def measure(cmd: list[str], timeout: int) -> tuple[int, str, str]:
         os.killpg(proc.pid, signal.SIGKILL)
         proc.communicate()
         return 124, "", "LOCAL_GENERATOR_TIMEOUT_PROCESS_GROUP_KILLED"
+
+
+def inspect_disposable_server_logs(root: Path) -> dict:
+    """Keep aggregate diagnostic counters ONLY; never upload raw IP/name logs."""
+    report = {"logs_found": 0, "truncated": False, "eventloop": None,
+              "fair_queue": None, "server_log_events": {}}
+    if root.is_symlink() or not root.is_dir():
+        return report
+    folders = list(root.glob("shadnet-load-*"))
+    if len(folders) != 1:
+        report["folder_count_mismatch"] = len(folders)
+        return report
+    folder = folders[0]
+    log = folder / "shadnet.log"
+    if folder.is_symlink() or not folder.is_dir() or log.is_symlink() or not log.is_file():
+        return report
+    if log.stat().st_size > 20 * 1024 * 1024:
+        report["truncated"] = True
+        return report
+    text = log.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines()
+    report["logs_found"] = 1
+    report["eventloop"] = aggregate_eventloop(lines)
+    report["fair_queue"] = aggregate_fair_queue(lines)
+    # Categorize server events, no raw log lines, account names or IP addresses.
+    categories = ("admission", "sign in", "refused", "rate limit",
+                  "timeout", "hello", "authentication", "link")
+    counts = dict.fromkeys(categories, 0)
+    for line in lines:
+        lowered = line.casefold()
+        for term in categories:
+            if term in lowered:
+                counts[term] += 1
+    report["server_log_events"] = counts
+    return report
 
 
 def inspect(stdout: str, rc: int, expected: int) -> dict:
@@ -105,8 +143,8 @@ def inspect(stdout: str, rc: int, expected: int) -> dict:
 def run(args) -> int:
     if args.team_size not in MATRIX or args.profile not in FPS:
         raise ValueError("Unsupported team shape or FPS profile")
-    if args.timeout < 20 or args.timeout > MAX_TIMEOUT:
-        raise ValueError("Unsafe timeout")
+    if args.timeout < 20 or args.timeout > MAX_TIMEOUT or not 1 <= args.ramp_ms <= 1000:
+        raise ValueError("Unsafe timeout or arrival ramp")
     if any(not p.is_file() or p.is_symlink() for p in
            (args.shadnet, args.bbload, args.load_script)):
         raise ValueError("Missing or linked original compiled server / generator")
@@ -119,8 +157,15 @@ def run(args) -> int:
         for i, players in enumerate(selected):
             cmd = make_command(args, players, i)
             started = time.monotonic()
-            rc, stdout, _ = measure(cmd, args.timeout)
-            report = inspect(stdout, rc, players)
+            # All real server/config/player files remain under a disposable
+            # private TMPDIR; only aggregated counts escape to CI artifact.
+            with tempfile.TemporaryDirectory(prefix="yt130-load-only-") as tmp:
+                environ = dict(os.environ)
+                environ["TMPDIR"] = tmp
+                cmd.append("--keep")
+                rc, stdout, _ = measure(cmd, args.timeout, environ)
+                report = inspect(stdout, rc, players)
+                observed = inspect_disposable_server_logs(Path(tmp))
             row = {
                 "stage_players": players,
                 "team_size": args.team_size,
@@ -128,6 +173,8 @@ def run(args) -> int:
                 "owner_fps": FPS[args.profile][0],
                 "follower_fps": FPS[args.profile][1],
                 "generator_processes": processes(players),
+                "ramp_ms_per_client_group": args.ramp_ms,
+                "server_diagnostics": observed,
                 "elapsed_s": round(time.monotonic() - started, 2),
                 "scope": "ISOLATED_127.0.0.1_SYNTHETIC_YT130_ONLY",
                 "proof": "LOOPBACK_GAMEPLAY_NOT_REAL_WORLD_1000_PLAYER_SLA",
@@ -159,5 +206,6 @@ if __name__ == "__main__":
     p.add_argument("--peak", type=int,
                    choices=(250, 256, 500, 512, 1000, 1024, 2000, 2048), default=1000)
     p.add_argument("--timeout", type=int, default=120)
+    p.add_argument("--ramp-ms", type=int, default=20)
     p.add_argument("--require-healthy", action="store_true")
     raise SystemExit(run(p.parse_args()))
