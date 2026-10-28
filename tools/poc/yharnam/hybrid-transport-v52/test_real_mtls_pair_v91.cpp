@@ -7,6 +7,9 @@
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QFile>
+#include <QSslConfiguration>
+#include <QSslKey>
+#include <QSslSocket>
 #include <QTimer>
 #include <atomic>
 #include <thread>
@@ -23,6 +26,33 @@ static QSslCertificate Leaf(const QString& path) {
 static QByteArray Pin(const QString& path) {
     return QCryptographicHash::hash(
         Leaf(path).toDer(),QCryptographicHash::Sha256).toHex();
+}
+// V101: exercise the actual Qt TLS listener, not only P2PPairLease methods.
+// A valid certificate on a fresh session lacking V80+V90 ownership must
+// NOT be able to abort the already staged A/B grant via OFFER or READY.
+static bool RejectUnpairedCommand(const QString& ca_path,
+                                  const QString& cert_path,
+                                  const QString& key_path,
+                                  quint16 port,const QByteArray& cmd) {
+    QFile key_file(key_path);
+    if(!key_file.open(QIODevice::ReadOnly))return false;
+    const QSslKey key(&key_file,QSsl::Rsa,QSsl::Pem,QSsl::PrivateKey);
+    if(key.isNull())return false;
+    QSslConfiguration cfg=QSslConfiguration::defaultConfiguration();
+    cfg.setProtocol(QSsl::TlsV1_3);
+    cfg.setCaCertificates({Leaf(ca_path)});
+    cfg.setLocalCertificate(Leaf(cert_path));
+    cfg.setPrivateKey(key);
+    cfg.setPeerVerifyMode(QSslSocket::VerifyPeer);
+    QSslSocket socket;
+    socket.setSslConfiguration(cfg);
+    socket.connectToHostEncrypted("127.0.0.1",port);
+    if(!socket.waitForEncrypted(4000))return false;
+    if(socket.write(cmd)!=cmd.size() || !socket.waitForBytesWritten(4000))
+        return false;
+    const bool disconnected=socket.waitForDisconnected(4000) ||
+                            socket.state()==QAbstractSocket::UnconnectedState;
+    return disconnected && socket.bytesAvailable()==0;
 }
 struct Identity {
     NativeOfferIdentityV84 current{};
@@ -87,7 +117,17 @@ int main(int argc,char** argv) {
             NativeSealedGrantInboxV84 box_a,box_b;
             SecurePeerOfferV84 grant_a{},grant_b{};
             bool ready_a=false,ready_b=false;
-            bool good=NativeTlsLocalOfferClientV91::Request(
+            // A fresh but verified mTLS socket has not received a paired
+            // grant. Neither a forged READY nor an OFFER without V80 BEGIN
+            // can revoke the separate waiting A/B lease.
+            bool good=RejectUnpairedCommand(
+                argv[3],argv[4],argv[5],port,
+                "YT-P2P/V91 READY "+QByteArray(64,'a')+"\\n");
+            good=good && RejectUnpairedCommand(
+                argv[3],argv[4],argv[5],port,"YT-P2P/V90 OFFER\\n");
+            std::fprintf(stderr,"V101 real TLS unissued OFFER/READY denial: %s\\n",
+                         good?"PASS":"FAIL");
+            good=good && NativeTlsLocalOfferClientV91::Request(
                 config_a,box_a,first.current,1,Refresh,&first,now(),ready_a);
             good=good && !ready_a;
             const auto* pa=box_a.PendingForNat(now());
