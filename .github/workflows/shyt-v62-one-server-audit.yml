@@ -1,0 +1,88 @@
+name: Seamless Hunt V62 CLS snapshot and one-server migration audit
+on:
+  push:
+    branches:
+      - feature/shyt-cls-friends-one-server-v62
+    paths:
+      - docs/architecture/ONE_YHARNAM_TOGETHER_SERVER.md
+      - docs/architecture/DIRECT_P2P_FIRST_AND_MATCHMAKING.md
+      - tools/poc/yharnam/one-server-v62/**
+      - .github/workflows/shyt-v62-one-server-audit.yml
+  pull_request:
+    branches:
+      - feature/seamless-hunt-mainline
+    paths:
+      - docs/architecture/ONE_YHARNAM_TOGETHER_SERVER.md
+      - docs/architecture/DIRECT_P2P_FIRST_AND_MATCHMAKING.md
+      - tools/poc/yharnam/one-server-v62/**
+      - .github/workflows/shyt-v62-one-server-audit.yml
+permissions:
+  contents: read
+jobs:
+  inventory-and-provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check read-only inventory syntax and immutable source provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tools/poc/yharnam/one-server-v62/fornex_readonly_inventory.sh
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("tools/poc/yharnam/one-server-v62/cls_20261025_snapshot.json")
+          doc=Path("docs/architecture/ONE_YHARNAM_TOGETHER_SERVER.md").read_text()
+          m=json.loads(p.read_text(encoding="utf-8"))
+          assert m["schema"] == 1
+          assert len(m["source_archive"]["sha256"]) == 64
+          assert len(m["source_archive"]["inner_sha256"]) == 64
+          assert m["source_archive"]["not_committed_to_public_repo"] is True
+          assert m["fornex"]["installed_matches_running"] is True
+          assert m["fornex"]["game_friends_ui_tested"] is False
+          assert m["fornex"]["direct_p2p_gameplay_enabled"] is False
+          assert m["fornex"]["qt_backend_enabled"] is False
+          assert m["fornex"]["python_game_backend_port"] == 20443
+          assert m["fornex"]["qt_game_backend_port"] == 20443
+          assert m["upstream"]["latest_not_imported"] is True
+          assert m["fornex"]["candidate_sha256"] in doc
+          script=Path("tools/poc/yharnam/one-server-v62/fornex_readonly_inventory.sh").read_text()
+          for forbidden in ("systemctl stop", "systemctl start", "systemctl restart",
+                            "rm -rf", "sed -i", "sqlite3", "curl", "wget"):
+              assert forbidden not in script, forbidden
+          print("SHYT_V62_READONLY_ONE_SERVER_MIGRATION_CONTRACT_PASS")
+          PY
+  match-intents:
+    name: shared coop/PvP policy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Verify shared matchmaking authorization (Linux GCC)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            tools/poc/yharnam/one-server-v62/test_unified_matchmaking.cpp \
+            -o /tmp/shyt-v64-match-intents
+          /tmp/shyt-v64-match-intents
+      - name: Verify shared matchmaking authorization (Windows MSVC)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 tools/poc/yharnam/one-server-v62/test_unified_matchmaking.cpp /Fe:shyt-v64-match-intents.exe
+          if ($LASTEXITCODE -ne 0) { throw 'matchmaking intent compile failed' }
+          ./shyt-v64-match-intents.exe
+          if ($LASTEXITCODE -ne 0) { throw 'PvP opt-in, permission or capacity policy regression failed' }

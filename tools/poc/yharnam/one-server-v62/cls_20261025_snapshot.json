@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-10-25",
+  "purpose": "source provenance and current deployed server snapshot, NOT a public binary source release",
+  "source_archive": {
+    "filename": "server_linuz.zip",
+    "sha256": "6a557aa580bbc2883e6d122601aa2bfda4f1de09846f374fe4a25e49c7d001b7",
+    "inner_tarball": "amanises-yt-public-server-src-20261025.tar.gz",
+    "inner_sha256": "ade8fc9baa46ea47f4122ae723fcabc7406e0e2ba6b33925d81cf9502b5c772d",
+    "copyright": "CLS_AMG/Amanises and contributors",
+    "license": "GPL-2.0-or-later; verify component-specific headers",
+    "stored_in_private_user_library": "/Bloodborne/CLS/server_linuz-2026-10-25-original.zip",
+    "not_committed_to_public_repo": true
+  },
+  "guarded_v3": {
+    "filename": "BBSC-YT-Friends-20261025-Fornex-Guarded-v3.zip",
+    "sha256": "11a7c646131524bd69940a93ceea102655b76256e2db38e6a98a3a632c0e0879",
+    "stored_in_private_user_library": "/Bloodborne/CLS/BBSC-YT-Friends-20261025-Fornex-Guarded-v3.zip"
+  },
+  "critical_source_files_sha256": {
+    "coop/coop.proto": "6052a81c4eef4bd0bd50be91bf9c123eff99ee1e990c08ccb030dfe7aa6a3ae0",
+    "src/lobby_friends.h": "8f0924fe1a06968f9eb0b1d40a59178a39621ba5977a1d0193a769820a400bdd",
+    "src/lobby_friends.cpp": "66d7950bc6a4703b12be27e855ed986e0c27b5685c506aa54aeeccda7e59ddaa",
+    "src/lobby_friends_db.cpp": "23f31c945b825a0cffc61d92399ac8c695ec4897b2ca8c45084f4e87cf7cc281",
+    "src/lobby_friends_db.h": "721115705e72dadfc3a6ccc2a08273f5b71c3cd4951cfac99e903f3a088b748b",
+    "tests/test_lobby_friends_db.cpp": "9a5a12a60e529968ba8b38f7be7cdc3d961605531a718eb8f46cff147d2c471a",
+    "src/bloodborne_backend_server.cpp": "0ce688683c4e65bd9f77380a82005857c15c36236a7b2f3b441c6417993d0bb9",
+    "src/bloodborne_backend.cpp": "916857619b18ea1d681649979df3f35871a0a395c1cffd131db7927a5454ce28",
+    "src/config.cpp": "d8149e39486ab7cb90c6931e1037f58a8c083fb962e6c48881228174fe317bb0",
+    "src/main.cpp": "6a371f0ef89fcd2c299cdc39c315cfb2b2fec27712d26fe90be2e4dc642b39b4"
+  },
+  "upstream": {
+    "repository": "lKaniel/bloodborne-server",
+    "pinned_baseline_sha": "77e350743a7cb4524cfcc1782fb6e3af64e25b15",
+    "latest_observed_20261025_sha": "f34b82dd0a6e9efe6c44f101debc2585a2ef36d8",
+    "latest_not_imported": true
+  },
+  "fornex": {
+    "service": "bbsc-shadnet.service",
+    "installed_binary": "/opt/bbsc/shadnet/shadnet",
+    "candidate_sha256": "8b4b29b3e56414aa60bb53baa28285242b9a482e0a11e8dfe732ddc553094633",
+    "installed_matches_running": true,
+    "observed_running": "2026-10-25 13:02 UTC",
+    "backup_dir": "/opt/bbsc/backups/friends-20261025-20261025T130156Z-1031121",
+    "game_friends_ui_tested": false,
+    "python_game_backend_port": 20443,
+    "qt_backend_enabled": false,
+    "qt_game_backend_port": 20443,
+    "shadnet_friends_db": "db/shadnet.db",
+    "direct_p2p_gameplay_enabled": false
+  },
+  "limits": [
+    "SHA matches and unit tests do not prove gameplay feature parity",
+    "No production changes through this manifest",
+    "No public raw third-party archive, live credentials, user database, or proprietary game assets"
+  ]
+}
