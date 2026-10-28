@@ -278,7 +278,9 @@ int ATeamFormsAndStartsThroughTheService() {{
                     // Local test pins alone choose whose grants may be
                     // consumed by this isolated 127.0.0.1 listener.
                     const auto authorized=[&](const QByteArray& id) {
-                        return id==a || id==b || id==c;
+                        return id==a || id==b || id==c ||
+                               (!d.isEmpty() && id==d) ||
+                               (!e.isEmpty() && id==e);
                     };
                     std::vector<std::pair<QByteArray,QByteArray>> current;
                     for(const auto& edge:server.DiscoverLiveDirectPairs()) {
