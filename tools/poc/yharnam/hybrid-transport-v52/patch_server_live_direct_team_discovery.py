@@ -54,7 +54,7 @@ f'''{TYPE} Service::{API}() const {{
     constexpr std::size_t kMaxPairs=512,kMaxPeersPerAccount=16;
     {TYPE} result;
     std::map<QByteArray,std::size_t> occurrences;
-    std::map<QString,std::vector<QByteArray>> teams;
+    std::map<std::string,std::vector<QByteArray>> teams; // TEAM ID, never world name
     // Duplicate account links are ambiguous: they NEVER enter a pair.
     for(const auto& [key,member]:members)
         if(!member.online_id.isEmpty())++occurrences[member.online_id];
@@ -66,7 +66,20 @@ f'''{TYPE} Service::{API}() const {{
            endpoints.find(key)==endpoints.end() ||
            worlds.find(member.party)==worlds.end())
             continue;
-        teams[member.party].push_back(member.online_id);
+        // Critical: world membership alone is NOT a team, particularly
+        // for public matchmaking or PvP. A user-supplied LobbyHello member
+        // may be forged on older servers. Only the hex of the authenticated
+        // SHLK online ID is allowed to name this signed-in lobby account.
+        const auto authenticated_lobby=member.online_id.toHex().toStdString();
+        if(member.lobby.empty() || member.lobby!=authenticated_lobby)
+            continue;
+        const auto* team=lobby.TeamOf(authenticated_lobby);
+        if(!team || !team->started() ||
+           team->members_size()<2 || team->members_size()>5 ||
+           team->party().empty() ||
+           member.party!=FolderOf(QByteArray::fromStdString(team->party())))
+            continue;
+        teams[team->id()].push_back(member.online_id);
     }}
     std::map<QByteArray,std::size_t> degrees;
     for(auto& [party,players]:teams) {{
@@ -135,9 +148,9 @@ quint64 ShadNetServer::CurrentDirectAccountEpoch(const QByteArray& id) const {{
 ''',
 f'''  CHECK(service.CurrentDirectAccountEpoch("host")!=0);
   CHECK(service.CurrentDirectAccountEpoch("guest")!=0);
-  const auto visible=service.{API}();
-  CHECK(visible.size()==1);
-  CHECK(visible[0].first=="guest" && visible[0].second=="host");
+  // A shared world is NOT sufficient: until authenticated YT lobby
+  // membership and a started team exist, no direct keys are discoverable.
+  CHECK(service.{API}().empty());
 ''', "actual world one-pair enumeration")
     test=one(test,
 '''  CHECK(service.CurrentDirectAccountEpoch("host")==0);
