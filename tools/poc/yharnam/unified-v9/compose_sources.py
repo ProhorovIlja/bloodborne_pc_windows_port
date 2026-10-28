@@ -838,6 +838,20 @@ def run(checkout:Path, repo:Path, out:Path):
     for name,body in discovery.patch(inputs).items():
         files[name]=body.encode("utf-8")
     meta["applied"].append("Original YT shadNet current signed-in real-world Direct pair discovery, 512 edges/16 per peer; no new STUN; Direct OFF")
+    # Candidate only: original game documents exactly FOUR remote player
+    # slots. Reuse native server's actual team size and summon-sign allocation
+    # for host + 4, never bypass the client's gameplay join validation.
+    # Slot/sign 4 conflicts with the unmerged invasion placeholder, so full
+    # five-player teams must NOT admit ordinary hostile phantom until verified.
+    five_path=metrics_dir/"patch_five_hunter_team.py"
+    five=types.ModuleType("sh_five_hunters_original_lobby")
+    five.__file__=str(five_path)
+    exec(compile(five_path.read_text("utf-8"),str(five_path),"exec"),five.__dict__)
+    five_inputs={p:(files[p] if p in files else (checkout/p).read_bytes()).decode("utf-8")
+                 for p in five.FILES}
+    for name,body in five.patch(five_inputs).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("5-hunter YT native lobby candidate: host+4, unique co-op signs 7/6/5/4, 6th denied; game full-party rig validation pending")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
