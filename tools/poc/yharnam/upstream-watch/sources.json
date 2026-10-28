@@ -90,8 +90,8 @@
       "full_name": "Jgamrot/yharnam-pc",
       "category": "native-windows-bbport-discord-presence",
       "known_head": "9a4e837115b130038b0cfe9505ab2fe11e6dcee7",
-      "known_release_tag": "unverified",
-      "compatibility": "DISCORD_STATS_READONLY_AND_SOURCE_LICENSE_QA; NEVER_COPY_UNVERIFIED_MEMORY_OFFSETS"
+      "known_release_tag": "v2.3.1",
+      "compatibility": "NATIVE_BBPORT_CLIENT_YHARNAM_PC_2_3_1_THDSERVER_REQUIRES_ACCEPTANCE; DISCORD_STATS_READONLY_VERIFY_MEMORY_OFFSETS_LICENSE"
     }
   ],
   "pull_requests": [
