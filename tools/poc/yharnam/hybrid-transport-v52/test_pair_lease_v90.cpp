@@ -47,7 +47,12 @@ int main() {
     assert(!lease.Active());            // fails closed, erases both keys
     assert(lease.Begin("A","B",Resolver(src),1000));
     assert(!lease.Take("attacker",101,1001,a));
-    assert(!lease.Active());
+    // A third signed-in account must not be able to DoS a live unrelated
+    // two-player pair by invoking the mTLS OFFER handler.
+    assert(lease.Active());
+    assert(lease.HasOutstanding(1001));
+    assert(!lease.Take("attacker",202,1002,a));
+    assert(lease.Active());
     assert(lease.Begin("A","B",Resolver(src),1000));
     assert(!lease.Take("A",102,1001,a));
     assert(lease.Begin("A","B",Resolver(src),1000));
@@ -67,6 +72,18 @@ int main() {
     assert(PairKeyScheduleV89::Derive(b,true,PairKeyPurposeV89::NatProbe,1002,b_tx));
     assert(PairKeyScheduleV89::Derive(a,false,PairKeyPurposeV89::NatProbe,1002,a_rx));
     assert(a_tx==b_rx && b_tx==a_rx && a_tx!=b_tx);
+    PairReadyProofV91::Tag proof_a{},proof_b{};
+    bool both_ready=false;
+    assert(PairReadyProofV91::Create(a,1002,proof_a));
+    assert(PairReadyProofV91::Create(b,1002,proof_b));
+    assert(!lease.MarkReady("attacker",101,proof_a,1002,both_ready));
+    assert(!both_ready && lease.HasOutstanding(1002));
+    assert(!lease.MarkReady("attacker",202,proof_b,1002,both_ready));
+    assert(!both_ready && lease.HasOutstanding(1002));
+    assert(lease.MarkReady("A",101,proof_a,1002,both_ready));
+    assert(!both_ready);
+    assert(lease.MarkReady("B",202,proof_b,1003,both_ready));
+    assert(both_ready && lease.BothReady(1003));
     assert(!lease.Take("A",101,1003,a)); // no third/replayed ticket
     assert((a.direction_key==std::array<std::uint8_t,32>{}));
     assert(!lease.Active());
