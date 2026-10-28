@@ -19,7 +19,7 @@
 #include <memory>
 #include "sh_p2p_tls_identity.hpp" // V79 pinned cert/account
 #include "sh_p2p_tls_key_session.hpp" // V80 per TLS connection ephemeral key
-#include "sh_p2p_pair_lease_v90.hpp" // developer-only coordinated 2-recipient offers
+#include "sh_p2p_pair_registry_v101.hpp" // bounded independent current-world grants
 
 namespace SeamlessHunt::Hybrid {
 class P2PTlsListener final : public QTcpServer {
@@ -52,7 +52,7 @@ public:
     // No client may choose peers or create/rekey a pair through TLS.
     bool ConfigureLocalReciprocalPairV90(
         const QByteArray& first,const QByteArray& second,
-        P2PPairLeaseV90::Resolver authoritative) {
+        P2PPairRegistryV101::Resolver authoritative) {
         // The original Qt server can stage a pair AFTER both players
         // have logged in, while its loopback listener is running.
         // Never mutate this QObject from the native TLS worker thread,
@@ -61,9 +61,8 @@ public:
            (isListening() && serverAddress()!=QHostAddress::LocalHost))
             return false;
         const auto now=QDateTime::currentMSecsSinceEpoch();
-        if(now<=0 || pair_lease_.HasOutstanding(
-             static_cast<std::uint64_t>(now)))return false;
-        return pair_lease_.Begin(
+        if(now<=0)return false;
+        return pair_registry_.Begin(
             first,second,std::move(authoritative),
             static_cast<std::uint64_t>(now));
     }
@@ -219,7 +218,7 @@ protected:
                 }
                 const qint64 stamp=QDateTime::currentMSecsSinceEpoch();
                 SeamlessHunt::Hybrid::SecurePeerOfferV84 grant{};
-                if(stamp<=0 || !pair_lease_.Take(
+                if(stamp<=0 || !pair_registry_.Take(
                      bound->account,bound->current_epoch,
                      static_cast<std::uint64_t>(stamp),grant)) {
                     session->Clear();s->abort();return;
@@ -230,11 +229,11 @@ protected:
                     static_cast<std::uint64_t>(stamp),reply);
                 CryptoDetail::Erase(grant.direction_key);
                 if(!sealed) {
-                    pair_lease_.Clear();session->Clear();s->abort();return;
+                    pair_registry_.RevokeRecipient(bound->account);session->Clear();s->abort();return;
                 }
                 pending->clear();
                 if(s->write(reply)!=reply.size()) {
-                    pair_lease_.Clear();session->Clear();s->abort();return;
+                    pair_registry_.RevokeRecipient(bound->account);session->Clear();s->abort();return;
                 }
                 std::fill(reply.begin(),reply.end(),char(0));
             } else if (pending->startsWith("YT-P2P/V91 READY ")) {
@@ -253,17 +252,17 @@ protected:
                 }
                 if(pending->size()!=prefix.size()+64+1 ||
                    !pending->endsWith('\n')) {
-                    pair_lease_.Clear();session->Clear();s->abort();return;
+                    pair_registry_.RevokeRecipient(bound->account);session->Clear();s->abort();return;
                 }
                 const auto hex=pending->mid(prefix.size(),64);
                 QByteArray proof=QByteArray::fromHex(hex);
                 if(proof.size()!=32 || proof.toHex()!=hex.toLower()) {
                     std::fill(proof.begin(),proof.end(),char(0));
-                    pair_lease_.Clear();session->Clear();s->abort();return;
+                    pair_registry_.RevokeRecipient(bound->account);session->Clear();s->abort();return;
                 }
                 const auto stamp=QDateTime::currentMSecsSinceEpoch();
                 bool both_ready=false;
-                const bool accepted=stamp>0 && pair_lease_.MarkReady(
+                const bool accepted=stamp>0 && pair_registry_.MarkReady(
                     bound->account,bound->current_epoch,
                     std::span<const std::uint8_t>(
                         reinterpret_cast<const std::uint8_t*>(proof.constData()),
@@ -299,7 +298,7 @@ protected:
         s->startServerEncryption();
     }
 private:
-    P2PPairLeaseV90 pair_lease_{};
+    P2PPairRegistryV101 pair_registry_{};
     QByteArray offer_peer_{};
     OfferScopeResolver offer_scope_{};
     P2PTlsIdentity identity_{};
