@@ -140,3 +140,7 @@ New shadPS4 upstream changes found in today's PR scan:
 - [#5548](https://github.com/shadps4-emu/shadPS4/pull/5548) **OPEN**: Linux/FreeBSD FS-to-GS TLS rewrite; **not suitable for Windows native YT client by default**.
 
 All added to read-only source registry; monitor now has **12 repos, 8 branches, 41 curated PRs**. Build integration remains independent of game networking and Fornex; PR status and user-visible behavior must be source-verified each time.
+
+### Yharnam-PC official version and client identity, verified 2026-10-28
+
+[Release v2.3.1](https://github.com/Jgamrot/yharnam-pc/releases/tag/v2.3.1) is a published, non-prerelease `bbport-windows.zip`, released 2026-10-28 11:59:41 UTC. [Exact upstream commits](https://github.com/Jgamrot/yharnam-pc/compare/080938728432eb6f3c1a474a375bd2c8212dc963...9a4e837115b130038b0cfe9505ab2fe11e6dcee7) change launcher/updater release links and set the user-agent/server build fingerprint from `bbport-jgamrot` to **`yharnam-pc/<version>`** in shadNet and native THD session. THD connection is deliberately not offered until that service accepts the new client name. Do not rewrite fingerprints, spoof the old identity or assume cross-server compatibility. Registry now pins the manually reviewed latest commit `9a4e837115b130038b0cfe9505ab2fe11e6dcee7` and confirmed release `v2.3.1`. The Discord helper source was unchanged by those two commits. This port's native shadNet stack is a reference for transport, launcher and QoL, **not** drop-in Yharnam Together protocol.
