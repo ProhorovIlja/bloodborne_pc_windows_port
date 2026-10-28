@@ -8,6 +8,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
@@ -23,6 +24,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
@@ -129,7 +131,7 @@ jobs:
           openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key \
             -CAcreateserial -out server.pem -days 1 -sha256 -extfile server.ext
           printf 'extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n' > client.ext
-          for hunter in a b c; do
+          for hunter in a b c d e; do
             openssl req -newkey rsa:2048 -sha256 -nodes \
               -keyout "$hunter.key" -out "$hunter.csr" \
               -subj "/CN=V102 test client $hunter"
@@ -153,6 +155,24 @@ jobs:
             "$dir/b.pem" "$dir/b.key" \
             "$dir/c.pem" "$dir/c.key"
           echo SHYT_V102_THREE_REAL_TLS_NATIVE_PAIR_READY_PASS
+      - name: FIVE real native mTLS clients verify every one of ten independent SHG2 pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_real_mtls_five_v102.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -lssl -lcrypto -pthread -o /tmp/shyt-v102-five-real-tls
+          dir=/tmp/shyt-v102-certs
+          /tmp/shyt-v102-five-real-tls \
+            "$dir/server.pem" "$dir/server.key" "$dir/ca.pem" \
+            "$dir/a.pem" "$dir/a.key" \
+            "$dir/b.pem" "$dir/b.key" \
+            "$dir/c.pem" "$dir/c.key" \
+            "$dir/d.pem" "$dir/d.key" \
+            "$dir/e.pem" "$dir/e.key"
+          echo SHYT_V102_FIVE_REAL_TLS_TEN_MUTUAL_READY_PASS
       - name: Compose immutable original YT and compile actual Qt main
         shell: bash
         run: |
