@@ -81,9 +81,16 @@ class V92Tests(unittest.TestCase):
         # Completion must not call Reply first: a valid ReadyAck has one
         # sequence and a double-open would reject it as a replay.
         self.assertIn("NatProbeKindV91::ReadyAck",result)
+        self.assertIn("NatProbeKindV91::Receipt",result)
         self.assertIn("nat_probe_v92->Complete(",result)
+        self.assertIn("nat_probe_v92->CompleteResponder(",result)
+        self.assertIn("nat_probe_v92->ReceiptSent(response)",result)
+        self.assertIn("nat_probe_v92->ResponderVerified()",result)
+        self.assertIn("const bool written=Transmit(destination,",result)
         self.assertLess(result.index("NatProbeKindV91::ReadyAck"),
                         result.index("nat_probe_v92->Complete("))
+        self.assertLess(result.index("const bool written=Transmit(destination,"),
+                        result.index("nat_probe_v92->ReceiptSent(response)"))
         self.assertIn("::recvfrom(host_socket",result)
         self.assertIn("Transmit(destination",result)
         self.assertNotIn("::socket(AF_INET",result)
