@@ -52,7 +52,7 @@ def build_command(args, shards: int, players: int, index: int) -> list[str]:
         "--ramp-ms", str(args.ramp_ms),
         "--processes", str(min(20, max(2, (players + 149) // 150))),
         "--port", str(38314 + index * 20),
-        "--extra", (f"--build {args.game_build} --owner-fps {fps_owner} "
+        "--extra", (f"--owner-fps {fps_owner} "
                     f"--follower-fps {fps_follower}"),
     ]
 
@@ -187,7 +187,6 @@ if __name__ == "__main__":
     parser.add_argument("--bbload", type=Path, required=True)
     parser.add_argument("--load-script", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--game-build", default="1.3.0", help="Pinned YT original synthetic build")
     parser.add_argument("--team-size", type=int, choices=(2, 4), default=2)
     parser.add_argument("--profile", choices=tuple(FPS), default="active")
     parser.add_argument("--peak", type=int, default=1000)
