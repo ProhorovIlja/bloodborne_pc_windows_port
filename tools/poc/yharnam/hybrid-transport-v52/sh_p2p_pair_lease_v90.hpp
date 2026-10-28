@@ -139,7 +139,7 @@ public:
     bool BothReady(std::uint64_t now_ms) const noexcept {
         return ready_gate_.BothReady(now_ms);
     }
-    bool Active() const noexcept{return active_;}
+    // Opaque random 64-bit generation ID, never a client-chosen account.\n    std::uint64_t PairBinding() const noexcept {\n        return ready_gate_.PairBinding();\n    }\n    bool Active() const noexcept{return active_;}
     bool HasOutstanding(std::uint64_t now_ms) const noexcept {
         return (active_ && now_ms>=pair_.for_a.issued_ms &&
                 now_ms<pair_.for_a.expires_ms) ||
