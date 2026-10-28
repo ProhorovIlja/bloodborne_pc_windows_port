@@ -172,6 +172,84 @@ f'''  b.Hello(now+40,Party,false);
   CHECK(service.{API}().empty());
   CHECK(!service.PairDirectConsent("host","guest"));
 ''', "actual opt-out event uniquely revokes discovered edge")
+    # The original test game's network link receives a raw account ID;
+    # in hosted YT the lobby member is exactly this ID encoded as hex.
+    # Preserve the original default used by all existing older tests, but
+    # permit one strict authenticated-lobby fixture for candidate discovery.
+    test=one(test,
+'''  void LobbyHello(bool playing, qint64 now_ms) {
+    bbcoop::Envelope envelope;
+    envelope.mutable_lobby_hello()->set_protocol(CoopProtocol);
+    envelope.mutable_lobby_hello()->set_member(name);
+''',
+'''  void LobbyHello(bool playing, qint64 now_ms,
+                  bool authenticated_account=false) {
+    bbcoop::Envelope envelope;
+    envelope.mutable_lobby_hello()->set_protocol(CoopProtocol);
+    envelope.mutable_lobby_hello()->set_member(
+        authenticated_account ?
+        QByteArray::fromStdString(name).toHex().toStdString() : name);
+''',"real game fixture optionally binds current authenticated online ID")
+    test=one(test,
+'''int ATeamFormsAndStartsThroughTheService() {
+''',
+f'''int AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams() {{
+  Service service{{{{}}}};
+  Game a{{1000,"host",11}}, b{{1001,"guest",12}}, c{{1002,"stranger",13}};
+  constexpr qint64 Now=1'000'000;
+  const std::vector<Game*> games{{&a,&b,&c}};
+  a.LobbyHello(false,Now,true);
+  b.LobbyHello(false,Now,true);
+  c.LobbyHello(false,Now,true);
+  Pump(service,games,Now);
+  const auto identity=[](const Game& g) {{
+      return QByteArray::fromStdString(g.name).toHex().toStdString();
+  }};
+  a.Team(bbcoop::TeamRequest::CREATE,Now);
+  Pump(service,games,Now);
+  CHECK(a.lobby.has_team());
+  const auto team=a.lobby.team().id();
+  a.Team(bbcoop::TeamRequest::INVITE,Now,identity(b));
+  Pump(service,games,Now);
+  b.Team(bbcoop::TeamRequest::ACCEPT,Now,{{}},team);
+  Pump(service,games,Now);
+  CHECK(a.lobby.team().members_size()==2);
+  a.Team(bbcoop::TeamRequest::READY,Now,{{}},{{}},1);
+  b.Team(bbcoop::TeamRequest::READY,Now,{{}},{{}},1);
+  Pump(service,games,Now);
+  a.Team(bbcoop::TeamRequest::START,Now);
+  Pump(service,games,Now);
+  CHECK(!a.starts.empty() && !b.starts.empty());
+  const auto party=QByteArray::fromStdString(a.starts.back().party());
+  // Deliberate attempted WORLD co-location by a third, NON-TEAM player:
+  // granting it P2P would leak direct peer addresses and session keys.
+  a.Hello(Now+20,party,true);
+  b.Hello(Now+20,party,true);
+  c.Hello(Now+20,party,true);
+  a.Map(0x18010000,Now+20);
+  b.Map(0x18010000,Now+20);
+  c.Map(0x18010000,Now+20);
+  Pump(service,games,Now+20);
+  const auto valid=service.{API}();
+  CHECK(valid.size()==1);
+  CHECK(valid[0].first=="guest" && valid[0].second=="host");
+  b.Team(bbcoop::TeamRequest::LEAVE,Now+40);
+  Pump(service,games,Now+40);
+  CHECK(service.{API}().empty());
+  return 0;
+}}
+
+int ATeamFormsAndStartsThroughTheService() {{
+''',"original Qt world real team and intruder isolation")
+    test=one(test,
+'''       {{"ATeamFormsAndStartsThroughTheService",
+        ATeamFormsAndStartsThroughTheService}},
+''',
+'''       {{"AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams",
+        AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams}},
+       {{"ATeamFormsAndStartsThroughTheService",
+        ATeamFormsAndStartsThroughTheService}},
+''',"include actual authenticated team isolation regression")
     # Replace LOCAL 3-way hardcoded enumeration with real current signed-in
     # shadNet world. For this dev test, only exactly operator-pinned A/B/C
     # may consume the candidate offers. This does NOT make public TLS.
