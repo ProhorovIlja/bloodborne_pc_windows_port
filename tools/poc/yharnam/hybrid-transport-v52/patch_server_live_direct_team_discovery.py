@@ -34,6 +34,9 @@ def patch(srcs):
     h,cpp,lh,lc,sh,sc,test,main=(srcs[p] for p in FILES)
     if TAG in main or API in h or API in sh or API in lh:
         raise ValueError("live pair discovery already installed")
+    h=one(h,'#include <string>\n',
+          '#include <string>\n#include <vector>\n#include <utility>\n',
+          'explicit C++ vector/utility deps')
     # Keep it available only to the server's own Qt event-loop timer.
     # Nothing in ordinary shadNet RPC/HTTP/UDP exposes the candidate list.
     h=one(h,
