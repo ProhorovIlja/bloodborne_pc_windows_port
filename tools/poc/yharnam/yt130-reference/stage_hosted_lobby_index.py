@@ -84,6 +84,18 @@ NEW_STATE = """        if (mine) {
                 ++others;
             }
         }"""
+OLD_SET_HOSTED = """    void SetHosted(size_t lobby_players, size_t worlds_per_player) {
+        hosted = true;
+        this->lobby_players = lobby_players;
+        this->worlds_per_player = worlds_per_player;
+    }"""
+NEW_SET_HOSTED = """    void SetHosted(size_t lobby_players, size_t worlds_per_player) {
+        hosted = true;
+        this->lobby_players = lobby_players;
+        this->worlds_per_player = worlds_per_player;
+        Changed(); // Rebuild hosted indices even if StateFor was previously unhosted.
+    }"""
+
 OLD_HEADER = """    mutable std::map<std::string, size_t> team_index; // member -> its team's place in `teams`
 
     std::function<std::string()> make_id;"""
@@ -95,6 +107,15 @@ NEW_HEADER = """    mutable std::map<std::string, size_t> team_index; // member 
     std::function<std::string()> make_id;"""
 CPP_TEST = """// 512 mostly-teamed Hosted clients must not expose a global player roster.
 int HostedLargeTeamsKeepRosterBoundedThroughChanges() {
+  // Original Index may have been built while not Hosted: switching modes
+  // must invalidate the cache to keep its exact original player listing.
+  TeamLobby after_switch = NewLobby();
+  after_switch.Arrive("a", "A", false);
+  after_switch.Arrive("b", "B", false);
+  CHECK(after_switch.StateFor("a").players_size() == 1);
+  after_switch.SetHosted(3, 16);
+  CHECK(after_switch.StateFor("a").players_size() == 1);
+  CHECK(after_switch.StateFor("a").players(0).member() == "b");
   TeamLobby lobby = NewLobby();
   lobby.SetHosted(3, 16);
   for (int i = 0; i < 512; ++i) {
@@ -138,6 +159,7 @@ def rewrite(cpp, header, tests):
         raise ValueError("Double application")
     cpp = unique(cpp, OLD_INDEX, NEW_INDEX, "Index")
     cpp = unique(cpp, OLD_STATE, NEW_STATE, "Hosted StateFor")
+    header = unique(header, OLD_SET_HOSTED, NEW_SET_HOSTED, "Hosted mode switch")
     header = unique(header, OLD_HEADER, NEW_HEADER, "Fields")
     tests = unique(tests, OLD_MAIN, CPP_TEST + NEW_MAIN, "Original team lobby test")
     return cpp, header, tests
