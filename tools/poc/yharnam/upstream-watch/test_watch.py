@@ -22,7 +22,14 @@ class SourceWatchTests(unittest.TestCase):
         names = {r["full_name"] for r in self.data["repositories"]}
         self.assertTrue({"lKaniel/bloodborne-server", "visy/bloodborne_pc_windows_port",
                          "Supermedo/bloodborne_pc", "deadinside28/bloodborne_pc",
-                         "droogie/bbhost", "Mrsuss60/bloodborne_pc_windows_port"}.issubset(names))
+                         "droogie/bbhost", "Mrsuss60/bloodborne_pc_windows_port",
+                         "Awakenchan/LanternEngine", "DarkIzuku/bloodborne_pc",
+                         "Wozzardman/shadnet-p2p"}.issubset(names))
+        self.assertGreaterEqual(len(names), 11)
+        # Comparing engines is allowed; the native YT auth/wire is never replaced.
+        for name in ("Awakenchan/LanternEngine", "Wozzardman/shadnet-p2p"):
+            entry = next(r for r in self.data["repositories"] if r["full_name"] == name)
+            self.assertIn("NO_YT", entry["compatibility"])
 
     def test_fails_closed_if_repo_injected_or_pinning_invalid(self):
         with tempfile.TemporaryDirectory() as tmp:
