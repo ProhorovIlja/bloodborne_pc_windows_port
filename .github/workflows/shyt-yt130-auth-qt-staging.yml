@@ -65,16 +65,20 @@ jobs:
             "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py \
             "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           # Five additional original files: three team-lobby files, invasion policy header, vitals board.
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 15
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 16
           grep -q 'YT130_EVENTLOOP read_batches=' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'RecordWire(raw, true)' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'NonHostedTeamEditsAreCoalescedAndStartStillWorks' \
             "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
-          echo YT130_SOURCE_EXACT_10_FILE_FULL_STAGE_PASS_NO_QT_BUILD_NO_PRODUCTION
+          grep -Fq 'Net no_pair_debug(3000, 60000, 10000, 0);' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_server_link.cpp"
+          echo YT130_SOURCE_EXACT_V114_FULL_STAGE_PASS_NO_QT_BUILD_NO_PRODUCTION
   compile-real-shadnet-and-sqlite-tests:
     needs: verify-disposable-source-stage
     runs-on: ubuntu-24.04
@@ -190,8 +194,10 @@ jobs:
             "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py \
             "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 15
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 16
           grep -Fq 'constexpr size_t TeamSize = 5' \
             "$RUNNER_TEMP/yt-src/server/coop/team_lobby.h"
           grep -Fq 'GuestSigns{7, 6, 5, 4}' \
@@ -214,7 +220,7 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_hosted_lobby_index_v113.py \
             "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 15
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 16
           grep -Fq 'nonhosted_roster_valid = false;' \
             "$RUNNER_TEMP/yt-src/server/coop/team_lobby.h"
           grep -Fq 'NonHostedRosterCacheRefreshesAndKeepsOriginalPerRecipientSemantics' \
@@ -223,7 +229,11 @@ jobs:
             "$RUNNER_TEMP/yt-src/server/coop/team_lobby.cpp"
           grep -Fq 'HostedLargeTeamsKeepRosterBoundedThroughChanges' \
             "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
-          echo SHYT_QT_NATIVE_V112_V113_BOTH_LOBBY_MODES_STAGED
+          grep -Fq 'Net no_pair_debug(3000, 60000, 10000, 0);' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_server_link.cpp"
+          grep -Fq 'ServerLink::Hub m_link{3000, 60000, 10000, 0, 12000};' \
+            "$RUNNER_TEMP/yt-src/server/src/link_server.h"
+          echo SHYT_QT_NATIVE_V112_V113_V114_RELAY_STAGED
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |

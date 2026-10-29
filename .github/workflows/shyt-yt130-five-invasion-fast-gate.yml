@@ -20,6 +20,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_nonhosted_roster_cache_v112.py
       - tools/poc/yharnam/yt130-reference/stage_hosted_lobby_index_v113.py
       - tools/poc/yharnam/yt130-reference/test_stage_hosted_lobby_index_v113.py
+      - tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_relay_pair_log_v114.py
       - tools/poc/yharnam/yt130-reference/patch_five_hunter_team.py
       - .github/workflows/shyt-yt130-five-invasion-fast-gate.yml
 permissions:
@@ -76,7 +78,8 @@ jobs:
             stage_five_hunter_invasion_guard.py \
             stage_multi_invader_server_v108.py \
             stage_nonhosted_roster_cache_v112.py \
-            stage_hosted_lobby_index_v113.py; do
+            stage_hosted_lobby_index_v113.py \
+            stage_native_relay_pair_log_v114.py; do
             python3 "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
           # Original native GAME, not just the Qt server: apply the per-ID
@@ -92,7 +95,9 @@ jobs:
           python3 tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py \
             "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 24
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 25
+          grep -Fq 'Net no_pair_debug(3000, 60000, 10000, 0);' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_server_link.cpp"
           grep -Fq 'LoadedParamMemory, RejectsTruncatedAndOverflowingEntries' \
             "$RUNNER_TEMP/yt-src/emulator/tests/bloodborne/test_bloodborne_harder_enemies.cpp"
           grep -Fq 'const u64 size = ParamTableSize(' \
@@ -149,11 +154,11 @@ jobs:
             "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" \
             "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0"
           cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target \
-            test_bloodborne_world test_team_lobby test_invasions
+            test_bloodborne_world test_team_lobby test_invasions test_server_link
       - name: Execute REAL Qt C++ five-member and three invasion-race cases
         shell: bash
         run: |
           set -euo pipefail
           ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure \
-            --timeout 120 -j 2 -R '^(bloodborne_world|team_lobby|invasions)$'
-          echo SHYT_FIVE_HUNTER_INVASION_ACTUAL_QT_CPP_3_TEST_BINARIES_PASS
+            --timeout 120 -j 2 -R '^(bloodborne_world|team_lobby|invasions|server_link)$'
+          echo SHYT_FIVE_HUNTER_INVASION_V114_ACTUAL_QT_CPP_4_TEST_BINARIES_PASS
