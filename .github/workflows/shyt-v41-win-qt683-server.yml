@@ -3,9 +3,11 @@ on:
   # Scope expensive native Qt parity reruns to reviewed hotfixes only;
   # mainline builds remain orchestrated by shyt-mainline-candidate.yml.
   push:
-    branches: ['fix/**']
+    branches: ['fix/**', feature/shyt-hybrid-p2p-v52]
     paths:
       - .github/workflows/shyt-v41-win-qt683-server.yml
+      - tools/poc/yharnam/hybrid-transport-v52/patch_p2p_session_generation.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_v77_windows_macro.cpp
       - tools/poc/yharnam/mainline/**
       - tools/poc/yharnam/parity-diagnostics-v43/**
   workflow_call:
