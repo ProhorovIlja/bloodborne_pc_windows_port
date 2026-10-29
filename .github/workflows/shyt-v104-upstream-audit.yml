@@ -1,0 +1,62 @@
+name: SHYT V104 verified upstream client fixes
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/upstream-v104/**
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v104-upstream-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  composed-yharnam-client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Source-locked upstream PR433 and PR451 tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/upstream-v104 -p 'test_*.py' -v
+      - name: Compose full original Yharnam Together overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v104-composed
+      - name: Verify original native game wall and frozen Windows launcher UTF-8
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path('/tmp/shyt-v104-composed')
+          info=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          files=('emulator/src/core/bloodborne_party.cpp',
+                 'bbport/launcher/bbport_launcher_win.py')
+          for rel in files:
+              p=root/rel
+              assert p.is_file(), rel
+              assert info['sha256'][rel]==hashlib.sha256(p.read_bytes()).hexdigest(),rel
+          world=(root/files[0]).read_text()
+          launcher=(root/files[1]).read_text()
+          assert 'std::array<s32, 19> Walls' in world
+          assert '3401801,' in world
+          assert 'encoding=\'utf-8\', errors=\'replace\', line_buffering=True' in launcher
+          assert 'V104 upstream YT PR451 Ludwig multiplayer exit wall, PR433 Windows Cyrillic launcher child role UTF-8' in info['applied']
+          print('SHYT_V104_REAL_NATIVE_GAME_LAUNCHER_SOURCE_PASS')
+          PY
