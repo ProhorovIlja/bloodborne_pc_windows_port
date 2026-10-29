@@ -82,6 +82,16 @@ FULL_TEAM_EDITS = (
      '        {"complete_teams", complete_teams},\n'),
 )
 
+def patch_complete_teams(text: str) -> str:
+    # Test the source-drift guards separately on the verified output of
+    # the prior receiver instrumentation.
+    for old, replacement in FULL_TEAM_EDITS:
+        if text.count(old) != 1:
+            raise ValueError("Pinned complete-five-team bbload anchor drift")
+        text = text.replace(old, replacement, 1)
+    return text
+
+
 def blob_sha(raw: bytes) -> str:
     return hashlib.sha1(
         b"blob " + str(len(raw)).encode() + b"\x00" + raw
@@ -103,11 +113,7 @@ def rewrite(text: str) -> str:
         if text.count(old) != 1:
             raise ValueError("Pinned game-receiver bbload anchor drift")
         text = text.replace(old, replacement, 1)
-    for old, replacement in FULL_TEAM_EDITS:
-        if text.count(old) != 1:
-            raise ValueError("Pinned complete-five-team bbload anchor drift")
-        text = text.replace(old, replacement, 1)
-    return text
+    return patch_complete_teams(text)
 
 
 def transform(raw: bytes) -> bytes:

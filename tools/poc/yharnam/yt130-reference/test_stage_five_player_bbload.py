@@ -26,7 +26,13 @@ class FivePlayerLoadgenTests(unittest.TestCase):
         self.assertEqual(len(mod.OWNER_EDITS), 7)
         self.assertEqual(len(mod.RECEIVER_EDITS), 5)
         for before, after in mod.RECEIVER_EDITS:
-            self.assertIn(after, transformed)
+            # V118 deliberately extends several V117 receiver edit results;
+            # validate their final composed form, not obsolete intermediates.
+            final = after
+            for old, replacement in mod.FULL_TEAM_EDITS:
+                if old in final:
+                    final = final.replace(old, replacement, 1)
+            self.assertIn(final, transformed)
         self.assertIn("game_receivers += game->Playing() && game->SawGamePackets();",
                       transformed)
         self.assertEqual(len(mod.FULL_TEAM_EDITS), 4)
@@ -62,16 +68,21 @@ class FivePlayerLoadgenTests(unittest.TestCase):
                     mod.rewrite(original.replace(before, "MISSING", 1))
 
     def test_missing_full_team_anchor_rejected(self):
-        # V118 consumes ONLY exact C++ text created by earlier guarded edits.
-        bad = self.pinned_anchor_fixture()
-        without = mod.RECEIVER_EDITS[0][0]
-        self.assertIn(without, bad)
-        changed = mod.rewrite(bad)
+        # Inspect the EXACT previous source transformation, before V118 edits.
+        prior = self.pinned_anchor_fixture()
+        prior = prior.replace(mod.OLD_HELP, mod.NEW_HELP, 1)
+        prior = prior.replace(mod.OLD_CLAMP, mod.NEW_CLAMP, 1)
+        for old, new in mod.OWNER_EDITS:
+            prior = prior.replace(old, new, 1)
+        for old, new in mod.RECEIVER_EDITS:
+            prior = prior.replace(old, new, 1)
         for old, _ in mod.FULL_TEAM_EDITS:
-            with self.subTest(old=old[:40]):
-                self.assertIn(old, changed)
-                self.assertNotIn(old, changed.replace(old, "CORRUPTED", 1))
-        self.assertIn("complete_teams", changed)
+            with self.subTest(missing=old[:40]):
+                self.assertEqual(prior.count(old), 1)
+                with self.assertRaisesRegex(ValueError,
+                                            "complete-five-team bbload anchor drift"):
+                    mod.patch_complete_teams(prior.replace(old, "BROKEN", 1))
+        self.assertIn("complete_teams", mod.patch_complete_teams(prior))
 
     def test_unpinned_source_refused(self):
         with self.assertRaisesRegex(ValueError, "exact official pinned"):
