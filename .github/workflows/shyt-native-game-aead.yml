@@ -113,6 +113,6 @@ jobs:
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
             -I tools/poc/yharnam/hybrid-transport-v52 \
             tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \
-            -lcrypto -o shyt-reciprocal-aead-keys.exe
+            -lcrypto -lbcrypt -o shyt-reciprocal-aead-keys.exe
           ./shyt-reciprocal-aead-keys.exe
           echo SHYT_AEAD_WIN_CLANG64_REAL_AES256_GCM_PASS_NOT_GAME_LIVE
