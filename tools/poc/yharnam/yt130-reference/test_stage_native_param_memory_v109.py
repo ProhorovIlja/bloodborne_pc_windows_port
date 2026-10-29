@@ -60,7 +60,7 @@ class NativeParamMemoryStageTest(unittest.TestCase):
         self.assertEqual(modified[m.TEST][:len(original[m.TEST])], original[m.TEST])
         self.assertEqual(len(m.FILES), 4)
         self.assertEqual(m.PIN, "0645740a33ae21c56df3b4a0d9777086dbca6053")
-        self.assertIn("20k", m.PARAM_FUNCTION)
+        self.assertIn("21k", m.PARAM_FUNCTION)
 
 
 if __name__ == "__main__":
