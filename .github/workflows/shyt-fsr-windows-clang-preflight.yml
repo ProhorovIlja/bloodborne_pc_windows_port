@@ -5,6 +5,8 @@ on:
     paths:
       - tools/poc/yharnam/package-v41/patch_pinned_fsr_windows_wprintf.py
       - tools/poc/yharnam/package-v41/test_patch_pinned_fsr_windows_wprintf.py
+      - tools/poc/yharnam/package-v41/patch_pinned_fsr_vk_clang64.py
+      - tools/poc/yharnam/package-v41/test_patch_pinned_fsr_vk_clang64.py
       - .github/workflows/shyt-fsr-windows-clang-preflight.yml
   workflow_dispatch:
 permissions:
@@ -32,6 +34,8 @@ jobs:
           $ErrorActionPreference='Stop'
           python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_fsr_windows_wprintf.py -v
           if ($LASTEXITCODE -ne 0) { throw 'FSR source-gate tests failed' }
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_fsr_vk_clang64.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'FSR Vulkan source-gate tests failed' }
           git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party/fsr-vulkan
           if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR submodule checkout failed' }
           $expected='c64f093404125e960813f95f1996c14780f0dd69'
@@ -43,6 +47,7 @@ jobs:
           update: false
           install: >-
             mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-vulkan-headers
       - name: Compile ACTUAL previously failed FidelityFX source under MSYS2 CLANG64
         shell: msys2 {0}
         run: |
@@ -54,4 +59,13 @@ jobs:
             -I "${root}/include" -I "${root}/src/shared" \
             -I "${root}/src/components" -fsyntax-only \
             "${root}/src/shared/ffx_message.cpp"
+          "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_vk_clang64.py --upstream pinned-upstream
+          clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
+            -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
+            -I "$root/include" -I "$root/src/shared" -I "$root/src/components" \
+            -I "$root/src/backends/shared" -I "$root/src/backends/shared/blob_accessors" \
+            -I pinned-upstream/bbport/gpu/third_party/fsr-vulkan/generated/ffx-1.1.4/vk/fsr3upscaler \
+            -I pinned-upstream/bbport/gpu/third_party/fsr-vulkan/generated/ffx-1.1.4/vk/fsr3framegeneration \
+            -fsyntax-only "$root/src/backends/vk/ffx_vk.cpp"
           echo SHYT_REAL_PINNED_FSR_WINDOWS_CLANG_WPRINTF_COMPILES
+          echo SHYT_REAL_PINNED_FSR3_VULKAN_BACKEND_HEADERS_AND_STD_MATH_COMPILES
