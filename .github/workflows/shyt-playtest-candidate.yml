@@ -13,9 +13,13 @@ permissions:
   contents: read
 concurrency:
   group: shyt-isolated-playtest-${{ github.ref }}
-  # Preserve 60-120min native Windows compilation when source fixes land.
-  # A new deployment candidate can wait; NEVER cancel active expensive builds.
-  cancel-in-progress: false
+  # Recovery 2026-10-29: previous run 40849951135 still occupied the
+  # concurrency group >3.5 hours after starting, despite a 180m job limit.
+  # It blocked the newer FSR fail-fast build 40869663803 with zero jobs.
+  # Prefer the latest verified source; cancel superseded older runs instead
+  # of keeping a potentially wedged Windows compile and blocking every fix.
+  # This workflow triggers on its own build definitions, NOT every source edit.
+  cancel-in-progress: true
 
 jobs:
   source-and-five-hunter-gate:
