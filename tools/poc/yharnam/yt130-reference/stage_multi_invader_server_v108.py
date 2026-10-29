@@ -19,7 +19,8 @@ POLICY = "server/coop/invasions.h"
 RULES = "server/coop/invasions.cpp"
 LINK = "server/src/server_link.cpp"
 TEST = "server/tests/test_bloodborne_world.cpp"
-FILES = (HEADER, CPP, POLICY, RULES, LINK, TEST)
+BOARDS = "server/src/bloodborne_party_boards.cpp"
+FILES = (HEADER, CPP, POLICY, RULES, LINK, TEST, BOARDS)
 TAG = "SHYT-V108-MULTI-INVADER-ORIGINAL-SERVER"
 
 def one(s, a, b, label):
@@ -37,12 +38,26 @@ def block(s, a, b, new, label):
 
 def patch(source):
     if set(source)!=set(FILES):
-        raise ValueError(f"{TAG}: exact six original native Qt files required")
-    h,cpp,policy,rules,link,test=(source[k] for k in FILES)
-    if any(TAG in s for s in (h,cpp,policy,rules,link,test)):
+        raise ValueError(f"{TAG}: exact seven original native Qt files required")
+    h,cpp,policy,rules,link,test,boards=(source[k] for k in FILES)
+    if any(TAG in s for s in (h,cpp,policy,rules,link,test,boards)):
         raise ValueError(f"{TAG}: double application denied")
     if "InvasionMaxPlayers = 5" not in policy or "SupportsCurrentServerInvasion" not in cpp:
         raise ValueError("V108 requires previously verified five-hunter admission guard")
+
+    boards=one(boards,
+        "    if (std::erase_if(vitals, stale) > 0) {\n"
+        "        changed |= VitalsBoard;\n"
+        "    }",
+        "    // "+TAG+": a real group departure, not a quiet 5s timeout,\n"
+        "    // removes its dead/downed zero-HP HUD name and metadata.\n"
+        "    // Service::ForgetMember calls PartyBoards::Forget explicitly.",
+        "keep member vitals while session is linked")
+    h=one(h,
+        "struct InvasionRules {\n    bool enabled = false;",
+        "struct InvasionRules {\n    bool enabled = false;\n"
+        "    bool dbno_enabled = false; // "+TAG+": explicit opt-in, default legacy",
+        "server-side DBNO policy switch")
 
     # Reserve a real seat for every pending invasion. Distinct ID and
     # distinct slot survive the ten-second notice, world-map changes and
@@ -241,20 +256,35 @@ def patch(source):
         return;
     case bbcoop::Envelope::kVitals: {
         member.level = envelope.vitals().level();
-        if (envelope.vitals().vital() == 3 && !invaded.isEmpty()) {
-            if (world_bucket != invasions.end() && invasion != world_bucket->second.end())
-                EndInvasion(invaded,invasion->first,bbcoop::InvasionEnd::INVADER_DIED,now_ms,result);
-            return;
-        }
         if (world_bucket == invasions.end() || invasion == world_bucket->second.end() ||
             !invasion->second.joined) return;
+        const quint32 vital = envelope.vitals().vital();
+        // DBNO off: one dead hostile disconnects, other visitors remain.
+        if (vital == 3 && !invasion_rules.dbno_enabled) {
+            EndInvasion(invaded,invasion->first,bbcoop::InvasionEnd::INVADER_DIED,now_ms,result);
+            return;
+        }
         bbcoop::Vitals line = envelope.vitals();
         line.clear_hits();
+        // With DBNO on, a dead/downed character remains joined with zero HP.
+        if (vital == 2 || vital == 3) line.set_hp(0);
         if (!invasion->second.vitals ||
             invasion->second.vitals->SerializeAsString() != line.SerializeAsString()) {
             invasion->second.vitals = std::move(line);
             if (const auto world = worlds.find(invaded); world != worlds.end())
                 SendBoards(world->second, PartyBoards::VitalsBoard, now_ms);
+        }
+        if (invasion_rules.dbno_enabled && (vital == 2 || vital == 3)) {
+            // No report from a linked visitor is NOT evidence of death.
+            const bool anyone_up = std::ranges::any_of(world_bucket->second,
+                [](const auto& row) {
+                    if (!row.second.joined) return false;
+                    return !row.second.vitals ||
+                        (row.second.vitals->vital()!=2 &&
+                         row.second.vitals->vital()!=3);
+                });
+            if (!anyone_up)
+                EndInvasion(invaded,bbcoop::InvasionEnd::PARTY_WIPED,now_ms,result);
         }
         return;
     }
@@ -788,7 +818,7 @@ bbcoop::VitalsBoard Service::VitalsBoardOf(''',
     test=one(test,
         "int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {",
         r'''int HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth() {
-  InvasionRig rig;
+  InvasionRig rig{true,true,{}, {},true};
   Game blue{1003,"bl",14};
   rig.games.push_back(&blue);
   blue.LobbyHello(true,rig.now);
@@ -824,11 +854,17 @@ bbcoop::VitalsBoard Service::VitalsBoardOf(''',
     if (line.member()=="bl" && line.hostile()) has_blue=true;
   }
   CHECK(has_team && has_red && has_blue);
-  // A true death releases ONLY this hostile, and immediately invalidates
-  // the departed ally's row in every still-joined invader's board.
+  // DBNO on: true death without disconnect leaves empty bar and full identity.
   blue.Vitals(InvadedMap,3,rig.now,60);
   rig.Step();
-  CHECK(EndedFor(blue,bbcoop::InvasionEnd::INVADER_DIED));
+  CHECK(blue.ends.empty() && rig.red.ends.empty());
+  CHECK(rig.red.vitals_board.members_size()==2);
+  CHECK(VitalsFor(rig.red,"bl") &&
+        VitalsFor(rig.red,"bl")->vitals().vital()==3 &&
+        VitalsFor(rig.red,"bl")->vitals().hp()==0);
+  blue.Invade(0,rig.now,true); // real explicit leave, not death
+  rig.Step();
+  CHECK(EndedFor(blue,bbcoop::InvasionEnd::INVADER_LEFT));
   CHECK(rig.red.vitals_board.members_size()==1);
   CHECK(rig.red.vitals_board.members(0).member()=="rr");
   CHECK(rig.red.vitals_board.members(0).hostile());
@@ -848,7 +884,95 @@ int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {''',
         '      {"HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth",\n'
         '       HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth},',
         "register real original Qt hostile vitals privacy regression")
-    return dict(zip(FILES,(h,cpp,policy,rules,link,test)))
+    # Pinned original Qt service: link removal really removes the member.
+    cpp=one(cpp,
+        "    if (found != members.end()) {\n"
+        "        std::erase(flush_now, &found->second);\n"
+        "    }\n"
+        "    members.erase(link.Key());",
+        "    if (found != members.end()) {\n"
+        "        if (!found->second.party.isEmpty()) {\n"
+        "            const auto w=worlds.find(found->second.party);\n"
+        "            if (w!=worlds.end())\n"
+        "                ForgetMember(w->second,found->second.name,clock_ms,result);\n"
+        "        }\n"
+        "        std::erase(flush_now, &found->second);\n"
+        "    }\n"
+        "    members.erase(link.Key());",
+        "real linked co-op departure clears vitals immediately")
+    test=one(test,
+        "  explicit InvasionRig(bool enabled = true, bool allow = true,\n"
+        "                       const QString &folder = {},\n"
+        "                       const BloodborneWorld::Limits &limits = {})\n",
+        "  explicit InvasionRig(bool enabled = true, bool allow = true,\n"
+        "                       const QString &folder = {},\n"
+        "                       const BloodborneWorld::Limits &limits = {},\n"
+        "                       bool dbno_enabled = false)\n",
+        "real invasion rig configures DBNO")
+    test=one(test,
+        "    rules.enabled = enabled;\n    rules.kind = RulesKind;",
+        "    rules.enabled = enabled;\n    rules.dbno_enabled = dbno_enabled;\n"
+        "    rules.kind = RulesKind;",
+        "test real server DBNO setting")
+    test=one(test,
+        "int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {",
+        r'''int DeadCooperatorKeepsEmptyHpAndNameUntilActualDisconnect() {
+  InvasionRig rig;
+  rig.b.Vitals(InvadedMap,3,rig.now,55);
+  rig.Step();
+  CHECK(VitalsFor(rig.a,"bb") && VitalsFor(rig.a,"bb")->vitals().hp()==0);
+  CHECK(VitalsFor(rig.a,"bb")->vitals().vital()==3);
+  // Previously the death line silently expired after five seconds.
+  rig.Step(6001);
+  CHECK(VitalsFor(rig.a,"bb") && VitalsFor(rig.a,"bb")->vitals().vital()==3);
+  rig.b.online=false;
+  rig.service.Forget(rig.b.endpoint);
+  rig.Step();
+  CHECK(VitalsFor(rig.a,"bb")==nullptr);
+  return 0;
+}
+
+int AllDownedInvadersLeaveTogetherOnlyAfterFinalFall() {
+  InvasionRig rig{true,true,{}, {},true};
+  Game blue{1003,"bl",14};
+  rig.games.push_back(&blue);
+  blue.LobbyHello(true,rig.now);
+  rig.Step();
+  for (Game* visitor:std::vector<Game*>{&rig.red,&blue}) {
+    visitor->Invade(60,rig.now);
+    visitor->Map(InvadedMap,rig.now);
+    rig.Step();
+    CHECK(visitor->notices.size()==1);
+  }
+  rig.Step(InvasionNoticeMs);
+  CHECK(rig.red.invasion && blue.invasion);
+  blue.Vitals(InvadedMap,2,rig.now,60);
+  rig.Step();
+  CHECK(blue.ends.empty() && rig.red.ends.empty());
+  CHECK(VitalsFor(rig.red,"bl") &&
+        VitalsFor(rig.red,"bl")->vitals().hp()==0);
+  rig.red.Vitals(InvadedMap,2,rig.now,60);
+  rig.Step();
+  CHECK(EndedFor(blue,bbcoop::InvasionEnd::PARTY_WIPED));
+  CHECK(EndedFor(rig.red,bbcoop::InvasionEnd::PARTY_WIPED));
+  CHECK(rig.service.VisitingOf(blue.endpoint).isEmpty());
+  CHECK(rig.service.VisitingOf(rig.red.endpoint).isEmpty());
+  return 0;
+}
+
+int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {''',
+        "real co-op vital retention and invader last-fall regression")
+    test=one(test,
+        '      {"HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth",\n'
+        '       HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth},',
+        '      {"HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth",\n'
+        '       HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth},\n'
+        '      {"DeadCooperatorKeepsEmptyHpAndNameUntilActualDisconnect",\n'
+        '       DeadCooperatorKeepsEmptyHpAndNameUntilActualDisconnect},\n'
+        '      {"AllDownedInvadersLeaveTogetherOnlyAfterFinalFall",\n'
+        '       AllDownedInvadersLeaveTogetherOnlyAfterFinalFall},',
+        "register original Qt real death/disconnect regression")
+    return dict(zip(FILES,(h,cpp,policy,rules,link,test,boards)))
 
 def stage(root:Path)->None:
     root=root.resolve(strict=True)
