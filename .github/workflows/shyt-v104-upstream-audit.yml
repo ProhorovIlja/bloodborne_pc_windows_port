@@ -4,6 +4,8 @@ on:
     branches: [feature/shyt-hybrid-p2p-v52]
     paths:
       - tools/poc/yharnam/upstream-v104/**
+      - tools/poc/yharnam/package-v41/smoke_frozen_windows_launcher.py
+      - tools/poc/yharnam/package-v41/test_smoke_frozen_windows_launcher.py
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v104-upstream-audit.yml
   workflow_dispatch:
@@ -31,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest discover -s tools/poc/yharnam/upstream-v104 -p 'test_*.py' -v
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p 'test_smoke_frozen_windows_launcher.py' -v
       - name: Compose full original Yharnam Together overlays
         shell: bash
         run: |
