@@ -129,19 +129,19 @@ jobs:
           # SHADNET_HOME. Never launch from a GitHub runner's build directory
           # or silently open a public server with default credentials.
           cat > "$pkg/bin/start-shadnet" <<'SHYT_START'
-#!/usr/bin/env bash
-set -euo pipefail
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-home="${SHADNET_HOME:-$root}"
-if [[ ! -f "$home/shadnet.cfg" ]]; then
-    echo "No shadnet.cfg in SHADNET_HOME ($home). Configure the server explicitly before starting." >&2
-    exit 78
-fi
-export SHADNET_HOME="$home"
-export LD_LIBRARY_PATH="$root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export QT_PLUGIN_PATH="$root/plugins"
-exec "$root/bin/shadnet" "$@"
-SHYT_START
+          #!/usr/bin/env bash
+          set -euo pipefail
+          root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+          home="${SHADNET_HOME:-$root}"
+          if [[ ! -f "$home/shadnet.cfg" ]]; then
+              echo "No shadnet.cfg in SHADNET_HOME ($home). Configure the server explicitly before starting." >&2
+              exit 78
+          fi
+          export SHADNET_HOME="$home"
+          export LD_LIBRARY_PATH="$root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export QT_PLUGIN_PATH="$root/plugins"
+          exec "$root/bin/shadnet" "$@"
+          SHYT_START
           chmod 0755 "$pkg/bin/start-shadnet"
           # Qt 6.8.3 is NOT Ubuntu 24.04's default. Carry the exact
           # dynamically linked Qt and ICU libraries plus driver plugins
