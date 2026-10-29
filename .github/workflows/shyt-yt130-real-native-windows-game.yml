@@ -162,7 +162,7 @@ jobs:
                       continue
                   fi""",1)
           s=s.replace("-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null","-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache >/dev/null",1)
-          p.write_text(s)
+          p.write_bytes(s.encode("utf-8"))  # retain LF on native Windows Python
           PY
           cd pinned-upstream/bbport
           # Preserve actual compiler failures rather than spinning hours.
