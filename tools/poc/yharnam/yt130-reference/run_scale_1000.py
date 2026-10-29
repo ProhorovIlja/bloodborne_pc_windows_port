@@ -51,6 +51,17 @@ def verify_five_player_generator(bbload: Path) -> None:
         raise ValueError("Five-hunter bbload required; original upstream silently clamps to four")
 
 
+def verify_multi_owner_generator(bbload: Path) -> None:
+    """Require the ACTUAL compiled upstream #444 bbload, never silently skip --owners."""
+    try:
+        info = subprocess.run([str(bbload), "--help"], capture_output=True,
+                              text=True, timeout=10, check=False)
+    except (OSError, subprocess.TimeoutExpired) as ex:
+        raise ValueError("Actual multi-owner bbload capability could not be checked") from ex
+    if info.returncode != 0 or "--owners" not in (info.stdout + info.stderr):
+        raise ValueError("Missing source-pinned upstream bbload --owners option")
+
+
 def processes(players: int) -> int:
     """Bound generator processes, not server threads."""
     return min(24, max(2, math.ceil(players / 100)))
@@ -141,6 +152,8 @@ def run(args) -> int:
         raise ValueError("Only original source-pinned upstream generator accepted")
     if args.team_size == 5:
         verify_five_player_generator(args.bbload)
+    if owners_per_team(args) > 1:
+        verify_multi_owner_generator(args.bbload)
     selected = stages(args.team_size, args.peak)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     all_green = True
