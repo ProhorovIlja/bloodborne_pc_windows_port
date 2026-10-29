@@ -57,9 +57,13 @@ class InvasionGate(unittest.TestCase):
         result=guard.patch(SOURCES)
         self.assertEqual(result[guard.H].count(guard.TAG),1)
         self.assertIn("constexpr size_t InvasionMaxPlayers = 5;",result[guard.H])
+        self.assertIn("static_assert(FitsFiveHunterRoles(3, 2))",result[guard.H])
+        self.assertIn("static_assert(FitsFiveHunterRoles(2, 3))",result[guard.H])
+        self.assertIn("static_assert(!SupportsCurrentServerInvasion(3, 2))",result[guard.H])
+        self.assertIn("ImplementedInvadersPerWorld = 1;",result[guard.H])
         cpp=result[guard.WORLD]
         self.assertEqual(cpp.count(guard.TAG),3)
-        self.assertLess(cpp.index("live.players >= InvasionMaxPlayers"),
+        self.assertLess(cpp.index("!SupportsCurrentServerInvasion(live.players, 1)"),
                         cpp.index("invader.visiting = world.name;"))
         self.assertLess(cpp.index("if (!sign) {"),
                         cpp.index("invader.visiting = world.name;"))

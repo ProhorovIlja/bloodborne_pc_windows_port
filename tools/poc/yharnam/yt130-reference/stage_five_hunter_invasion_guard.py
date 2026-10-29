@@ -46,7 +46,32 @@ def patch(raw: dict[str, str]) -> dict[str, str]:
         "constexpr size_t InvasionMaxPlayers = 4;",
         "// "+TAG+": one host + FOUR guest sign slots 7/6/5/4.\n"
         "// A fifth team occupant reserves the final guest sign, even when offline.\n"
-        "constexpr size_t InvasionMaxPlayers = 5;",
+        "constexpr size_t InvasionMaxPlayers = 5;\n"
+        "// Population contract for the FUTURE multi-invader redesign.\n"
+        "// This is a five-BODY ceiling, NOT permission to invade with three.\n"
+        "// The present Qt service stores exactly ONE Invasion per world, and\n"
+        "// the game's hostile kind/sign are still unverified placeholders.\n"
+        "constexpr size_t IntendedMaxInvaders = 3;\n"
+        "constexpr size_t ImplementedInvadersPerWorld = 1;\n"
+        "constexpr bool FitsFiveHunterRoles(size_t cooperators, size_t invaders) noexcept {\n"
+        "    return cooperators > 0 && cooperators <= InvasionMaxPlayers &&\n"
+        "           invaders <= IntendedMaxInvaders &&\n"
+        "           invaders <= InvasionMaxPlayers - cooperators;\n"
+        "}\n"
+        "constexpr bool SupportsCurrentServerInvasion(size_t cooperators, size_t invaders) noexcept {\n"
+        "    return FitsFiveHunterRoles(cooperators, invaders) &&\n"
+        "           invaders <= ImplementedInvadersPerWorld;\n"
+        "}\n"
+        "static_assert(FitsFiveHunterRoles(5, 0));\n"
+        "static_assert(FitsFiveHunterRoles(4, 1));\n"
+        "static_assert(FitsFiveHunterRoles(3, 2)); // future, not implemented\n"
+        "static_assert(FitsFiveHunterRoles(2, 3)); // future, not implemented\n"
+        "static_assert(!FitsFiveHunterRoles(5, 1));\n"
+        "static_assert(!FitsFiveHunterRoles(4, 2));\n"
+        "static_assert(!FitsFiveHunterRoles(3, 3));\n"
+        "static_assert(!SupportsCurrentServerInvasion(3, 2));\n"
+        "static_assert(!SupportsCurrentServerInvasion(2, 3));\n"
+        "static_assert(SupportsCurrentServerInvasion(4, 1));",
         "capacity")
     world=exactly(world,
 '''    for (const auto& [key, member] : members) {
@@ -125,7 +150,7 @@ def patch(raw: dict[str, str]) -> dict[str, str]:
     const bbcoop::Team* team = lobby.TeamOf(world.session->host());
     const InvasionTarget live = TargetOf(world);
     if (!team || !live.session_open || !live.allows_invaders ||
-        live.players >= InvasionMaxPlayers ||
+        !SupportsCurrentServerInvasion(live.players, 1) ||
         std::ranges::any_of(live.members, [](const auto& m) { return m.boss; })) {
         EndInvasion(world.name, bbcoop::InvasionEnd::REFUSED, now_ms, result);
         return;
