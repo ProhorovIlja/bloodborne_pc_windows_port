@@ -18,10 +18,10 @@ SOURCE = {
     "frameinterpolation/ffx_frameinterpolation.cpp": ("b8f48c07933f5a444bc454dc9d9c68edaf461a3e", 14),
 }
 PIN = "c64f093404125e960813f95f1996c14780f0dd69"
-COUNT = re.compile(r"(?<![\\w])_countof\\(([a-zA-Z_][a-zA-Z_0-9]*)\\)")
+COUNT = re.compile(r"(?<![\w])_countof\(([a-zA-Z_][a-zA-Z_0-9]*)\)")
 
 def git_blob(raw: bytes) -> str:
-    return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\\0" + raw).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
 
 def patch_source(text: str, count: int) -> str:
     seen = COUNT.findall(text)
@@ -41,7 +41,7 @@ def patch_files(upstream: Path) -> None:
         if not path.is_file() or path.is_symlink():
             raise ValueError("Pinned FidelityFX host component file missing")
         raw = path.read_bytes()
-        canonical = raw.replace(b"\\r\\n", b"\\n")
+        canonical = raw.replace(b"\r\n", b"\n")
         if git_blob(canonical) != expected_blob:
             raise ValueError(f"AMD FidelityFX SDK git blob mismatch for {rel}")
         patched = patch_source(canonical.decode("utf-8"), count).encode("utf-8")
