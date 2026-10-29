@@ -76,7 +76,7 @@ jobs:
           python3 tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py \
             "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 25
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 24
           grep -Fq 'LoadedParamMemory, RejectsTruncatedAndOverflowingEntries' \
             "$RUNNER_TEMP/yt-src/emulator/tests/bloodborne/test_bloodborne_harder_enemies.cpp"
           grep -Fq 'const u64 size = ParamTableSize(' \
