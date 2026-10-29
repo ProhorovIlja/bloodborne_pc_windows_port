@@ -44,8 +44,20 @@ jobs:
               source='int '+name+'() {'
               assert s.count(source)==1, 'missing '+name
               s=s.replace(source,source+'\n  std::cerr << "BEGIN '+name+'\\n" << std::flush;',1)
+          # The stock Windows test died with STATUS_STACK_OVERFLOW
+          # (0xc00000fd) at the start of HelloAndBuilds. Measure the actual
+          # Hub object and pinpoint whether construction or Receive recurses.
+          entry='int HelloAndBuilds() {'
+          assert s.count(entry)==1
+          source='  Hub hub;\\n  auto result = hub.Receive(Kaniel, HelloFrom("Kaniel"), 0);'
+          assert s.count(source)==1
+          s=s.replace(source, '  std::cerr << "BEFORE Hub ctor\\\\n" << std::flush;\\n'
+                                '  Hub hub;\\n'
+                                '  std::cerr << "AFTER Hub ctor\\\\n" << std::flush;\\n'
+                                '  auto result = hub.Receive(Kaniel, HelloFrom("Kaniel"), 0);\\n'
+                                '  std::cerr << "AFTER first Receive\\\\n" << std::flush;',1)
           assert s.count('int main() {')==1
-          s=s.replace('int main() {','int main() {\n  std::cerr << "BEGIN main\\n" << std::flush;',1)
+          s=s.replace('int main() {','int main() {\\n  std::cerr << "BEGIN main\\\\n" << std::flush;\\n  std::cerr << "sizeof(Hub)=" << sizeof(Hub) << "\\\\n" << std::flush;',1)
           p.write_text(s,encoding='utf-8')
           print('TEST_SERVER_LINK_TRACE_INSERTED')
           '@ | python -
