@@ -5,6 +5,7 @@ on:
     paths:
       - tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py
       - tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py
+      - tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py
       - tools/poc/yharnam/yt130-reference/test_stage_five_hunter_invasion_guard.py
       - tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py
       - tools/poc/yharnam/yt130-reference/patch_five_hunter_team.py
@@ -64,8 +65,16 @@ jobs:
             stage_multi_invader_server_v108.py; do
             python3 "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
+          # Original native GAME, not just the Qt server: apply the per-ID
+          # three-hostile ledger to the same newer pinned YT1.3 commit.
+          python3 tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 14
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 17
+          grep -Fq 'MaxConcurrentHostiles = 3' \
+            "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_invasion.h"
+          grep -Fq 'ThreeConcurrentHostilesIndependentIdsAndEnds' \
+            "$RUNNER_TEMP/yt-src/emulator/tests/bloodborne/test_bloodborne_invasion.cpp"
           grep -Fq 'std::map<QString, std::map<quint64, Invasion>> invasions' \
             "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.h"
           grep -Fq 'ThreeInvadersShareTwoCooperatorsAndCleanupIndependently' \
