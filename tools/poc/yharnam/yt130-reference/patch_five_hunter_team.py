@@ -126,4 +126,30 @@ def patch(files):
   CHECK(SignOf(lobby, "d") == 5 && SignOf(lobby, "e") == 4 &&
         SignOf(lobby, "f") == 6);''',
         "fifth hunter and slot reuse across host handover")
+    # With host + FOUR guests, the ORIGINAL "join by team code" regression
+    # must also admit its fifth member. Otherwise it incorrectly asserts
+    # the v1.3.0 4-person cap and fails genuine Qt CTests despite correct
+    # five-hunter server admission. The sixth player remains refused.
+    test=one(test,
+        '''  CHECK(lobby.Request("b", join).notice.empty());
+  CHECK(lobby.Request("c", join).notice.empty());
+  CHECK(!lobby.Request("d", join).notice.empty());
+  CHECK(!lobby.TeamOf("d"));''',
+        '''  CHECK(lobby.Request("b", join).notice.empty());
+  CHECK(lobby.Request("c", join).notice.empty());
+  CHECK(lobby.Request("d", join).notice.empty());
+  CHECK(lobby.TeamOf("d") == lobby.TeamOf("a"));
+  CHECK(!lobby.Request("f", join).notice.empty()); // sixth is refused
+  CHECK(!lobby.TeamOf("f"));''',
+        "code-join fifth accepted and sixth refused")
+    test=one(test,
+        '''  CHECK(!lobby.Request("d", join).notice.empty());
+  join.set_code(fresh);
+  CHECK(lobby.Request("d", join).notice.empty());
+  CHECK(lobby.TeamOf("d") == lobby.TeamOf("a"));''',
+        '''  CHECK(!lobby.Request("f", join).notice.empty());
+  join.set_code(fresh);
+  CHECK(lobby.Request("f", join).notice.empty());
+  CHECK(lobby.TeamOf("f") == lobby.TeamOf("a"));''',
+        "renewed team code permits sixth only after vacated seat")
     return dict(zip(FILES,(h,cpp,test)))
