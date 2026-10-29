@@ -19,6 +19,10 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_native_rx_queue_v115.py
       - tools/poc/yharnam/yt130-reference/native/net_rx_queue_limits_v115.h
       - tools/poc/yharnam/yt130-reference/native/test_net_rx_queue_limits_v115.cpp
+      - tools/poc/yharnam/yt130-reference/stage_native_p2p_log_v116.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py
+      - tools/poc/yharnam/yt130-reference/native/net_p2p_log_budget_v116.h
+      - tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp
       - .github/workflows/shyt-yt130-load-harness-fast.yml
   pull_request:
     branches: [master]
@@ -39,6 +43,10 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_native_rx_queue_v115.py
       - tools/poc/yharnam/yt130-reference/native/net_rx_queue_limits_v115.h
       - tools/poc/yharnam/yt130-reference/native/test_net_rx_queue_limits_v115.cpp
+      - tools/poc/yharnam/yt130-reference/stage_native_p2p_log_v116.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py
+      - tools/poc/yharnam/yt130-reference/native/net_p2p_log_budget_v116.h
+      - tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp
       - .github/workflows/shyt-yt130-load-harness-fast.yml
   workflow_dispatch:
 permissions:
@@ -67,7 +75,9 @@ jobs:
             tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py \
             tools/poc/yharnam/yt130-reference/test_stage_native_relay_pair_log_v114.py \
             tools/poc/yharnam/yt130-reference/stage_native_rx_queue_v115.py \
-            tools/poc/yharnam/yt130-reference/test_stage_native_rx_queue_v115.py
+            tools/poc/yharnam/yt130-reference/test_stage_native_rx_queue_v115.py \
+            tools/poc/yharnam/yt130-reference/stage_native_p2p_log_v116.py \
+            tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
             -p test_run_capacity_curve.py -v
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
@@ -87,6 +97,13 @@ jobs:
             tools/poc/yharnam/yt130-reference/native/test_net_rx_queue_limits_v115.cpp \
             -o "$RUNNER_TEMP/yt130-v115-native-udp-queue"
           "$RUNNER_TEMP/yt130-v115-native-udp-queue"
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_native_p2p_log_v116.py -v
+          g++ -std=c++20 -O2 -g0 -Wall -Wextra -Werror -pthread \
+            -I tools/poc/yharnam/yt130-reference/native \
+            tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp \
+            -o "$RUNNER_TEMP/yt130-v116-native-log-budget"
+          "$RUNNER_TEMP/yt130-v116-native-log-budget"
       - name: Do not confuse generator unit safety with native server capacity
         shell: bash
         run: |

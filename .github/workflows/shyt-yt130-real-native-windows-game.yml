@@ -12,6 +12,10 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_native_rx_queue_v115.py
       - tools/poc/yharnam/yt130-reference/native/net_rx_queue_limits_v115.h
       - tools/poc/yharnam/yt130-reference/native/test_net_rx_queue_limits_v115.cpp
+      - tools/poc/yharnam/yt130-reference/stage_native_p2p_log_v116.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py
+      - tools/poc/yharnam/yt130-reference/native/net_p2p_log_budget_v116.h
+      - tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp
 permissions:
   contents: read
 concurrency:
@@ -72,7 +76,8 @@ jobs:
             'test_stage_native_param_slots_v110.py',
             'test_guard_native_protocol8_v111.py',
             'test_probe_native_param_cpp_v109.py',
-            'test_stage_native_rx_queue_v115.py')) {
+            'test_stage_native_rx_queue_v115.py',
+            'test_stage_native_p2p_log_v116.py')) {
             python -m unittest discover -s tools/poc/yharnam/yt130-reference -p $test -v
             if ($LASTEXITCODE -ne 0) { throw "Native YT1.3 client source regression failed: $test" }
           }
@@ -86,6 +91,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native Protocol8 game UDP queue bound patch failed' }
           if (-not (Test-Path 'pinned-upstream/emulator/src/core/libraries/network/net_rx_queue_limits_v115.h')) {
             throw 'Native bounded queue header not installed into real game'
+          }
+          python tools/poc/yharnam/yt130-reference/stage_native_p2p_log_v116.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Native Protocol8 game P2P diagnostic budget patch failed' }
+          if (-not (Test-Path 'pinned-upstream/emulator/src/core/libraries/network/net_p2p_log_budget_v116.h')) {
+            throw 'Native game saturated diagnostic budget header not installed'
           }
           python tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py --client-root pinned-upstream --server-root pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Incompatible native Protocol8 game/Qt server code' }
@@ -137,6 +147,12 @@ jobs:
             -o shyt-yt130-v115-udp-queue.exe
           ./shyt-yt130-v115-udp-queue.exe
           echo SHYT_YT130_NATIVE_WINDOWS_SOCKET_QUEUE_POLICY_COMPILER_PASS
+          clang++ -std=c++20 -O2 -g0 -Wall -Wextra -Werror -pthread \
+            -I tools/poc/yharnam/yt130-reference/native \
+            tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp \
+            -o shyt-yt130-v116-udp-log-budget.exe
+          ./shyt-yt130-v116-udp-log-budget.exe
+          echo SHYT_YT130_NATIVE_WINDOWS_PACKET_LOG_BUDGET_COMPILER_PASS
       - name: Restore bounded shared C++ object cache
         uses: actions/cache/restore@v4
         with:
