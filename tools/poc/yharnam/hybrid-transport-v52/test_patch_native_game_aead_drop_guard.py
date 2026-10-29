@@ -10,6 +10,7 @@ spec.loader.exec_module(patch)
 ORIGINAL='''#include "core/libraries/network/sh_native_direct_rx.hpp" // SHYT-V70-NATIVE-RECV-HMAC
 // SHYT-V87-TRUSTED-SERVER-LINK
     SeamlessHunt::Hybrid::NativeDirectReceiver direct_ingress{};
+    direct_ingress.RevokeAll();
     void Stop() {
         {
             std::lock_guard direct_lock(direct_egress_mutex);

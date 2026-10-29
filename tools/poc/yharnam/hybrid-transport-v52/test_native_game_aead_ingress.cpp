@@ -67,7 +67,8 @@ int main() {
     const PhysicalV4 physical{0x0100007fU,0x2153U};
     const VirtualV4 virtual_peer{0x09090909U,0x7711U};
     LiveWorld world{};world.authority=Good();
-    auto key=Key(10),salt=Salt(71);
+    const auto key=Key(10);
+    const auto salt=Salt(71);
     NativeGameAeadSealer tx;
     auto ticket=Ticket(502);
     assert(tx.Arm(ticket,key,salt,100));
