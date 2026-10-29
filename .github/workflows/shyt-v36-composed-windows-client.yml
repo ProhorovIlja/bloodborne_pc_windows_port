@@ -110,6 +110,20 @@ jobs:
           if (($source.Split($old).Count - 1) -ne 1) {
             throw 'Pinned game build.sh has changed; refusing non-reviewed incremental compiler injection'
           }
+          # Native Vulkan TU preflight already installed 0002's real <mutex>
+          # and source-locked std headers. The original build.sh would try
+          # to reverse-check 0002 AFTER our narrowly changed TU and could
+          # reject its modified context. Skip only the ALREADY VERIFIED 0002.
+          $vendorAnchor = '    for patch in gpu/patches/fsr-vulkan/*.patch; do'
+          if (($source.Split($vendorAnchor).Count - 1) -ne 1) {
+            throw 'Pinned Windows vendor patch loop drift'
+          }
+          $vendorNew = $vendorAnchor + "`n" +
+            '        if [[ "$patch" == *0002-ffx_vk-include-mutex-for-libc.patch ]]; then' + "`n" +
+            '            grep -Fqx "#include <mutex> // bbport: libc++ does not include it transitively" gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp || exit 1' + "`n" +
+            '            continue' + "`n" +
+            '        fi'
+          $source = $source.Replace($vendorAnchor, $vendorNew)
           [IO.File]::WriteAllText((Resolve-Path $script), $source.Replace($old, $new))
       - name: Compile real native Windows renderer and game loader
         id: native_build
