@@ -67,6 +67,17 @@ class FsrCompatibilityTest(unittest.TestCase):
         self.assertEqual(mod.git_blob(b"test"),
                          "30d74d258442c7c65512eafab474568dd706c430")
 
+    def test_windows_line_endings_are_only_allowed_normalization(self):
+        # Real FSR pin remains mandatory. One universal CRLF conversion
+        # may be normalized; mutation of any other source byte is denied.
+        with TemporaryDirectory() as d:
+            target=Path(d)/"ffx_message.cpp"
+            target.write_bytes(FSR.replace("\n","\r\n").encode())
+            with self.assertRaisesRegex(ValueError, "version mismatch"):
+                mod.patch_file(target)
+            self.assertEqual(target.read_bytes(),
+                             FSR.replace("\n","\r\n").encode())
+
 
 if __name__ == "__main__":
     unittest.main()

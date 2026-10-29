@@ -72,8 +72,15 @@ def patch_file(path: Path) -> None:
     original = path.read_bytes()
     actual_blob = git_blob(original)
     if actual_blob != ORIGINAL_BLOB:
-        raise ValueError(
-            f"FSR version mismatch: required {ORIGINAL_BLOB}, got {actual_blob}")
+        # Windows Git may check out *this pinned text file* with CRLF.
+        # Normalizing CRLF to LF must reproduce the IDENTICAL Git blob;
+        # otherwise refuse, never treat arbitrary changed FSR as safe.
+        canonical = original.replace(b"\r\n", b"\n")
+        if b"\r\n" not in original or git_blob(canonical) != ORIGINAL_BLOB:
+            raise ValueError(
+                f"FSR version mismatch: required {ORIGINAL_BLOB}, "
+                f"got {actual_blob} (CRLF-normalized={git_blob(canonical)})")
+        original = canonical
     updated = patch_text(original.decode("utf-8"))
     path.write_bytes(updated.encode("utf-8"))
     print("SHYT_FSR_PINNED_MINGW_WPRINTF_FIXED:" + git_blob(
