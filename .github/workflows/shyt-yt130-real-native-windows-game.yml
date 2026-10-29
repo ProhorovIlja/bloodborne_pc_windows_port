@@ -171,9 +171,29 @@ jobs:
                       grep -Fqx "#include <mutex> // bbport: libc++ does not include it transitively" gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp || exit 1
                       continue
                   fi""",1)
-          s=s.replace("-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null","-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache >/dev/null",1)
+          # The Windows runner has two vCPUs and limited memory. The prior
+          # original 1.1.9 Protocol7 renderer job reached only 119/418 Ninja
+          # tasks before its 130-minute timeout, without a compiler error.
+          # Preserve optimized -O2 and NDEBUG while avoiding heavyweight -g
+          # debug information for this CI build; do NOT change game physics.
+          build_cmd="-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null"
+          assert s.count(build_cmd)==1, "Pinned YT1.3 Windows CMake command changed"
+          s=s.replace(build_cmd,
+              "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ "
+              "-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache "
+              "-DCMAKE_C_FLAGS_RELWITHDEBINFO='-O2 -g0 -DNDEBUG' "
+              "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO='-O2 -g0 -DNDEBUG' >/dev/null",1)
+          # Heavy FSR/C++ shader translation units must not oversubscribe
+          # 7 GB Windows RAM and page thrash. Two native compilers in flight.
+          ninja_cmd="ninja -C out/gpu bb-probe bb-gpu-capabilities bb-play > out/gpu-build.log 2>&1"
+          assert s.count(ninja_cmd)==1, "Pinned YT1.3 Ninja command changed"
+          s=s.replace(ninja_cmd,
+              "ninja -j 2 -C out/gpu bb-probe bb-gpu-capabilities bb-play > out/gpu-build.log 2>&1",1)
           p.write_bytes(s.encode("utf-8"))  # retain LF on native Windows Python
           PY
+          grep -Fq -- "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO='-O2 -g0 -DNDEBUG'" pinned-upstream/bbport/build.sh
+          grep -Fq 'ninja -j 2 -C out/gpu bb-probe bb-gpu-capabilities bb-play' pinned-upstream/bbport/build.sh
+          echo SHYT_YT130_WINDOWS_2WORKERS_O2_G0_SOURCE_GUARD_PASS
           cd pinned-upstream/bbport
           # Preserve actual compiler failures rather than spinning hours.
           timeout --signal=TERM --kill-after=15s 130m bash build.sh &
