@@ -58,7 +58,9 @@ int main() {
     NativeGameAeadIngress rx;
     const PhysicalV4 addr{0x0100007fU,0xa01bU};
     const VirtualV4 peer{0x0a000001U,0xe102U};
-    const auto ticket=Ticket(554),key=Key(17),salt=Salt(83);
+    const auto ticket=Ticket(554);
+    const auto key=Key(17);
+    const auto salt=Salt(83);
     World w{};w.auth=Allowed();
     const auto game=Game('A');
     std::vector<std::uint8_t> wire;
