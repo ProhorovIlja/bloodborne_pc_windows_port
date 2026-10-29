@@ -915,6 +915,7 @@ def run(checkout:Path, repo:Path, out:Path):
     files[shy2.AEAD_HEADER]=(metrics_dir/"sh_native_game_aead.hpp").read_bytes()
     files[shy2.INGRESS_HEADER]=(metrics_dir/"sh_native_game_aead_ingress.hpp").read_bytes()
     files[shy2.EGRESS_HEADER]=(metrics_dir/"sh_native_game_aead_egress.hpp").read_bytes()
+    files[shy2.CUTOVER_HEADER]=(metrics_dir/"sh_native_shy2_grant_cutover_v106.hpp").read_bytes()
     files["emulator/src/core/libraries/network/sh_pair_aead_keys.hpp"]=(
         metrics_dir/"sh_pair_aead_keys.hpp").read_bytes()
     meta["applied"].append("Native SHY2 AES-256-GCM original recvfrom ingress and SendFrame writer callback: server-scoped physical/virtual/world/ACK gates; zero installed peers, relay unchanged")

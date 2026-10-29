@@ -11,6 +11,8 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_aead_egress.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead_egress.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_native_game_shy2_udp_loopback.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_shy2_grant_cutover_v106.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_shy2_grant_cutover_v106.cpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_pair_aead_keys.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_game_aead_drop_guard.py
@@ -56,6 +58,7 @@ jobs:
           keys='emulator/src/core/libraries/network/sh_pair_aead_keys.hpp'
           ingress='emulator/src/core/libraries/network/sh_native_game_aead_ingress.hpp'
           egress='emulator/src/core/libraries/network/sh_native_game_aead_egress.hpp'
+          cutover='emulator/src/core/libraries/network/sh_native_shy2_grant_cutover_v106.hpp'
           code=(root/game).read_text()
           assert code.count('SHYT-SHY2-AUTHENTICATED-INGRESS')==1
           assert code.index('IsSHY2(datagram)')<code.index('IsSHP1(datagram)')
@@ -65,15 +68,19 @@ jobs:
           assert 'native_shy2_egress.Seal(' in code
           assert 'Transmit(dest,std::move(sealed))' in code
           assert 'native_shy2_egress.Arm(' not in code
+          assert 'SHYT-SHY2-DEV-TRUSTED-CUTOVER' in code
+          assert 'NativeShy2GrantCutoverV106::Install(' in code
+          assert code.count('SHYT-SHY2-V106-TRUSTED-PAIR-GATE')==1
           assert 'native_shy2_ingress.Arm(' not in code
           assert code.index('IsSHP1(datagram)')<code.index('Link::TakesDatagramFrom(')
           assert 'direct_ingress.Arm(' not in code
           assert 'direct_egress.Arm(' not in code
-          assert all((root/name).is_file() for name in (codec,keys,ingress,egress))
+          assert all((root/name).is_file() for name in (codec,keys,ingress,egress,cutover))
+          assert 'VerifiedFor(*offer,now_ms)' in (root/cutover).read_text()
           assert 'EligibleNativeWireFrame' in (root/ingress).read_text()
           assert 'EVP_aes_256_gcm()' in (root/codec).read_text()
           assert 'NativePairAeadKeys' in (root/keys).read_text()
-          for name in (game,codec,keys,ingress,egress):
+          for name in (game,codec,keys,ingress,egress,cutover):
               assert hashlib.sha256((root/name).read_bytes()).hexdigest()==m['sha256'][name]
           assert any('Native SHY2 AES-256-GCM original recvfrom ingress and SendFrame writer callback:' in x for x in m['applied'])
           print('SHYT_REAL_ORIGINAL_GAME_SHY2_CRYPTO_INGRESS_DEFAULT_OFF_RELAY_UNCHANGED')
@@ -112,6 +119,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_native_game_shy2_udp_loopback.cpp \
             -lcrypto -o /tmp/shyt-shy2-kernel-udp
           timeout 25s /tmp/shyt-shy2-kernel-udp
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_shy2_grant_cutover_v106.cpp \
+            -lcrypto -o /tmp/shyt-v106-trusted-game-cutover
+          timeout 25s /tmp/shyt-v106-trusted-game-cutover
           c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
             -I tools/poc/yharnam/hybrid-transport-v52 \
             tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \
@@ -158,6 +170,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_native_game_shy2_udp_loopback.cpp \
             -lcrypto -lws2_32 -o shyt-shy2-kernel-udp.exe
           ./shyt-shy2-kernel-udp.exe
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_shy2_grant_cutover_v106.cpp \
+            -lcrypto -lbcrypt -o shyt-v106-trusted-game-cutover.exe
+          ./shyt-v106-trusted-game-cutover.exe
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
             -I tools/poc/yharnam/hybrid-transport-v52 \
             tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \

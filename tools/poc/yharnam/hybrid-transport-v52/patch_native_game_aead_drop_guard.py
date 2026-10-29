@@ -12,6 +12,7 @@ NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 AEAD_HEADER = "emulator/src/core/libraries/network/sh_native_game_aead.hpp"
 INGRESS_HEADER = "emulator/src/core/libraries/network/sh_native_game_aead_ingress.hpp"
 EGRESS_HEADER = "emulator/src/core/libraries/network/sh_native_game_aead_egress.hpp"
+CUTOVER_HEADER = "emulator/src/core/libraries/network/sh_native_shy2_grant_cutover_v106.hpp"
 TAG = "SHYT-SHY2-AUTHENTICATED-INGRESS"
 
 
@@ -33,7 +34,10 @@ def patch_game(src: str) -> str:
         '#include "core/libraries/network/sh_native_direct_rx.hpp" // SHYT-V70-NATIVE-RECV-HMAC\n',
         '#include "core/libraries/network/sh_native_direct_rx.hpp" // SHYT-V70-NATIVE-RECV-HMAC\n'
         '#include "core/libraries/network/sh_native_game_aead_ingress.hpp" // ' + TAG + '\n'
-        '#include "core/libraries/network/sh_native_game_aead_egress.hpp" // SHYT-SHY2-AUTHENTICATED-EGRESS\n',
+        '#include "core/libraries/network/sh_native_game_aead_egress.hpp" // SHYT-SHY2-AUTHENTICATED-EGRESS\n'
+        '#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS\n'
+        '#include "core/libraries/network/sh_native_shy2_grant_cutover_v106.hpp" // SHYT-SHY2-V106-TRUSTED-PAIR-GATE\n'
+        '#endif\n',
         "actual game header")
     src = one(src,
         '    SeamlessHunt::Hybrid::NativeDirectReceiver direct_ingress{};\n',
@@ -102,7 +106,7 @@ def patch_game(src: str) -> str:
 """
     src = one(src,
         '    static bool TrustedReverseDirectReady(\n',
-        callback + '    static bool TrustedReverseDirectReady(\n',
+        method + callback + '    static bool TrustedReverseDirectReady(\n',
         "original game verified sender callback")
     # V71 has TWO independent lifecycle revocations. The encrypted route
     # requires both; no stale AES peer may survive logout/server swap/stop.
