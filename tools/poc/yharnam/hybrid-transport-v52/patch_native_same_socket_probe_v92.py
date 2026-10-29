@@ -31,11 +31,13 @@ def patch_game(src):
         '#include "core/libraries/network/sh_native_game_identity_v87.hpp" // SHYT-V87-TRUSTED-SERVER-LINK\n'
         '#include "core/libraries/network/sh_nat_probe_v91.hpp" // '+TAG+'\n'
         '#include "core/libraries/network/sh_native_tls_local_client_v91.hpp" // V92 paired TLS-only admission\n'
-        '#include "core/libraries/network/sh_native_tls_pair_list_v102.hpp" // native five-hunter selector discovery\n',
+        '#include "core/libraries/network/sh_native_tls_pair_list_v102.hpp" // native five-hunter selector discovery\n'
+        '#include "core/libraries/network/sh_native_team_grant_slots_v103.hpp" // V103 bounded game-owned team grants\n',
         "dev-only native probe header")
     src=one(src,
         '    SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 native_grant_inbox_v84{};\n',
         '    SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 native_grant_inbox_v84{};\n'
+        '    SeamlessHunt::Hybrid::NativeTeamGrantSlotsV103 nat_team_grants_v103{};\n'
         '    std::optional<SeamlessHunt::Hybrid::NatProbeProofV91> nat_probe_v92;\n'
         '    std::uint64_t nat_probe_link_generation_v92=0;\n'
         '    std::uint64_t nat_paired_tls_generation_v92=0;\n'
@@ -47,6 +49,7 @@ def patch_game(src):
         ('            native_grant_inbox_v84.Revoke(); // V86 account/server change\n',"account/server change"),
     ):
         src=one(src,old,old+
+            '            nat_team_grants_v103.RevokeAll(); // bound to this signed-in game link\n'
             '            nat_probe_v92.reset(); // V92 '+remark+', wipe probe secrets\n'
             '            nat_probe_link_generation_v92=0;\n'
             '            nat_paired_tls_generation_v92=0;\n'
@@ -108,6 +111,20 @@ def patch_game(src):
         return true;
     }
 
+    // Read-only: a granted V102 pair has been committed to this native
+    // game's own per-peer slot, but is still NOT permitted to transmit
+    // gameplay over Direct. Call only from a trusted game worker.
+    bool HasLocalTeamGrantForNatTest(
+        std::uint64_t pair_id,std::uint64_t now_ms) {
+        if(!running.load(std::memory_order_acquire) || LinkCut())return false;
+        std::lock_guard lock(native_grant_mutex);
+        std::lock_guard link_lock(link_mutex);
+        if(!link_welcomed || !shyt_link_generation_v87 ||
+           !link_server.addr_nbo || !link_server.port_nbo)return false;
+        return nat_team_grants_v103.PendingForNat(
+            pair_id,shyt_link_generation_v87,now_ms)!=nullptr;
+    }
+
     // V92: ONLY a full SHG2 *coordinated* V90 pair can probe. The
     // original game's authenticated online ID must agree with the
     // certificate identity and must survive the entire blocking mTLS
@@ -143,7 +160,8 @@ def patch_game(src):
                 game_id,welcomed,configured,expected);
         std::fill(game_id.begin(),game_id.end(),char(0));
         if(!valid)return false;
-        {
+        if(!v102_pair_id) {
+            // Legacy one-pair developer path stays isolated from V103.
             std::lock_guard lock(native_grant_mutex);
             nat_probe_v92.reset();
             nat_probe_link_generation_v92=0;
@@ -183,10 +201,19 @@ def patch_game(src):
             if(v102_pair_id && grant->pair_binding!=v102_pair_id)
                 return false;
             const auto binding=grant->pair_binding;
-            if(!temporary_inbox.TransferVerifiedTo(
-                  native_grant_inbox_v84,received_ms))return false;
-            nat_paired_tls_generation_v92=generation;
-            nat_paired_tls_binding_v92=binding;
+            if(v102_pair_id) {
+                // V103: five hunters require FOUR independent grant slots
+                // per native game, not one shared V90 inbox. Every slot
+                // owns its secret and retains its own game-state refresh.
+                if(!nat_team_grants_v103.InstallVerified(
+                       temporary_inbox,binding,generation,received_ms))
+                    return false;
+            } else {
+                if(!temporary_inbox.TransferVerifiedTo(
+                      native_grant_inbox_v84,received_ms))return false;
+                nat_paired_tls_generation_v92=generation;
+                nat_paired_tls_binding_v92=binding;
+            }
         }
         both_ready=receipt;
         return true; // Still NOT permission for Direct game traffic
