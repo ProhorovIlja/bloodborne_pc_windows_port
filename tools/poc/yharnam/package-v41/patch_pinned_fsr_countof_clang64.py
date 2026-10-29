@@ -15,6 +15,7 @@ from pathlib import Path
 BASE = "bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/components"
 SOURCE = {
     "opticalflow/ffx_opticalflow.cpp": ("ae94c2d04f6d6edc6766847c41e6f99254b2fdd9", 9),
+    "fsr3upscaler/ffx_fsr3upscaler.cpp": ("94bf58107192b3a72b1c6f98f122623195daee9e", 7),
     "frameinterpolation/ffx_frameinterpolation.cpp": ("b8f48c07933f5a444bc454dc9d9c68edaf461a3e", 14),
 }
 PIN = "c64f093404125e960813f95f1996c14780f0dd69"
@@ -46,7 +47,7 @@ def patch_files(upstream: Path) -> None:
             raise ValueError(f"AMD FidelityFX SDK git blob mismatch for {rel}")
         patched = patch_source(canonical.decode("utf-8"), count).encode("utf-8")
         staged[path] = patched
-    # All-or-nothing validation before changing EITHER original source file.
+    # All-or-nothing validation before changing ANY of the three original host files.
     for path, raw in staged.items():
         path.write_bytes(raw)
         print(f"SHYT_PINNED_FSR_COUNT_OF_PASS {path.name} {git_blob(raw)}")
