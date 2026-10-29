@@ -105,7 +105,7 @@ def patch(sources: dict[str, str]) -> dict[str, str]:
          "    const u64 size = ParamTableSize(\n"
          "        {reinterpret_cast<const u8*>(param), entries}, rows, row_size);\n"),
         "replace twenty-thousand independent memory probes")
-    output[TEST] = sources[TEST].rstrip() + "\n\n" + TEST_CASE
+    output[TEST] = sources[TEST].rstrip() + "\n\n" + TEST_CASE.rstrip() + "\n"
     return output
 
 def stage(root: Path) -> None:
