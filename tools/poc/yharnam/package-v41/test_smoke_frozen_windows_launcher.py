@@ -41,6 +41,28 @@ class FrozenLauncherSmokeUnit(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unsafe"):
                 smoke.inspect_archive(archive)
 
+    def test_case_collisions_denied_on_windows(self):
+        with tempfile.TemporaryDirectory() as d:
+            archive = Path(d) / "case-collision.zip"
+            with zipfile.ZipFile(archive, "w") as z:
+                z.writestr("bbport-windows/BLauncher.exe", b"MZ")
+                z.writestr("bbport-windows/README.TXT", "first")
+                z.writestr("bbport-windows/readme.txt", "second")
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                smoke.inspect_archive(archive)
+
+    def test_symlink_payload_denied_before_extract(self):
+        with tempfile.TemporaryDirectory() as d:
+            archive = Path(d) / "symlink.zip"
+            link = zipfile.ZipInfo("bbport-windows/escape.txt")
+            link.create_system = 3
+            link.external_attr = (0o120777 << 16)
+            with zipfile.ZipFile(archive, "w") as z:
+                z.writestr("bbport-windows/BLauncher.exe", b"MZ")
+                z.writestr(link, "../../outside")
+            with self.assertRaisesRegex(ValueError, "symbolic link"):
+                smoke.inspect_archive(archive)
+
     def test_missing_frozen_launcher_denied(self):
         with tempfile.TemporaryDirectory() as d:
             archive = Path(d) / "test.zip"
