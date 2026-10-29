@@ -89,6 +89,18 @@ class Scale1000PlanTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "silently clamps"):
                 m.verify_five_player_generator(Path("/tmp/bbload"))
 
+    def test_actual_owner_generator_help_is_required_not_assumed(self):
+        from subprocess import CompletedProcess
+        valid = CompletedProcess(args=["bbload", "--help"], returncode=0,
+                                 stdout="--owners <n> enemy-owner seats", stderr="")
+        legacy = CompletedProcess(args=["bbload", "--help"], returncode=0,
+                                  stdout="players a team (2-5)", stderr="")
+        with patch.object(m.subprocess, "run", return_value=valid):
+            m.verify_multi_owner_generator(Path("/tmp/bbload"))
+        with patch.object(m.subprocess, "run", return_value=legacy):
+            with self.assertRaisesRegex(ValueError, "Missing source-pinned"):
+                m.verify_multi_owner_generator(Path("/tmp/bbload"))
+
     @staticmethod
     def playing(players=1000, p99=21.0, received=300000):
         return {
