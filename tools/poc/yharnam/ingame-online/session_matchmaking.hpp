@@ -20,7 +20,7 @@ enum class Visibility { Public, Private };
 enum class Scaling { Vanilla, PartyBalanced, Challenging };
 enum class RoutePreference { DirectP2P, RelayOnly };
 enum class Reject { None, Closed, Private, InvasionsDisabled, InvasionCap, Full, InvalidGroup, MismatchedBuild, LevelMismatch, DuplicatePlayer, Blocked };
-struct Hunter { std::string id; int level=4; std::string public_name; };
+struct Hunter { std::string id; int level=4; std::string public_name{}; };
 struct Party { std::string id; std::vector<Hunter> members; };
 struct Rules {
     Visibility visibility=Visibility::Public;
@@ -115,8 +115,8 @@ struct RoomView {
     RoutePreference route=RoutePreference::DirectP2P;
     std::uint64_t rules_revision=0;
     Reject reason=Reject::None;
-    std::string host_name;
-    std::vector<std::string> public_members; // explicit public_name only
+    std::string host_name{};
+    std::vector<std::string> public_members{}; // explicit public_name only
 };
 struct RoomPage {
     std::vector<RoomView> rooms;
