@@ -102,7 +102,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $testPython)) {
             throw 'Missing verified Python 3.12 for backend parity tests'
           }
-          cmake -S pinned-upstream/server -B build-native-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" "-DPython3_EXECUTABLE=$testPython" -Dprotobuf_BUILD_TESTS=OFF
+          cmake -S pinned-upstream/server -B build-native-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" "-DPython3_EXECUTABLE=$testPython" "-DCMAKE_CXX_FLAGS=/DNOMINMAX" -Dprotobuf_BUILD_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { throw 'Qt server configuration failed' }
           # V28 release gate: the original Hub must stay under 16 KiB
           # after heap-moving its bounded 448-KiB optional login-admission
