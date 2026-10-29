@@ -28,24 +28,32 @@ def patch_link_cpp(s):
     // SH-LOGIN-ADMISSION-V28: cheap, bounded work before any password DB/KDF.
     // Silent rejection is intentional: ordinary clients retry Hello, and a
     // Welcome refusal could cause a permanent login failure.
-    if (SeamlessHunt::LoginAdmission::Enabled() &&
-        !hello_admission.Allow(from.ipv4, now_ms)) {
-        return;
+    if (SeamlessHunt::LoginAdmission::Enabled()) {
+        // V28 Windows crash fix: Gate is ~448 KiB. A stack-embedded
+        // Gate made every Hub huge, overflowing Windows test stack when
+        // more than one Hub existed. Allocate once only when opt-in is
+        // enabled; on OOM deny before any expensive password DB work.
+        if (!hello_admission)
+            hello_admission.reset(new (std::nothrow)
+                SeamlessHunt::LoginAdmission::Gate());
+        if (!hello_admission || !hello_admission->Allow(from.ipv4, now_ms))
+            return;
     }
     QByteArray refusal;''', 'before SignIn')
 
 def patch_link_h(s):
     if 'SH-LOGIN-ADMISSION-V28' in s:
         raise ValueError('V28 already applied to Hub header')
-    s = one(s, '#include <map>', '#include <map>\n#include "sh_login_admission.hpp" // SH-LOGIN-ADMISSION-V28', 'policy include')
+    s = one(s, '#include <map>', '#include <map>\n#include <memory>\n#include <new>\n#include "sh_login_admission.hpp" // SH-LOGIN-ADMISSION-V28', 'policy include')
     return one(s, '''    int pair_lines;''', '''    int pair_lines;
     // Fixed-size 4-way IP table and global token bucket, never allocates per
     // untrusted Hello. Disabled unless SH_LOGIN_ADMISSION=1.
-    SeamlessHunt::LoginAdmission::Gate hello_admission;''', 'Hub budget')
+    std::unique_ptr<SeamlessHunt::LoginAdmission::Gate> hello_admission;''', 'Hub budget')
 
 def patch_test(s):
     if 'SH-LOGIN-ADMISSION-V28' in s:
         raise ValueError('V28 already applied to Qt tests')
+    s = one(s, 'using namespace ServerLink;', 'using namespace ServerLink;\n\n// Hub must never embed the ~448 KiB per-source ingress table on its stack.\nstatic_assert(sizeof(Hub) < 16384, "V28 Hub must keep login admission Gate off the stack");', 'bounded native Hub stack footprint')
     s = one(s, 'int Relays() {', '''// SH-LOGIN-ADMISSION-V28: first-hop flood test exercises real Hub::OnHello.
 int HelloAdmissionLimitsDbCalls() {
   qputenv("SH_LOGIN_ADMISSION", "1");
