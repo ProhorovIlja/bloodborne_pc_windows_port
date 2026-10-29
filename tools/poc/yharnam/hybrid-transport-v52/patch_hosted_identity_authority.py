@@ -89,22 +89,8 @@ def patch(src):
     const bool arrived = member.lobby.empty();
     member.lobby = hello.member();
 ""","V25-compatible live Qt lobby identity gate before mutation")
-    # Original game's BoardMemberOfOnlineId emits the hex of signed-in
-    # online_id for BOTH LobbyHello and Hello; synthetic old Qt tests used
-    # raw names. Strict five-member fixture must emulate game hex identities.
-    test=one(test,
-"""  void LobbyHello(bool playing, qint64 now_ms) {
-""",
-"""  void LobbyHello(bool playing, qint64 now_ms,
-                  bool authenticated_account=false) {
-""","real Qt test fixture explicit signed-in lobby member")
-    test=one(test,
-"""    envelope.mutable_lobby_hello()->set_member(name);
-""",
-"""    envelope.mutable_lobby_hello()->set_member(
-        authenticated_account ?
-        QByteArray::fromStdString(name).toHex().toStdString() : name);
-""","strict LobbyHello member uses game account hex, not arbitrary name")
+    # Discovery V102 already patched LobbyHello to use the signed-in
+    # account's hex identity; don't patch that fixture a second time.
     # The real original game test's default names remain unchanged. Explicit
     # strict test fixture uses exactly authenticated online_id.toHex().
     test=one(test,
