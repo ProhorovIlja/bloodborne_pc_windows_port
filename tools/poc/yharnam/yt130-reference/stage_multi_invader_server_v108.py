@@ -715,6 +715,139 @@ int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {''',
         '      {"ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved",\n'
         '       ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved},',
         "register original Qt test")
+    # A real bug found in original Service::SendBoards: invaders retain their
+    # own party key and only set Member.visiting to the target world. Ordinary
+    # board fanout checks member.party==world.name, so other hostile games NEVER
+    # receive any ally vitals. Do NOT forward the co-op VitalsBoard wholesale:
+    # it includes cooperator HP, position, and team wipe information.
+    cpp=one(cpp,
+        "    for (const bbcoop::Envelope& board : boards) {\n"
+        "        if (only != nullptr) {\n"
+        "            SendTo(*only, board, now_ms);\n"
+        "            continue;\n"
+        "        }\n"
+        "        for (auto& [key, member] : members) {\n"
+        "            if (member.party == world.name) {\n"
+        "                SendTo(member, board, now_ms);\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n\n"
+        "bbcoop::VitalsBoard Service::VitalsBoardOf(",
+        r'''    for (const bbcoop::Envelope& board : boards) {
+        if (only != nullptr) {
+            SendTo(*only, board, now_ms);
+            continue;
+        }
+        for (auto& [key, member] : members) {
+            if (member.party == world.name) {
+                SendTo(member, board, now_ms);
+            }
+        }
+        // SHYT-V108-ALLIED-HOSTILE-VITALS: a visiting invader is NOT a
+        // cooperator in member.party. Share ONLY fellow invaders' vitals,
+        // without cooperator HP/position, wipes or any other boards.
+        if (!board.has_vitals_board()) continue;
+        const auto group = invasions.find(world.name);
+        if (group == invasions.end()) continue;
+        bbcoop::Envelope safe;
+        auto* allies = safe.mutable_vitals_board();
+        for (const auto& entry : board.vitals_board().members()) {
+            if (entry.hostile()) *allies->add_members() = entry;
+        }
+        for (const auto& [id, invasion] : group->second) {
+            if (!invasion.joined) continue;
+            const auto visitor = members.find(invasion.invader);
+            if (visitor != members.end() && visitor->second.hostile &&
+                visitor->second.visiting == world.name) {
+                SendTo(visitor->second, safe, now_ms);
+            }
+        }
+    }
+}
+
+bbcoop::VitalsBoard Service::VitalsBoardOf(''',
+        "privacy-filtered real Qt hostile ally vitals delivery")
+    # On joining, give the invader an initial ally roster; on independent
+    # exit, refresh both cooperative and remaining hostile vitals views.
+    cpp=one(cpp,
+        '    SendTo(invader,start,now_ms);\n'
+        '    result.log.append(QStringLiteral("invasions: %1 joins %2, id %3 sign %4")',
+        '    SendTo(invader,start,now_ms);\n'
+        '    SendBoards(world, PartyBoards::VitalsBoard, now_ms);\n'
+        '    result.log.append(QStringLiteral("invasions: %1 joins %2, id %3 sign %4")',
+        "new visitor receives initial privacy-filtered board")
+    cpp=one(cpp,
+        '    cooldowns.Ended(world.toStdString(),invasion.invader_name,now_ms);\n'
+        '    result.log.append(QStringLiteral("invasions: id %1 of world %2 by %3 ended %4")',
+        '    cooldowns.Ended(world.toStdString(),invasion.invader_name,now_ms);\n'
+        '    if (const auto current=worlds.find(world);current!=worlds.end())\n'
+        '        SendBoards(current->second, PartyBoards::VitalsBoard, now_ms);\n'
+        '    result.log.append(QStringLiteral("invasions: id %1 of world %2 by %3 ended %4")',
+        "remaining invaders no longer see departed hostile")
+    test=one(test,
+        "int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {",
+        r'''int HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth() {
+  InvasionRig rig;
+  Game blue{1003,"bl",14};
+  rig.games.push_back(&blue);
+  blue.LobbyHello(true,rig.now);
+  rig.Step();
+  for (Game* invader:std::vector<Game*>{&rig.red,&blue}) {
+    invader->Invade(60,rig.now);
+    invader->Map(InvadedMap,rig.now);
+    rig.Step();
+    CHECK(invader->notices.size()==1);
+  }
+  rig.Step(InvasionNoticeMs);
+  CHECK(rig.red.invasion.has_value() && blue.invasion.has_value());
+  rig.red.Vitals(InvadedMap,1,rig.now,60);
+  blue.Vitals(InvadedMap,2,rig.now,60); // downed, not dead yet
+  rig.Step();
+  const auto allied_only=[](const Game& game) {
+    if (game.vitals_board.members_size()!=2 ||
+        game.vitals_board.wipes_size()!=0) return false;
+    bool seen_red=false,seen_blue=false;
+    for (const auto& line:game.vitals_board.members()) {
+      if (!line.hostile()) return false; // no co-op HP or location
+      if (line.member()=="rr" && line.vitals().vital()==1) seen_red=true;
+      if (line.member()=="bl" && line.vitals().vital()==2) seen_blue=true;
+    }
+    return seen_red && seen_blue;
+  };
+  CHECK(allied_only(rig.red));
+  CHECK(allied_only(blue));
+  bool has_team=false,has_red=false,has_blue=false;
+  for (const auto& line:rig.a.vitals_board.members()) {
+    if (line.member()=="aa" && !line.hostile()) has_team=true;
+    if (line.member()=="rr" && line.hostile()) has_red=true;
+    if (line.member()=="bl" && line.hostile()) has_blue=true;
+  }
+  CHECK(has_team && has_red && has_blue);
+  // A true death releases ONLY this hostile, and immediately invalidates
+  // the departed ally's row in every still-joined invader's board.
+  blue.Vitals(InvadedMap,3,rig.now,60);
+  rig.Step();
+  CHECK(EndedFor(blue,bbcoop::InvasionEnd::INVADER_DIED));
+  CHECK(rig.red.vitals_board.members_size()==1);
+  CHECK(rig.red.vitals_board.members(0).member()=="rr");
+  CHECK(rig.red.vitals_board.members(0).hostile());
+  CHECK(rig.red.vitals_board.wipes_size()==0);
+  for (const auto& line:rig.a.vitals_board.members())
+    CHECK(line.member()!="bl");
+  return 0;
+}
+
+int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {''',
+        "real two-invader Qt privacy and ally down/update/exit test")
+    test=one(test,
+        '      {"ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved",\n'
+        '       ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved},',
+        '      {"ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved",\n'
+        '       ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved},\n'
+        '      {"HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth",\n'
+        '       HostileVitalsBoardsAreAlliedOnlyAndNeverLeakTeamHealth},',
+        "register real original Qt hostile vitals privacy regression")
     return dict(zip(FILES,(h,cpp,policy,rules,link,test)))
 
 def stage(root:Path)->None:
