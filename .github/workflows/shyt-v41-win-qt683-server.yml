@@ -8,6 +8,8 @@ on:
       - .github/workflows/shyt-v41-win-qt683-server.yml
       - tools/poc/yharnam/hybrid-transport-v52/patch_p2p_session_generation.py
       - tools/poc/yharnam/hybrid-transport-v52/test_v77_windows_macro.cpp
+      - tools/poc/yharnam/login-admission-v28/patch_login_admission.py
+      - tools/poc/yharnam/login-admission-v28/test_patch_login_admission.py
       - tools/poc/yharnam/mainline/**
       - tools/poc/yharnam/parity-diagnostics-v43/**
   workflow_call:
@@ -102,6 +104,12 @@ jobs:
           }
           cmake -S pinned-upstream/server -B build-native-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" "-DPython3_EXECUTABLE=$testPython" -Dprotobuf_BUILD_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { throw 'Qt server configuration failed' }
+          # V28 release gate: the original Hub must stay under 16 KiB
+          # after heap-moving its bounded 448-KiB optional login-admission
+          # table. The server_link test used to crash on the Windows
+          # default process stack before this regression was added.
+          python -m unittest discover -s tools/poc/yharnam/login-admission-v28 -p 'test_patch_login_admission.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V28 Windows input/Hub regression failed' }
           cmake --build build-native-windows --parallel 2 --target shadnet test_server_link test_bloodborne_world test_accounts
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path build-native-windows/shadnet.exe)) { throw 'Windows shadnet build failed' }
       - name: Validate backend parity, accounts and world
