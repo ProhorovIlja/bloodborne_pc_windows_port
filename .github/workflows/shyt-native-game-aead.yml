@@ -6,6 +6,8 @@ on:
       - .github/workflows/shyt-native-game-aead.yml
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_aead.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_aead_ingress.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead_ingress.cpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_pair_aead_keys.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_game_aead_drop_guard.py
@@ -16,7 +18,7 @@ permissions:
   contents: read
 jobs:
   native-game-recvfrom:
-    name: Original Bloodborne native recvfrom SHY2 fail-closed integration
+    name: Original Bloodborne native recvfrom SHY2 authenticated ingress, default OFF
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -49,19 +51,24 @@ jobs:
           game='emulator/src/core/libraries/network/p2p_sockets.cpp'
           codec='emulator/src/core/libraries/network/sh_native_game_aead.hpp'
           keys='emulator/src/core/libraries/network/sh_pair_aead_keys.hpp'
+          ingress='emulator/src/core/libraries/network/sh_native_game_aead_ingress.hpp'
           code=(root/game).read_text()
-          assert code.count('SHYT-SHY2-UNARMED-DROP')==1
-          assert code.index('SHYT-SHY2-UNARMED-DROP')<code.index('IsSHP1(datagram)')
+          assert code.count('SHYT-SHY2-AUTHENTICATED-INGRESS')==1
+          assert code.index('IsSHY2(datagram)')<code.index('IsSHP1(datagram)')
+          assert 'native_shy2_ingress.Receive(' in code
+          assert code.count('native_shy2_ingress.RevokeAll()')==2
+          assert 'native_shy2_ingress.Arm(' not in code
           assert code.index('IsSHP1(datagram)')<code.index('Link::TakesDatagramFrom(')
           assert 'direct_ingress.Arm(' not in code
           assert 'direct_egress.Arm(' not in code
-          assert (root/codec).is_file() and (root/keys).is_file()
+          assert (root/codec).is_file() and (root/keys).is_file() and (root/ingress).is_file()
+          assert 'EligibleNativeWireFrame' in (root/ingress).read_text()
           assert 'EVP_aes_256_gcm()' in (root/codec).read_text()
           assert 'NativePairAeadKeys' in (root/keys).read_text()
-          for name in (game,codec,keys):
+          for name in (game,codec,keys,ingress):
               assert hashlib.sha256((root/name).read_bytes()).hexdigest()==m['sha256'][name]
-          assert any('Native SHY2 AES-256-GCM direct UDP codec and reciprocal SHG2 directional key schedule staged' in x for x in m['applied'])
-          print('SHYT_REAL_ORIGINAL_GAME_SHY2_DROPS_UNARMED_P2P_RELAY_UNCHANGED')
+          assert any('Native SHY2 AES-256-GCM original recvfrom ingress:' in x for x in m['applied'])
+          print('SHYT_REAL_ORIGINAL_GAME_SHY2_CRYPTO_INGRESS_DEFAULT_OFF_RELAY_UNCHANGED')
           PY
   aes256gcm-linux:
     name: Native Linux AES-256-GCM Direct game candidate
@@ -80,6 +87,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp \
             -lcrypto -o /tmp/shyt-native-game-aead
           /tmp/shyt-native-game-aead
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead_ingress.cpp \
+            -lcrypto -o /tmp/shyt-aead-game-ingress
+          /tmp/shyt-aead-game-ingress
           c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
             -I tools/poc/yharnam/hybrid-transport-v52 \
             tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \
@@ -110,6 +122,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp \
             -lcrypto -o shyt-native-game-aead.exe
           ./shyt-native-game-aead.exe
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead_ingress.cpp \
+            -lcrypto -o shyt-aead-game-ingress.exe
+          ./shyt-aead-game-ingress.exe
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
             -I tools/poc/yharnam/hybrid-transport-v52 \
             tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \
