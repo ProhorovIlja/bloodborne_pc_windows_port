@@ -157,7 +157,11 @@ public:
              std::span<const std::uint8_t> directional_salt,
              std::int64_t now_ms) noexcept {
         // Refuse silent rekey/sequence reset. Revoke must be explicit.
-        if(active_ || !AeadDetail::ValidTicket(verified,now_ms) ||
+        // A fresh key/nonce also needs a NEW server-issued pair lease.
+        // Explicit Revoke must not reset this local anti-nonce-reuse guard.
+        if(active_ || (used_epoch_==verified.session_epoch &&
+                       used_pair_==verified.pair_binding && used_epoch_) ||
+           !AeadDetail::ValidTicket(verified,now_ms) ||
            directional_key.size()!=key_.size() ||
            directional_salt.size()!=salt_.size() ||
            !AeadDetail::Nonzero(directional_key) ||
@@ -165,13 +169,15 @@ public:
         std::copy(directional_key.begin(),directional_key.end(),key_.begin());
         std::copy(directional_salt.begin(),directional_salt.end(),salt_.begin());
         ticket_=verified;first_ms_=now_ms;next_=1;active_=true;
+        used_epoch_=verified.session_epoch;used_pair_=verified.pair_binding;
         return true;
     }
     bool SealGame(std::span<const std::uint8_t> native_game_frame,
                   std::int64_t now_ms,std::vector<std::uint8_t>& out) {
         out.clear();
-        if(!active_ || now_ms<first_ms_ || now_ms>ticket_.expires_at_ms ||
-           next_==0 || native_game_frame.empty() ||
+        if(!active_ || now_ms<first_ms_)return false;
+        if(now_ms>ticket_.expires_at_ms){Revoke();return false;}
+        if(next_==0 || native_game_frame.empty() ||
            native_game_frame.size()>AeadDetail::MaxPayload)return false;
         out.resize(AeadDetail::HeaderBytes+native_game_frame.size()+
                    AeadDetail::TagBytes);
@@ -200,6 +206,7 @@ private:
     std::array<std::uint8_t,AeadDetail::SaltBytes> salt_{};
     PeerTicket ticket_{};
     std::uint64_t next_=0;
+    std::uint64_t used_epoch_=0,used_pair_=0;
     std::int64_t first_ms_=0;
     bool active_=false;
 };
@@ -214,7 +221,11 @@ public:
              std::span<const std::uint8_t> directional_key,
              std::span<const std::uint8_t> directional_salt,
              std::int64_t now_ms) noexcept {
-        if(active_ || !AeadDetail::ValidTicket(verified,now_ms) ||
+        // A fresh key/nonce also needs a NEW server-issued pair lease.
+        // Explicit Revoke must not reset this local anti-nonce-reuse guard.
+        if(active_ || (used_epoch_==verified.session_epoch &&
+                       used_pair_==verified.pair_binding && used_epoch_) ||
+           !AeadDetail::ValidTicket(verified,now_ms) ||
            directional_key.size()!=key_.size() ||
            directional_salt.size()!=salt_.size() ||
            !AeadDetail::Nonzero(directional_key) ||
@@ -222,13 +233,14 @@ public:
         std::copy(directional_key.begin(),directional_key.end(),key_.begin());
         std::copy(directional_salt.begin(),directional_salt.end(),salt_.begin());
         ticket_=verified;first_ms_=now_ms;active_=true;
+        used_epoch_=verified.session_epoch;used_pair_=verified.pair_binding;
         return true;
     }
     bool OpenGame(std::span<const std::uint8_t> datagram,
                   std::int64_t now_ms,std::vector<std::uint8_t>& native_game_frame) {
         native_game_frame.clear();
-        if(!active_||now_ms<first_ms_||now_ms>ticket_.expires_at_ms)
-            return false;
+        if(!active_ || now_ms<first_ms_)return false;
+        if(now_ms>ticket_.expires_at_ms){Revoke();return false;}
         std::uint64_t seq=0;
         if(!AeadDetail::HeaderValid(datagram,ticket_,seq) || Seen(seq))
             return false;
@@ -272,6 +284,7 @@ private:
     PeerTicket ticket_{};
     std::int64_t first_ms_=0;
     std::uint64_t highest_=0,seen_=0;
+    std::uint64_t used_epoch_=0,used_pair_=0;
     bool active_=false;
 };
 } // namespace SeamlessHunt::Hybrid
