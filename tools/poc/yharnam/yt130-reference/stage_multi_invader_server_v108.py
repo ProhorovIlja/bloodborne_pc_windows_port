@@ -623,8 +623,11 @@ void Service::EndInvasion(const QString& world, bbcoop::InvasionEnd::Reason reas
   rig.Step();
   CHECK(fourth.notices.empty()); // 2 co-op + 3 hostile = five TOTAL
   rig.Step(InvasionNoticeMs);
-  for (Game* visitor:std::vector<Game*>{&rig.red,&blue,&green})
+  for (Game* visitor:std::vector<Game*>{&rig.red,&blue,&green}) {
     CHECK(visitor->invasion.has_value());
+    visitor->Map(InvadedMap,rig.now); // actual native channel same-map policy
+  }
+  rig.Step();
   std::set<std::uint32_t> signs;
   for (Game* visitor:std::vector<Game*>{&rig.red,&blue,&green}) {
     signs.insert(visitor->invasion->session().sign());
@@ -675,6 +678,9 @@ int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {''',
   }
   rig.Step(InvasionNoticeMs);
   CHECK(rig.red.invasion && blue.invasion && green.invasion);
+  for (Game* visitor:std::vector<Game*>{&rig.red,&blue,&green})
+    visitor->Map(InvadedMap,rig.now);
+  rig.Step();
   CHECK(rig.red.invasion->session().sign()==4);
   CHECK(blue.invasion->session().sign()==5);
   CHECK(green.invasion->session().sign()==6);
