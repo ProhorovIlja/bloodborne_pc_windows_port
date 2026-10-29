@@ -176,7 +176,7 @@ public:
                   std::int64_t now_ms,std::vector<std::uint8_t>& out) {
         out.clear();
         if(!active_ || now_ms<first_ms_)return false;
-        if(now_ms>ticket_.expires_at_ms){Revoke();return false;}
+        if(now_ms>=ticket_.expires_at_ms){Revoke();return false;}
         if(next_==0 || native_game_frame.empty() ||
            native_game_frame.size()>AeadDetail::MaxPayload)return false;
         out.resize(AeadDetail::HeaderBytes+native_game_frame.size()+
@@ -240,7 +240,7 @@ public:
                   std::int64_t now_ms,std::vector<std::uint8_t>& native_game_frame) {
         native_game_frame.clear();
         if(!active_ || now_ms<first_ms_)return false;
-        if(now_ms>ticket_.expires_at_ms){Revoke();return false;}
+        if(now_ms>=ticket_.expires_at_ms){Revoke();return false;}
         std::uint64_t seq=0;
         if(!AeadDetail::HeaderValid(datagram,ticket_,seq) || Seen(seq))
             return false;
