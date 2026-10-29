@@ -550,10 +550,11 @@ void Service::EndInvasion(const QString& world, bbcoop::InvasionEnd::Reason reas
     after=r'''        if (const bbcoop::Team* team=lobby.TeamOf(member.lobby);
             team && !team->party().empty()) {
             const QString party=FolderOf(QByteArray::fromStdString(team->party()));
-            while (const auto bucket=invasions.find(party);
-                   bucket!=invasions.end() &&
-                   static_cast<size_t>(team->members_size())+bucket->second.size()
-                        > InvasionMaxPlayers) {
+            for (;;) {
+                const auto bucket=invasions.find(party);
+                if (bucket==invasions.end() ||
+                    static_cast<size_t>(team->members_size())+bucket->second.size()
+                        <= InvasionMaxPlayers) break;
                 const quint64 newest=bucket->second.rbegin()->first;
                 EndInvasion(party,newest,bbcoop::InvasionEnd::REFUSED,now_ms,result);
             }
