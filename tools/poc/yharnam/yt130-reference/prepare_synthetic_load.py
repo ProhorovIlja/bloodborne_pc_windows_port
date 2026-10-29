@@ -15,7 +15,13 @@ def transform(raw):
     s=raw.decode("utf-8")
     if s.count("import argparse\n")!=1 or s.count("args.extra.split()")!=1:
         raise ValueError("Exact pinned upstream syntax mismatch")
-    return s.replace("import argparse\n","import argparse\nimport shlex\n",1).replace("args.extra.split()","shlex.split(args.extra)",1).encode()
+    anchor = '        "packets_received": sum(r["packets_received"] for r in results),'
+    if s.count(anchor) != 1:
+        raise ValueError("Pinned upstream receipt summary changed")
+    s = s.replace("import argparse\n","import argparse\nimport shlex\n",1)
+    s = s.replace("args.extra.split()","shlex.split(args.extra)",1)
+    return s.replace(anchor, anchor + '\n' +
+        '        "game_receivers": sum(r["game_receivers"] for r in results),', 1).encode()
 def check_argv():
     if shlex.split("--build '"+FINGERPRINT+"'")!=["--build",FINGERPRINT]:
         raise ValueError("Bad build fingerprint command parsing")

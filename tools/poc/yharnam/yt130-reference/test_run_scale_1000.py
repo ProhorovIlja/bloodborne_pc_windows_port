@@ -107,6 +107,7 @@ class Scale1000PlanTests(unittest.TestCase):
     def playing(players=1000, p99=21.0, received=300000):
         return {
             "players": players, "playing": players,
+            "game_receivers": players,
             "packets_sent": 300000, "packets_received": received,
             "packets_lost": max(0, 300000 - received),
             "relay_ms_p99": p99, "main_thread_cpu_avg": 14.0,
@@ -118,6 +119,11 @@ class Scale1000PlanTests(unittest.TestCase):
         self.assertEqual(full["quality"], "FULL_GAMEPLAY")
         self.assertTrue(full["observed"])
         self.assertEqual(full["metrics"]["packets_lost"], 0)
+        self.assertEqual(full["metrics"]["game_receivers"], 1000)
+        missing = self.playing()
+        missing["game_receivers"] = 999
+        self.assertEqual(m.inspect(json.dumps(missing), 0, 1000)["quality"],
+                         "GAME_RECIPIENTS_MISSING")
         # This report must not claim healthy gameplay when the native
         # generator observes holes even if fanout inflates receives.
         with_gaps = self.playing(received=400000)

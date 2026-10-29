@@ -39,6 +39,30 @@ OWNER_EDITS = (
      "  settings.follower_fps = std::max(1, parser.value(\"follower-fps\").toInt());\n  settings.owners = std::clamp(parser.value(\"owners\").toInt(), 1, settings.team_size);"),
 )
 
+
+# Real per-client packet receipt is not implied by aggregate relay totals.
+# Instrument only the pinned disposable bbload generator used in CI.
+RECEIVER_EDITS = (
+    ('  bool Linked() const { return state != State::Linking; }\n',
+     '  bool Linked() const { return state != State::Linking; }\n'
+     '  bool SawGamePackets() const { return received_game_packets != 0; }\n'),
+    ('  u32 frame_count = 0;\n',
+     '  u32 frame_count = 0;\n  quint64 received_game_packets = 0;\n'),
+    ('    Report(NowUs());\n    int linked = 0;\n    int playing = 0;\n'
+     '    for (auto &game : games) {\n      linked += game->Linked();\n'
+     '      playing += game->Playing();\n    }',
+     '    Report(NowUs());\n    int linked = 0;\n    int playing = 0;\n'
+     '    int game_receivers = 0;\n'
+     '    for (auto &game : games) {\n      linked += game->Linked();\n'
+     '      playing += game->Playing();\n'
+     '      game_receivers += game->Playing() && game->SawGamePackets();\n    }'),
+    ('        {"playing", playing},\n        {"seconds", seconds},',
+     '        {"playing", playing},\n        {"game_receivers", game_receivers},\n'
+     '        {"seconds", seconds},'),
+    ('    ++load.totals.packets_received;\n',
+     '    ++load.totals.packets_received;\n    ++received_game_packets;\n'),
+)
+
 def blob_sha(raw: bytes) -> str:
     return hashlib.sha1(
         b"blob " + str(len(raw)).encode() + b"\x00" + raw
@@ -56,6 +80,10 @@ def rewrite(text: str) -> str:
         if text.count(old) != 1:
             raise ValueError("Pinned upstream multi-owner bbload anchor drift")
         text = text.replace(old, new, 1)
+    for old, replacement in RECEIVER_EDITS:
+        if text.count(old) != 1:
+            raise ValueError("Pinned game-receiver bbload anchor drift")
+        text = text.replace(old, replacement, 1)
     return text
 
 

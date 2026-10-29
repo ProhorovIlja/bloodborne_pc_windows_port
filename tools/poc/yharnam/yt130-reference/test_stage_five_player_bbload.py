@@ -13,7 +13,8 @@ class FivePlayerLoadgenTests(unittest.TestCase):
     @staticmethod
     def pinned_anchor_fixture():
         return ('before\n' + mod.OLD_HELP + '\n' + mod.OLD_CLAMP + '\n' +
-                '\n'.join(old for old, _ in mod.OWNER_EDITS) + '\nafter')
+                '\n'.join(old for old, _ in mod.OWNER_EDITS) + '\n' +
+                '\n'.join(old for old, _ in mod.RECEIVER_EDITS) + '\nafter')
 
     def test_exact_upstream_pr444_owner_changes_and_five_player_anchors(self):
         original = self.pinned_anchor_fixture()
@@ -23,6 +24,11 @@ class FivePlayerLoadgenTests(unittest.TestCase):
         self.assertNotIn(mod.OLD_CLAMP, transformed)
         self.assertNotIn(mod.OLD_HELP, transformed)
         self.assertEqual(len(mod.OWNER_EDITS), 7)
+        self.assertEqual(len(mod.RECEIVER_EDITS), 5)
+        for before, after in mod.RECEIVER_EDITS:
+            self.assertIn(after, transformed)
+        self.assertIn("game_receivers += game->Playing() && game->SawGamePackets();",
+                      transformed)
         for old, new in mod.OWNER_EDITS:
             self.assertIn(new, transformed)
         self.assertIn('std::clamp(parser.value("owners").toInt(), 1, settings.team_size)',
@@ -41,6 +47,13 @@ class FivePlayerLoadgenTests(unittest.TestCase):
             with self.subTest(missing=old[:40]):
                 with self.assertRaisesRegex(ValueError, "multi-owner.*anchor drift"):
                     mod.rewrite(original.replace(old, "MISSING", 1))
+
+    def test_missing_receiver_source_anchor_is_rejected(self):
+        original = self.pinned_anchor_fixture()
+        for before, _ in mod.RECEIVER_EDITS:
+            with self.subTest(anchor=before[:30]):
+                with self.assertRaisesRegex(ValueError, "game-receiver.*anchor drift"):
+                    mod.rewrite(original.replace(before, "MISSING", 1))
 
     def test_unpinned_source_refused(self):
         with self.assertRaisesRegex(ValueError, "exact official pinned"):

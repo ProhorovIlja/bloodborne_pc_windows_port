@@ -58,12 +58,18 @@ class CapacityUnitTests(unittest.TestCase):
                 mod.isolated_load(["python", "run_load.py"], unsafe)
 
     def test_true_delivery_and_valid_packets_required(self):
-        baseline = {"players":200, "playing":200,
+        baseline = {"players":200, "playing":200, "game_receivers":200,
                     "packets_sent":2000, "packets_received":2000,
                     "packets_lost":0, "relay_ms_p99":0.7,
                     "main_thread_cpu_avg":5.0}
         self.assertEqual(mod.quality(baseline, 200), "FULL_GAMEPLAY")
         self.assertEqual(mod.quality(baseline | {"playing":199}, 200), "PARTIAL_GAMEPLAY")
+        self.assertEqual(mod.quality(baseline | {"game_receivers":199}, 200),
+                         "GAME_RECIPIENTS_MISSING")
+        self.assertEqual(mod.quality(baseline | {"game_receivers":201}, 200),
+                         "INVALID_METRICS")
+        self.assertEqual(mod.quality({k: v for k, v in baseline.items()
+                                      if k != "game_receivers"}, 200), "INVALID_METRICS")
         self.assertEqual(mod.quality(baseline | {"players":199}, 200), "GENERATOR_MISMATCH")
         self.assertEqual(mod.quality(baseline | {"playing":0}, 200), "NO_GAMEPLAY")
         self.assertEqual(mod.quality(baseline | {"packets_received":0}, 200), "NO_GAMEPLAY")
@@ -94,10 +100,10 @@ class CapacityUnitTests(unittest.TestCase):
                          "MAIN_THREAD_SATURATED")
         # Actual six-stage optimized 2026-10-26 synthetic evidence,
         # without inventing per-client packet delivery.
-        actual64 = baseline | {"players":64, "playing":64, "packets_sent":40714,
+        actual64 = baseline | {"players":64, "playing":64, "game_receivers":64, "packets_sent":40714,
                                "packets_received":39882, "packets_lost":787,
                                "relay_ms_p99":262.676,"main_thread_cpu_avg":18.6}
-        actual100 = baseline | {"players":100, "playing":100, "packets_sent":54435,
+        actual100 = baseline | {"players":100, "playing":100, "game_receivers":100, "packets_sent":54435,
                                 "packets_received":32951, "packets_lost":19277,
                                 "relay_ms_p99":2859.115, "main_thread_cpu_avg":84.1}
         self.assertEqual(mod.quality(actual64, 64), "DELIVERY_DEGRADED")

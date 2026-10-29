@@ -137,7 +137,7 @@ def inspect(stdout: str, rc: int, expected: int) -> dict:
         "quality": quality(m, expected),
         "observed": True,
         "metrics": {name: m.get(name) for name in (
-            "players", "playing", "refused", "packets_sent",
+            "players", "playing", "game_receivers", "refused", "packets_sent",
             "packets_received", "packets_lost", "delivered_pct", "relay_ms_p50",
             "relay_ms_p99", "ping_ms_p99",
             "main_thread_cpu_avg", "main_thread_cpu_max",

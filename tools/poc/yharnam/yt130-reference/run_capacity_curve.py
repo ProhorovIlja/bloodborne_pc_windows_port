@@ -23,7 +23,8 @@ def settings(players: int) -> tuple[int, int, int]:
 
 def quality(m: dict, players: int) -> str:
     # Upstream bbload reports aggregate counters, not per-peer delivery proofs.
-    keys = ("players", "playing", "packets_sent", "packets_received", "packets_lost")
+    keys = ("players", "playing", "game_receivers",
+            "packets_sent", "packets_received", "packets_lost")
     # Qt serializes these counters as JSON numbers: whole values may be 3 or 3.0.
     # A received packet can also have more than one recipient, so do not
     # assume that aggregate receive counts never exceed send counts.
@@ -41,6 +42,12 @@ def quality(m: dict, players: int) -> str:
         return "NO_GAMEPLAY"
     if m["playing"] != players:
         return "PARTIAL_GAMEPLAY"
+    # At least one original game packet must reach EVERY reported
+    # playing virtual client. Aggregate counters hide silent recipients.
+    if m["game_receivers"] > m["playing"]:
+        return "INVALID_METRICS"
+    if m["game_receivers"] != players:
+        return "GAME_RECIPIENTS_MISSING"
     # A handful of packets cannot substantiate an all-player gameplay claim.
     # This is a minimum evidence gate, not proof of per-client packet delivery.
     if m["packets_sent"] < players or m["packets_received"] < players:
