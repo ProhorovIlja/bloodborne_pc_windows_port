@@ -62,7 +62,7 @@ int main(){
     social.defenders.front().members.front().public_name="Lady Maria";
     auto companion=P("companion","ally-private-account");
     companion.members.front().public_name="The Wanderer";
-    social.defenders.push_back(companion);
+    social.defenders.front().members.push_back(companion.members.front());
     assert(mm.Create(social));
     RoomFilters query;
     query.host_name_query="mArIa";
