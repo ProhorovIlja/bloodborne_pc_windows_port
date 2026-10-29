@@ -1,0 +1,45 @@
+name: SHYT YT1.3 bounded load-generator safety (fast Python gate)
+on:
+  push:
+    branches: [feature/yt130-1000-2000-scale-ladder-20261028]
+    paths:
+      - tools/poc/yharnam/yt130-reference/run_capacity_curve.py
+      - tools/poc/yharnam/yt130-reference/test_run_capacity_curve.py
+      - tools/poc/yharnam/yt130-reference/run_scale_1000.py
+      - tools/poc/yharnam/yt130-reference/test_run_scale_1000.py
+      - .github/workflows/shyt-yt130-load-harness-fast.yml
+  pull_request:
+    branches: [master]
+    paths:
+      - tools/poc/yharnam/yt130-reference/run_capacity_curve.py
+      - tools/poc/yharnam/yt130-reference/test_run_capacity_curve.py
+      - tools/poc/yharnam/yt130-reference/run_scale_1000.py
+      - tools/poc/yharnam/yt130-reference/test_run_scale_1000.py
+      - .github/workflows/shyt-yt130-load-harness-fast.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-bbload-cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python syntax and isolated shadnet/bbload process-group lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/poc/yharnam/yt130-reference/run_capacity_curve.py \
+            tools/poc/yharnam/yt130-reference/run_scale_1000.py
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_run_capacity_curve.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_run_scale_1000.py -v
+      - name: Do not confuse generator unit safety with native server capacity
+        shell: bash
+        run: |
+          echo SHYT_LOAD_HARNESS_UNIT_GUARDS_ONLY
+          echo NO_QT_CPP_COMPILED_NO_REAL_PLAYERS_NO_CAPACITY_CLAIM
