@@ -16,7 +16,9 @@ from pathlib import Path
 HEADER="emulator/src/core/bloodborne_invasion.h"
 CPP="emulator/src/core/bloodborne_invasion.cpp"
 TEST="emulator/tests/bloodborne/test_bloodborne_invasion.cpp"
-FILES=(HEADER,CPP,TEST)
+PANEL="emulator/src/core/bloodborne_party.cpp"
+PANEL_TEST="emulator/tests/bloodborne/test_bloodborne_party_death.cpp"
+FILES=(HEADER,CPP,TEST,PANEL,PANEL_TEST)
 TAG="SHYT-V107-MULTI-HOSTILE-NATIVE-GAME"
 
 def one(s:str,old:str,new:str,label:str)->str:
@@ -244,9 +246,9 @@ GAME_TEST = """TEST(InvadedTeam, ThreeConcurrentHostilesIndependentIdsAndEnds) {
 
 def patch(sources:dict[str,str])->dict[str,str]:
     if set(sources)!=set(FILES):
-        raise ValueError(TAG+" requires exact native header, source and test")
-    h,cpp,test=(sources[p] for p in FILES)
-    if TAG in h or TAG in cpp or TAG in test:
+        raise ValueError(TAG+" requires five native gameplay and HUD sources")
+    h,cpp,test,panel,panel_test=(sources[p] for p in FILES)
+    if any(TAG in source for source in (h,cpp,test,panel,panel_test)):
         raise ValueError(TAG+" installed twice")
     h=one(h,'#include <optional>','#include <map>\n#include <optional>',"std::map")
     h=region(h,'class InvadedTeam {','// What the overlay\'s invasion notice shows',
@@ -257,7 +259,58 @@ def patch(sources:dict[str,str])->dict[str,str]:
        'TEST(InvadedTeam, NoticeJoinedEnd) {',
        GAME_TEST+'TEST(InvadedTeam, NoticeJoinedEnd) {',
        "real original game gtest insertion")
-    return dict(zip(FILES,(h,cpp,test)))
+    # Actual original native HUD, not a separate UI mock: revive progress
+    # is shown by the downed-state ICON, but the HP bar is EMPTY until
+    # revived. Keep the name and both supplies regardless of zero HP.
+    panel=one(panel,
+        "            entry.hp = static_cast<s32>(std::max(percent, 1L));\n"
+        "            entry.max = 100;\n"
+        "            entry.icon = PartyListIconDowned0 + static_cast<u32>((percent + 5) / 10);",
+        "            // "+TAG+": DBNO is not an HP refill. A downed player's\n"
+        "            // HP bar stays empty and all other HUD fields remain.\n"
+        "            entry.hp = 0;\n"
+        "            entry.icon = PartyListIconDowned0 + static_cast<u32>((percent + 5) / 10);",
+        "actual original game's DBNO-empty-HP UI")
+    panel_test=one(panel_test,
+        "    EXPECT_EQ(entries[1].hp, 64);\n"
+        "    EXPECT_EQ(entries[1].max, 100);",
+        "    EXPECT_EQ(entries[1].hp, 0); // DBNO: no faux revive HP\n"
+        "    EXPECT_EQ(entries[1].max, 800); // preserves character max HP",
+        "original native game HUD assertions")
+    panel_test=one(panel_test,
+        "// The native party list: the first three members as the game's own nameplate tags, under the",
+        r'''TEST(BloodbornePartyHud, DownedAndDeadKeepVisibleNamesEmptyHpAndOtherInfo) {
+    PartyPanel panel;
+    panel.members.push_back(PanelMember{.member="a",.name="host",
+        .vital=Vital::Down,.here=true,.hp=100,.max=800,
+        .landed=500,.needed=1000,.vials=12,.bullets=7});
+    panel.members.push_back(PanelMember{.member="b",.name="ally",
+        .vital=Vital::Dead,.here=true,.hp=50,.max=900,
+        .vials=5,.bullets=3});
+    const auto shown=PartyListEntries(panel);
+    EXPECT_TRUE(shown[0].visible && shown[1].visible);
+    EXPECT_EQ(shown[0].hp, 0);
+    EXPECT_EQ(shown[1].hp, 0);
+    EXPECT_EQ(shown[0].max, 800);
+    EXPECT_EQ(shown[1].max, 900);
+    EXPECT_EQ(shown[0].name, "Hunter"); // character display names resolve externally
+    EXPECT_EQ(shown[0].vials, 12u);
+    EXPECT_EQ(shown[0].bullets, 7u);
+    EXPECT_EQ(shown[1].vials, 5u);
+    EXPECT_EQ(shown[1].bullets, 3u);
+    EXPECT_EQ(shown[0].icon, PartyListIconDowned0 + 5);
+    EXPECT_EQ(shown[1].icon, PartyListIconFallen);
+    // Only actual group disconnection removes this member from the panel.
+    panel.members.erase(panel.members.begin());
+    const auto after_disconnect=PartyListEntries(panel);
+    EXPECT_TRUE(after_disconnect[0].visible);
+    EXPECT_EQ(after_disconnect[0].hp, 0);
+    EXPECT_FALSE(after_disconnect[1].visible);
+}
+
+// The native party list: the first three members as the game's own nameplate tags, under the''',
+        "native original Bloodborne HUD DBNO and disconnected member test")
+    return dict(zip(FILES,(h,cpp,test,panel,panel_test)))
 
 def stage(root:Path)->None:
     root=root.resolve(strict=True)
