@@ -1,4 +1,4 @@
-name: SHYT pinned AMD FSR Win32 CLANG64 compiler preflight
+name: SHYT pinned FSR and Sirit Win32 CLANG64 compiler preflight
 on:
   push:
     branches: [feature/shyt-hybrid-p2p-v52]
@@ -9,6 +9,8 @@ on:
       - tools/poc/yharnam/package-v41/test_patch_pinned_fsr_vk_clang64.py
       - tools/poc/yharnam/package-v41/patch_pinned_fsr_countof_clang64.py
       - tools/poc/yharnam/package-v41/test_patch_pinned_fsr_countof_clang64.py
+      - tools/poc/yharnam/package-v41/patch_pinned_sirit_windows.py
+      - tools/poc/yharnam/package-v41/test_patch_pinned_sirit_windows.py
       - .github/workflows/shyt-fsr-windows-clang-preflight.yml
   workflow_dispatch:
 permissions:
@@ -40,6 +42,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'FSR Vulkan source-gate tests failed' }
           python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_fsr_countof_clang64.py -v
           if ($LASTEXITCODE -ne 0) { throw 'FSR host _countof source-gate tests failed' }
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_sirit_windows.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned original Sirit source tests failed' }
           git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party/fsr-vulkan
           if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR submodule checkout failed' }
           $expected='c64f093404125e960813f95f1996c14780f0dd69'
@@ -53,6 +57,7 @@ jobs:
             git
             mingw-w64-clang-x86_64-clang
             mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-spirv-headers
       - name: Compile ACTUAL previously failed FidelityFX source under MSYS2 CLANG64
         shell: msys2 {0}
         run: |
@@ -94,3 +99,12 @@ jobs:
               -fsyntax-only "$source"
           done
           echo SHYT_PINNED_AMD_FSR_HOST_ALL_30_MSVC_COUNT_OF_CALLS_CPP_COMPILE_PASS
+          "$win_python" tools/poc/yharnam/package-v41/patch_pinned_sirit_windows.py --upstream pinned-upstream
+          sirit=pinned-upstream/bbport/gpu/third_party/sirit
+          for source in "$sirit/src/sirit.cpp" \
+                        "$sirit/src/instructions/type.cpp" \
+                        "$sirit/src/instructions/constant.cpp"; do
+            clang++ -std=c++20 -O2 -g -DNDEBUG \
+              -I "$sirit/include" -I "$sirit/src" -fsyntax-only "$source"
+          done
+          echo SHYT_PINNED_ORIGINAL_SIRIT_WINDOWS_CLANG64_CPP_PASS
