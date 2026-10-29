@@ -101,9 +101,13 @@ jobs:
           echo SHYT_PINNED_AMD_FSR_HOST_ALL_30_MSVC_COUNT_OF_CALLS_CPP_COMPILE_PASS
           "$win_python" tools/poc/yharnam/package-v41/patch_pinned_sirit_windows.py --upstream pinned-upstream
           sirit=pinned-upstream/bbport/gpu/third_party/sirit
-          for source in "$sirit/src/sirit.cpp" \
-                        "$sirit/src/instructions/type.cpp" \
-                        "$sirit/src/instructions/constant.cpp"; do
+          # Original pinned Sirit CMake target contains sirit.cpp and EXACTLY
+          # 18 instructions/*.cpp files. Probe its full real C++20 closure,
+          # avoiding the next one-file-at-a-time long Windows renderer build.
+          mapfile -t sirit_instructions < <(find "$sirit/src/instructions" \
+            -maxdepth 1 -type f -name '*.cpp' | LC_ALL=C sort)
+          test "${#sirit_instructions[@]}" -eq 18
+          for source in "$sirit/src/sirit.cpp" "${sirit_instructions[@]}"; do
             clang++ -std=c++20 -O2 -g -DNDEBUG \
               -I "$sirit/include" -I "$sirit/src" -fsyntax-only "$source"
           done
