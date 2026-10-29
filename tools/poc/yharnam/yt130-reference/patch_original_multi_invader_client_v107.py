@@ -18,7 +18,8 @@ CPP="emulator/src/core/bloodborne_invasion.cpp"
 TEST="emulator/tests/bloodborne/test_bloodborne_invasion.cpp"
 PANEL="emulator/src/core/bloodborne_party.cpp"
 PANEL_TEST="emulator/tests/bloodborne/test_bloodborne_party_death.cpp"
-FILES=(HEADER,CPP,TEST,PANEL,PANEL_TEST)
+BOARDS_CLIENT="emulator/src/core/bloodborne_boards.cpp"
+FILES=(HEADER,CPP,TEST,PANEL,PANEL_TEST,BOARDS_CLIENT)
 TAG="SHYT-V107-MULTI-HOSTILE-NATIVE-GAME"
 
 def one(s:str,old:str,new:str,label:str)->str:
@@ -246,9 +247,9 @@ GAME_TEST = """TEST(InvadedTeam, ThreeConcurrentHostilesIndependentIdsAndEnds) {
 
 def patch(sources:dict[str,str])->dict[str,str]:
     if set(sources)!=set(FILES):
-        raise ValueError(TAG+" requires five native gameplay and HUD sources")
-    h,cpp,test,panel,panel_test=(sources[p] for p in FILES)
-    if any(TAG in source for source in (h,cpp,test,panel,panel_test)):
+        raise ValueError(TAG+" requires six native gameplay, HUD and board sources")
+    h,cpp,test,panel,panel_test,boards_client=(sources[p] for p in FILES)
+    if any(TAG in source for source in (h,cpp,test,panel,panel_test,boards_client)):
         raise ValueError(TAG+" installed twice")
     h=one(h,'#include <optional>','#include <map>\n#include <optional>',"std::map")
     h=region(h,'class InvadedTeam {','// What the overlay\'s invasion notice shows',
@@ -310,7 +311,70 @@ def patch(sources:dict[str,str])->dict[str,str]:
 
 // The native party list: the first three members as the game's own nameplate tags, under the''',
         "native original Bloodborne HUD DBNO and disconnected member test")
-    return dict(zip(FILES,(h,cpp,test,panel,panel_test)))
+    # A visitor receives a hostile-only roster from the authoritative server.
+    # To this visiting player's OWN HUD those entries are ALLIES, not
+    # enemies, so never strip them out of its local party panel. The
+    # defender still strips hostile lines as before. Filter accidental
+    # cross-faction rows and wipes explicitly before presenting the board.
+    h=one(h,
+        "std::vector<MemberVitals> TakeHostileLines(VitalsBoard& board);",
+        "std::vector<MemberVitals> TakeHostileLines(VitalsBoard& board,\n"
+        "                                           bool local_is_invader = false);",
+        "game role-aware vitals split declaration")
+    cpp=one(cpp,
+        "std::vector<MemberVitals> TakeHostileLines(VitalsBoard& board) {\n"
+        "    std::vector<MemberVitals> hostile;",
+        "std::vector<MemberVitals> TakeHostileLines(VitalsBoard& board, bool local_is_invader) {\n"
+        "    if (local_is_invader) {\n"
+        "        // "+TAG+": an invader's authenticated board is hostile-only;\n"
+        "        // for this LOCAL faction these are teammates, including downed.\n"
+        "        std::erase_if(board.members,[](const MemberVitals& m){return !m.hostile;});\n"
+        "        for (auto& m:board.members) m.hostile=false;\n"
+        "        board.wipes.clear(); // never leak cooperator wipe data\n"
+        "        return {};\n"
+        "    }\n"
+        "    std::vector<MemberVitals> hostile;",
+        "do not hide same-faction invaders from their own HUD")
+    boards_client=one(boards_client,
+        "    std::vector<MemberVitals> hostile = TakeHostileLines(board);\n"
+        "    std::scoped_lock lock{vitals_mutex};",
+        "    // "+TAG+": visiting hostile-only rows are our teammates, not\n"
+        "    // cooperator targets. This is the real native client intake.\n"
+        "    std::vector<MemberVitals> hostile =\n"
+        "        TakeHostileLines(board, Invading() && InPartySession());\n"
+        "    std::scoped_lock lock{vitals_mutex};",
+        "native board receive must understand which faction it belongs to")
+    test=one(test,
+        "TEST(Invasion, ABoardWithoutAnInvaderStaysAsItIs) {",
+        r'''TEST(Invasion, VisitingInvaderHudKeepsAlliedZeroHpNameWithoutCoopLeak) {
+    VitalsBoard board;
+    auto down=Line("red",Target,{3,0,0},true,Vital::Down);
+    down.hp=0;
+    down.max=800;
+    down.vials=9;
+    down.bullets=4;
+    board.members={Line("coop",Target,{0,0,0}),down,
+                   Line("blue",Target,{4,0,0},true,Vital::Up)};
+    board.wipes={{1,Target,{"coop"}}};
+    EXPECT_TRUE(TakeHostileLines(board,true).empty());
+    ASSERT_EQ(board.members.size(),2u);
+    EXPECT_TRUE(board.wipes.empty());
+    EXPECT_EQ(board.members[0].member,"red");
+    EXPECT_FALSE(board.members[0].hostile); // ally to local invader
+    EXPECT_EQ(board.members[0].vital,Vital::Down);
+    EXPECT_EQ(board.members[0].hp,0);
+    EXPECT_EQ(board.members[0].vials,9u);
+    EXPECT_EQ(board.members[0].bullets,4u);
+    const PartyPanel panel=BuildPartyPanel(board.members,"blue",Target,{});
+    ASSERT_EQ(panel.members.size(),1u);
+    EXPECT_EQ(panel.members[0].member,"red");
+    EXPECT_EQ(PartyListEntries(panel)[0].hp,0);
+    EXPECT_TRUE(PartyListEntries(panel)[0].visible);
+}
+
+TEST(Invasion, ABoardWithoutAnInvaderStaysAsItIs) {''',
+        "native invader UI same-faction actual original gtest")
+    return dict(zip(FILES,(h,cpp,test,panel,panel_test,boards_client)))
 
 def stage(root:Path)->None:
     root=root.resolve(strict=True)
