@@ -9,6 +9,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/patch_mutual_p2p_consent.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_authoritative_pair_scope.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_p2p_session_generation.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_v77_windows_macro.cpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
       - .github/workflows/shyt-v72-live-world-epoch.yml
@@ -21,6 +22,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/patch_mutual_p2p_consent.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_authoritative_pair_scope.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_p2p_session_generation.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_v77_windows_macro.cpp
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
       - .github/workflows/shyt-v72-live-world-epoch.yml
@@ -49,6 +51,10 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_world_revision.cpp \
             -o /tmp/shyt-v72-revision
           /tmp/shyt-v72-revision
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            tools/poc/yharnam/hybrid-transport-v52/test_v77_windows_macro.cpp \
+            -o /tmp/shyt-v77-macro
+          /tmp/shyt-v77-macro
       - name: Verify world/map/team/owner revisions Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -57,6 +63,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'V72 MSVC source fail' }
           ./shyt-v72-revision.exe
           if ($LASTEXITCODE -ne 0) { throw 'V72 MSVC world regression fail' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 tools/poc/yharnam/hybrid-transport-v52/test_v77_windows_macro.cpp /Fe:shyt-v77-macro.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V77 original Windows max macro compile regression' }
+          ./shyt-v77-macro.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V77 Windows max macro state regression' }
   real-qt-game-world:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
@@ -103,6 +113,10 @@ jobs:
           assert "PairDirectConsent(" in (root/"server/src/bloodborne_world.cpp").read_text()
           assert "CaptureDirectPairScope(" in (root/"server/src/bloodborne_world.cpp").read_text()
           assert "direct_next_serial" in (root/"server/src/bloodborne_world.h").read_text()
+          header=(root/"server/src/bloodborne_world.h").read_text()
+          assert "(std::numeric_limits<quint64>::max)()" in header
+          assert "(std::min)(first.direct_state_serial" in (root/"server/src/bloodborne_world.cpp").read_text()
+          assert "(std::max)(first.direct_state_serial" in (root/"server/src/bloodborne_world.cpp").read_text()
           assert "world_revision!=captured->world_revision" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
           assert "world_revision!=returned->world_revision" in (root/"server/tests/test_bloodborne_world.cpp").read_text()
           assert "V77 server-only game link epoch rejects old grants after same-map/owner rejoin" in manifest["applied"]
