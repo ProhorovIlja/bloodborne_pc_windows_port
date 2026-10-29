@@ -16,6 +16,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_probe_native_param_cpp_v109.py
       - tools/poc/yharnam/yt130-reference/test_stage_five_hunter_invasion_guard.py
       - tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py
+      - tools/poc/yharnam/yt130-reference/stage_nonhosted_roster_cache_v112.py
+      - tools/poc/yharnam/yt130-reference/test_stage_nonhosted_roster_cache_v112.py
       - tools/poc/yharnam/yt130-reference/patch_five_hunter_team.py
       - .github/workflows/shyt-yt130-five-invasion-fast-gate.yml
 permissions:
@@ -70,7 +72,8 @@ jobs:
             stage_eventloop_timing.py \
             stage_five_hunter_server.py \
             stage_five_hunter_invasion_guard.py \
-            stage_multi_invader_server_v108.py; do
+            stage_multi_invader_server_v108.py \
+            stage_nonhosted_roster_cache_v112.py; do
             python3 "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
           # Original native GAME, not just the Qt server: apply the per-ID
@@ -105,6 +108,10 @@ jobs:
             "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
           grep -Fq 'ImplementedInvadersPerWorld = 3' \
             "$RUNNER_TEMP/yt-src/server/coop/invasions.h"
+          grep -Fq 'nonhosted_roster_valid = false;' \
+            "$RUNNER_TEMP/yt-src/server/coop/team_lobby.h"
+          grep -Fq 'NonHostedRosterCacheRefreshesAndKeepsOriginalPerRecipientSemantics' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
           grep -Fq 'constexpr size_t InvasionMaxPlayers = 5;' \
             "$RUNNER_TEMP/yt-src/server/coop/invasions.h"
           grep -Fq 'AJoinedFiveHunterTeamRejectsAnAlreadyNotifiedInvader' \
