@@ -164,6 +164,8 @@ jobs:
           # GNU timeout (which forwards TERM to its child process group).
           # No tests/binaries are faked and no compiler failure is ignored.
           command -v timeout >/dev/null
+          timeout --signal=TERM --kill-after=10s 130m bash build.sh &
+          build_pid=$!
           (
             while true; do
               sleep 15
@@ -182,8 +184,6 @@ jobs:
           ) &
           heartbeat_pid=$!
           trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
-          timeout --signal=TERM --kill-after=10s 130m bash build.sh &
-          build_pid=$!
           if ! wait "$build_pid"; then
             echo SHYT_NATIVE_WINDOWS_BUILD_FAILED_FAST
             if [[ -f out/gpu-build.log ]]; then
