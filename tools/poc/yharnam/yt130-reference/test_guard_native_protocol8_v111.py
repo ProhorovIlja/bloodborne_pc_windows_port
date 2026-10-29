@@ -75,7 +75,11 @@ class NativeProtocol8Contract(unittest.TestCase):
             external = root / "content.txt"
             external.write_text("not original")
             link = root / "source.txt"
-            link.symlink_to(external)
+            try:
+                link.symlink_to(external)
+            except (OSError, NotImplementedError):
+                # Linux CI still runs this adversarial test; Win32 may deny symlink rights.
+                self.skipTest("Windows CI runner cannot create symlinks")
             with self.assertRaisesRegex(ValueError, "Missing pinned original"):
                 guard.original(root, "source.txt", pinned=False)
 
