@@ -70,24 +70,25 @@ def patch(src):
     }
     if (!welcome.text().empty()) {
 ""","deny forged world hello and uninvited team world")
+    # V25 already inserted its opt-in StrictMode identity gate immediately
+    # before "const bool arrived". Do NOT match/replace the original
+    # OnLobbyHello protocol block: that code was transformed upstream.
+    # The live Internet server additionally enforces account binding always.
     cpp=one(cpp,
-"""    if (hello.protocol() != CoopProtocol || hello.member().empty()) {
-        bbcoop::Envelope answer;
-        answer.mutable_lobby_state()->set_notice(
-            hello.member().empty() ? "no member name"
-                                   : "co-op protocol " + std::to_string(hello.protocol()) +
-                                         ", this server speaks " + std::to_string(CoopProtocol));
+"""    const bool arrived = member.lobby.empty();
+    member.lobby = hello.member();
 """,
-"""    const bool wrong_identity=require_authenticated_identity &&
-        hello.member()!=member.online_id.toHex().toStdString();
-    if (hello.protocol() != CoopProtocol || hello.member().empty() || wrong_identity) {
-        bbcoop::Envelope answer;
-        answer.mutable_lobby_state()->set_notice(
-            hello.member().empty() ? "no member name"
-            : wrong_identity ? "member identity does not match the signed-in account"
-                             : "co-op protocol " + std::to_string(hello.protocol()) +
-                                   ", this server speaks " + std::to_string(CoopProtocol));
-""","reject spoofed lobby account before TeamLobby mutation")
+"""    if (require_authenticated_identity &&
+        hello.member()!=member.online_id.toHex().toStdString()) {
+        bbcoop::Envelope refuse;
+        refuse.mutable_lobby_state()->set_notice(
+            "member identity does not match the signed-in account");
+        SendTo(member,refuse,now_ms);
+        return;
+    }
+    const bool arrived = member.lobby.empty();
+    member.lobby = hello.member();
+""","V25-compatible live Qt lobby identity gate before mutation")
     # Original game's BoardMemberOfOnlineId emits the hex of signed-in
     # online_id for BOTH LobbyHello and Hello; synthetic old Qt tests used
     # raw names. Strict five-member fixture must emulate game hex identities.
