@@ -913,7 +913,9 @@ def run(checkout:Path, repo:Path, out:Path):
         raise ValueError("SHY2 must patch the actual V70-composed P2PTransport")
     files[shy2.NETWORK]=shy2.patch_game(files[shy2.NETWORK].decode("utf-8")).encode("utf-8")
     files[shy2.AEAD_HEADER]=(metrics_dir/"sh_native_game_aead.hpp").read_bytes()
-    meta["applied"].append("Native SHY2 AES-256-GCM direct UDP codec staged; actual recvfrom fail-closed for unarmed encrypted packets, relay unchanged")
+    files["emulator/src/core/libraries/network/sh_pair_aead_keys.hpp"]=(
+        metrics_dir/"sh_pair_aead_keys.hpp").read_bytes()
+    meta["applied"].append("Native SHY2 AES-256-GCM direct UDP codec and reciprocal SHG2 directional key schedule staged; actual recvfrom fail-closed for unarmed encrypted packets, relay unchanged")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
