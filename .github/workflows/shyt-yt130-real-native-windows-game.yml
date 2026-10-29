@@ -1,0 +1,214 @@
+name: SHYT authentic Protocol 8 native Windows game and co-op launcher
+on:
+  push:
+    branches: [feature/yt130-1000-2000-scale-ladder-20261028]
+    paths:
+      - .github/workflows/shyt-yt130-real-native-windows-game.yml
+      - tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py
+      - tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py
+      - tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py
+      - tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py
+permissions:
+  contents: read
+concurrency:
+  group: shyt-yt130-native-protocol8-windows
+  cancel-in-progress: false
+jobs:
+  native-protocol8-windows:
+    name: Actual YT1.3 native Windows BB + launcher, no proprietary game files
+    runs-on: windows-2022
+    timeout-minutes: 180
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+      KIT_HELPERS_PIN: 334b4606411e2df13210386b62000c7abfd26e6e
+      BB_LTO: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Windows long-path support
+        shell: pwsh
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      # Import ONLY already source-locked, Windows-compiler-tested helper
+      # scripts from PR17. Never mix its 1.1.9 game sources or overlays.
+      - uses: actions/checkout@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          ref: 334b4606411e2df13210386b62000c7abfd26e6e
+          path: kit-helpers
+          persist-credentials: false
+          submodules: false
+      - name: Initialize only actual native Windows GPU dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
+          if ($LASTEXITCODE -ne 0) { throw 'Original YT1.3 GPU dependency checkout failed' }
+          if ((git -C pinned-upstream rev-parse HEAD).Trim() -ne $env:YT_PIN) { throw 'Wrong Protocol8 game source pin' }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage actual original YT1.3 three invaders and guest performance fixes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p 'test_*.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Native source guards or regressions failed' }
+          python tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Original native invader game patch failed' }
+          python tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Native PARAM span source patch failed' }
+          python tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Native PARAM slot cache patch failed' }
+          python tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py --client-root pinned-upstream --server-root pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Incompatible native Protocol8 game/Qt server code' }
+          git -C pinned-upstream diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Native YT1.3 original game whitespace or patch conflict' }
+          Write-Host 'SHYT_YT130_REAL_NATIVE_CLIENT_PROTOCOL8_SOURCE_STAGED'
+      - name: Reuse source-pinned Windows C++ portability corrections from prior verified CI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fix = 'kit-helpers/tools/poc/yharnam/package-v41'
+          foreach ($script in @('patch_pinned_fsr_countof_clang64.py', 'patch_pinned_sirit_windows.py')) {
+            python "$fix/$script" --upstream pinned-upstream
+            if ($LASTEXITCODE -ne 0) { throw "Native YT1.3 GPU source differs from validated FSR/Sirit: $script" }
+          }
+          Write-Host 'SHYT_YT130_NATIVE_GPU_SOURCE_EXACT_WINDOWS_COMPAT_PASS'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - name: Install actual CLANG64 compiler and native renderer dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed \
+            git patch mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld \
+            mingw-w64-clang-x86_64-ccache mingw-w64-clang-x86_64-libc++ \
+            mingw-w64-clang-x86_64-cmake mingw-w64-clang-x86_64-ninja \
+            mingw-w64-clang-x86_64-pkgconf mingw-w64-clang-x86_64-vulkan-headers \
+            mingw-w64-clang-x86_64-vulkan-loader mingw-w64-clang-x86_64-vulkan-memory-allocator \
+            mingw-w64-clang-x86_64-glslang mingw-w64-clang-x86_64-sdl3 \
+            mingw-w64-clang-x86_64-fmt mingw-w64-clang-x86_64-boost \
+            mingw-w64-clang-x86_64-robin-map mingw-w64-clang-x86_64-xxhash \
+            mingw-w64-clang-x86_64-ffmpeg mingw-w64-clang-x86_64-zydis \
+            mingw-w64-clang-x86_64-spirv-tools mingw-w64-clang-x86_64-spirv-headers \
+            mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
+            mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
+            mingw-w64-clang-x86_64-nlohmann-json
+      - name: Restore bounded shared C++ object cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: shyt-yt130-native-windows-ccache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            shyt-yt130-native-windows-ccache-${{ runner.os }}-
+      - name: Compile real original YT1.3 native Protocol8 renderer AND network/game code
+        id: game_build
+        timeout-minutes: 155
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export CC=clang CXX=clang++
+          export CCACHE_DIR="$(cygpath -u "$GITHUB_WORKSPACE")/.ccache"
+          mkdir -p "$CCACHE_DIR"
+          ccache --max-size 1200M
+          fsr=pinned-upstream/bbport/gpu/third_party/fsr-vulkan
+          test "$(git -C "$fsr" rev-parse HEAD)" = c64f093404125e960813f95f1996c14780f0dd69
+          winpy="$(cygpath -u "$pythonLocation")/python.exe"
+          "$winpy" kit-helpers/tools/poc/yharnam/package-v41/patch_pinned_fsr_windows_wprintf.py --upstream pinned-upstream
+          # EXACT same original upstream vendor patches as its build.sh uses.
+          for vendor_patch in pinned-upstream/bbport/gpu/patches/fsr-vulkan/*.patch; do
+            if ! git -C "$fsr" apply --reverse --check "$PWD/$vendor_patch" 2>/dev/null; then
+              git -C "$fsr" apply "$PWD/$vendor_patch"
+            fi
+          done
+          "$winpy" kit-helpers/tools/poc/yharnam/package-v41/patch_pinned_fsr_vk_clang64.py --upstream pinned-upstream
+          sdk="$fsr/upstream/ffx-1.1.4/sdk"
+          clang++ -std=c++17 -O2 -DNDEBUG -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
+            -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
+            -I "$sdk/src/backends/shared" -I "$sdk/src/backends/shared/blob_accessors" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3upscaler" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3framegeneration" \
+            -fsyntax-only "$sdk/src/backends/vk/ffx_vk.cpp"
+          echo SHYT_YT130_REAL_PINNED_CLANG64_FSR_VK_CPP_PASS
+          sirit=pinned-upstream/bbport/gpu/third_party/sirit
+          clang++ -std=c++20 -O2 -DNDEBUG -I "$sirit/include" -I "$sirit/src" \
+            -fsyntax-only "$sirit/src/sirit.cpp"
+          echo SHYT_YT130_REAL_PINNED_CLANG64_SIRIT_CPP_PASS
+          # The original build.sh repeats vendor patch 0002 after the above
+          # verified source edit; skip ONLY this already-present mutex include.
+          "$winpy" - <<'PY'
+          from pathlib import Path
+          p=Path("pinned-upstream/bbport/build.sh")
+          s=p.read_text()
+          marker="    for patch in gpu/patches/fsr-vulkan/*.patch; do"
+          assert s.count(marker)==1, "Original YT1.3 build.sh has changed"
+          assert s.count("-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null")==1
+          s=s.replace(marker,marker+"""
+                  if [[ "$patch" == *0002-ffx_vk-include-mutex-for-libc.patch ]]; then
+                      grep -Fqx "#include <mutex> // bbport: libc++ does not include it transitively" gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp || exit 1
+                      continue
+                  fi""",1)
+          s=s.replace("-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null","-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache >/dev/null",1)
+          p.write_text(s)
+          PY
+          cd pinned-upstream/bbport
+          # Preserve actual compiler failures rather than spinning hours.
+          timeout --signal=TERM --kill-after=15s 130m bash build.sh &
+          game_pid=$!
+          (
+            while kill -0 "$game_pid" 2>/dev/null; do
+              sleep 20
+              if [[ -f out/gpu-build.log ]]; then
+                tail -n 5 out/gpu-build.log || true
+                if grep -q '^FAILED:' out/gpu-build.log; then
+                  echo SHYT_YT130_REAL_NATIVE_NINJA_FATAL_DETECTED
+                  kill -TERM "$game_pid" 2>/dev/null || true
+                  exit 0
+                fi
+              fi
+            done
+          ) &
+          watcher=$!
+          trap 'kill "$watcher" 2>/dev/null || true' EXIT
+          if ! wait "$game_pid"; then
+            echo SHYT_YT130_REAL_NATIVE_WINDOWS_BUILD_FAILED
+            test ! -f out/gpu-build.log || tail -n 90 out/gpu-build.log
+            exit 1
+          fi
+          kill "$watcher" 2>/dev/null || true
+          trap - EXIT
+          test -s out/bb-probe.exe
+          test -s out/bb-gpu-capabilities.exe
+          test -s out/bb-play.exe
+          echo SHYT_YT130_REAL_NATIVE_PROTOCOL8_GAME_AND_RENDERER_EXES_BUILT
+      - name: Preserve only bounded build evidence and Windows native compiler products
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-protocol8-native-windows-compiler-EVIDENCE-INTERNAL
+          path: |
+            pinned-upstream/bbport/out/gpu-build.log
+            pinned-upstream/bbport/out/bb-probe.exe
+            pinned-upstream/bbport/out/bb-gpu-capabilities.exe
+            pinned-upstream/bbport/out/bb-play.exe
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Cache native game objects after compiler failure or success
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: shyt-yt130-native-windows-ccache-${{ runner.os }}-${{ github.run_id }}
