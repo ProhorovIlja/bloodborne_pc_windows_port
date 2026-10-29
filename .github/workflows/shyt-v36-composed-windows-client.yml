@@ -131,10 +131,23 @@ jobs:
           win_python="$(cygpath -u "$pythonLocation")/python.exe"
           "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_windows_wprintf.py \
             --upstream pinned-upstream
+          "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_vk_clang64.py \
+            --upstream pinned-upstream
           sdk="$fsr/upstream/ffx-1.1.4/sdk"
           clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
             -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
             -fsyntax-only "$sdk/src/shared/ffx_message.cpp"
+          # Compile the ACTUAL original FSR3 Vulkan backend translation unit
+          # that failed repeatedly in CI #40880463021. No stubs/mocks.
+          clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
+            -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
+            -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
+            -I "$sdk/src/backends/shared" \
+            -I "$sdk/src/backends/shared/blob_accessors" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3upscaler" \
+            -I "$fsr/generated/ffx-1.1.4/vk/fsr3framegeneration" \
+            -fsyntax-only "$sdk/src/backends/vk/ffx_vk.cpp"
+          echo SHYT_REAL_FSR3_VULKAN_CLANG64_COMPILER_PREFLIGHT_PASS
           echo SHYT_PINNED_FSR_WINDOWS_COMPILER_PREFLIGHT_PASS
           cd pinned-upstream/bbport
           # The original upstream build redirects all Ninja output to a log.
