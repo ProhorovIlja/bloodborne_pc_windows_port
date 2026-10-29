@@ -9,6 +9,10 @@ on:
       - tools/poc/yharnam/yt130-reference/test_run_scale_1000.py
       - tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py
       - tools/poc/yharnam/yt130-reference/test_stage_five_player_bbload.py
+      - tools/poc/yharnam/yt130-reference/stage_nonhosted_roster_cache_v112.py
+      - tools/poc/yharnam/yt130-reference/test_stage_nonhosted_roster_cache_v112.py
+      - tools/poc/yharnam/yt130-reference/stage_hosted_lobby_index_v113.py
+      - tools/poc/yharnam/yt130-reference/test_stage_hosted_lobby_index_v113.py
       - .github/workflows/shyt-yt130-load-harness-fast.yml
   pull_request:
     branches: [master]
@@ -19,6 +23,10 @@ on:
       - tools/poc/yharnam/yt130-reference/test_run_scale_1000.py
       - tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py
       - tools/poc/yharnam/yt130-reference/test_stage_five_player_bbload.py
+      - tools/poc/yharnam/yt130-reference/stage_nonhosted_roster_cache_v112.py
+      - tools/poc/yharnam/yt130-reference/test_stage_nonhosted_roster_cache_v112.py
+      - tools/poc/yharnam/yt130-reference/stage_hosted_lobby_index_v113.py
+      - tools/poc/yharnam/yt130-reference/test_stage_hosted_lobby_index_v113.py
       - .github/workflows/shyt-yt130-load-harness-fast.yml
   workflow_dispatch:
 permissions:
@@ -39,13 +47,21 @@ jobs:
             tools/poc/yharnam/yt130-reference/run_capacity_curve.py \
             tools/poc/yharnam/yt130-reference/run_scale_1000.py \
             tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py \
-            tools/poc/yharnam/yt130-reference/test_stage_five_player_bbload.py
+            tools/poc/yharnam/yt130-reference/test_stage_five_player_bbload.py \
+            tools/poc/yharnam/yt130-reference/stage_nonhosted_roster_cache_v112.py \
+            tools/poc/yharnam/yt130-reference/test_stage_nonhosted_roster_cache_v112.py \
+            tools/poc/yharnam/yt130-reference/stage_hosted_lobby_index_v113.py \
+            tools/poc/yharnam/yt130-reference/test_stage_hosted_lobby_index_v113.py
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
             -p test_run_capacity_curve.py -v
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
             -p test_run_scale_1000.py -v
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
             -p test_stage_five_player_bbload.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_nonhosted_roster_cache_v112.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_hosted_lobby_index_v113.py -v
       - name: Do not confuse generator unit safety with native server capacity
         shell: bash
         run: |

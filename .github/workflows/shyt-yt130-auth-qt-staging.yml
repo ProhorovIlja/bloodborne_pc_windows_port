@@ -211,13 +211,19 @@ jobs:
           # Native team_lobby C++ test checks join, leave, names, teams, invites.
           python tools/poc/yharnam/yt130-reference/stage_nonhosted_roster_cache_v112.py \
             "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_hosted_lobby_index_v113.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 15
           grep -Fq 'nonhosted_roster_valid = false;' \
             "$RUNNER_TEMP/yt-src/server/coop/team_lobby.h"
           grep -Fq 'NonHostedRosterCacheRefreshesAndKeepsOriginalPerRecipientSemantics' \
             "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
-          echo SHYT_QT_NATIVE_V112_NONHOSTED_ROSTER_CACHE_STAGE_ONLY
+          grep -Fq 'hosted_invite_team_index.clear();' \
+            "$RUNNER_TEMP/yt-src/server/coop/team_lobby.cpp"
+          grep -Fq 'HostedLargeTeamsKeepRosterBoundedThroughChanges' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
+          echo SHYT_QT_NATIVE_V112_V113_BOTH_LOBBY_MODES_STAGED
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
