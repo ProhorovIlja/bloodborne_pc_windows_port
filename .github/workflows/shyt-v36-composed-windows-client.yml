@@ -123,22 +123,47 @@ jobs:
           mkdir -p "$CCACHE_DIR"
           ccache --max-size 1600M
           ccache --show-stats
+          # Real Windows CLANG64 source compatibility is gated BEFORE the
+          # costly hundreds-of-TUs GPU build. Exact upstream FSR git blob only:
+          # fail closed on any unreviewed submodule version or source change.
+          fsr=pinned-upstream/bbport/gpu/third_party/fsr-vulkan
+          test "$(git -C "$fsr" rev-parse HEAD)" = c64f093404125e960813f95f1996c14780f0dd69
+          win_python="$(cygpath -u "$pythonLocation")/python.exe"
+          "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_windows_wprintf.py \
+            --upstream pinned-upstream
+          sdk="$fsr/upstream/ffx-1.1.4/sdk"
+          clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
+            -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
+            -fsyntax-only "$sdk/src/shared/ffx_message.cpp"
+          echo SHYT_PINNED_FSR_WINDOWS_COMPILER_PREFLIGHT_PASS
           cd pinned-upstream/bbport
-          # The upstream build redirects ALL Ninja output to gpu-build.log.
-          # Without a heartbeat GitHub shows nothing for 90 minutes and the
-          # former job limit cancelled, losing the only useful diagnostics.
-          bash build.sh &
-          builder=$!
-          while kill -0 "$builder" 2>/dev/null; do
-            echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # The original upstream build redirects all Ninja output to a log.
+          # A separate *watcher* emits heartbeats. The REAL build runs in
+          # foreground, so a non-zero exit propagates IMMEDIATELY. Previously
+          # kill -0 on a completed-but-unreaped MSYS child remained true,
+          # looping for 165 minutes after a fatal FSR compile error.
+          (
+            while true; do
+              sleep 60
+              echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              if [[ -f out/gpu-build.log ]]; then
+                tail -n 10 out/gpu-build.log || true
+              else
+                echo "GPU Ninja log not created yet; configuring dependencies"
+              fi
+            done
+          ) &
+          heartbeat_pid=$!
+          trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
+          if ! bash build.sh; then
+            echo SHYT_NATIVE_WINDOWS_BUILD_FAILED_FAST
             if [[ -f out/gpu-build.log ]]; then
-              tail -n 10 out/gpu-build.log || true
-            else
-              echo "GPU Ninja log not created yet; configuring dependencies"
+              tail -n 70 out/gpu-build.log || true
             fi
-            sleep 60
-          done
-          wait "$builder"
+            exit 1
+          fi
+          kill "$heartbeat_pid" 2>/dev/null || true
+          trap - EXIT
           ccache --show-stats
           test -s out/bb-probe.exe
           test -s out/bb-gpu-capabilities.exe
