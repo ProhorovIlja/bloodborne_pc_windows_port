@@ -1,0 +1,56 @@
+name: SHYT pinned AMD FSR Win32 CLANG64 compiler preflight
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/package-v41/patch_pinned_fsr_windows_wprintf.py
+      - tools/poc/yharnam/package-v41/test_patch_pinned_fsr_windows_wprintf.py
+      - .github/workflows/shyt-fsr-windows-clang-preflight.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pinned-fsr-win32-compat:
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Source pin, existing fix guard and focused Python regressions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_fsr_windows_wprintf.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'FSR source-gate tests failed' }
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party/fsr-vulkan
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR submodule checkout failed' }
+          $expected='c64f093404125e960813f95f1996c14780f0dd69'
+          $actual=(git -C pinned-upstream/bbport/gpu/third_party/fsr-vulkan rev-parse HEAD).Trim()
+          if ($actual -ne $expected) { throw "FSR submodule revision mismatch: $actual" }
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+          install: >-
+            mingw-w64-clang-x86_64-clang
+      - name: Compile ACTUAL previously failed FidelityFX source under MSYS2 CLANG64
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/package-v41/patch_pinned_fsr_windows_wprintf.py --upstream pinned-upstream
+          root=pinned-upstream/bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk
+          clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
+            -I "${root}/include" -I "${root}/src/shared" \
+            -I "${root}/src/components" -fsyntax-only \
+            "${root}/src/shared/ffx_message.cpp"
+          echo SHYT_REAL_PINNED_FSR_WINDOWS_CLANG_WPRINTF_COMPILES
