@@ -753,6 +753,8 @@ def run(checkout:Path, repo:Path, out:Path):
     # the V92 game-owned same-socket pair admission. Still test-only.
     files["emulator/src/core/libraries/network/sh_native_tls_pair_list_v102.hpp"]=(
         metrics_dir/"sh_native_tls_pair_list_v102.hpp").read_bytes()
+    files["emulator/src/core/libraries/network/sh_native_team_grant_slots_v103.hpp"]=(
+        metrics_dir/"sh_native_team_grant_slots_v103.hpp").read_bytes()
     # Stage the revised KDF on BOTH platforms; both need ReadyProof=3.
     kdf_header=(metrics_dir/"sh_pair_key_schedule_v89.hpp").read_bytes()
     files["server/src/sh_pair_key_schedule_v89.hpp"]=kdf_header
