@@ -6,6 +6,8 @@ on:
       - .github/workflows/shyt-native-game-aead.yml
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_aead.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_pair_aead_keys.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_game_aead_drop_guard.py
       - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_game_aead_drop_guard.py
       - tools/poc/yharnam/unified-v9/compose_sources.py
@@ -46,17 +48,19 @@ jobs:
           m=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
           game='emulator/src/core/libraries/network/p2p_sockets.cpp'
           codec='emulator/src/core/libraries/network/sh_native_game_aead.hpp'
+          keys='emulator/src/core/libraries/network/sh_pair_aead_keys.hpp'
           code=(root/game).read_text()
           assert code.count('SHYT-SHY2-UNARMED-DROP')==1
           assert code.index('SHYT-SHY2-UNARMED-DROP')<code.index('IsSHP1(datagram)')
           assert code.index('IsSHP1(datagram)')<code.index('Link::TakesDatagramFrom(')
           assert 'direct_ingress.Arm(' not in code
           assert 'direct_egress.Arm(' not in code
-          assert (root/codec).is_file()
+          assert (root/codec).is_file() and (root/keys).is_file()
           assert 'EVP_aes_256_gcm()' in (root/codec).read_text()
-          for name in (game,codec):
+          assert 'NativePairAeadKeys' in (root/keys).read_text()
+          for name in (game,codec,keys):
               assert hashlib.sha256((root/name).read_bytes()).hexdigest()==m['sha256'][name]
-          assert any('Native SHY2 AES-256-GCM direct UDP codec staged' in x for x in m['applied'])
+          assert any('Native SHY2 AES-256-GCM direct UDP codec and reciprocal SHG2 directional key schedule staged' in x for x in m['applied'])
           print('SHYT_REAL_ORIGINAL_GAME_SHY2_DROPS_UNARMED_P2P_RELAY_UNCHANGED')
           PY
   aes256gcm-linux:
@@ -76,6 +80,11 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp \
             -lcrypto -o /tmp/shyt-native-game-aead
           /tmp/shyt-native-game-aead
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \
+            -lcrypto -o /tmp/shyt-reciprocal-aead-keys
+          /tmp/shyt-reciprocal-aead-keys
           echo SHYT_AEAD_LINUX_REAL_AES256_GCM_PASS_NOT_GAME_LIVE
   aes256gcm-win-clang:
     name: Native Windows CLANG64 AES-256-GCM Direct game candidate
@@ -101,4 +110,9 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp \
             -lcrypto -o shyt-native-game-aead.exe
           ./shyt-native-game-aead.exe
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \
+            -lcrypto -o shyt-reciprocal-aead-keys.exe
+          ./shyt-reciprocal-aead-keys.exe
           echo SHYT_AEAD_WIN_CLANG64_REAL_AES256_GCM_PASS_NOT_GAME_LIVE
