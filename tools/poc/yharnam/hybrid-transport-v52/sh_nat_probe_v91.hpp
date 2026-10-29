@@ -273,6 +273,32 @@ public:
     bool ResponderVerified() const noexcept {
         return active_ && complete_ && role_==Role::Responder;
     }
+    // V106: NAT proof may authorize only the *SAME* current TLS-issued
+    // pair, world and endpoint. Old completed proof cannot be transferred
+    // to another player/room, refreshed grant or changed NAT candidate.
+    // This is a PRECONDITION, not itself permission to route game data.
+    bool VerifiedFor(const SecurePeerOfferV84& current,
+                     std::uint64_t now_ms) const noexcept {
+        if(!active_ || !complete_ ||
+           !SecureOfferV84Detail::Valid(grant_,now_ms) ||
+           !SecureOfferV84Detail::Valid(current,now_ms))
+            return false;
+        return grant_.session_epoch==current.session_epoch &&
+               grant_.pair_binding==current.pair_binding &&
+               grant_.world_revision==current.world_revision &&
+               grant_.issued_ms==current.issued_ms &&
+               grant_.expires_ms==current.expires_ms &&
+               grant_.peer_ipv4_nbo==current.peer_ipv4_nbo &&
+               grant_.peer_port_nbo==current.peer_port_nbo &&
+               grant_.peer_virtual_ipv4_nbo==current.peer_virtual_ipv4_nbo &&
+               grant_.peer_virtual_port_nbo==current.peer_virtual_port_nbo &&
+               SecureOfferV84Detail::EqualDigest(
+                   grant_.sender_account,current.sender_account) &&
+               SecureOfferV84Detail::EqualDigest(
+                   grant_.recipient_account,current.recipient_account) &&
+               SecureOfferV84Detail::EqualDigest(
+                   grant_.direction_key,current.direction_key);
+    }
     void Reset() noexcept {
         CryptoDetail::Erase(grant_.direction_key);
         grant_={};

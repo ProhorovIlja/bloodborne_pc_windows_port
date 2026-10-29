@@ -115,6 +115,8 @@ int main(){
         NatProbeProofV91 responder(NatProbeProofV91::Role::Responder);
         assert(initiator.Start(alice,1000));
         assert(responder.Start(bob,1000));
+        assert(!initiator.VerifiedFor(alice,1000));
+        assert(!responder.VerifiedFor(bob,1000));
         NatProbeCodecV91::Wire packet{},answer{};
         assert(initiator.Initial(1001,packet));
         assert(!initiator.Initial(1002,answer)); // cannot initiate twice
@@ -168,6 +170,27 @@ int main(){
         assert(responder.CompleteResponder(wire_receipt,
                     htonl(INADDR_LOOPBACK),a.port_nbo,1006));
         assert(responder.ResponderVerified());
+        assert(initiator.VerifiedFor(alice,1007));
+        assert(responder.VerifiedFor(bob,1007));
+        assert(!initiator.VerifiedFor(alice,2000)); // expired
+        const auto alter=[&](auto change) {
+            auto changed_offer=alice;
+            change(changed_offer);
+            assert(!initiator.VerifiedFor(changed_offer,1007));
+        };
+        alter([](auto& g){++g.pair_binding;});
+        alter([](auto& g){++g.world_revision;});
+        alter([](auto& g){++g.session_epoch;});
+        alter([](auto& g){++g.issued_ms;});
+        alter([](auto& g){--g.expires_ms;});
+        alter([](auto& g){g.peer_ipv4_nbo^=1;});
+        alter([](auto& g){++g.peer_port_nbo;});
+        alter([](auto& g){g.peer_virtual_ipv4_nbo^=1;});
+        alter([](auto& g){++g.peer_virtual_port_nbo;});
+        alter([](auto& g){g.sender_account[0]^=1;});
+        alter([](auto& g){g.recipient_account[0]^=1;});
+        alter([](auto& g){g.direction_key[0]^=1;});
+        assert(!initiator.VerifiedFor(bob,1007)); // cannot swap party
         assert(!responder.CompleteResponder(wire_receipt,
                     htonl(INADDR_LOOPBACK),a.port_nbo,1007));
         // A completed *proof* is NOT game routing permission.
@@ -184,6 +207,8 @@ int main(){
         initiator.Reset();responder.Reset();
         assert(!initiator.InitiatorVerified());
         assert(!responder.ResponderVerified());
+        assert(!initiator.VerifiedFor(alice,1007));
+        assert(!responder.VerifiedFor(bob,1007));
 
         // Strict identity/pair/world/endpoint checks with REAL HMAC.
         NatProbeCodecV91::Wire good{};
