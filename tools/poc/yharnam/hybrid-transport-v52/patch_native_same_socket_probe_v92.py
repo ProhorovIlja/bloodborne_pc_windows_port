@@ -118,11 +118,17 @@ def patch_game(src):
         std::uint64_t pair_id,std::uint64_t now_ms) {
         if(!running.load(std::memory_order_acquire) || LinkCut())return false;
         std::lock_guard lock(native_grant_mutex);
-        std::lock_guard link_lock(link_mutex);
-        if(!link_welcomed || !shyt_link_generation_v87 ||
-           !link_server.addr_nbo || !link_server.port_nbo)return false;
+        std::uint64_t generation=0;
+        {
+            std::lock_guard link_lock(link_mutex);
+            if(!link_welcomed || !shyt_link_generation_v87 ||
+               !link_server.addr_nbo || !link_server.port_nbo)return false;
+            generation=shyt_link_generation_v87;
+        }
+        // PendingForNat refreshes the real game account and may itself
+        // consult link_mutex. Never call it while owning that lock.
         return nat_team_grants_v103.PendingForNat(
-            pair_id,shyt_link_generation_v87,now_ms)!=nullptr;
+            pair_id,generation,now_ms)!=nullptr;
     }
 
     // V92: ONLY a full SHG2 *coordinated* V90 pair can probe. The
