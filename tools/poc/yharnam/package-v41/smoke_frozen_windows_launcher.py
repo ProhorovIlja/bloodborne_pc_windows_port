@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -45,12 +46,30 @@ def inspect_archive(path: Path) -> None:
             raise ValueError("bad game archive CRC")
         if sum(x.file_size for x in infos) > MAX_EXTRACT:
             raise ValueError("extraction volume too large")
+        seen = set()
         for f in infos:
             parts = f.filename.rstrip("/").split("/")
             if (not f.filename.startswith(ROOT) or not f.filename.isascii()
-                    or "\\" in f.filename or ".." in parts
+                    or "\\" in f.filename or ":" in f.filename
+                    or "\x00" in f.filename or ".." in parts
                     or any(not p for p in parts)):
                 raise ValueError("unsafe ZIP path")
+            if stat.S_IFMT(f.external_attr >> 16) == stat.S_IFLNK:
+                raise ValueError("ZIP contains symbolic link")
+            if f.is_dir():
+                continue
+            folded = f.filename.casefold()
+            if folded in seen:
+                raise ValueError("duplicate Windows-case-insensitive ZIP entry")
+            seen.add(folded)
+
+
+def digest_file(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as source:
+        for piece in iter(lambda: source.read(1024 * 1024), b""):
+            value.update(piece)
+    return value.hexdigest()
 
 
 def smoke(package: Path, *, timeout: int = 65) -> dict:
@@ -95,7 +114,7 @@ def smoke(package: Path, *, timeout: int = 65) -> dict:
         "game_assets_tested": False,
         "real_online_tested": False,
         "direct_p2p_tested": False,
-        "package_sha256": hashlib.sha256(package.read_bytes()).hexdigest(),
+        "package_sha256": digest_file(package),
     }
 
 
