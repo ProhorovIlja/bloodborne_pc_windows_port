@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "sh_native_direct_rx.hpp"
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -70,7 +71,11 @@ public:
             return false;
         link.virtual_peer=virtual_peer;
         link.physical_peer=physical_peer;
-        link.sender=local_native_sender;
+        // Keep the authoritative sender ID inside the slot. A borrowed
+        // string_view could dangle after a TLS/identity callback returns.
+        std::copy(local_native_sender.begin(),local_native_sender.end(),
+                  link.sender_storage.begin());
+        link.sender_size=static_cast<std::uint8_t>(local_native_sender.size());
         link.refresh=refresh_authority;
         link.authority_ctx=authority_ctx;
         link.transmit=send_authenticated;
@@ -110,7 +115,9 @@ public:
                 return NativeTxStatus::RelayRequired;
             if(complete_native_frame.empty() ||
                complete_native_frame.size()>DirectReceiver::kMaxPayloadBytes ||
-               !EligibleNativeWireFrame(complete_native_frame,link.sender,
+               !EligibleNativeWireFrame(complete_native_frame,
+                                        std::string_view(link.sender_storage.data(),
+                                                         link.sender_size),
                                         current,
                                         false /* no actual reliable stream handover */).direct_eligible)
                 return NativeTxStatus::RelayRequired;
@@ -145,7 +152,9 @@ private:
         PeerTicket outbound_ticket{};
         VerifiedReversePath verified_reverse=nullptr;
         void* receiver_ctx=nullptr;
-        std::string_view sender{}; // borrowed from trusted owner: must outlive Arm
+        // Fixed-size, owned signed-in ID: no allocation or external lifetime.
+        std::array<char,255> sender_storage{};
+        std::uint8_t sender_size=0;
         CurrentWorld refresh=nullptr;
         void* authority_ctx=nullptr;
         AuthenticatedDirectTransmit transmit=nullptr;
@@ -154,7 +163,9 @@ private:
         std::int64_t cooldown_until_ms=0;
         bool active=false;
         void Reset() noexcept {
-            virtual_peer={};physical_peer={};sender={};
+            virtual_peer={};physical_peer={};
+            std::fill(sender_storage.begin(),sender_storage.end(),char(0));
+            sender_size=0;
             outbound_ticket={};verified_reverse=nullptr;receiver_ctx=nullptr;
             refresh=nullptr;authority_ctx=nullptr;transmit=nullptr;
             crypto_ctx=nullptr;expires_at_ms=0;cooldown_until_ms=0;
