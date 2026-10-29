@@ -902,6 +902,18 @@ def run(checkout:Path, repo:Path, out:Path):
     for p,body in upstream104.patch(upstream104_inputs).items():
         files[p]=body.encode("utf-8")
     meta["applied"].append("V104 upstream YT PR451 Ludwig multiplayer exit wall, PR433 Windows Cyrillic launcher child role UTF-8")
+    # Secure Direct AEAD is NOT active. Put the tested AES-GCM codec beside the
+    # original native game socket and explicitly discard unarmed SHY2 packets
+    # before legacy shadNet frame processing. Never treat magic as authority.
+    shy2_path=metrics_dir/"patch_native_game_aead_drop_guard.py"
+    shy2=types.ModuleType("shyt_native_shy2_fail_closed")
+    shy2.__file__=str(shy2_path)
+    exec(compile(shy2_path.read_text("utf-8"),str(shy2_path),"exec"),shy2.__dict__)
+    if shy2.NETWORK not in files:
+        raise ValueError("SHY2 must patch the actual V70-composed P2PTransport")
+    files[shy2.NETWORK]=shy2.patch_game(files[shy2.NETWORK].decode("utf-8")).encode("utf-8")
+    files[shy2.AEAD_HEADER]=(metrics_dir/"sh_native_game_aead.hpp").read_bytes()
+    meta["applied"].append("Native SHY2 AES-256-GCM direct UDP codec staged; actual recvfrom fail-closed for unarmed encrypted packets, relay unchanged")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
