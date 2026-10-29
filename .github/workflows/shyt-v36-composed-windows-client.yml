@@ -133,6 +133,14 @@ jobs:
             --upstream pinned-upstream
           "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_vk_clang64.py \
             --upstream pinned-upstream
+          # The pinned port's build.sh applies three REAL vendor patches before Ninja.
+          # Reproduce exactly that state for the Vulkan TU preflight, including
+          # official 0002-ffx_vk-include-mutex-for-libc.patch.
+          for vendor_patch in pinned-upstream/bbport/gpu/patches/fsr-vulkan/*.patch; do
+            if ! git -C "$fsr" apply --reverse --check "$PWD/$vendor_patch" 2>/dev/null; then
+              git -C "$fsr" apply "$PWD/$vendor_patch"
+            fi
+          done
           sdk="$fsr/upstream/ffx-1.1.4/sdk"
           clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
             -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
