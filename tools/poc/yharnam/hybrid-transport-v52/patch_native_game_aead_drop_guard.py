@@ -11,6 +11,7 @@ from __future__ import annotations
 NETWORK = "emulator/src/core/libraries/network/p2p_sockets.cpp"
 AEAD_HEADER = "emulator/src/core/libraries/network/sh_native_game_aead.hpp"
 INGRESS_HEADER = "emulator/src/core/libraries/network/sh_native_game_aead_ingress.hpp"
+EGRESS_HEADER = "emulator/src/core/libraries/network/sh_native_game_aead_egress.hpp"
 TAG = "SHYT-SHY2-AUTHENTICATED-INGRESS"
 
 
@@ -31,14 +32,16 @@ def patch_game(src: str) -> str:
     src = one(src,
         '#include "core/libraries/network/sh_native_direct_rx.hpp" // SHYT-V70-NATIVE-RECV-HMAC\n',
         '#include "core/libraries/network/sh_native_direct_rx.hpp" // SHYT-V70-NATIVE-RECV-HMAC\n'
-        '#include "core/libraries/network/sh_native_game_aead_ingress.hpp" // ' + TAG + '\n',
+        '#include "core/libraries/network/sh_native_game_aead_ingress.hpp" // ' + TAG + '\n'
+        '#include "core/libraries/network/sh_native_game_aead_egress.hpp" // SHYT-SHY2-AUTHENTICATED-EGRESS\n',
         "actual game header")
     src = one(src,
         '    SeamlessHunt::Hybrid::NativeDirectReceiver direct_ingress{};\n',
         '    SeamlessHunt::Hybrid::NativeDirectReceiver direct_ingress{};\n'
         '    // No SHY2 Arm installer exists. Every unknown encrypted datagram is dropped.\n'
         '    std::mutex native_shy2_mutex;\n'
-        '    SeamlessHunt::Hybrid::NativeGameAeadIngress native_shy2_ingress{};\n',
+        '    SeamlessHunt::Hybrid::NativeGameAeadIngress native_shy2_ingress{};\n'
+        '    SeamlessHunt::Hybrid::NativeGameAeadEgress native_shy2_egress{};\n',
         "actual game crypto slot owner")
     marker = """            if (SeamlessHunt::Hybrid::IsSHP1(datagram)) {
                 SeamlessHunt::Hybrid::NativeRxResult verified{};"""
@@ -63,6 +66,44 @@ def patch_game(src: str) -> str:
             }
 """
     src = one(src, marker, ingress + marker, "original recvfrom demux")
+    # The ORIGINAL native game already calls NativeDirectSender::TrySend()
+    # in SendFrame, which owns verified reverse NAT, authority, and relay
+    # fallback. Supply a real SHY2 AES-GCM same-socket writer callback,
+    # but NEVER call native Direct Arm without live server authorization.
+    callback = """    // SHYT-SHY2-ENCRYPTED-SEND: callback for the existing verified
+    // NativeDirectSender only. No code currently installs/arms this.
+    // Seals the whole native frame with a server-issued directional key,
+    // then transmits over the game's ORIGINAL host_socket via Transmit().
+    // Any crypto, key expiry or socket failure returns to normal SHLK relay.
+    static bool TransmitVerifiedShy2(
+        SeamlessHunt::Hybrid::PhysicalV4 peer,
+        std::span<const std::uint8_t> complete_frame,
+        std::int64_t now_ms,void* trusted_transport) noexcept {
+        if(!trusted_transport)return false;
+        auto* self=static_cast<P2PTransport*>(trusted_transport);
+        try {
+            std::vector<u8> sealed;
+            {
+                std::lock_guard shy2_lock(self->native_shy2_mutex);
+                if(!self->native_shy2_egress.Seal(
+                       peer,complete_frame,now_ms,sealed))
+                    return false;
+            }
+            sockaddr_in dest{};
+            dest.sin_family=AF_INET;
+            dest.sin_addr.s_addr=peer.addr_nbo;
+            dest.sin_port=peer.port_nbo;
+            return self->Transmit(dest,std::move(sealed));
+        } catch(...) {
+            return false; // no C++ exception across native game TX callback
+        }
+    }
+
+"""
+    src = one(src,
+        '    static bool TrustedReverseDirectReady(\n',
+        callback + '    static bool TrustedReverseDirectReady(\n',
+        "original game verified sender callback")
     # V71 has TWO independent lifecycle revocations. The encrypted route
     # requires both; no stale AES peer may survive logout/server swap/stop.
     old = """            direct_egress.RevokeAll();
@@ -74,6 +115,7 @@ def patch_game(src: str) -> str:
         old + """        {
             std::lock_guard shy2_lock(native_shy2_mutex);
             native_shy2_ingress.RevokeAll(); // revoke AES peer keys on stop/swap
+            native_shy2_egress.RevokeAll(); // matching outbound AES lease
         }
 """)
     return src

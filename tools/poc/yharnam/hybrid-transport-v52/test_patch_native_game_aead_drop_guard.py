@@ -23,6 +23,7 @@ ORIGINAL='''#include "core/libraries/network/sh_native_direct_rx.hpp" // SHYT-V7
             direct_egress.RevokeAll();
         }
     }
+    static bool TrustedReverseDirectReady(
     void ReceiveMain() {
             if (SeamlessHunt::Hybrid::IsSHP1(datagram)) {
                 SeamlessHunt::Hybrid::NativeRxResult verified{};
@@ -43,6 +44,11 @@ class NativeEncryptedGameIngress(unittest.TestCase):
         self.assertIn("native_shy2_ingress.Receive(",out)
         self.assertIn("Deliver(verified.sender.addr_nbo,verified.sender.port_nbo,",out)
         self.assertEqual(out.count("native_shy2_ingress.RevokeAll()"),2)
+        self.assertEqual(out.count("native_shy2_egress.RevokeAll()"),2)
+        self.assertIn("native_shy2_egress.Seal(",out)
+        self.assertIn("Transmit(dest,std::move(sealed))",out)
+        self.assertIn("static bool TransmitVerifiedShy2(",out)
+        self.assertNotIn("native_shy2_egress.Arm(",out)
         self.assertNotIn("native_shy2_ingress.Arm(",out)
         self.assertEqual(out.count("direct_egress.RevokeAll()"),2)
         self.assertEqual(out.count("if (!Link::TakesDatagramFrom("),1)
