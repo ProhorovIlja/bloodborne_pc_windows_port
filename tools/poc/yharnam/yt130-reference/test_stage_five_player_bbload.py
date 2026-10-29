@@ -10,22 +10,37 @@ spec.loader.exec_module(mod)
 
 
 class FivePlayerLoadgenTests(unittest.TestCase):
-    def test_only_exact_two_source_anchors_rewritten(self):
-        original = 'before\n' + mod.OLD_HELP + '\n' + mod.OLD_CLAMP + '\nafter'
+    @staticmethod
+    def pinned_anchor_fixture():
+        return ('before\n' + mod.OLD_HELP + '\n' + mod.OLD_CLAMP + '\n' +
+                '\n'.join(old for old, _ in mod.OWNER_EDITS) + '\nafter')
+
+    def test_exact_upstream_pr444_owner_changes_and_five_player_anchors(self):
+        original = self.pinned_anchor_fixture()
         transformed = mod.rewrite(original)
         self.assertEqual(transformed.count(mod.NEW_HELP), 1)
         self.assertEqual(transformed.count(mod.NEW_CLAMP), 1)
         self.assertNotIn(mod.OLD_CLAMP, transformed)
         self.assertNotIn(mod.OLD_HELP, transformed)
+        self.assertEqual(len(mod.OWNER_EDITS), 7)
+        for old, new in mod.OWNER_EDITS:
+            self.assertIn(new, transformed)
+        self.assertIn('std::clamp(parser.value("owners").toInt(), 1, settings.team_size)',
+                      transformed)
+        self.assertIn('Owner() ? load.settings.owner_fps', transformed)
         self.assertEqual(transformed.splitlines()[0], "before")
 
     def test_missing_duplicate_and_second_stage_refused(self):
-        original = mod.OLD_HELP + "\n" + mod.OLD_CLAMP
+        original = self.pinned_anchor_fixture()
         for invalid in (original + "\n" + mod.OLD_HELP,
                         original.replace(mod.OLD_CLAMP, ""),
                         mod.rewrite(original)):
-            with self.assertRaisesRegex(ValueError, "source anchor drift"):
+            with self.assertRaisesRegex(ValueError, "anchor drift"):
                 mod.rewrite(invalid)
+        for old, new in mod.OWNER_EDITS:
+            with self.subTest(missing=old[:40]):
+                with self.assertRaisesRegex(ValueError, "multi-owner.*anchor drift"):
+                    mod.rewrite(original.replace(old, "MISSING", 1))
 
     def test_unpinned_source_refused(self):
         with self.assertRaisesRegex(ValueError, "exact official pinned"):
