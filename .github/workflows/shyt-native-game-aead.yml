@@ -1,0 +1,55 @@
+name: SHYT encrypted native game Direct UDP candidate (not enabled)
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - .github/workflows/shyt-native-game-aead.yml
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_aead.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  aes256gcm-linux:
+    name: Native Linux AES-256-GCM Direct game candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and run real OpenSSL AES-GCM/replay tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp \
+            -lcrypto -o /tmp/shyt-native-game-aead
+          /tmp/shyt-native-game-aead
+          echo SHYT_AEAD_LINUX_REAL_AES256_GCM_PASS_NOT_GAME_LIVE
+  aes256gcm-win-clang:
+    name: Native Windows CLANG64 AES-256-GCM Direct game candidate
+    runs-on: windows-2022
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+          install: >-
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-openssl
+      - name: Compile and run real native Windows OpenSSL AES-GCM/replay tests
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp \
+            -lcrypto -o shyt-native-game-aead.exe
+          ./shyt-native-game-aead.exe
+          echo SHYT_AEAD_WIN_CLANG64_REAL_AES256_GCM_PASS_NOT_GAME_LIVE
