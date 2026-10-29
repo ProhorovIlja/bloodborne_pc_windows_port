@@ -83,10 +83,14 @@ jobs:
             -fsyntax-only "$root/src/backends/vk/ffx_vk.cpp"
           echo SHYT_REAL_PINNED_FSR_WINDOWS_CLANG_WPRINTF_COMPILES
           echo SHYT_REAL_PINNED_FSR3_VULKAN_BACKEND_HEADERS_AND_STD_MATH_COMPILES
-          for source in "$root/src/components/opticalflow/ffx_opticalflow.cpp" \
-                        "$root/src/components/frameinterpolation/ffx_frameinterpolation.cpp"; do
+          for source in "$root/src/shared/ffx_assert.cpp" \
+                        "$root/src/shared/ffx_object_management.cpp" \
+                        "$root/src/components/fsr3upscaler/ffx_fsr3upscaler.cpp" \
+                        "$root/src/components/opticalflow/ffx_opticalflow.cpp" \
+                        "$root/src/components/frameinterpolation/ffx_frameinterpolation.cpp" \
+                        "$root/src/components/fsr3/ffx_fsr3.cpp"; do
             clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
               -I "$root/include" -I "$root/src/shared" -I "$root/src/components" \
               -fsyntax-only "$source"
           done
-          echo SHYT_PINNED_AMD_FSR_HOST_ALL_23_MSVC_COUNT_OF_CALLS_CPP_COMPILE_PASS
+          echo SHYT_PINNED_AMD_FSR_HOST_ALL_30_MSVC_COUNT_OF_CALLS_CPP_COMPILE_PASS
