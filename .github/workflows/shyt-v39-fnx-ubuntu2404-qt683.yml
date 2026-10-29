@@ -2,6 +2,10 @@ name: Seamless Hunt V39 Fornex Ubuntu 24.04 Qt 6.8.3 native server
 on:
   workflow_call:
   workflow_dispatch:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - .github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
 
 permissions:
   contents: read
@@ -119,8 +123,20 @@ jobs:
         run: |
           set -euo pipefail
           pkg="$OUT_ROOT/shyt-internal-linux-server"
-          mkdir -p "$pkg/bin" "$pkg/licenses" "$pkg/config-reference"
+          mkdir -p "$pkg/bin" "$pkg/licenses" "$pkg/config-reference" "$pkg/lib" "$pkg/plugins/sqldrivers" "$pkg/plugins/tls"
           install -m 755 "$OUT_ROOT/build/shadnet" "$pkg/bin/shadnet"
+          # Qt 6.8.3 is NOT Ubuntu 24.04's default. Carry the exact
+          # dynamically linked Qt and ICU libraries plus driver plugins
+          # rather than producing a binary that fails on the operator's VPS.
+          for lib in libQt6Core.so.6 libQt6Network.so.6 libQt6Sql.so.6 libQt6HttpServer.so.6 libQt6WebSockets.so.6 \
+                     libicui18n.so.73 libicuuc.so.73 libicudata.so.73; do
+            test -f "$QT_ROOT_DIR/lib/$lib" || { echo "Qt runtime dependency missing: $lib" >&2; exit 1; }
+            cp -L "$QT_ROOT_DIR/lib/$lib" "$pkg/lib/$lib"
+          done
+          install -m 644 "$QT_ROOT_DIR/plugins/sqldrivers/libqsqlite.so" "$pkg/plugins/sqldrivers/"
+          if compgen -G "$QT_ROOT_DIR/plugins/tls/*.so" >/dev/null; then
+            cp -L "$QT_ROOT_DIR"/plugins/tls/*.so "$pkg/plugins/tls/"
+          fi
           install -m 644 "$OUT_ROOT/upstream/server/LICENSES/GPL-2.0-or-later.txt" "$pkg/licenses/GPL-2.0-or-later.txt"
           install -m 644 "$GITHUB_WORKSPACE/LICENSE" "$pkg/licenses/GPL-3.0.txt"
           install -m 644 "$GITHUB_WORKSPACE/licenses/LGPL-3.0.txt" "$pkg/licenses/LGPL-3.0.txt"
@@ -137,8 +153,11 @@ jobs:
               install -m 644 "$OUT_ROOT/upstream/server/$file" "$pkg/config-reference/$file"
             fi
           done
-          ldd "$pkg/bin/shadnet" > "$pkg/SHADNET-RUNTIME-LIBS.txt"
-          if ! grep -F "libQt6Core.so.6 => $QT_ROOT_DIR/lib/" "$pkg/SHADNET-RUNTIME-LIBS.txt"; then
+          # A relink against the vendored runtime is mandatory. Merely
+          # copying .so files would not establish a self-contained kit.
+          env LD_LIBRARY_PATH="$pkg/lib" QT_PLUGIN_PATH="$pkg/plugins" \
+            ldd "$pkg/bin/shadnet" > "$pkg/SHADNET-RUNTIME-LIBS.txt"
+          if ! grep -F "libQt6Core.so.6 => $pkg/lib/" "$pkg/SHADNET-RUNTIME-LIBS.txt"; then
             echo 'Qt mismatch: staging candidate is not linked to Qt 6.8.3' >&2
             exit 1
           fi
@@ -148,7 +167,10 @@ jobs:
           fi
           printf 'INTERNAL CI CANDIDATE; never copy into live production without staging validation.\nPinned upstream: %s\nSource revision: %s\nBuild OS: Ubuntu 24.04 x86_64, Qt 6.8.3 runtime REQUIRED.\nNetwork/protocol: legacy cross-client and login not game-tested.\nRelease approved: NO\n' \
             "$PIN" "$GITHUB_SHA" > "$pkg/NOT-READY-FOR-PRODUCTION.txt"
-          (cd "$pkg" && sha256sum bin/shadnet config-reference/* licenses/* CREDITS.txt > SHA256SUMS)
+          (cd "$pkg" && find bin lib plugins config-reference licenses -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum CREDITS.txt >> SHA256SUMS)
+          test -s "$pkg/plugins/sqldrivers/libqsqlite.so"
+          test -s "$pkg/lib/libQt6Core.so.6"
+          echo SHYT_UBUNTU_QT683_BUNDLED_RUNTIME_PASS
           tar -czf "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
             -C "$OUT_ROOT" shyt-internal-linux-server
           sha256sum "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
