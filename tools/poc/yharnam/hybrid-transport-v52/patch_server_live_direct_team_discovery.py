@@ -208,11 +208,24 @@ f'''int AuthenticatedFiveHunterPolicyDoesNotDiscoverOtherTeams() {{
   Pump(service,games,Now);
   CHECK(a.lobby.has_team());
   const auto team=a.lobby.team().id();
+  int expected_members=1;
   for(Game* guest:std::vector<Game*>{{&b,&d,&e,&f}}) {{
       a.Team(bbcoop::TeamRequest::INVITE,Now,identity(*guest));
       Pump(service,games,Now);
+      const auto invited=guest->lobby.invites_size();
       guest->Team(bbcoop::TeamRequest::ACCEPT,Now,{{}},team);
       Pump(service,games,Now);
+      ++expected_members;
+      if(!guest->lobby.has_team() ||
+         a.lobby.team().members_size()!=expected_members)
+          std::cerr << "5-hunter join refused: guest=" << guest->name
+                    << " invited=" << invited
+                    << " notice=" << guest->lobby.notice()
+                    << " host_notice=" << a.lobby.notice()
+                    << " host_members=" << a.lobby.team().members_size()
+                    << " wanted=" << expected_members << '\\n';
+      CHECK(guest->lobby.has_team() &&
+            a.lobby.team().members_size()==expected_members);
   }}
   CHECK(a.lobby.team().members_size()==5);
   // A sixth player, even in the same world, MUST NOT inherit team grants.
