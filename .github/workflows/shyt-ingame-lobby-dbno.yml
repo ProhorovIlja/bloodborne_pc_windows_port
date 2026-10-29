@@ -1,0 +1,40 @@
+name: Seamless Hunt in-game lobby browser and invader DBNO C++ safety
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/ingame-online/**
+      - .github/workflows/shyt-ingame-lobby-dbno.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/ingame-online/**
+      - .github/workflows/shyt-ingame-lobby-dbno.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-ingame-lobby-dbno-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  in-game-policy:
+    name: Native C++ admission, browser, DBNO (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile actual C++20 matchmaking and invasion regression tests
+        shell: bash
+        run: |
+          cmake -S tools/poc/yharnam/ingame-online -B "${{ runner.temp }}/shyt-ingame-policy" -DCMAKE_BUILD_TYPE=Debug
+          cmake --build "${{ runner.temp }}/shyt-ingame-policy" --config Debug --parallel 2
+      - name: Run actual C++ tests (assertions enabled)
+        shell: bash
+        run: |
+          ctest --test-dir "${{ runner.temp }}/shyt-ingame-policy" -C Debug --output-on-failure
