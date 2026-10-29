@@ -11,7 +11,11 @@ H="""// The game's player slots (the host and three): an invader needs a free on
 // this many is never invaded.
 constexpr size_t InvasionMaxPlayers = 4;
 """
-WORLD="""    for (const auto& [key, member] : members) {
+WORLD="""    if (outcome.changed) {
+        StoreWorldList(result);
+    }
+    // Invasions: the leader turned them off: a running one ends.
+    for (const auto& [key, member] : members) {
         if (member.party == world.name && !member.hostile) {
             ++target.players;
             target.members.push_back({member.map, member.level, member.boss});
@@ -54,7 +58,7 @@ class InvasionGate(unittest.TestCase):
         self.assertEqual(result[guard.H].count(guard.TAG),1)
         self.assertIn("constexpr size_t InvasionMaxPlayers = 5;",result[guard.H])
         cpp=result[guard.WORLD]
-        self.assertEqual(cpp.count(guard.TAG),2)
+        self.assertEqual(cpp.count(guard.TAG),3)
         self.assertLess(cpp.index("live.players >= InvasionMaxPlayers"),
                         cpp.index("invader.visiting = world.name;"))
         self.assertLess(cpp.index("if (!sign) {"),
@@ -62,6 +66,10 @@ class InvasionGate(unittest.TestCase):
         self.assertIn("team->members_size()",cpp)
         self.assertIn("!live.allows_invaders",cpp)
         self.assertIn("m.boss",cpp)
+        self.assertIn("AJoiningFifthHunterRevokesAlreadyJoinedInvader",
+                      result[guard.TEST])
+        self.assertIn("EndInvasion(party, bbcoop::InvasionEnd::REFUSED",
+                      cpp)
         self.assertIn("candidate <= 7",cpp)
         tests=result[guard.TEST]
         self.assertIn("AJoinedFiveHunterTeamRejectsAnAlreadyNotifiedInvader",tests)
