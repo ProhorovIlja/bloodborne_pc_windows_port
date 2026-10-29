@@ -93,6 +93,15 @@ int main(){
     assert(!rx.OpenGame(original,300,plain) && plain.empty());
     std::vector<std::uint8_t> oversized(AeadDetail::MaxPayload+1,0x11);
     assert(!tx.SealGame(oversized,300,out) && out.empty());
+    // The grant expires EXCLUSIVELY at expires_at_ms. A fresh, unseen
+    // ciphertext from 19999 must be rejected when received at 20000,
+    // not merely rejected as a replay of a previously accepted packet.
+    std::vector<std::uint8_t> before_expiry, at_expiry;
+    assert(tx.SealGame(game,19999,before_expiry));
+    assert(tx.SealGame(game,19999,at_expiry));
+    assert(rx.OpenGame(before_expiry,19999,plain) && plain==game);
+    assert(!rx.OpenGame(at_expiry,20000,plain) && plain.empty());
+    assert(!tx.SealGame(game,20000,out) && out.empty());
     assert(!tx.SealGame(game,20001,out));
     assert(!rx.OpenGame(four,20001,plain) && plain.empty());
     tx.Revoke();rx.Revoke();
