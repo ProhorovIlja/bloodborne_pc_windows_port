@@ -8,6 +8,8 @@ on:
       - tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py
       - tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py
       - tools/poc/yharnam/yt130-reference/test_stage_native_param_memory_v109.py
+      - tools/poc/yharnam/yt130-reference/probe_native_param_cpp_v109.py
+      - tools/poc/yharnam/yt130-reference/test_probe_native_param_cpp_v109.py
       - tools/poc/yharnam/yt130-reference/test_stage_five_hunter_invasion_guard.py
       - tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py
       - tools/poc/yharnam/yt130-reference/patch_five_hunter_team.py
@@ -98,6 +100,13 @@ jobs:
           grep -Fq 'AJoiningFifthHunterRevokesAlreadyJoinedInvader' \
             "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
           echo SHYT_ACTUAL_FIVE_HUNTER_QT_INVASION_SOURCE_RACES_STAGED
+      - name: Compile and execute actual original YT1.3 PR442 C++ PARAM helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/probe_native_param_cpp_v109.py \
+            --source "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party.cpp"
+          echo SHYT_YT130_NATIVE_GAME_PARAM_CPP_BOUNDS_AND_OVERFLOW_PASS
       - name: Configure original Qt6 server and build native game-world tests
         shell: bash
         run: |
