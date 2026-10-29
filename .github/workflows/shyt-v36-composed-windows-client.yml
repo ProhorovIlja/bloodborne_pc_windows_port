@@ -30,6 +30,19 @@ jobs:
         run: |
           git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
           if ($LASTEXITCODE -ne 0) { throw "Pinned native GPU submodule checkout failed" }
+      - name: Fix pinned FSR 1.1.4 MSVC-only _countof for CLANG64
+        shell: pwsh
+        run: |
+          # Keep pinned Git refs and renderer features; patch only array length.
+          $path = 'pinned-upstream/bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp'
+          if (-not (Test-Path $path)) { throw 'Pinned FSR frame interpolation source missing' }
+          $text = [IO.File]::ReadAllText((Resolve-Path $path))
+          $old = '_countof(copyJobs)'
+          $count = ([regex]::Matches($text, [regex]::Escape($old))).Count
+          if ($count -ne 3) { throw "FSR 1.1.4 source drift: expected 3 array counts, got $count" }
+          $fixed = '(sizeof(copyJobs) / sizeof(copyJobs[0]))'
+          [IO.File]::WriteAllText((Resolve-Path $path), $text.Replace($old, $fixed))
+          Write-Host 'PINNED_FSR_CLANG64_ARRAY_COUNT_PORTABILITY_PASS'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
