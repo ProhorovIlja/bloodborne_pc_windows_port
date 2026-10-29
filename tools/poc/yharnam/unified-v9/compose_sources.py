@@ -468,6 +468,14 @@ def run(checkout:Path, repo:Path, out:Path):
         "emulator/src/core/bloodborne_re.cpp"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
+    # ALL additional pinned source text must be loaded with Python's
+    # universal newline decoder. Windows checkout can store CRLF, while
+    # immutable patch anchors deliberately require normalized LF. Binary
+    # headers/artifacts remain loaded via read_bytes() elsewhere.
+    def pinned_source(path: str) -> str:
+        if path in files:
+            return files[path].decode("utf-8").replace("\r\n","\n")
+        return (checkout/path).read_text(encoding="utf-8")
     # V69: apply runtime-only optional byte/packet counters to the ENTIRE
     # original p2p_sockets.cpp after the pinned source has been composed.
     # Strict anchor matching ensures a changed V7 transport is never silently
@@ -536,8 +544,7 @@ def run(checkout:Path, repo:Path, out:Path):
     exec(compile(v74_script.read_text("utf-8"),str(v74_script),"exec"),v74.__dict__)
     v74_paths=(v74.PROTO,v74.WORLD_H,v74.WORLD_CPP,v74.LINK_CPP,
                v74.CLIENT_WORLD,v74.WORLD_TEST)
-    v74_sources={p:(files[p] if p in files else (checkout/p).read_bytes()).decode("utf-8")
-                 for p in v74_paths}
+    v74_sources={p:pinned_source(p) for p in v74_paths}
     for path,body in v74.transform(v74_sources).items():
         files[path]=body.encode("utf-8")
     meta["applied"].append("V74 opt-in protobuf native client Hello + game-world mutual consent, legacy DENY")
@@ -606,8 +613,7 @@ def run(checkout:Path, repo:Path, out:Path):
     exec(compile(v79_script.read_text("utf-8"),str(v79_script),"exec"),v79.__dict__)
     v79_paths=(v79.MAIN,v79.SERVER_H,v79.SERVER_CPP,v79.LINK_H,
                v79.LINK_CPP,v79.WORLD_H,v79.WORLD_CPP,v79.WORLD_TEST)
-    v79_sources={p:(files[p] if p in files else (checkout/p).read_bytes())
-                 .decode("utf-8") for p in v79_paths}
+    v79_sources={p:pinned_source(p) for p in v79_paths}
     for path,body in v79.patch(v79_sources).items():
         files[path]=body.encode("utf-8")
     files[v79.IDENTITY_H]=(metrics_dir/"sh_p2p_tls_identity.hpp").read_bytes()
@@ -634,8 +640,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v81_input={p:files[p].decode("utf-8") for p in v81_paths}
     for path,body in v81.patch(v81_input).items():
         files[path]=body.encode("utf-8")
-    cmake_source=(files[v81.CMAKE] if v81.CMAKE in files
-                  else (checkout/v81.CMAKE).read_bytes()).decode("utf-8")
+    cmake_source=pinned_source(v81.CMAKE)
     files[v81.CMAKE]=v81.patch_cmake(cmake_source).encode("utf-8")
     files[v81.OFFER_H]=(metrics_dir/"sh_p2p_tls_offer_issuer.hpp").read_bytes()
     files["server/src/sh_p2p_tls_key_session.hpp"]=(metrics_dir/"sh_p2p_tls_key_session.hpp").read_bytes()
@@ -662,8 +667,7 @@ def run(checkout:Path, repo:Path, out:Path):
     v83.__file__=str(v83_script)
     exec(compile(v83_script.read_text("utf-8"),str(v83_script),"exec"),v83.__dict__)
     files[v83.NETWORK]=v83.patch_game(files[v83.NETWORK].decode("utf-8")).encode("utf-8")
-    cmake_game=(files[v83.CMAKE] if v83.CMAKE in files
-                 else (checkout/v83.CMAKE).read_bytes()).decode("utf-8")
+    cmake_game=pinned_source(v83.CMAKE)
     files[v83.CMAKE]=v83.patch_cmake(cmake_game).encode("utf-8")
     files[v83.HEADER]=(metrics_dir/"sh_native_tls_local_client.hpp").read_bytes()
     meta["applied"].append("V83 real native LibreSSL TLS1.3 client callable DEV-only; default OFF, no Direct Arm")
@@ -858,8 +862,7 @@ def run(checkout:Path, repo:Path, out:Path):
     five=types.ModuleType("sh_five_hunters_original_lobby")
     five.__file__=str(five_path)
     exec(compile(five_path.read_text("utf-8"),str(five_path),"exec"),five.__dict__)
-    five_inputs={p:(files[p] if p in files else (checkout/p).read_bytes()).decode("utf-8")
-                 for p in five.FILES}
+    five_inputs={p:pinned_source(p) for p in five.FILES}
     for name,body in five.patch(five_inputs).items():
         files[name]=body.encode("utf-8")
     meta["applied"].append("5-hunter YT native lobby candidate: host+4, unique co-op signs 7/6/5/4, 6th denied; game full-party rig validation pending")
@@ -883,8 +886,7 @@ def run(checkout:Path, repo:Path, out:Path):
     native5=types.ModuleType("sh_native_five_hunters_original_game")
     native5.__file__=str(native5_path)
     exec(compile(native5_path.read_text("utf-8"),str(native5_path),"exec"),native5.__dict__)
-    native5_inputs={p:(files[p] if p in files else (checkout/p).read_bytes()).decode("utf-8")
-                    for p in native5.FILES}
+    native5_inputs={p:pinned_source(p) for p in native5.FILES}
     for name,body in native5.patch(native5_inputs).items():
         files[name]=body.encode("utf-8")
     meta["applied"].append("5-hunter original game candidate: host re-rings until five, fourth guest sign=4 in real TeamGate; live game rig pending")
