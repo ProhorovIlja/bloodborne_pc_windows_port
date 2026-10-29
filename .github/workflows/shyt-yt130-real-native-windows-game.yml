@@ -194,6 +194,43 @@ jobs:
           test -s out/bb-gpu-capabilities.exe
           test -s out/bb-play.exe
           echo SHYT_YT130_REAL_NATIVE_PROTOCOL8_GAME_AND_RENDERER_EXES_BUILT
+      - name: Package actual original Protocol8 Windows BLauncher, DLLs and co-op code
+        if: success()
+        timeout-minutes: 30
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          export CC=clang CXX=clang++
+          export WINPYTHON="$(cygpath -u "$pythonLocation")/python.exe"
+          cd pinned-upstream/bbport
+          bash packaging/windows/package.sh
+          test -s dist/bbport-windows.zip
+          echo SHYT_YT130_REAL_NATIVE_BLAUNCHER_PORTABLE_ZIP_BUILT_INTERNAL_ONLY
+      - name: Smoke-test actual frozen Windows BLauncher and sanitized archive
+        if: success()
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = 'pinned-upstream/bbport/dist/bbport-windows.zip'
+          python kit-helpers/tools/poc/yharnam/package-v41/smoke_frozen_windows_launcher.py $archive --output pinned-upstream/bbport/dist/SHYT-YT130-BLAUNCHER-SMOKE.json
+          if ($LASTEXITCODE -ne 0) { throw 'Real Protocol8 frozen BLauncher executable or UTF-8 runtime rejected' }
+          python tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py --client-root pinned-upstream --server-root pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Protocol8 client/server contract drift after native game package' }
+          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("$archive.sha256", "$hash  bbport-windows.zip`n", [Text.Encoding]::ASCII)
+          Write-Host 'SHYT_YT130_ACTUAL_NATIVE_WINDOWS_LAUNCHER_SMOKE_PASS_NO_REAL_GAME_TEST'
+      - name: Preserve only INTERNAL native Protocol8 Windows launcher candidate
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-protocol8-windows-native-launcher-INTERNAL
+          path: |
+            pinned-upstream/bbport/dist/bbport-windows.zip
+            pinned-upstream/bbport/dist/bbport-windows.zip.sha256
+            pinned-upstream/bbport/dist/SHYT-YT130-BLAUNCHER-SMOKE.json
+          retention-days: 3
+          if-no-files-found: error
       - name: Preserve only bounded build evidence and Windows native compiler products
         if: always()
         uses: actions/upload-artifact@v4
