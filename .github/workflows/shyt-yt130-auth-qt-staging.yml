@@ -202,6 +202,16 @@ jobs:
           set -euo pipefail
           ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(accounts|server_link|admission|region|packet_routes|rpc_tunnel|bloodborne_world|team_lobby|invasions|bloodborne_duel|stream_extractor)$'
           echo SHYT_YT130_REAL_QT_NETWORK_WORLD_AND_ACCOUNT_MATRIX_PASS
+      - name: Extend ONLY disposable pinned bbload to truthful five-hunter generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'players a team (2-5)' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          echo FIVE_HUNTER_LOAD_GENERATOR_ISOLATED_NOT_GAME_SERVER_RELEASE
       - name: Compile ORIGINAL upstream synthetic player generator
         shell: bash
         run: |
@@ -301,6 +311,15 @@ jobs:
             --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
             --profile reduced --team-size 4 --peak 1024 --timeout 115 \
             --output yt130-scale-reduced-quartet-1024.jsonl
+          # Fifty to two hundred independent FIVE-person teams.
+          # Pinned upstream server may reject fifth seats: never claim
+          # release support on mere successful generator completion.
+          timeout 420s python tools/poc/yharnam/yt130-reference/run_scale_1000.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --profile reduced --team-size 5 --peak 1000 --timeout 115 \
+            --output yt130-scale-reduced-five-hunter-1000.jsonl
           echo "YT130_DIAGNOSTIC_1000_NOT_PASSED_UNLESS_METRICS_PROVE_HEALTH"
       - name: Extreme 2000/2048-player active & presence scaling ONLY by manual explicit opt-in
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.extreme_2000 == true }}

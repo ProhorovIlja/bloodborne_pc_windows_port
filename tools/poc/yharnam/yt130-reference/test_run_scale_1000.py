@@ -19,7 +19,11 @@ class Scale1000PlanTests(unittest.TestCase):
         self.assertEqual(m.stages(4, 1024), (256, 512, 1024))
         self.assertEqual(m.stages(2, 2000), (250, 500, 1000, 2000))
         self.assertEqual(m.stages(4, 2048), (256, 512, 1024, 2048))
-        for team, peak in ((2, 1024), (4, 1000), (4, 400), (2, 10000)):
+        self.assertEqual(m.stages(5, 1000), (250, 500, 1000))
+        self.assertEqual(m.stages(5, 2000), (250, 500, 1000, 2000))
+        self.assertEqual(m.stages(5, 250), (250,))
+        for team, peak in ((2, 1024), (4, 1000), (4, 400), (2, 10000),
+                           (5, 1024), (5, 2048), (1, 250)):
             with self.assertRaises(ValueError):
                 m.stages(team, peak)
 
@@ -37,12 +41,27 @@ class Scale1000PlanTests(unittest.TestCase):
         self.assertIn("--owner-fps 30 --follower-fps 8", command[-1])
         self.assertIn("CheckServerBuild=false", command)
         self.assertEqual(m.processes(2048), 21)
+        Args.team_size = 5
+        self.assertEqual(m.make_command(Args(), 1000, 2)[
+            m.make_command(Args(), 1000, 2).index("--team-size") + 1], "5")
         Args.profile = "reduced"
         self.assertIn("--owner-fps 10 --follower-fps 3",
                       m.make_command(Args(), 1000, 2)[-1])
         Args.profile = "presence"
         self.assertIn("--owner-fps 1 --follower-fps 1",
                       m.make_command(Args(), 1000, 2)[-1])
+
+    def test_five_hunter_generator_must_never_silently_clamp_to_four(self):
+        from subprocess import CompletedProcess
+        patched = CompletedProcess(args=["bbload", "--help"], returncode=0,
+                                   stdout="players a team (2-5)", stderr="")
+        original = CompletedProcess(args=["bbload", "--help"], returncode=0,
+                                    stdout="players a team (2-4)", stderr="")
+        with patch.object(m.subprocess, "run", return_value=patched):
+            m.verify_five_player_generator(Path("/tmp/bbload"))
+        with patch.object(m.subprocess, "run", return_value=original):
+            with self.assertRaisesRegex(ValueError, "silently clamps"):
+                m.verify_five_player_generator(Path("/tmp/bbload"))
 
     @staticmethod
     def playing(players=1000, p99=21.0, received=300000):

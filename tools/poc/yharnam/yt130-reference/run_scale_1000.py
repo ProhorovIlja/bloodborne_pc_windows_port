@@ -5,6 +5,10 @@ Run original source-pinned run_load.py and actual compiled shadnet/bbload.
 Profiles test 250/500/1000 (256/512/1024 for four-player teams),
 optionally 2000/2048. No external IP, credentials or production writes.
 The 30/8 fps default is original upstream bbload active-owner/follower rate.
+A five-hunter test uses a separately source-pinned modified bbload generator.
+The base YT 1.3 server may reject fifth players; report this as a failure,
+never as a five-player release claim. Partially filled MIXED groups are a
+separate missing runtime acceptance test.
 Results are diagnostic, not P2P or real two-PC gameplay evidence.
 """
 from __future__ import annotations
@@ -21,7 +25,8 @@ import time
 
 from run_capacity_curve import BUILD, quality
 
-MATRIX = {2: (250, 500, 1000, 2000), 4: (256, 512, 1024, 2048)}
+MATRIX = {2: (250, 500, 1000, 2000), 4: (256, 512, 1024, 2048),
+          5: (250, 500, 1000, 2000)}
 FPS = {"active": (30, 8), "reduced": (10, 3), "presence": (1, 1)}
 MAX_TIMEOUT = 160
 
@@ -31,6 +36,17 @@ def stages(team_size: int, peak: int) -> tuple[int, ...]:
     if peak not in allowed:
         raise ValueError("Unreviewed scale or wrong team-size")
     return allowed[:allowed.index(peak) + 1]
+
+
+def verify_five_player_generator(bbload: Path) -> None:
+    """Never silently measure four players when five were requested."""
+    try:
+        info = subprocess.run([str(bbload), "--help"], capture_output=True,
+                              text=True, timeout=10, check=False)
+    except (OSError, subprocess.TimeoutExpired) as ex:
+        raise ValueError("Five-hunter bbload support cannot be verified") from ex
+    if info.returncode != 0 or "players a team (2-5)" not in (info.stdout + info.stderr):
+        raise ValueError("Five-hunter bbload required; original upstream silently clamps to four")
 
 
 def processes(players: int) -> int:
@@ -112,6 +128,8 @@ def run(args) -> int:
         raise ValueError("Missing or linked original compiled server / generator")
     if args.load_script.name != "run_load.py":
         raise ValueError("Only original source-pinned upstream generator accepted")
+    if args.team_size == 5:
+        verify_five_player_generator(args.bbload)
     selected = stages(args.team_size, args.peak)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     all_green = True
@@ -154,7 +172,7 @@ if __name__ == "__main__":
     p.add_argument("--bbload", type=Path, required=True)
     p.add_argument("--load-script", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--team-size", type=int, choices=(2, 4), default=2)
+    p.add_argument("--team-size", type=int, choices=(2, 4, 5), default=2)
     p.add_argument("--profile", choices=tuple(FPS), default="active")
     p.add_argument("--peak", type=int,
                    choices=(250, 256, 500, 512, 1000, 1024, 2000, 2048), default=1000)
