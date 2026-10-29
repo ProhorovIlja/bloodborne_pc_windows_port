@@ -56,6 +56,14 @@ def processes(players: int) -> int:
     return min(24, max(2, math.ceil(players / 100)))
 
 
+def owners_per_team(args) -> int:
+    """A genuine 1..N native enemy-ownership worst-case test, not fake players."""
+    count = getattr(args, "owners", 1)
+    if type(count) is not int or count < 1 or count > args.team_size:
+        raise ValueError("enemy-owner count must be 1..team-size")
+    return count
+
+
 def make_command(args, players: int, index: int) -> list[str]:
     owner, follower = FPS[args.profile]
     return [
@@ -69,7 +77,7 @@ def make_command(args, players: int, index: int) -> list[str]:
         "--ramp-ms", "20",
         "--port", str(36314 + index * 10),
         "--cfg", "CheckServerBuild=false",
-        "--extra", f"--build '{BUILD}' --owner-fps {owner} --follower-fps {follower}",
+        "--extra", f"--build '{BUILD}' --owner-fps {owner} --follower-fps {follower} --owners {owners_per_team(args)}",
     ]
 
 
@@ -123,6 +131,7 @@ def inspect(stdout: str, rc: int, expected: int) -> dict:
 def run(args) -> int:
     if args.team_size not in MATRIX or args.profile not in FPS:
         raise ValueError("Unsupported team shape or FPS profile")
+    owners_per_team(args)
     if args.timeout < 20 or args.timeout > MAX_TIMEOUT:
         raise ValueError("Unsafe timeout")
     if any(not p.is_file() or p.is_symlink() for p in
@@ -147,6 +156,8 @@ def run(args) -> int:
                 "profile": args.profile,
                 "owner_fps": FPS[args.profile][0],
                 "follower_fps": FPS[args.profile][1],
+                "enemy_owners_per_team": owners_per_team(args),
+                "owner_model": "UPSTREAM_YT_PR444_PINNED_SOURCE",
                 "generator_processes": processes(players),
                 "elapsed_s": round(time.monotonic() - started, 2),
                 "scope": "ISOLATED_127.0.0.1_SYNTHETIC_YT130_ONLY",
@@ -175,6 +186,8 @@ if __name__ == "__main__":
     p.add_argument("--load-script", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--team-size", type=int, choices=(2, 4, 5), default=2)
+    p.add_argument("--owners", type=int, default=1,
+                   help="actual enemy owners per team, 1..team-size; source-pinned upstream YT PR444")
     p.add_argument("--profile", choices=tuple(FPS), default="active")
     p.add_argument("--peak", type=int,
                    choices=(250, 256, 500, 512, 1000, 1024, 2000, 2048), default=1000)
