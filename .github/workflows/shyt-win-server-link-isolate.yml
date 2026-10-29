@@ -29,6 +29,8 @@ jobs:
       - name: Compose exact current server link sources, no game build
         shell: pwsh
         run: |
+          python -m unittest discover -s tools/poc/yharnam/login-admission-v28 -p 'test_patch_login_admission.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'V28 stack allocation regression' }
           $out = Join-Path $env:RUNNER_TEMP 'shyt-server-link-diagnostic-composed'
           python tools/poc/yharnam/unified-v9/compose_sources.py --upstream pinned-upstream --repo . --out $out
           if ($LASTEXITCODE -ne 0) { throw 'Composition failed' }
