@@ -6,13 +6,14 @@ on:
     branches: [feature/shyt-hybrid-p2p-v52]
     paths:
       - .github/workflows/shyt-playtest-candidate.yml
-      - tools/poc/yharnam/unified-v9/compose_sources.py
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
   group: shyt-isolated-playtest-${{ github.ref }}
-  cancel-in-progress: true
+  # Preserve 60-120min native Windows compilation when source fixes land.
+  # A new deployment candidate can wait; NEVER cancel active expensive builds.
+  cancel-in-progress: false
 
 jobs:
   source-and-five-hunter-gate:
