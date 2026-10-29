@@ -28,8 +28,9 @@ jobs:
         run: |
           python tools/poc/yharnam/unified-v9/compose_sources.py --upstream pinned-upstream --repo . --out composed
           if ($LASTEXITCODE -ne 0) { throw 'Composition failed' }
-          Copy-Item composed/server/src/server_link.cpp pinned-upstream/server/src/server_link.cpp -Force
-          Copy-Item composed/server/src/server_link.h pinned-upstream/server/src/server_link.h -Force
+          git -C pinned-upstream submodule update --init --depth 1 -- server/externals/protobuf
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned protobuf checkout failed' }
+          Copy-Item composed/server/* pinned-upstream/server/ -Recurse -Force
           @'
           from pathlib import Path
           import re
@@ -41,9 +42,9 @@ jobs:
               # Replace literal AST source, not arbitrary static calls.
               source='int '+name+'() {'
               assert s.count(source)==1, 'missing '+name
-              s=s.replace(source,source+'\\n  std::cerr << "BEGIN '+name+'\\\\n" << std::flush;',1)
+              s=s.replace(source,source+'\n  std::cerr << "BEGIN '+name+'\\n" << std::flush;',1)
           assert s.count('int main() {')==1
-          s=s.replace('int main() {','int main() {\\n  std::cerr << "BEGIN main\\\\n" << std::flush;',1)
+          s=s.replace('int main() {','int main() {\n  std::cerr << "BEGIN main\\n" << std::flush;',1)
           p.write_text(s,encoding='utf-8')
           print('TEST_SERVER_LINK_TRACE_INSERTED')
           '@ | python -
