@@ -9,6 +9,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_team_grant_slots_v103.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_pair_list_v102.hpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
@@ -28,6 +29,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_team_grant_slots_v103.hpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_pair_list_v102.hpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
@@ -237,6 +239,8 @@ jobs:
           assert 'LinkServer::DiscoverLiveDirectPairs()' in link
           assert 'm_signedIn.contains(pair.first)' in link
           assert 'SHYT_P2P_TLS_LOCAL_TEST' in main
+          assert (root/'emulator/src/core/libraries/network/sh_native_team_grant_slots_v103.hpp').is_file()
+          assert 'NativeTeamGrantSlotsV103' in (root/'emulator/src/core/libraries/network/sh_native_team_grant_slots_v103.hpp').read_text()
           assert 'P2PTeamPairRegistryV102 team_registry_' in header
           assert 'V102 original Qt team 3+ peer P2P pair registry' in ' '.join(manifest['applied'])
           for name in ('server/src/main.cpp','server/src/sh_p2p_team_registry_v102.hpp'):
