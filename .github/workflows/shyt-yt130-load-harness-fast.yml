@@ -23,6 +23,9 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py
       - tools/poc/yharnam/yt130-reference/native/net_p2p_log_budget_v116.h
       - tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp
+      - tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py
+      - tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
+      - tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
       - .github/workflows/shyt-yt130-load-harness-fast.yml
   pull_request:
     branches: [master]
@@ -47,6 +50,9 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py
       - tools/poc/yharnam/yt130-reference/native/net_p2p_log_budget_v116.h
       - tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp
+      - tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py
+      - tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
+      - tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
       - .github/workflows/shyt-yt130-load-harness-fast.yml
   workflow_dispatch:
 permissions:
@@ -77,7 +83,10 @@ jobs:
             tools/poc/yharnam/yt130-reference/stage_native_rx_queue_v115.py \
             tools/poc/yharnam/yt130-reference/test_stage_native_rx_queue_v115.py \
             tools/poc/yharnam/yt130-reference/stage_native_p2p_log_v116.py \
-            tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py
+            tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py \
+            tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py \
+            tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py \
+            tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
             -p test_run_capacity_curve.py -v
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
@@ -104,6 +113,8 @@ jobs:
             tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp \
             -o "$RUNNER_TEMP/yt130-v116-native-log-budget"
           "$RUNNER_TEMP/yt130-v116-native-log-budget"
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_shard_five_v117.py -v
       - name: Do not confuse generator unit safety with native server capacity
         shell: bash
         run: |

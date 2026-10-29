@@ -100,7 +100,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             cmake ninja-build g++ pkg-config qt6-base-dev \
-            qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite ccache
+            qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite ccache \
+            redis-server python3-venv
       - name: Restore reusable Qt C++ object cache across staging runs
         uses: actions/cache@v4
         with:
@@ -288,6 +289,14 @@ jobs:
           python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
           grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' \
             "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
+          python tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py \
+            "$RUNNER_TEMP/yt-src"
+          grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq 'shlex.split(args.extra)' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          echo YT130_ORIGINAL_5_PLAYER_REDIS_SHARD_GENERATOR_RECEIVERS_STAGED
       - name: Diagnose real synthetic 4-peer sign-in before large load
         shell: bash
         run: |
@@ -415,6 +424,31 @@ jobs:
               --timeout 130 --continue-after-unhealthy \
               --output "yt130-scale-extreme-${mode}-${peak}.jsonl"
           done
+      - name: Compare REAL original 1 vs 3 Qt/Redis shards at 200 five-player hunters
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! test -x "$RUNNER_TEMP/yt-build/shadnet" || \
+             ! test -x "$RUNNER_TEMP/yt-build/bbload" || \
+             ! grep -Fq 'SHYT-V117-TRUE-FIVE-HUNTER-SHARD-GAME-RECEIVERS' \
+                "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"; then
+            echo YT130_V117_NO_REAL_BINARIES_OR_SOURCE_PIN_SKIP_NOT_A_PASS
+            exit 0
+          fi
+          python3 -m venv "$RUNNER_TEMP/yt117-dir-venv"
+          "$RUNNER_TEMP/yt117-dir-venv/bin/pip" install -q --disable-pip-version-check \
+            -r "$RUNNER_TEMP/yt-src/server/directory/requirements.txt"
+          timeout 320s "$RUNNER_TEMP/yt117-dir-venv/bin/python" \
+            tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --shard-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+            --timeout 120 --output yt130-v117-shards-five-200.jsonl
+          # Diagnostic only: strict quality appears in JSON; NEVER turn a
+          # failed 200-player QoS into a release green check.
+          grep -q '"team_size": 5' yt130-v117-shards-five-200.jsonl
+          echo YT130_V117_SHARDS_REAL_REDIS_1_VS_3_DIAGNOSTIC_NOT_PRODUCTION
       - name: Preserve synthetic 200-peer CPU and latency evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -424,6 +458,7 @@ jobs:
             yt130-scale-*.jsonl
             yt130-capacity-curve.jsonl
             yt130-reduced-rate.jsonl
+            yt130-v117-shards-five-200.jsonl
             yt130-wire-logs/
             yt130-smoke4.jsonl
             yt130-smoke4.stderr
