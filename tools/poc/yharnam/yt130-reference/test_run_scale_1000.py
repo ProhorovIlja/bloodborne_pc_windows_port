@@ -51,6 +51,32 @@ class Scale1000PlanTests(unittest.TestCase):
         self.assertIn("--owner-fps 1 --follower-fps 1",
                       m.make_command(Args(), 1000, 2)[-1])
 
+    def test_real_upstream_multi_owner_packets_are_bounded_and_marked(self):
+        class Args:
+            load_script = Path("/tmp/yt/run_load.py")
+            shadnet = Path("/tmp/yt/shadnet")
+            bbload = Path("/tmp/yt/bbload")
+            team_size = 5
+            profile = "active"
+            owners = 4
+        opts = Args()
+        cmd = m.make_command(opts, 1000, 0)
+        self.assertIn("--owners 4", cmd[-1])
+        self.assertEqual(m.owners_per_team(opts), 4)
+        opts.owners = 5
+        self.assertIn("--owners 5", m.make_command(opts, 1000, 0)[-1])
+        for invalid in (0, -1, 6, 1.5, "5", None):
+            opts.owners = invalid
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    m.owners_per_team(opts)
+        opts.owners = 4
+        opts.team_size = 2
+        with self.assertRaises(ValueError):
+            m.owners_per_team(opts)
+        opts.owners = 1
+        self.assertIn("--owners 1", m.make_command(opts, 250, 0)[-1])
+
     def test_five_hunter_generator_must_never_silently_clamp_to_four(self):
         from subprocess import CompletedProcess
         patched = CompletedProcess(args=["bbload", "--help"], returncode=0,
