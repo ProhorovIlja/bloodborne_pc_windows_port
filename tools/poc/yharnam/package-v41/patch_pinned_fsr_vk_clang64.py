@@ -16,7 +16,7 @@ RELATIVE = ("bbport/gpu/third_party/fsr-vulkan/"
             "upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp")
 SUBMODULE_COMMIT = "c64f093404125e960813f95f1996c14780f0dd69"
 ORIGINAL_BLOB = "b2439b6bb8c32196c4ba88c0aa61fd4d8333c200"
-HEADER = "#include <FidelityFX/host/ffx_interface.h>\n"
+HEADER = "#include <ffx_breadcrumbs_list.h>\n"
 LOG2 = "floor(log2(FFX_MAXIMUM("
 FIXED_LOG2 = "std::floor(std::log2(FFX_MAXIMUM("
 INCLUDES = "#include <cmath>\n#include <new>\n"
