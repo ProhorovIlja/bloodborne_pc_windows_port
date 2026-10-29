@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -59,6 +61,32 @@ def quality(m: dict, players: int) -> str:
         return "MAIN_THREAD_SATURATED"
     return "FULL_GAMEPLAY"
 
+def isolated_load(cmd: list[str], timeout: int = 95) -> subprocess.CompletedProcess | None:
+    """Terminate all spawned synthetic peers and server on timeout/interrupt.
+
+    Upstream run_load.py starts shadnet + several bbload descendants.
+    subprocess.run(timeout=...) kills only its immediate Python child, which
+    can leave old servers listening on localhost and corrupt later measurements.
+    This test executes on the isolated Ubuntu GitHub runner, not Windows/Fornex.
+    """
+    if not 20 <= timeout <= 120:
+        raise ValueError("Invalid bounded load stage timeout")
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, start_new_session=True)
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as ex:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # child group already exited
+        proc.communicate()
+        if isinstance(ex, KeyboardInterrupt):
+            raise
+        return None
+
+
 def run(args) -> int:
     for path in (args.shadnet,args.bbload,args.load_script):
         if not path.is_file():
@@ -75,12 +103,15 @@ def run(args) -> int:
                  "--cfg","CheckServerBuild=false",
                  "--extra","--build '"+BUILD+"'" +
                  (" --owner-fps 10 --follower-fps 3" if args.profile == "reduced" else "")]
-            try:
-                result=subprocess.run(cmd,capture_output=True,text=True,timeout=95)
-            except subprocess.TimeoutExpired:
-                sample={"stage_players":players,"quality":"TIMEOUT"}
-                sink.write(json.dumps(sample)+"\n")
+            result=isolated_load(cmd, timeout=95)
+            if result is None:
+                sample={"stage_players":players,"quality":"TIMEOUT",
+                        "cleanup":"LOCAL_PROCESS_GROUP_KILLED",
+                        "no_gameplay_claim":True}
+                sink.write(json.dumps(sample,sort_keys=True)+"\n")
                 sink.flush()
+                print("SHYT_YT130_LOAD_TIMEOUT_CLEANED_WHOLE_PROCESS_GROUP",
+                      "players="+str(players),flush=True)
                 return 1
             summaries=[]
             for line in result.stdout.splitlines():
