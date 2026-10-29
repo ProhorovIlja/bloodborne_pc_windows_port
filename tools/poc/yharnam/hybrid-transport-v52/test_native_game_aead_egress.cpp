@@ -108,8 +108,11 @@ int main() {
         assert(tx.Seal(ip,Game('B'),111,wire));
         assert(rx.Receive(ip,wire,111).status==NativeRxStatus::Game);
     }
+    // Preserve the last real SHY2 ciphertext: a failed Seal clears its
+    // output buffer, and an empty vector is NOT a SHY2 datagram.
+    const auto last_ciphertext=wire;
     tx.RevokeAll();rx.RevokeAll();
-    assert(!tx.Seal(addr,game,112,wire));
-    assert(rx.Receive(addr,wire,112).status==NativeRxStatus::Dropped);
+    assert(!tx.Seal(addr,game,112,wire) && wire.empty());
+    assert(rx.Receive(addr,last_ciphertext,112).status==NativeRxStatus::Dropped);
     return 0;
 }
