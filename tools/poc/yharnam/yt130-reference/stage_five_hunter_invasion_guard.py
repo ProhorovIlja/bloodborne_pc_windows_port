@@ -38,10 +38,6 @@ def patch(raw: dict[str, str]) -> dict[str, str]:
     h,world,test=(raw[p] for p in FILES)
     if TAG in h or TAG in world or TAG in test:
         raise ValueError("five-hunter invasion patch applied twice")
-    if "constexpr size_t TeamSize = 5" not in raw.get(
-        "server/coop/team_lobby.h", "constexpr size_t TeamSize = 5"
-    ):
-        raise ValueError("five hunter TeamLobby not present")
     if "NonHostedTeamEditsAreCoalescedAndStartStillWorks" not in test:
         raise ValueError("Expected preceding source-pinned original C++ test staging")
     h=exactly(h,
