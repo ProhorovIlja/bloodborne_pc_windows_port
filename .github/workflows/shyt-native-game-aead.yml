@@ -6,10 +6,59 @@ on:
       - .github/workflows/shyt-native-game-aead.yml
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_aead.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_game_aead_drop_guard.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_game_aead_drop_guard.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  native-game-recvfrom:
+    name: Original Bloodborne native recvfrom SHY2 fail-closed integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Verify exact SHY2 drop patch unit regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p test_patch_native_game_aead_drop_guard.py -v
+      - name: Assemble exact original game and verify encrypted packet isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-shy2-composed
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('/tmp/shyt-shy2-composed')
+          m=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          game='emulator/src/core/libraries/network/p2p_sockets.cpp'
+          codec='emulator/src/core/libraries/network/sh_native_game_aead.hpp'
+          code=(root/game).read_text()
+          assert code.count('SHYT-SHY2-UNARMED-DROP')==1
+          assert code.index('SHYT-SHY2-UNARMED-DROP')<code.index('IsSHP1(datagram)')
+          assert code.index('IsSHP1(datagram)')<code.index('Link::TakesDatagramFrom(')
+          assert 'direct_ingress.Arm(' not in code
+          assert 'direct_egress.Arm(' not in code
+          assert (root/codec).is_file()
+          assert 'EVP_aes_256_gcm()' in (root/codec).read_text()
+          for name in (game,codec):
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest()==m['sha256'][name]
+          assert any('Native SHY2 AES-256-GCM direct UDP codec staged' in x for x in m['applied'])
+          print('SHYT_REAL_ORIGINAL_GAME_SHY2_DROPS_UNARMED_P2P_RELAY_UNCHANGED')
+          PY
   aes256gcm-linux:
     name: Native Linux AES-256-GCM Direct game candidate
     runs-on: ubuntu-24.04
