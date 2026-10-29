@@ -6,6 +6,8 @@ on:
     branches: [feature/shyt-hybrid-p2p-v52]
     paths:
       - .github/workflows/shyt-playtest-candidate.yml
+      - .github/workflows/shyt-v36-composed-windows-client.yml
+      - .github/workflows/shyt-v41-win-qt683-server.yml
   workflow_dispatch:
 permissions:
   contents: read
