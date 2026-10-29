@@ -30,7 +30,8 @@ def patch_game(src):
         '#include "core/libraries/network/sh_native_game_identity_v87.hpp" // SHYT-V87-TRUSTED-SERVER-LINK\n',
         '#include "core/libraries/network/sh_native_game_identity_v87.hpp" // SHYT-V87-TRUSTED-SERVER-LINK\n'
         '#include "core/libraries/network/sh_nat_probe_v91.hpp" // '+TAG+'\n'
-        '#include "core/libraries/network/sh_native_tls_local_client_v91.hpp" // V92 paired TLS-only admission\n',
+        '#include "core/libraries/network/sh_native_tls_local_client_v91.hpp" // V92 paired TLS-only admission\n'
+        '#include "core/libraries/network/sh_native_tls_pair_list_v102.hpp" // native five-hunter selector discovery\n',
         "dev-only native probe header")
     src=one(src,
         '    SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 native_grant_inbox_v84{};\n',
@@ -51,7 +52,63 @@ def patch_game(src):
             '            nat_paired_tls_generation_v92=0;\n'
             '            nat_paired_tls_binding_v92=0;\n',
             remark+" revocation")
-    method='''    // V92: ONLY a full SHG2 *coordinated* V90 pair can probe. The
+    method='''    // Native game worker can discover up to 16 server-issued selectors
+    // for its own mTLS identity. This performs no gameplay Direct Arm,
+    // caches no peer IPs and uses no second UDP socket. Every selector
+    // must still pass a separate certificate-bound OFFER/READY and SHG2.
+    bool TryListLocalTeamPairsForTest(
+        const SeamlessHunt::Hybrid::NativeTlsLocalConfig& cfg,
+        const SeamlessHunt::Hybrid::NativeOfferIdentityV84& expected,
+        SeamlessHunt::Hybrid::RefreshNativeOfferIdentityV84 refresh,
+        void* trusted_game_state,
+        SeamlessHunt::Hybrid::NativeTlsPairListV102::PairSelectors& ids,
+        std::size_t& count) {
+        ids.fill(0);count=0;
+        if(!running.load(std::memory_order_acquire) || LinkCut() ||
+           !refresh || !trusted_game_state)return false;
+        std::uint64_t generation=0;
+        std::string current_id;
+        bool welcomed=false,configured=false;
+        {
+            std::lock_guard lock(link_mutex);
+            generation=shyt_link_generation_v87;
+            current_id=link_online_id;
+            welcomed=link_welcomed;
+            configured=link_server.addr_nbo && link_server.port_nbo;
+        }
+        const bool accepted=generation &&
+            SeamlessHunt::Hybrid::NativeGameSelfIdentityV87::MatchesAcceptedLink(
+                current_id,welcomed,configured,expected);
+        std::fill(current_id.begin(),current_id.end(),char(0));
+        if(!accepted)return false;
+        const auto unchanged=[&]() {
+            SeamlessHunt::Hybrid::NativeOfferIdentityV84 actual{};
+            return refresh(actual,trusted_game_state) &&
+                actual.self_account==expected.self_account &&
+                actual.peer_account==expected.peer_account &&
+                actual.session_epoch==expected.session_epoch &&
+                actual.world_revision==expected.world_revision &&
+                actual.locally_opted_in && expected.locally_opted_in;
+        };
+        if(!unchanged())return false;
+        // No native_grant_mutex or link_mutex held during blocking TLS.
+        if(!SeamlessHunt::Hybrid::NativeTlsPairListV102::List(cfg,ids,count))
+            return false;
+        bool linked=false;
+        {
+            std::lock_guard lock(link_mutex);
+            linked=running.load(std::memory_order_acquire) &&
+                shyt_link_generation_v87==generation &&
+                link_welcomed && link_server.addr_nbo &&
+                link_server.port_nbo;
+        }
+        if(!linked || !unchanged()) {
+            ids.fill(0);count=0;return false;
+        }
+        return true;
+    }
+
+    // V92: ONLY a full SHG2 *coordinated* V90 pair can probe. The
     // original game's authenticated online ID must agree with the
     // certificate identity and must survive the entire blocking mTLS
     // handshake. V85 standalone SHG2 is explicitly NOT sufficient.
@@ -60,7 +117,8 @@ def patch_game(src):
         const SeamlessHunt::Hybrid::NativeOfferIdentityV84& expected,
         std::uint64_t serial,
         SeamlessHunt::Hybrid::RefreshNativeOfferIdentityV84 current,
-        void* verified_game_state,std::uint64_t now_ms,bool& both_ready) {
+        void* verified_game_state,std::uint64_t now_ms,bool& both_ready,
+        std::uint64_t v102_pair_id=0) {
         both_ready=false;
         if(nat_tls_request_active_v93.test_and_set(
               std::memory_order_acquire))return false;
@@ -98,7 +156,8 @@ def patch_game(src):
         bool receipt=false;
         if(!SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV91::Request(
               cfg,temporary_inbox,expected,serial,current,
-              verified_game_state,now_ms,receipt))return false;
+              verified_game_state,now_ms,receipt,nullptr,v102_pair_id))
+            return false;
         const auto received_ms=static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
@@ -119,6 +178,10 @@ def patch_game(src):
                     link_server.addr_nbo && link_server.port_nbo;
             }
             if(!original_session_stable)return false;
+            // The TLS server binds OFFER and READY to this same opaque
+            // selector. A mismatched receipt must never reach the game.
+            if(v102_pair_id && grant->pair_binding!=v102_pair_id)
+                return false;
             const auto binding=grant->pair_binding;
             if(!temporary_inbox.TransferVerifiedTo(
                   native_grant_inbox_v84,received_ms))return false;
