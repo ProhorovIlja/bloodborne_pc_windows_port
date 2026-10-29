@@ -158,17 +158,23 @@ jobs:
           echo SHYT_REAL_FSR3_VULKAN_CLANG64_COMPILER_PREFLIGHT_PASS
           echo SHYT_PINNED_FSR_WINDOWS_COMPILER_PREFLIGHT_PASS
           cd pinned-upstream/bbport
-          # The original upstream build redirects all Ninja output to a log.
-          # A separate *watcher* emits heartbeats. The REAL build runs in
-          # foreground, so a non-zero exit propagates IMMEDIATELY. Previously
-          # kill -0 on a completed-but-unreaped MSYS child remained true,
-          # looping for 165 minutes after a fatal FSR compile error.
+          # The pinned build.sh captures Ninja's output. The old run kept
+          # other compiler children alive for >50 minutes after FSR first
+          # logged FAILED. A log watcher now aborts the REAL build through
+          # GNU timeout (which forwards TERM to its child process group).
+          # No tests/binaries are faked and no compiler failure is ignored.
+          command -v timeout >/dev/null
           (
             while true; do
-              sleep 60
+              sleep 15
               echo "SHYT_NATIVE_BUILD_HEARTBEAT $(date -u +%Y-%m-%dT%H:%M:%SZ)"
               if [[ -f out/gpu-build.log ]]; then
-                tail -n 10 out/gpu-build.log || true
+                tail -n 6 out/gpu-build.log || true
+                if grep -q '^FAILED:' out/gpu-build.log; then
+                  echo SHYT_NATIVE_NINJA_FATAL_DETECTED_ABORT_COMPILER_GROUP
+                  kill -TERM "$build_pid" 2>/dev/null || true
+                  exit 0
+                fi
               else
                 echo "GPU Ninja log not created yet; configuring dependencies"
               fi
@@ -176,7 +182,9 @@ jobs:
           ) &
           heartbeat_pid=$!
           trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
-          if ! bash build.sh; then
+          timeout --signal=TERM --kill-after=10s 130m bash build.sh &
+          build_pid=$!
+          if ! wait "$build_pid"; then
             echo SHYT_NATIVE_WINDOWS_BUILD_FAILED_FAST
             if [[ -f out/gpu-build.log ]]; then
               tail -n 70 out/gpu-build.log || true
