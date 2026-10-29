@@ -187,6 +187,16 @@ jobs:
           python tools/diagnostics/check_windows_candidate.py $zip --sha256 (Join-Path $root "$name.sha256")
           if ($LASTEXITCODE -ne 0) { throw 'Windows artifact checksum and safety gate rejected' }
           Write-Host 'SIGNED_MANIFEST_NOT_YET_AVAILABLE_RELEASE_BLOCKED'
+      - name: Smoke-test packaged frozen BLauncher.exe with Cyrillic script path
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/package-v41/smoke_frozen_windows_launcher.py `
+            pinned-upstream/bbport/dist/bbport-windows.zip `
+            --output pinned-upstream/bbport/dist/SHYT-FROZEN-LAUNCHER-SMOKE.json
+          if ($LASTEXITCODE -ne 0) { throw 'Native frozen launcher runtime or UTF-8 failure' }
+          Write-Host 'REAL_FROZEN_LAUNCHER_SCRIPT_ROLE_PASS_NO_GAMEPLAY_CLAIM'
       - name: Preserve only INTERNAL Windows development candidate
         uses: actions/upload-artifact@v4
         with:
@@ -194,6 +204,7 @@ jobs:
           path: |
             pinned-upstream/bbport/dist/bbport-windows.zip
             pinned-upstream/bbport/dist/bbport-windows.zip.sha256
+            pinned-upstream/bbport/dist/SHYT-FROZEN-LAUNCHER-SMOKE.json
           if-no-files-found: error
           retention-days: 7
       - name: Preserve build failure evidence without publishing a client
