@@ -31,7 +31,10 @@ static std::vector<std::uint8_t> Game() {
             'H','u','n','t','e','r','s',' ','t','o','g','e','t','h','e','r'};
 }
 int main(){
-    const auto key=Key(10),salt=Salt(40),game=Game(),ticket=Ticket();
+    const auto key=Key(10);
+    const auto salt=Salt(40);
+    const auto game=Game();
+    const auto ticket=Ticket();
     NativeGameAeadSealer tx;
     NativeGameAeadOpener rx;
     std::vector<std::uint8_t> out,original,plain;
