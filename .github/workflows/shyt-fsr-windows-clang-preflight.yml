@@ -7,6 +7,8 @@ on:
       - tools/poc/yharnam/package-v41/test_patch_pinned_fsr_windows_wprintf.py
       - tools/poc/yharnam/package-v41/patch_pinned_fsr_vk_clang64.py
       - tools/poc/yharnam/package-v41/test_patch_pinned_fsr_vk_clang64.py
+      - tools/poc/yharnam/package-v41/patch_pinned_fsr_countof_clang64.py
+      - tools/poc/yharnam/package-v41/test_patch_pinned_fsr_countof_clang64.py
       - .github/workflows/shyt-fsr-windows-clang-preflight.yml
   workflow_dispatch:
 permissions:
@@ -36,6 +38,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'FSR source-gate tests failed' }
           python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_fsr_vk_clang64.py -v
           if ($LASTEXITCODE -ne 0) { throw 'FSR Vulkan source-gate tests failed' }
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_fsr_countof_clang64.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'FSR host _countof source-gate tests failed' }
           git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party/fsr-vulkan
           if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR submodule checkout failed' }
           $expected='c64f093404125e960813f95f1996c14780f0dd69'
@@ -54,6 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           win_python="$(cygpath -u "$pythonLocation")/python.exe"
+          "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_countof_clang64.py --upstream pinned-upstream
           "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_windows_wprintf.py --upstream pinned-upstream
           root=pinned-upstream/bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk
           clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
@@ -78,3 +83,10 @@ jobs:
             -fsyntax-only "$root/src/backends/vk/ffx_vk.cpp"
           echo SHYT_REAL_PINNED_FSR_WINDOWS_CLANG_WPRINTF_COMPILES
           echo SHYT_REAL_PINNED_FSR3_VULKAN_BACKEND_HEADERS_AND_STD_MATH_COMPILES
+          for source in "$root/src/components/opticalflow/ffx_opticalflow.cpp" \
+                        "$root/src/components/frameinterpolation/ffx_frameinterpolation.cpp"; do
+            clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
+              -I "$root/include" -I "$root/src/shared" -I "$root/src/components" \
+              -fsyntax-only "$source"
+          done
+          echo SHYT_PINNED_AMD_FSR_HOST_ALL_23_MSVC_COUNT_OF_CALLS_CPP_COMPILE_PASS
