@@ -207,6 +207,7 @@ jobs:
           team=(root/'server/coop/team_lobby.h').read_text()
           signs=(root/'server/coop/team_lobby.cpp').read_text()
           tests=(root/'server/tests/test_team_lobby.cpp').read_text()
+          world_test=(root/'server/tests/test_bloodborne_world.cpp').read_text()
           assert 'constexpr size_t TeamSize = 5;' in team
           assert 'GuestSigns{7, 6, 5, 4}' in signs
           assert 'TeamHoldsFive()' in tests
@@ -220,8 +221,8 @@ jobs:
           assert 'RoomForMore(true, 4, 5)' in room_test
           assert 'RoomForMore(true, 5, 6)' in room_test
           assert 'TeamGuestSign(lobby, "e"), 4u' in sign_test
-          assert 'CHECK(valid.size()==10)' in tests
-          assert 'CHECK(service.DiscoverLiveDirectPairs().size()==6)' in tests
+          assert 'CHECK(valid.size()==10)' in world_test
+          assert 'CHECK(service.DiscoverLiveDirectPairs().size()==6)' in world_test
           world=(root/'server/src/bloodborne_world.cpp').read_text()
           link=(root/'server/src/link_server.cpp').read_text()
           assert 'Service::DiscoverLiveDirectPairs()' in world
@@ -229,8 +230,8 @@ jobs:
           assert 'require_authenticated_identity' in world
           assert 'not in the team that plays this world' in world
           assert 'RequireAuthenticatedIdentity();' in link
-          assert 'service.RequireAuthenticatedIdentity();' in tests
-          assert 'forged.mutable_lobby_hello()->set_member(identity(a));' in tests
+          assert 'service.RequireAuthenticatedIdentity();' in world_test
+          assert 'forged.mutable_lobby_hello()->set_member(identity(a));' in world_test
           assert 'LinkServer::DiscoverLiveDirectPairs()' in link
           assert 'm_signedIn.contains(pair.first)' in link
           assert 'SHYT_P2P_TLS_LOCAL_TEST' in main
