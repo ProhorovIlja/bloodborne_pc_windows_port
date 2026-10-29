@@ -61,9 +61,11 @@ jobs:
           done
           python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py \
             "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          # Three additional original files: team lobby header, implementation and C++ tests.
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 11
+          # Four additional original files: three team-lobby files plus invasion policy header.
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 12
           grep -q 'YT130_EVENTLOOP read_batches=' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'RecordWire(raw, true)' \
@@ -182,13 +184,19 @@ jobs:
           set -euo pipefail
           python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py \
             "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 11
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 12
           grep -Fq 'constexpr size_t TeamSize = 5' \
             "$RUNNER_TEMP/yt-src/server/coop/team_lobby.h"
           grep -Fq 'GuestSigns{7, 6, 5, 4}' \
             "$RUNNER_TEMP/yt-src/server/coop/team_lobby.cpp"
-          echo SHYT_QT_FIVE_HUNTER_CPP_REGRESSION_STAGE_PASS
+          grep -Fq 'constexpr size_t InvasionMaxPlayers = 5;' \
+            "$RUNNER_TEMP/yt-src/server/coop/invasions.h"
+          grep -Fq 'AJoinedFiveHunterTeamRejectsAnAlreadyNotifiedInvader' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          echo SHYT_QT_FIVE_HUNTER_CPP_AND_INVASION_RECHECK_STAGE_PASS
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
