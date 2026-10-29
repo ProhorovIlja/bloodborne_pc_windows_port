@@ -7,6 +7,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <string>
 #include <vector>
 using namespace SeamlessHunt::Hybrid;
 
@@ -127,7 +128,11 @@ int main() {
     grant.peer_consent=false;
     assert(!tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
     grant=Granted();
-    assert(tx.Arm(0,t,grant,dest,phys,"A",Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
+    // Keep the server-verified identity even when the TLS owner reuses
+    // its source buffer. A borrowed view must not change packet policy.
+    std::string ephemeral_verified_sender="A";
+    assert(tx.Arm(0,t,grant,dest,phys,ephemeral_verified_sender,Refresh,&world,SendAuthenticated,&wire,ReverseReady,&reverse,100));
+    ephemeral_verified_sender[0]='Z';
     assert(tx.TrySend(dest,frame,101)==NativeTxStatus::RelayRequired);
     assert(tx.TrySend({dest.addr_nbo,54321},frame,105)==NativeTxStatus::RelayRequired);
     std::vector<std::uint8_t> probe_wire;
