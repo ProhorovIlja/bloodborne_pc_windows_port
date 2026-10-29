@@ -4,6 +4,7 @@
 #include "sh_p2p_tls_listener.hpp"
 #include "sh_native_tls_local_client_v91.hpp"
 #include "sh_native_tls_pair_list_v102.hpp"
+#include "sh_native_team_grant_slots_v103.hpp"
 #include "sh_pair_key_schedule_v89.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -57,11 +58,18 @@ static bool RealEdge(const NativeTlsLocalConfig& x,
                      const NativeTlsLocalConfig& y,
                      const QByteArray& name_x,const QByteArray& name_y,
                      quint64 epoch_x,quint64 epoch_y,
-                     std::uint64_t selector) {
+                     std::uint64_t selector,
+                     NativeTeamGrantSlotsV103* persistent_owner=nullptr,
+                     GameState* persistent_self=nullptr) {
     const auto ax=P2PFullIdentityIssuerV84::AccountDigest(name_x);
     const auto by=P2PFullIdentityIssuerV84::AccountDigest(name_y);
     if(!ax || !by || !selector)return false;
-    GameState first{{*ax,*by,epoch_x,303,true}};
+    GameState temporary_self{{*ax,*by,epoch_x,303,true}};
+    GameState& first=persistent_self?*persistent_self:temporary_self;
+    if(persistent_self) {
+        first.current={*ax,*by,epoch_x,303,true};
+        first.live.store(true);
+    }
     GameState second{{*by,*ax,epoch_y,303,true}};
     NativeSealedGrantInboxV84 inbox_x,inbox_y;
     bool ready_x=false,ready_y=false;
@@ -94,6 +102,13 @@ static bool RealEdge(const NativeTlsLocalConfig& x,
            PairKeyScheduleV89::Derive(
                grant_x,true,PairKeyPurposeV89::GameData,Now(),x_game) &&
            x_send==y_receive && x_send!=x_game;
+    }
+    if(ok && persistent_owner) {
+        // The actual native mTLS client issued and verified this V102
+        // grant. Its private game-state callback must outlive this call.
+        // Four independent peer grants are stored under one game owner.
+        ok=persistent_self &&
+           persistent_owner->InstallVerified(inbox_x,selector,77,Now());
     }
     CryptoDetail::Erase(x_send);
     CryptoDetail::Erase(y_receive);
@@ -210,6 +225,8 @@ int main(int argc,char** argv) {
                          good?"PASS":"FAIL");
             // Five independent certificate identities, ten different
             // pair grants, one SHG2 master per edge, mutual dual READY.
+            NativeTeamGrantSlotsV103 original_game_owner;
+            std::array<GameState,4> persistent_game_accounts{};
             for(int i=0;i<5 && good;++i)
                 for(int j=i+1;j<5 && good;++j)
                     good=RealEdge(
@@ -219,7 +236,31 @@ int main(int argc,char** argv) {
                         hunter[static_cast<size_t>(j)],
                         epochs[static_cast<size_t>(i)],
                         epochs[static_cast<size_t>(j)],
-                        grant[i][j]);
+                        grant[i][j],
+                        i==0?&original_game_owner:nullptr,
+                        i==0?&persistent_game_accounts[
+                            static_cast<size_t>(j-1)]:nullptr);
+            if(good) {
+                good=original_game_owner.Count()==4;
+                for(int j=1;j<5 && good;++j)
+                    good=original_game_owner.PendingForNat(
+                        grant[0][j],77,Now())!=nullptr;
+                // A live opt-out must revoke only that player's edge,
+                // without destroying the other three authenticated keys.
+                if(good) {
+                    persistent_game_accounts[0].live.store(false);
+                    good=!original_game_owner.PendingForNat(
+                        grant[0][1],77,Now()) &&
+                        original_game_owner.Count()==3 &&
+                        original_game_owner.PendingForNat(
+                            grant[0][2],77,Now())!=nullptr;
+                }
+                original_game_owner.RevokeAll();
+                good=good && original_game_owner.Count()==0;
+                std::fprintf(stderr,
+                    "V103 five-hunter original native owner four independent mTLS grants: %s\n",
+                    good?"PASS":"FAIL");
+            }
             exit_code.store(good?0:1);
             QMetaObject::invokeMethod(&app,[&] {app.quit();},
                                       Qt::QueuedConnection);
