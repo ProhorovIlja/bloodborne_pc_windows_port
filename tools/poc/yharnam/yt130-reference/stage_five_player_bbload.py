@@ -23,29 +23,21 @@ NEW_CLAMP = 'std::clamp(parser.value("team-size").toInt(), 2, 5)'
 # separated four-/five-hunter group may have several actual enemy owners.
 # This affects load evidence ONLY, never game or server routing.
 OWNER_EDITS = (
-    ('  int follower_fps = 8; // a follower\\'s\\n',
-     '  int follower_fps = 8; // a follower\\'s\\n'
-     '  int owners = 1; // up to team_size seats own enemies; upstream #444\\n'),
-    ('  bool Leader() const { return seat == 0; }\\n',
-     '  bool Leader() const { return seat == 0; }\\n'
-     '  bool Owner() const;\\n'),
-    ('bool Game::Elsewhere() const {',
-     'bool Game::Owner() const { return seat < load.settings.owners; }\\n\\n'
-     'bool Game::Elsewhere() const {'),
-    ('Leader() ? load.settings.owner_fps : load.settings.follower_fps',
-     'Owner() ? load.settings.owner_fps : load.settings.follower_fps'),
-    ('    if (Leader()) {\\n'
-     '      // The enemy owner (rig 2026-10-15):',
-     '    if (Owner()) {\\n'
-     '      // The enemy owner (rig 2026-10-15):'),
-    ('      {"follower-fps", "a follower\\'s frames a second per teammate", "n", "8"},',
-     '      {"follower-fps", "a follower\\'s frames a second per teammate", "n", "8"},\\n'
-     '      {"owners", "enemy-owner seats per team (1-team size)", "n", "1"},'),
-    ('  settings.follower_fps = std::max(1, parser.value("follower-fps").toInt());',
-     '  settings.follower_fps = std::max(1, parser.value("follower-fps").toInt());\\n'
-     '  settings.owners = std::clamp(parser.value("owners").toInt(), 1, settings.team_size);'),
+    ("  int follower_fps = 8; // a follower's\n",
+     "  int follower_fps = 8; // a follower's\n  int owners = 1; // enemy owners in each team (upstream PR444)\n"),
+    ("  bool Leader() const { return seat == 0; }\n",
+     "  bool Leader() const { return seat == 0; }\n  bool Owner() const;\n"),
+    ("bool Game::Elsewhere() const {",
+     "bool Game::Owner() const { return seat < load.settings.owners; }\n\nbool Game::Elsewhere() const {"),
+    ("Leader() ? load.settings.owner_fps : load.settings.follower_fps",
+     "Owner() ? load.settings.owner_fps : load.settings.follower_fps"),
+    ("    if (Leader()) {\n      // The enemy owner (rig 2026-10-15):",
+     "    if (Owner()) {\n      // The enemy owner (rig 2026-10-15):"),
+    ("      {\"follower-fps\", \"a follower's frames a second per teammate\", \"n\", \"8\"},",
+     "      {\"follower-fps\", \"a follower's frames a second per teammate\", \"n\", \"8\"},\n      {\"owners\", \"enemy-owner seats per team (1-team size)\", \"n\", \"1\"},"),
+    ("  settings.follower_fps = std::max(1, parser.value(\"follower-fps\").toInt());",
+     "  settings.follower_fps = std::max(1, parser.value(\"follower-fps\").toInt());\n  settings.owners = std::clamp(parser.value(\"owners\").toInt(), 1, settings.team_size);"),
 )
-
 
 def blob_sha(raw: bytes) -> str:
     return hashlib.sha1(
