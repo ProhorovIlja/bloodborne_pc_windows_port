@@ -60,7 +60,6 @@ jobs:
             -I "${root}/include" -I "${root}/src/shared" \
             -I "${root}/src/components" -fsyntax-only \
             "${root}/src/shared/ffx_message.cpp"
-          "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_vk_clang64.py --upstream pinned-upstream
           # Match pinned build.sh's vendor patch application before -fsyntax-only;
           # 0002 adds the required <mutex> for std::lock_guard on CLANG64.
           fsr=pinned-upstream/bbport/gpu/third_party/fsr-vulkan
@@ -69,6 +68,7 @@ jobs:
               git -C "$fsr" apply "$PWD/$vendor_patch"
             fi
           done
+          "$win_python" tools/poc/yharnam/package-v41/patch_pinned_fsr_vk_clang64.py --upstream pinned-upstream
           clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
             -DFFX_FI=1 -DFFX_FSR3UPSCALER=1 -DFFX_OF=1 \
             -I "$root/include" -I "$root/src/shared" -I "$root/src/components" \
