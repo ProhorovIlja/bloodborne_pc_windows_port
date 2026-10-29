@@ -749,6 +749,10 @@ def run(checkout:Path, repo:Path, out:Path):
     files["emulator/src/core/libraries/network/sh_pair_ready_v91.hpp"]=ready_header
     files["emulator/src/core/libraries/network/sh_native_tls_local_client_v91.hpp"]=(
         metrics_dir/"sh_native_tls_local_client_v91.hpp").read_bytes()
+    # Native V102 real certificate-bound selector discovery is needed by
+    # the V92 game-owned same-socket pair admission. Still test-only.
+    files["emulator/src/core/libraries/network/sh_native_tls_pair_list_v102.hpp"]=(
+        metrics_dir/"sh_native_tls_pair_list_v102.hpp").read_bytes()
     # Stage the revised KDF on BOTH platforms; both need ReadyProof=3.
     kdf_header=(metrics_dir/"sh_pair_key_schedule_v89.hpp").read_bytes()
     files["server/src/sh_pair_key_schedule_v89.hpp"]=kdf_header
