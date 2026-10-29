@@ -4,7 +4,9 @@ name: SHYT isolated five-hunter playtest candidate
 on:
   push:
     branches: [feature/shyt-hybrid-p2p-v52]
-    paths: [.github/workflows/shyt-playtest-candidate.yml]
+    paths:
+      - .github/workflows/shyt-playtest-candidate.yml
+      - tools/poc/yharnam/unified-v9/compose_sources.py
   workflow_dispatch:
 permissions:
   contents: read
