@@ -13,6 +13,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_native_game_shy2_udp_loopback.cpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_shy2_grant_cutover_v106.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_native_shy2_grant_cutover_v106.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_original_multi_invader_client_v107.py
       - tools/poc/yharnam/hybrid-transport-v52/sh_pair_aead_keys.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_game_aead_drop_guard.py
@@ -68,6 +69,14 @@ jobs:
           assert 'native_shy2_egress.Seal(' in code
           assert 'Transmit(dest,std::move(sealed))' in code
           assert 'native_shy2_egress.Arm(' not in code
+          native_inv=(root/'emulator/src/core/bloodborne_invasion.cpp').read_text()
+          native_inv_header=(root/'emulator/src/core/bloodborne_invasion.h').read_text()
+          native_inv_test=(root/'emulator/tests/bloodborne/test_bloodborne_invasion.cpp').read_text()
+          assert 'SHYT-V107-MULTI-HOSTILE-NATIVE-GAME' in native_inv
+          assert 'std::map<u64,Visitor> visitors' in native_inv_header
+          assert 'MaxConcurrentHostiles = 3' in native_inv_header
+          assert 'ThreeConcurrentHostilesIndependentIdsAndEnds' in native_inv_test
+          assert 'TakeEnd(End(12' in native_inv_test
           assert 'SHYT-SHY2-DEV-TRUSTED-CUTOVER' in code
           assert 'NativeShy2GrantCutoverV106::Install(' in code
           assert code.count('SHYT-SHY2-V106-TRUSTED-PAIR-GATE')==1

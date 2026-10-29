@@ -890,6 +890,19 @@ def run(checkout:Path, repo:Path, out:Path):
     for name,body in native5.patch(native5_inputs).items():
         files[name]=body.encode("utf-8")
     meta["applied"].append("5-hunter original game candidate: host re-rings until five, fourth guest sign=4 in real TeamGate; live game rig pending")
+    # V107: actual native game hostile-state update; original InvadedTeam
+    # stored only ONE invasion and overwrote its ID when a second hostile
+    # joined. Keep up to three independent server-issued invasion lifecycles
+    # in the game core and extend the ORIGINAL gtest. This is required for
+    # the 3 co-op+2 hostile / 2 co-op+3 hostile release feature.
+    multi107_path=metrics_dir/"patch_original_multi_invader_client_v107.py"
+    multi107=types.ModuleType("shyt_v107_original_game_multi_invader")
+    multi107.__file__=str(multi107_path)
+    exec(compile(multi107_path.read_text("utf-8"),str(multi107_path),"exec"),multi107.__dict__)
+    original107={p:pinned_source(p).decode("utf-8") for p in multi107.FILES}
+    for name,body in multi107.patch(original107).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("V107 ORIGINAL native Bloodborne game hostile ledger keyed by invasion ID, up to 3 concurrent hostiles and per-ID end/notice/replay guards; actual native 5-person rig pending")
     # V104: surgical reviewed upstream backports, AFTER all V97/V98/V99
     # native gameplay overlays and V46 launcher remote-profile adaptation.
     # PR451 fixes Ludwig's multiplayer wall; PR433 fixes Cyrillic output
