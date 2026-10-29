@@ -78,6 +78,11 @@ def load_inventory(path: Path = REGISTRY) -> dict:
             raise ValueError("Only validated repository PR IDs allowed")
         if key in seen or row["last_seen"] not in ("open", "closed", "merged"):
             raise ValueError("Duplicate PR or invalid expected state")
+        if "last_seen_head" in row and (
+            not isinstance(row["last_seen_head"], str) or
+            not SHORT_SHA.fullmatch(row["last_seen_head"])
+        ):
+            raise ValueError("Unpinned reviewed PR head SHA")
         seen.add(key)
     return data
 
@@ -146,11 +151,19 @@ def survey(registry: dict, get) -> dict:
         repo, n = entry["repo"], entry["number"]
         item = _attempt(get, "/repos/" + repo + "/pulls/" + str(n), output["errors"])
         state = status_of_pr(item) if item else "unavailable"
+        reviewed_head = entry.get("last_seen_head", "")
+        head_meta = item.get("head") if isinstance(item, dict) else None
+        observed_head = head_meta.get("sha", "") if isinstance(head_meta, dict) else ""
+        if not isinstance(observed_head, str) or not SHORT_SHA.fullmatch(observed_head):
+            observed_head = ""
         output["pull_requests"].append({
             "repo": repo, "number": n, "area": entry["area"],
             "priority": entry["priority"], "next_action": entry["action"],
             "reviewed_state": entry["last_seen"], "observed_state": state,
             "state_changed": state not in ("unavailable", entry["last_seen"]),
+            "reviewed_head": reviewed_head, "observed_head": observed_head,
+            "head_changed": bool(reviewed_head and observed_head and observed_head != reviewed_head),
+            "head_evidence_complete": bool(not reviewed_head or observed_head),
             "merge_commit": item.get("merge_commit_sha") if item and state == "merged" else None,
             "url": "https://github.com/" + repo + "/pull/" + str(n),
         })
@@ -198,6 +211,10 @@ def markdown(report: dict) -> str:
         status = p["reviewed_state"] + " → " + p["observed_state"]
         if p["state_changed"]:
             status += " (REVIEW)"
+        if p.get("head_changed"):
+            status += " (HEAD UPDATED: REVIEW)"
+        if not p.get("head_evidence_complete", True):
+            status += " (HEAD UNKNOWN)"
         lines.append("| [#" + str(p["number"]) + "](" + p["url"] + ") | " +
                      md_safe(p["area"]) + " | " + md_safe(status) + " | " +
                      md_safe(p["priority"]) + " | " + md_safe(p["next_action"]) + " |")
@@ -235,7 +252,7 @@ def main() -> int:
     (args.output / "UPSTREAMS.md").write_text(markdown(report), encoding="utf-8")
     changes = sum(r["head_changed"] or r["release_changed"] for r in report["repositories"])
     changes += sum(b["head_changed"] for b in report["branches"])
-    changes += sum(p["state_changed"] for p in report["pull_requests"])
+    changes += sum(p["state_changed"] or p["head_changed"] for p in report["pull_requests"])
     print("BLOODBORNE_CROSS_FORK_READ_ONLY_AUDIT sources=" +
           str(len(report["repositories"])) + " branches=" +
           str(len(report["branches"])) + " prs=" +

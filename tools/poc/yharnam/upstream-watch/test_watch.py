@@ -158,6 +158,44 @@ class SourceWatchTests(unittest.TestCase):
         self.assertEqual(len(report["errors"]), 0)
         self.assertIn("UNKNOWN", m.markdown(report))
 
+    def test_open_pr_new_commit_is_reviewed_even_without_state_change(self):
+        tracked = next(p for p in self.data["pull_requests"]
+                       if p["repo"] == "ProhorovIlja/bloodborne_pc_windows_port"
+                       and p["number"] == 37)
+        self.assertEqual(len(tracked["last_seen_head"]), 40)
+
+        def get(path):
+            if path.endswith("/pulls/37") and "ProhorovIlja" in path:
+                return {"state": "open", "merged_at": None,
+                        "head": {"sha": "a" * 40}}
+            if "/pulls/" in path:
+                return {"state": "open", "merged_at": None}
+            if "/branches/" in path:
+                return {"commit": {"sha": "b" * 40}}
+            if "/releases/latest" in path:
+                return {"tag_name": "unverified"}
+            return {"sha": "c" * 40}
+
+        report = m.survey(self.data, get)
+        pr = next(x for x in report["pull_requests"]
+                  if x["repo"] == tracked["repo"] and x["number"] == 37)
+        self.assertFalse(pr["state_changed"])
+        self.assertTrue(pr["head_changed"])
+        self.assertTrue(pr["head_evidence_complete"])
+        self.assertIn("HEAD UPDATED: REVIEW", m.markdown(report))
+
+        missing = {**tracked, "last_seen_head": "not-a-sha"}
+        with tempfile.TemporaryDirectory() as tmp:
+            data = json.loads(json.dumps(self.data))
+            for index, row in enumerate(data["pull_requests"]):
+                if row["repo"] == missing["repo"] and row["number"] == missing["number"]:
+                    data["pull_requests"][index] = missing
+                    break
+            source = Path(tmp) / "bad-head.json"
+            source.write_text(json.dumps(data))
+            with self.assertRaisesRegex(ValueError, "Unpinned reviewed PR"):
+                m.load_inventory(source)
+
     def test_fetch_refuses_arbitrary_urls_and_unsafe_paths(self):
         for path in ("https://evil.invalid/", "/users/oai", "/repos/a/b/../secrets",
                      "/repos/a/b?token=x"):

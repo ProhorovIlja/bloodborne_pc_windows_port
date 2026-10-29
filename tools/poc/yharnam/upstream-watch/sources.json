@@ -381,10 +381,11 @@
     {
       "repo": "Supermedo/bloodborne_pc",
       "number": 126,
-      "last_seen": "open",
+      "last_seen": "merged",
       "area": "occlusion-query-results-ordered-vram-long-session-28min-crash",
       "priority": "P0",
-      "action": "SOURCE_EXACT_45_MIN_CATHEDRAL_WARD_STRESS_AND_SAVED_SESSIONS_NO_BLIND_GPU_COPY"
+      "action": "SOURCE_EXACT_45_MIN_CATHEDRAL_WARD_STRESS_AND_SAVED_SESSIONS_NO_BLIND_GPU_COPY",
+      "last_seen_head": "baf0c9bf145c6fb6cf52271487a01a3a6412ee22"
     },
     {
       "repo": "Supermedo/bloodborne_pc",
@@ -624,7 +625,8 @@
       "last_seen": "open",
       "area": "PERFORMANCE: coalesce measured 98.6% Coop7 LobbyState bytes at 64+/128+ players",
       "priority": "P0",
-      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE",
+      "last_seen_head": "34fcbc6ec2951d26dade65a1f430b1fb1ce6f7ae"
     },
     {
       "repo": "ProhorovIlja/bloodborne_pc_windows_port",
@@ -696,7 +698,8 @@
       "last_seen": "open",
       "area": "PERFORMANCE: remove Hosted lobby O(N²) scans across 1000 peers; real C++ 512-player regression + 1/3 shar",
       "priority": "P0",
-      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE",
+      "last_seen_head": "6299346d19ccb7ce3c445a89e043b2735ab95d58"
     },
     {
       "repo": "ProhorovIlja/bloodborne_pc_windows_port",
@@ -728,7 +731,8 @@
       "last_seen": "open",
       "area": "SCALE GATE: actual YT1.3 1000-player game UDP + 1024 four-player groups, opt-in 2000",
       "priority": "P2",
-      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE",
+      "last_seen_head": "c6f150db84d612846aac45fce499b2f92022be0d"
     },
     {
       "repo": "ProhorovIlja/bloodborne_pc_windows_port",
@@ -888,7 +892,8 @@
       "last_seen": "open",
       "area": "V52–V99: secure original-game hybrid + Doll/respawn/boss AI fixes, Direct OFF",
       "priority": "P0",
-      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE",
+      "last_seen_head": "334b4606411e2df13210386b62000c7abfd26e6e"
     },
     {
       "repo": "ProhorovIlja/bloodborne_pc_windows_port",
@@ -1153,6 +1158,60 @@
       "area": "safe BBSC upgrade versioning",
       "priority": "P1",
       "action": "ADAPT_SAFE_PACKAGE_ATOMIC_UPDATE_ONLY_NOT_BBSC_PROTOCOL"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 452,
+      "last_seen": "merged",
+      "area": "gpu-subresource-extents-and-buffer-size-check",
+      "priority": "P1",
+      "action": "UPSTREAM_131_GPU_REVIEW_TEXTURE_DIMENSIONS_AND_GAME_RENDER_TEST",
+      "last_seen_head": "aa951175106c357391ec44935f20060d8add40a7"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 453,
+      "last_seen": "merged",
+      "area": "gx-occlusion-query-crash-guard",
+      "priority": "P0",
+      "action": "REVIEW_LONG_SESSION_NATIVE_GPU_QUERY_LIFETIME_40MIN_SOAK",
+      "last_seen_head": "d12c5e57805cc37e60481b263498714523f995e7"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 454,
+      "last_seen": "merged",
+      "area": "supermedo-196-physics-cloth-fps",
+      "priority": "P1",
+      "action": "VERIFY_PHYSICS_FRAME_PACING_30_60_90_FPS_AND_NETWORK_GUESTS",
+      "last_seen_head": "66186951757907b97ec7c97f8b410c71fa98bbfd"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 455,
+      "last_seen": "merged",
+      "area": "ingame-team-settings-grid-mouse-focus",
+      "priority": "P1",
+      "action": "ADOPT_WITH_5_SEATS_GAMEPAD_FOCUS_AND_DBNO_CONTROLS_TESTS",
+      "last_seen_head": "c6fe7986f9059f1f40d6cb76621754cdeb845d2e"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 448,
+      "last_seen": "merged",
+      "area": "host-handover-guest-enemy-respawn-loop",
+      "priority": "P1",
+      "action": "VERIFY_HOST_MIGRATION_ENEMY_AUTHORITY_NO_RESPAWN_LOOP",
+      "last_seen_head": "bcff4689f1b1f42396057b333960e0d383aa5cc9"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 449,
+      "last_seen": "merged",
+      "area": "coop-death-travel-vial-bullet-restock",
+      "priority": "P1",
+      "action": "VERIFY_DBNO_DEATH_VS_DISCONNECT_AND_PER_PLAYER_SUPPLIES",
+      "last_seen_head": "bda11fcf8748614d2991f4a929a3c2b169b64bf3"
     }
   ],
   "branches": [
