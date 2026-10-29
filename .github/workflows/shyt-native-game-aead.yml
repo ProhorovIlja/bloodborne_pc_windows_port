@@ -69,14 +69,12 @@ jobs:
           assert 'native_shy2_egress.Seal(' in code
           assert 'Transmit(dest,std::move(sealed))' in code
           assert 'native_shy2_egress.Arm(' not in code
-          native_inv=(root/'emulator/src/core/bloodborne_invasion.cpp').read_text()
-          native_inv_header=(root/'emulator/src/core/bloodborne_invasion.h').read_text()
-          native_inv_test=(root/'emulator/tests/bloodborne/test_bloodborne_invasion.cpp').read_text()
-          assert 'SHYT-V107-MULTI-HOSTILE-NATIVE-GAME' in native_inv
-          assert 'std::map<u64,Visitor> visitors' in native_inv_header
-          assert 'MaxConcurrentHostiles = 3' in native_inv_header
-          assert 'ThreeConcurrentHostilesIndependentIdsAndEnds' in native_inv_test
-          assert 'TakeEnd(End(12' in native_inv_test
+          # The pinned PR17 upstream predates game-side invasions.
+          # Do not claim the newer V107 game code was composed against
+          # 77e350 when the actual native sources are missing.
+          assert any('NATIVE_GAME_MULTINVADER_ABSENT_IN_PIN_77e350' in x
+                     for x in m.get('release_blockers',[]))
+          assert not (root/'emulator/src/core/bloodborne_invasion.cpp').exists()
           assert 'SHYT-SHY2-DEV-TRUSTED-CUTOVER' in code
           assert 'NativeShy2GrantCutoverV106::Install(' in code
           assert code.count('SHYT-SHY2-V106-TRUSTED-PAIR-GATE')==1

@@ -899,10 +899,20 @@ def run(checkout:Path, repo:Path, out:Path):
     multi107=types.ModuleType("shyt_v107_original_game_multi_invader")
     multi107.__file__=str(multi107_path)
     exec(compile(multi107_path.read_text("utf-8"),str(multi107_path),"exec"),multi107.__dict__)
-    original107={p:pinned_source(p).decode("utf-8") for p in multi107.FILES}
-    for name,body in multi107.patch(original107).items():
-        files[name]=body.encode("utf-8")
-    meta["applied"].append("V107 ORIGINAL native Bloodborne game hostile ledger keyed by invasion ID, up to 3 concurrent hostiles and per-ID end/notice/replay guards; actual native 5-person rig pending")
+    # SOURCE COMPATIBILITY BARRIER: PR17's pinned game upstream PIN
+    # 77e350... predates the entire invasion subsystem, whereas native
+    # multi-hostile game is present at later YT 0645740a. Do not falsely
+    # treat an absent native game subsystem as built/playable.
+    if all((checkout/p).is_file() for p in multi107.FILES):
+        original107={p:pinned_source(p) for p in multi107.FILES}
+        for name,body in multi107.patch(original107).items():
+            files[name]=body.encode("utf-8")
+        meta["applied"].append("V107 original native Bloodborne 3-hostile per-ID game lifecycle and original C++ gtests")
+    else:
+        meta.setdefault("release_blockers",[]).append(
+            "NATIVE_GAME_MULTINVADER_ABSENT_IN_PIN_77e350: upstream "
+            "0645740a invasion client/game/protocol requires a full "
+            "reviewed compatible backport or unified upstream rebase")
     # V104: surgical reviewed upstream backports, AFTER all V97/V98/V99
     # native gameplay overlays and V46 launcher remote-profile adaptation.
     # PR451 fixes Ludwig's multiplayer wall; PR433 fixes Cyrillic output
