@@ -11,6 +11,7 @@ spec.loader.exec_module(m)
 
 ORIGINAL = """// Copyright (C) 2024 Advanced Micro Devices, Inc.
 #include <FidelityFX/host/ffx_interface.h>
+#include <ffx_breadcrumbs_list.h>
 void init(BackendContext* backendContext) {
     new (&backendContext->uniformBufferMutex) std::mutex();
 }
