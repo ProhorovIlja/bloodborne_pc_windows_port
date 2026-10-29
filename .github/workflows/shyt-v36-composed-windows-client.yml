@@ -30,22 +30,18 @@ jobs:
         run: |
           git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
           if ($LASTEXITCODE -ne 0) { throw "Pinned native GPU submodule checkout failed" }
-      - name: Fix pinned FSR 1.1.4 MSVC-only _countof for CLANG64
-        shell: pwsh
-        run: |
-          # Keep pinned Git refs and renderer features; patch only array length.
-          $path = 'pinned-upstream/bbport/gpu/third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp'
-          if (-not (Test-Path $path)) { throw 'Pinned FSR frame interpolation source missing' }
-          $text = [IO.File]::ReadAllText((Resolve-Path $path))
-          $old = '_countof(copyJobs)'
-          $count = ([regex]::Matches($text, [regex]::Escape($old))).Count
-          if ($count -ne 3) { throw "FSR 1.1.4 source drift: expected 3 array counts, got $count" }
-          $fixed = '(sizeof(copyJobs) / sizeof(copyJobs[0]))'
-          [IO.File]::WriteAllText((Resolve-Path $path), $text.Replace($old, $fixed))
-          Write-Host 'PINNED_FSR_CLANG64_ARRAY_COUNT_PORTABILITY_PASS'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Verify exact AMD FSR 1.1.4 host sources and fix ALL 23 MSVC-only array lengths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_fsr_countof_clang64.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Source-pinned FSR host array tests failed' }
+          python tools/poc/yharnam/package-v41/patch_pinned_fsr_countof_clang64.py --upstream pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR host source drift or incomplete _countof migration' }
+          Write-Host 'PINNED_FSR_HOST_ALL_23_COUNT_OF_CALLS_PORTABLE'
       - name: Compose all native source overlays against immutable upstream
         shell: pwsh
         run: |
@@ -159,6 +155,15 @@ jobs:
           clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
             -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
             -fsyntax-only "$sdk/src/shared/ffx_message.cpp"
+          # These are the ACTUAL next two TUs that failed the full 418-object
+          # Windows build after original vk.cpp compilation was repaired.
+          for source in "$sdk/src/components/opticalflow/ffx_opticalflow.cpp" \
+                        "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"; do
+            clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
+              -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
+              -fsyntax-only "$source"
+          done
+          echo SHYT_PINNED_FSR_OPTICAL_FLOW_AND_FRAMEGEN_REAL_CPP_PRECHECK_PASS
           # Compile the ACTUAL original FSR3 Vulkan backend translation unit
           # that failed repeatedly in CI #40880463021. No stubs/mocks.
           clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
