@@ -106,7 +106,7 @@ Hub::Result Hub::Receive(const Endpoint& from, const QByteArray& datagram, qint6
         compose.HTTP_BACKEND_CPP: StatsBackendQtCompatibility.BACKEND,
         compose.HTTP_BLOODBORNE_CPP: BLOODBORNE_HTTP_FIXTURE,
         compose.WEB_AUTH_CPP: GATEWAY_AUTH_FIXTURE,
-        compose.SERVER_LINK_TEST: """int HelloAndBuilds() {\nint Relays() {
+        compose.SERVER_LINK_TEST: """using namespace ServerLink;\nint HelloAndBuilds() {\nint Relays() {
   if (Contracts() != 0 || HelloAndBuilds() != 0 || Relays() != 0 ||
 """,
         "server/coop/coop.proto": "    PROTOCOL_CURRENT = 7;\n        FORGET_WORLD = 11;\n    }\n    string world = 6;\n}\n\nmessage LobbyPlayer {\n    string party = 7;\n}\n\nmessage TeamInvite {\n",
