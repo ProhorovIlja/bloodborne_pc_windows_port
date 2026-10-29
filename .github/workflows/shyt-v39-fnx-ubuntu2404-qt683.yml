@@ -125,6 +125,24 @@ jobs:
           pkg="$OUT_ROOT/shyt-internal-linux-server"
           mkdir -p "$pkg/bin" "$pkg/licenses" "$pkg/config-reference" "$pkg/lib" "$pkg/plugins/sqldrivers" "$pkg/plugins/tls"
           install -m 755 "$OUT_ROOT/build/shadnet" "$pkg/bin/shadnet"
+          # The pinned game looks for shadnet.cfg and its database under
+          # SHADNET_HOME. Never launch from a GitHub runner's build directory
+          # or silently open a public server with default credentials.
+          cat > "$pkg/bin/start-shadnet" <<'SHYT_START'
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+home="${SHADNET_HOME:-$root}"
+if [[ ! -f "$home/shadnet.cfg" ]]; then
+    echo "No shadnet.cfg in SHADNET_HOME ($home). Configure the server explicitly before starting." >&2
+    exit 78
+fi
+export SHADNET_HOME="$home"
+export LD_LIBRARY_PATH="$root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QT_PLUGIN_PATH="$root/plugins"
+exec "$root/bin/shadnet" "$@"
+SHYT_START
+          chmod 0755 "$pkg/bin/start-shadnet"
           # Qt 6.8.3 is NOT Ubuntu 24.04's default. Carry the exact
           # dynamically linked Qt and ICU libraries plus driver plugins
           # rather than producing a binary that fails on the operator's VPS.
@@ -146,6 +164,9 @@ jobs:
             if [[ ! -s "$notice" ]]; then echo "missing original author or GPLv3 Qt license notice" >&2; exit 1; fi
           done
           # These are configuration references, NOT live production settings.
+          install -m 644 "$OUT_ROOT/upstream/tools/release/kit/server/shadnet.cfg" "$pkg/config-reference/shadnet.cfg"
+          # This is only a reference. The operator must configure nondefault
+          # auth/ports and an explicit SHADNET_HOME before starting.
           for file in worlds.cfg scoreboards.cfg; do
             if [[ -f "$OUT_ROOT/build/$file" ]]; then
               install -m 644 "$OUT_ROOT/build/$file" "$pkg/config-reference/$file"
@@ -170,6 +191,12 @@ jobs:
           (cd "$pkg" && find bin lib plugins config-reference licenses -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum CREDITS.txt >> SHA256SUMS)
           test -s "$pkg/plugins/sqldrivers/libqsqlite.so"
           test -s "$pkg/lib/libQt6Core.so.6"
+          test -x "$pkg/bin/start-shadnet"
+          if SHADNET_HOME="$pkg/config-reference/_intentionally_missing_" "$pkg/bin/start-shadnet" >/tmp/shyt-failclosed-output 2>&1; then
+            echo 'Native server runner unexpectedly started without configuration' >&2
+            exit 1
+          fi
+          grep -Fq 'No shadnet.cfg' /tmp/shyt-failclosed-output
           echo SHYT_UBUNTU_QT683_BUNDLED_RUNTIME_PASS
           tar -czf "$OUT_ROOT/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz" \
             -C "$OUT_ROOT" shyt-internal-linux-server
