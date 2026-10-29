@@ -5,6 +5,8 @@ on:
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_grant_inbox_v84.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_inbox_handoff_v93.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_team_grant_slots_v103.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_team_grant_slots_v103.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py
       - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_same_socket_probe_v92.py
       - .github/workflows/shyt-v93-nonblocking-tls-handoff.yml
@@ -13,6 +15,8 @@ on:
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_grant_inbox_v84.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_inbox_handoff_v93.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_team_grant_slots_v103.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_team_grant_slots_v103.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py
       - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_same_socket_probe_v92.py
       - .github/workflows/shyt-v93-nonblocking-tls-handoff.yml
@@ -49,6 +53,9 @@ jobs:
             "$p/test_inbox_handoff_v93.cpp" -lcrypto -o /tmp/shyt-v93
           /tmp/shyt-v93
           echo SHYT_V93_LINUX_DETACHED_TLS_INBOX_PASS
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I "$p"             "$p/test_native_team_grant_slots_v103.cpp" -lcrypto -o /tmp/shyt-v103
+          /tmp/shyt-v103
+          echo SHYT_V103_LINUX_FIVE_HUNTER_FOUR_GRANTS_PASS
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
       - name: CNG Windows detached TLS grant owner transfer
@@ -60,3 +67,8 @@ jobs:
           ./shyt-v93.exe
           if ($LASTEXITCODE -ne 0) { throw 'V93 Windows game-owner replay/transfer test failed' }
           Write-Host SHYT_V93_WINDOWS_DETACHED_TLS_INBOX_PASS
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_native_team_grant_slots_v103.cpp bcrypt.lib /Fe:shyt-v103.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V103 Windows native four-grant compile failed' }
+          ./shyt-v103.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V103 Windows four-grant isolation failed' }
+          Write-Host SHYT_V103_WINDOWS_FIVE_HUNTER_FOUR_GRANTS_PASS
