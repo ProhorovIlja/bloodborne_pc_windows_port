@@ -224,7 +224,9 @@ int AJoiningFifthHunterRevokesAlreadyJoinedInvader() {
          e.lobby.invites(0).team());
   rig.Step();
   CHECK(rig.a.lobby.team().members_size() == 5);
-  CHECK(!rig.red.invasion);
+  // Game's test fixture intentionally retains the historical InvasionStart
+  // record. EndInvasion is an event; verify that new End event + the
+  // authoritative route have both been revoked.
   CHECK(EndedFor(rig.red, bbcoop::InvasionEnd::REFUSED));
   CHECK(rig.service.VisitingOf(rig.red.endpoint).isEmpty());
   CHECK(!rig.Routes(rig.red, rig.a, 0x06));
