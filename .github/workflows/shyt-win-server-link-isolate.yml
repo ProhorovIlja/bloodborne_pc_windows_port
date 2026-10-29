@@ -2,7 +2,10 @@ name: SHYT pinpoint native Windows server-link crash
 on:
   push:
     branches: [feature/shyt-hybrid-p2p-v52]
-    paths: [.github/workflows/shyt-win-server-link-isolate.yml]
+    paths:
+      - .github/workflows/shyt-win-server-link-isolate.yml
+      - tools/poc/yharnam/login-admission-v28/patch_login_admission.py
+      - tools/poc/yharnam/login-admission-v28/test_patch_login_admission.py
   workflow_dispatch:
 permissions:
   contents: read
