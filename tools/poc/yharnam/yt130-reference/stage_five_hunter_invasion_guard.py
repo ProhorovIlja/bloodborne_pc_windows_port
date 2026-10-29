@@ -76,6 +76,32 @@ def patch(raw: dict[str, str]) -> dict[str, str]:
 }''',
         "reserved slots in TargetOf")
     world=exactly(world,
+'''    if (outcome.changed) {
+        StoreWorldList(result);
+    }
+    // Invasions: the leader turned them off: a running one ends.
+''',
+'''    if (outcome.changed) {
+        StoreWorldList(result);
+        // SHYT-YT130-FIVE-HUNTER-INVASION-CAPACITY-V1: a fifth cooperator can
+        // join AFTER the invader arrived. Immediately revoke hostile routing
+        // before sending the updated lobby/team session to the new hunter.
+        // The original game's final character despawn still needs a client
+        // ACK before any future PvP launch can claim seamless handover.
+        if (const bbcoop::Team* team = lobby.TeamOf(member.lobby);
+            team && team->members_size() >= static_cast<int>(InvasionMaxPlayers) &&
+            !team->party().empty()) {
+            const QString party =
+                FolderOf(QByteArray::fromStdString(team->party()));
+            if (invasions.contains(party)) {
+                EndInvasion(party, bbcoop::InvasionEnd::REFUSED, now_ms, result);
+            }
+        }
+    }
+    // Invasions: the leader turned them off: a running one ends.
+''',
+        "revoke existing invader when fifth hunter occupies slot")
+    world=exactly(world,
 '''    Member& invader = found->second;
     invader.visiting = world.name;
     invader.hostile = true;
@@ -167,6 +193,44 @@ def patch(raw: dict[str, str]) -> dict[str, str]:
   return 0;
 }
 
+int AJoiningFifthHunterRevokesAlreadyJoinedInvader() {
+  InvasionRig rig;
+  Game c{1003, "cc", 14}, d{1004, "dd", 15}, e{1005, "ee", 16};
+  for (Game* guest : std::vector<Game*>{&c, &d}) {
+    rig.games.push_back(guest);
+    guest->LobbyHello(false, rig.now);
+    rig.Step();
+    rig.a.Team(bbcoop::TeamRequest::INVITE, rig.now, guest->name);
+    rig.Step();
+    CHECK(guest->lobby.invites_size() == 1);
+    guest->Team(bbcoop::TeamRequest::ACCEPT, rig.now, {},
+                guest->lobby.invites(0).team());
+    rig.Step();
+  }
+  CHECK(rig.a.lobby.team().members_size() == 4);
+  CHECK(rig.Invade());
+  CHECK(rig.red.invasion->session().sign() == 4);
+  CHECK(rig.service.VisitingOf(rig.red.endpoint) ==
+        rig.service.PartyOf(rig.a.endpoint));
+  // A real fifth hunter may now enter the persistent team. Server-owned
+  // red-world routing MUST be revoked on acceptance, not after a later tick.
+  rig.games.push_back(&e);
+  e.LobbyHello(false, rig.now);
+  rig.Step();
+  rig.a.Team(bbcoop::TeamRequest::INVITE, rig.now, e.name);
+  rig.Step();
+  CHECK(e.lobby.invites_size() == 1);
+  e.Team(bbcoop::TeamRequest::ACCEPT, rig.now, {},
+         e.lobby.invites(0).team());
+  rig.Step();
+  CHECK(rig.a.lobby.team().members_size() == 5);
+  CHECK(!rig.red.invasion);
+  CHECK(EndedFor(rig.red, bbcoop::InvasionEnd::REFUSED));
+  CHECK(rig.service.VisitingOf(rig.red.endpoint).isEmpty());
+  CHECK(!rig.Routes(rig.red, rig.a, 0x06));
+  return 0;
+}
+
 int AFourHunterTeamCanStillBeInvadedInItsOnlyVacantSlot() {
   InvasionRig rig;
   Game c{1003, "cc", 14}, d{1004, "dd", 15};
@@ -201,6 +265,8 @@ int AFourHunterTeamCanStillBeInvadedInItsOnlyVacantSlot() {
        AJoinedFiveHunterTeamRejectsAnAlreadyNotifiedInvader},
       {"AFourHunterTeamCanStillBeInvadedInItsOnlyVacantSlot",
        AFourHunterTeamCanStillBeInvadedInItsOnlyVacantSlot},
+      {"AJoiningFifthHunterRevokesAlreadyJoinedInvader",
+       AJoiningFifthHunterRevokesAlreadyJoinedInvader},
 ''',
         "C++ native test registration")
     return dict(zip(FILES,(h,world,test)))
