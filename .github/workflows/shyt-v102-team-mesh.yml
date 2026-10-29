@@ -274,7 +274,10 @@ jobs:
           set -euo pipefail
           root=/tmp/shyt-v102-real/server
           proto=/tmp/shyt-v102-proto
-          c++ -std=c++20 -O0 -fPIC -Wall -Wextra -Werror \
+          # Original pinned upstream TeamLobby uses valid designated partial
+          # Outcome initializers; GCC -Wextra warns on its existing source.
+          # Keep -Werror for all other diagnostics, without rewriting upstream.
+          c++ -std=c++20 -O0 -fPIC -Wall -Wextra -Werror -Wno-missing-field-initializers \
             -I "$root/src" -I "$proto" -I "$root" -I pinned-upstream/server \
             "$root/tests/test_team_lobby.cpp" \
             "$root/coop/team_lobby.cpp" \
