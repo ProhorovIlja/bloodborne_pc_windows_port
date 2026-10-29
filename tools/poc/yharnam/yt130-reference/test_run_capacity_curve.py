@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+import subprocess
 p=Path(__file__).with_name("run_capacity_curve.py")
 sp=importlib.util.spec_from_file_location("yt130_capacity",p)
 mod=importlib.util.module_from_spec(sp)
@@ -18,6 +20,43 @@ class CapacityUnitTests(unittest.TestCase):
             self.assertGreaterEqual(ramp,100)
         with self.assertRaises(ValueError):
             mod.settings(10000)
+    def test_isolated_timeout_reaps_entire_process_group(self):
+        class Fake:
+            pid = 49231
+            returncode = -9
+            calls = 0
+            def communicate(self, timeout=None):
+                self.calls += 1
+                if timeout is not None:
+                    raise subprocess.TimeoutExpired(cmd=["synthetic"], timeout=timeout)
+                return ("partial", "cleanup")
+        fake = Fake()
+        with patch.object(mod.subprocess, "Popen", return_value=fake) as popen:
+            with patch.object(mod.os, "killpg") as killer:
+                result = mod.isolated_load(["python", "run_load.py"], 95)
+        self.assertIsNone(result)
+        self.assertEqual(fake.calls, 2)
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        self.assertEqual(popen.call_args.kwargs["stdout"], subprocess.PIPE)
+        killer.assert_called_once_with(fake.pid, mod.signal.SIGKILL)
+
+    def test_completed_isolated_game_load_is_not_killed(self):
+        class Fake:
+            pid = 87
+            returncode = 0
+            def communicate(self, timeout=None):
+                return ('{"players":4}', "")
+        with patch.object(mod.subprocess, "Popen", return_value=Fake()) as popen:
+            with patch.object(mod.os, "killpg") as killer:
+                result = mod.isolated_load(["python", "run_load.py"], 95)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '{"players":4}')
+        killer.assert_not_called()
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        for unsafe in (0, 1, 150):
+            with self.assertRaises(ValueError):
+                mod.isolated_load(["python", "run_load.py"], unsafe)
+
     def test_true_delivery_and_valid_packets_required(self):
         baseline = {"players":200, "playing":200,
                     "packets_sent":2000, "packets_received":2000,
