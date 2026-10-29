@@ -1,0 +1,85 @@
+name: SHYT pinpoint native Windows server-link crash
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths: [.github/workflows/shyt-win-server-link-isolate.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mswin-server-link:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compose exact current server link sources, no game build
+        shell: pwsh
+        run: |
+          python tools/poc/yharnam/unified-v9/compose_sources.py --upstream pinned-upstream --repo . --out composed
+          if ($LASTEXITCODE -ne 0) { throw 'Composition failed' }
+          Copy-Item composed/server/src/server_link.cpp pinned-upstream/server/src/server_link.cpp -Force
+          Copy-Item composed/server/src/server_link.h pinned-upstream/server/src/server_link.h -Force
+          @'
+          from pathlib import Path
+          import re
+          p=Path('pinned-upstream/server/tests/test_server_link.cpp')
+          s=p.read_text(encoding='utf-8')
+          for name in ('Contracts','HelloAndBuilds','Relays','Liveness','TeamOnly','VirtualMembers',
+                       'RoutesGamePackets','SignsIn','ALongSilenceEndsTheSignIn'):
+              expr=r'(int\\s+'+name+r'\\s*\\(\\s*\\)\\s*\\{)'
+              # Replace literal AST source, not arbitrary static calls.
+              source='int '+name+'() {'
+              assert s.count(source)==1, 'missing '+name
+              s=s.replace(source,source+'\\n  std::cerr << "BEGIN '+name+'\\\\n" << std::flush;',1)
+          assert s.count('int main() {')==1
+          s=s.replace('int main() {','int main() {\\n  std::cerr << "BEGIN main\\\\n" << std::flush;',1)
+          p.write_text(s,encoding='utf-8')
+          print('TEST_SERVER_LINK_TRACE_INSERTED')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Trace insertion failed' }
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: 'qthttpserver qtwebsockets'
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+      - name: Compile ONLY original native server_link test with trace markers
+        shell: pwsh
+        run: |
+          cmake -S pinned-upstream/server -B build-link -G Ninja -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" -Dprotobuf_BUILD_TESTS=OFF
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed' }
+          cmake --build build-link --target test_server_link --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Windows link-test compilation failed' }
+      - name: Run Windows link-test and print fault location
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $env:QT_LOGGING_RULES = '*.debug=true'
+          & ./build-link/test_server_link.exe 2>&1 | Tee-Object server-link-trace.log
+          $exitCode = $LASTEXITCODE
+          Write-Host "NATIVE_WINDOWS_SERVER_LINK_EXIT=$exitCode"
+          if ($exitCode -ne 0) { throw "Original native server-link test failed ($exitCode)" }
+      - name: Preserve crash markers, regardless of result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-win-link-trace
+          path: server-link-trace.log
+          if-no-files-found: ignore
+          retention-days: 5
