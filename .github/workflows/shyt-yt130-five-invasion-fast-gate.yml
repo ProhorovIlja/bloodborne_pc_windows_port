@@ -7,6 +7,8 @@ on:
       - tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py
       - tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py
       - tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py
+      - tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_param_slots_v110.py
       - tools/poc/yharnam/yt130-reference/test_stage_native_param_memory_v109.py
       - tools/poc/yharnam/yt130-reference/probe_native_param_cpp_v109.py
       - tools/poc/yharnam/yt130-reference/test_probe_native_param_cpp_v109.py
@@ -77,11 +79,19 @@ jobs:
           # this exact original native client is pinned to Protocol 8.
           python3 tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py \
             "$RUNNER_TEMP/yt-src"
+          # Official PR442 second fix: previous PARAM repository slot is
+          # always revalidated before avoiding a 1024-slot full scan.
+          python3 tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 24
           grep -Fq 'LoadedParamMemory, RejectsTruncatedAndOverflowingEntries' \
             "$RUNNER_TEMP/yt-src/emulator/tests/bloodborne/test_bloodborne_harder_enemies.cpp"
           grep -Fq 'const u64 size = ParamTableSize(' \
+            "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party_rules.cpp"
+          grep -Fq 'LoadedParamSlots, RememberEachTypeAndUpdateAfterReload' \
+            "$RUNNER_TEMP/yt-src/emulator/tests/bloodborne/test_bloodborne_harder_enemies.cpp"
+          grep -Fq 'remembered = slots.Slot(type)' \
             "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party_rules.cpp"
           grep -Fq 'MaxConcurrentHostiles = 3' \
             "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_invasion.h"
@@ -105,7 +115,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/poc/yharnam/yt130-reference/probe_native_param_cpp_v109.py \
-            --source "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party.cpp"
+            --source "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party.cpp" \
+            --header "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party.h"
           echo SHYT_YT130_NATIVE_GAME_PARAM_CPP_BOUNDS_AND_OVERFLOW_PASS
       - name: Configure original Qt6 server and build native game-world tests
         shell: bash
