@@ -9,6 +9,8 @@ on:
       - tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py
       - tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py
       - tools/poc/yharnam/yt130-reference/test_stage_native_param_slots_v110.py
+      - tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py
+      - tools/poc/yharnam/yt130-reference/test_guard_native_protocol8_v111.py
       - tools/poc/yharnam/yt130-reference/test_stage_native_param_memory_v109.py
       - tools/poc/yharnam/yt130-reference/probe_native_param_cpp_v109.py
       - tools/poc/yharnam/yt130-reference/test_probe_native_param_cpp_v109.py
@@ -110,6 +112,14 @@ jobs:
           grep -Fq 'AJoiningFifthHunterRevokesAlreadyJoinedInvader' \
             "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
           echo SHYT_ACTUAL_FIVE_HUNTER_QT_INVASION_SOURCE_RACES_STAGED
+      - name: Refuse Protocol 7 or mismatched native client and Qt world server
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py \
+            --client-root "$RUNNER_TEMP/yt-src" \
+            --server-root "$RUNNER_TEMP/yt-src"
+          echo SHYT_REAL_CLIENT_AND_SERVER_PROTOCOL8_PAIR_CHECK_PASS
       - name: Compile and execute actual original YT1.3 PR442 C++ PARAM helper
         shell: bash
         run: |
