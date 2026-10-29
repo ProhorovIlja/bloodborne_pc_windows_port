@@ -26,7 +26,7 @@ def patch(f):
 ''',
 '''    quint64 direct_next_serial=0; // NEVER from a game/client payload
     bool BumpDirectSerial(Member& member) noexcept {
-        if (direct_next_serial==std::numeric_limits<quint64>::max()) {
+        if (direct_next_serial==(std::numeric_limits<quint64>::max)()) {
             direct_next_serial=0; // exhausted; all grants must remain invalid
             member.direct_state_serial=0;
             return false;
@@ -82,8 +82,8 @@ def patch(f):
     // allocated by this server (not client Hello.run), and are symmetric.
     if(!world_revision || !first.direct_state_serial || !second.direct_state_serial ||
        direct_next_serial==0) return 0;
-    const auto lo=std::min(first.direct_state_serial,second.direct_state_serial);
-    const auto hi=std::max(first.direct_state_serial,second.direct_state_serial);
+    const auto lo=(std::min)(first.direct_state_serial,second.direct_state_serial);
+    const auto hi=(std::max)(first.direct_state_serial,second.direct_state_serial);
     auto revision=SeamlessHunt::Hybrid::RevisionNumber(world_revision,lo);
     revision=SeamlessHunt::Hybrid::RevisionNumber(revision,hi);
     return revision ? revision : 1;
