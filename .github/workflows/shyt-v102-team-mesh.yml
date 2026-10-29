@@ -260,6 +260,7 @@ jobs:
           PY
           c++ -std=c++20 -O0 -fPIC -fsyntax-only \
             -I /tmp/shyt-v102-real/server/src \
+            -I /tmp/shyt-v102-real/server \
             -I pinned-upstream/server \
             -I /tmp/shyt-v102-proto \
             $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6HttpServer) \
@@ -293,7 +294,7 @@ jobs:
           SRV=/tmp/shyt-v102-real/server
           ROOT=pinned-upstream/server
           c++ -std=c++20 -O0 -g0 -fPIC \
-            -I "$SRV/src" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v102-proto \
+            -I "$SRV/src" -I "$SRV" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v102-proto \
             $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql) \
             "$SRV/tests/test_bloodborne_world.cpp" \
             "$SRV/src/bloodborne_world.cpp" \
