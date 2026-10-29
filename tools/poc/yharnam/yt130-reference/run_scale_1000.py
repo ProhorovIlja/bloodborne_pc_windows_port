@@ -32,6 +32,8 @@ MAX_TIMEOUT = 160
 
 
 def stages(team_size: int, peak: int) -> tuple[int, ...]:
+    if team_size not in MATRIX:
+        raise ValueError("Unreviewed team size")
     allowed = MATRIX[team_size]
     if peak not in allowed:
         raise ValueError("Unreviewed scale or wrong team-size")
