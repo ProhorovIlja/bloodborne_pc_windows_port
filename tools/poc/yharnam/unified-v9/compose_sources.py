@@ -586,9 +586,14 @@ def run(checkout:Path, repo:Path, out:Path):
     v78.__file__=str(v78_script)
     exec(compile(v78_script.read_text("utf-8"),str(v78_script),"exec"),v78.__dict__)
     main_path=v78.MAIN
-    files[main_path]=v78.patch(
-        (files[main_path] if main_path in files else (checkout/main_path).read_bytes())
-        .decode("utf-8")).encode("utf-8")
+    # On GitHub Windows runners Git checks out untouched main.cpp with
+    # CRLF. read_bytes().decode() preserved those CRLFs, so every pinned
+    # LF-only V78 anchor failed before *any* real game/server compilation.
+    # Path.read_text() uses universal newline decoding, matching the
+    # compose() sources already read above and preserving strict anchors.
+    main_original=(files[main_path].decode("utf-8") if main_path in files
+                   else (checkout/main_path).read_text(encoding="utf-8"))
+    files[main_path]=v78.patch(main_original).encode("utf-8")
     files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
     meta["applied"].append("V78 disabled-by-default loopback-only mTLS 1.3 Qt readiness, NO grants")
     # V79: local, operator-pinned SHA256 X.509 certificate -> signed-in
