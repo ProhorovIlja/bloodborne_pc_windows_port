@@ -59,13 +59,13 @@ def patch(source):
         "    std::map<QString, Invasion> invasions; // by the invaded world",
         "    std::map<QString, std::map<quint64, Invasion>> invasions; // world -> ID -> visitor",
         "per-world per-ID ledger")
-    h=one(h,
-        "    void EndInvasion(const QString& world, bbcoop::InvasionEnd::Reason reason, qint64 now_ms,\n"
-        "                      Result& result);",
+    h=block(h,
+        "    void EndInvasion(const QString& world,",
+        "    // What a team member's vitals end",
         "    void EndInvasion(const QString& world, quint64 invasion_id,\n"
         "                     bbcoop::InvasionEnd::Reason reason, qint64 now_ms, Result& result);\n"
         "    void EndInvasion(const QString& world, bbcoop::InvasionEnd::Reason reason, qint64 now_ms,\n"
-        "                      Result& result); // end ALL visitors for boss/wipe/closed session",
+        "                      Result& result); // end ALL visitors for boss/wipe/closed session\n",
         "per ID end overload")
 
     policy=one(policy,
