@@ -890,6 +890,18 @@ def run(checkout:Path, repo:Path, out:Path):
     for name,body in native5.patch(native5_inputs).items():
         files[name]=body.encode("utf-8")
     meta["applied"].append("5-hunter original game candidate: host re-rings until five, fourth guest sign=4 in real TeamGate; live game rig pending")
+    # V104: surgical reviewed upstream backports, AFTER all V97/V98/V99
+    # native gameplay overlays and V46 launcher remote-profile adaptation.
+    # PR451 fixes Ludwig's multiplayer wall; PR433 fixes Cyrillic output
+    # from the frozen launcher script role, with source drift fail closed.
+    upstream104_path=repo/"tools/poc/yharnam/upstream-v104/patch_small_upstream_fixes.py"
+    upstream104=types.ModuleType("shyt_v104_reviewed_upstream")
+    upstream104.__file__=str(upstream104_path)
+    exec(compile(upstream104_path.read_text("utf-8"),str(upstream104_path),"exec"),upstream104.__dict__)
+    upstream104_inputs={p:pinned_source(p) for p in upstream104.FILES}
+    for p,body in upstream104.patch(upstream104_inputs).items():
+        files[p]=body.encode("utf-8")
+    meta["applied"].append("V104 upstream YT PR451 Ludwig multiplayer exit wall, PR433 Windows Cyrillic launcher child role UTF-8")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
