@@ -520,19 +520,20 @@ void Service::EndInvasion(const QString& world, bbcoop::InvasionEnd::Reason reas
         "link loss ends single hostile")
 
     cpp=one(cpp,
-        "    if (const QString invaded = InvadedBy(member.key); !invaded.isEmpty()) {\n"
-        "        EndInvasion(invaded, bbcoop::InvasionEnd::INVADER_LEFT, now_ms, result);\n"
-        "    }",
-        "    if (const QString invaded=InvadedBy(member.key);!invaded.isEmpty()) {\n"
-        "        const auto bucket=invasions.find(invaded);\n"
-        "        if (bucket!=invasions.end()) {\n"
-        "            for (const auto& [id,visitor]:bucket->second)\n"
-        "                if (visitor.invader==member.key) {\n"
-        "                    EndInvasion(invaded,id,bbcoop::InvasionEnd::INVADER_LEFT,now_ms,result);\n"
-        "                    break;\n"
+        "        if (!invaded.isEmpty()) {\n"
+        "            EndInvasion(invaded, bbcoop::InvasionEnd::INVADER_LEFT, now_ms, result);\n"
+        "        }",
+        "        if (!invaded.isEmpty()) {\n"
+        "            const auto bucket=invasions.find(invaded);\n"
+        "            if (bucket!=invasions.end()) {\n"
+        "                for (const auto& [id,visitor]:bucket->second) {\n"
+        "                    if (visitor.invader==member.key) {\n"
+        "                        EndInvasion(invaded,id,bbcoop::InvasionEnd::INVADER_LEFT,now_ms,result);\n"
+        "                        break;\n"
+        "                    }\n"
         "                }\n"
-        "        }\n"
-        "    }",
+        "            }\n"
+        "        }",
         "cancel request ends own hostile")
 
     # A fifth co-op player can arrive after ANY number of hostiles. Trim
