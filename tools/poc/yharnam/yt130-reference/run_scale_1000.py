@@ -101,9 +101,17 @@ def measure(cmd: list[str], timeout: int) -> tuple[int, str, str]:
     try:
         out, err = proc.communicate(timeout=timeout)
         return int(proc.returncode), out, err
-    except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGKILL)
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as ex:
+        # A child may exit between the deadline and killpg(). In that race
+        # the group is already gone: cleanup is successful, not a crash.
+        # SIGINT also has to reap the entire synthetic server/client group.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         proc.communicate()
+        if isinstance(ex, KeyboardInterrupt):
+            raise
         return 124, "", "LOCAL_GENERATOR_TIMEOUT_PROCESS_GROUP_KILLED"
 
 
@@ -188,6 +196,12 @@ def run(args) -> int:
                 # A hung 500-user test must not immediately launch 1000 more.
                 print("YT130_SCALE_SAFETY_STOP_AFTER_TIMEOUT", flush=True)
                 break
+            if row["quality"] != "FULL_GAMEPLAY" and not args.continue_after_unhealthy:
+                # Once packet loss or latency has already failed acceptance,
+                # don't automatically flood the runner with larger cohorts.
+                # An intentional diagnostic can opt in to all stages.
+                print("YT130_SCALE_SAFETY_STOP_AFTER_UNHEALTHY", flush=True)
+                break
     print("YT130_1000_PLUS_DIAGNOSTIC_ONLY_NO_DEPLOY_NO_CAPACITY_CLAIM")
     return 1 if args.require_healthy and not all_green else 0
 
@@ -206,4 +220,6 @@ if __name__ == "__main__":
                    choices=(250, 256, 500, 512, 1000, 1024, 2000, 2048), default=1000)
     p.add_argument("--timeout", type=int, default=120)
     p.add_argument("--require-healthy", action="store_true")
+    p.add_argument("--continue-after-unhealthy", action="store_true",
+                   help="manual full diagnostic only; default stops after first unhealthy stage")
     raise SystemExit(run(p.parse_args()))

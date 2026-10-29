@@ -379,7 +379,8 @@ jobs:
               --bbload "$RUNNER_TEMP/yt-build/bbload" \
               --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
               --profile "$mode" --team-size "$team" --peak "$peak" \
-              --timeout 130 --output "yt130-scale-extreme-${mode}-${peak}.jsonl"
+              --timeout 130 --continue-after-unhealthy \
+              --output "yt130-scale-extreme-${mode}-${peak}.jsonl"
           done
       - name: Preserve synthetic 200-peer CPU and latency evidence
         if: always()

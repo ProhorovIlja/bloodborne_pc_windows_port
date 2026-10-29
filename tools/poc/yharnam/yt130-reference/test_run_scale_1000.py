@@ -2,6 +2,8 @@
 import importlib.util
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import sys
 import unittest
 from unittest.mock import patch
@@ -144,6 +146,65 @@ class Scale1000PlanTests(unittest.TestCase):
         self.assertEqual(m.inspect(rows, 0, 1000)["quality"], "GENERATOR_FAILED")
         with self.assertRaises(ValueError):
             m.measure(["/bin/true"], 5000)
+
+    def test_automated_scale_stops_after_first_unhealthy_cohort(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            paths = [base / "shadnet", base / "bbload", base / "run_load.py"]
+            for path in paths:
+                path.write_text("fixture", encoding="utf-8")
+            args = SimpleNamespace(
+                shadnet=paths[0], bbload=paths[1], load_script=paths[2],
+                output=base / "report.jsonl", team_size=2, profile="active",
+                owners=1, peak=1000, timeout=90, require_healthy=True,
+                continue_after_unhealthy=False,
+            )
+            first = json.dumps(self.playing(players=250, p99=125))
+            with patch.object(m, "measure", return_value=(0, first, "")) as measured:
+                self.assertEqual(m.run(args), 1)
+            self.assertEqual(measured.call_count, 1)
+            rows = [json.loads(row) for row in args.output.read_text().splitlines()]
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["quality"], "RELAY_LATENCY_DEGRADED")
+            self.assertEqual(rows[0]["stage_players"], 250)
+            self.assertEqual(rows[0]["owner_model"], "UPSTREAM_YT_PR444_PINNED_SOURCE")
+
+            # An explicit diagnostic may still inspect 500 and 1000:
+            # no fabricated green scores or early positive return.
+            args.continue_after_unhealthy = True
+            cases = [(0, json.dumps(self.playing(players=p, p99=125)), "")
+                     for p in (250, 500, 1000)]
+            with patch.object(m, "measure", side_effect=cases) as measured:
+                self.assertEqual(m.run(args), 1)
+            self.assertEqual(measured.call_count, 3)
+            self.assertEqual(len(args.output.read_text().splitlines()), 3)
+
+    def test_timeout_cleanup_survives_already_exited_group(self):
+        class Fake:
+            pid = 32314
+            returncode = -9
+            def communicate(self, timeout=None):
+                if timeout is not None:
+                    from subprocess import TimeoutExpired
+                    raise TimeoutExpired(cmd=["synthetic"], timeout=timeout)
+                return "partial", "cleaned"
+        with patch.object(m.subprocess, "Popen", return_value=Fake()):
+            with patch.object(m.os, "killpg", side_effect=ProcessLookupError) as killed:
+                self.assertEqual(m.measure(["/local/run_load.py"], 90)[0], 124)
+        killed.assert_called_once_with(32314, m.signal.SIGKILL)
+
+    def test_keyboard_interrupt_reaps_entire_synthetic_group(self):
+        class Fake:
+            pid = 32315
+            def communicate(self, timeout=None):
+                if timeout is not None:
+                    raise KeyboardInterrupt()
+                return "partial", "cleaned"
+        with patch.object(m.subprocess, "Popen", return_value=Fake()):
+            with patch.object(m.os, "killpg") as killed:
+                with self.assertRaises(KeyboardInterrupt):
+                    m.measure(["/local/run_load.py"], 90)
+        killed.assert_called_once_with(32315, m.signal.SIGKILL)
 
     def test_process_group_killed_instead_of_orphaning_server(self):
         class Fake:
