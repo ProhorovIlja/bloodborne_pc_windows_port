@@ -1,0 +1,161 @@
+# Builds the ALREADY EXISTING native Yharnam Together candidate components
+# directly from PR #17. No production deploy, no retail game data.
+name: SHYT isolated five-hunter playtest candidate
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths: [.github/workflows/shyt-playtest-candidate.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-isolated-playtest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-and-five-hunter-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fail closed on original Yharnam Together pin and game transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/mainline/check_source_of_truth.py
+          python -m unittest discover -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_native_same_socket_probe_v92.py' -v
+          python -m unittest discover -s tools/poc/yharnam/package-v41 \
+            -p 'test_assemble_windows_test_kit.py' -v
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_team_grant_slots_v103.cpp \
+            -lcrypto -o /tmp/shyt-playtest-v103
+          /tmp/shyt-playtest-v103
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("tools/poc/yharnam/unified-v9/compose_sources.py").read_text()
+          for name in ("sh_native_team_grant_slots_v103.hpp",
+                       "sh_native_tls_pair_list_v102.hpp",
+                       "patch_native_same_socket_probe_v92.py"):
+              assert name in p, "original YT compose missing " + name
+          print("SHYT_PR17_PLAYTEST_SOURCE_GATE_PASS")
+          PY
+
+  native-windows-game:
+    needs: source-and-five-hunter-gate
+    uses: ./.github/workflows/shyt-v36-composed-windows-client.yml
+
+  native-windows-shadnet:
+    needs: source-and-five-hunter-gate
+    uses: ./.github/workflows/shyt-v41-win-qt683-server.yml
+
+  isolated-ubuntu-shadnet:
+    needs: source-and-five-hunter-gate
+    uses: ./.github/workflows/shyt-v39-fnx-ubuntu2404-qt683.yml
+
+  pack-playtest:
+    needs: [native-windows-game, native-windows-shadnet, isolated-ubuntu-shadnet]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: seamless-hunt-V36-native-windows-INTERNAL
+          path: inputs/game
+      - uses: actions/download-artifact@v4
+        with:
+          name: shyt-v41-native-windows-qt683-INTERNAL
+          path: inputs/win-server
+      - uses: actions/download-artifact@v4
+        with:
+          name: seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL
+          path: inputs/linux-server
+      - name: Validate all three independent native builds before packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          pairs=[
+              ('inputs/game/bbport-windows.zip','inputs/game/bbport-windows.zip.sha256'),
+              ('inputs/win-server/candidate-win-server-qt683.zip','inputs/win-server/candidate-win-server-qt683.zip.sha256'),
+              ('inputs/linux-server/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz',
+               'inputs/linux-server/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz.sha256')]
+          for data_name,manifest_name in pairs:
+              p=Path(data_name)
+              line=Path(manifest_name).read_text('ascii').strip()
+              bits=line.split()
+              assert len(bits)==2 and bits[1]==p.name, 'invalid digest record'
+              assert sha256(p.read_bytes()).hexdigest()==bits[0].lower(), 'checksum mismatch: '+p.name
+          print('SHYT_PLAYTEST_THREE_ARTIFACT_HASHES_PASS')
+          PY
+          python tools/poc/yharnam/package-v41/assemble_windows_test_kit.py \
+            --game inputs/game/bbport-windows.zip \
+            --game-sha inputs/game/bbport-windows.zip.sha256 \
+            --server inputs/win-server/candidate-win-server-qt683.zip \
+            --server-sha inputs/win-server/candidate-win-server-qt683.zip.sha256 \
+            --out stage/SHYT-PR17-NATIVE-WINDOWS-TEST-ONLY.zip
+      - name: Attach source and compatibility manifest without readiness claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from zipfile import ZipFile
+          archive=Path('stage/SHYT-PR17-NATIVE-WINDOWS-TEST-ONLY.zip')
+          with ZipFile(archive) as z:
+              assert z.testzip() is None
+              names=set(z.namelist())
+              for entry in ('bbport-windows/BLauncher.exe','bbport-windows/Bloodborne.exe',
+                            'bbport-windows/bin/bb-probe.exe',
+                            'bbport-windows/server/shadnet.exe',
+                            'bbport-windows/backend/bb_dummy_server.py'):
+                  assert entry in names, 'missing gameplay/server file: '+entry
+          manifest={
+              'type':'internal_two_pc_playtest_candidate',
+              'commit':os.environ['GITHUB_SHA'],
+              'pinned_upstream':'77e350743a7cb4524cfcc1782fb6e3af64e25b15',
+              'compiled_natively':True,
+              'original_game_assets_included':False,
+              'works_with_public_YT_v1_3_0':False,
+              'real_5_player_test_verified':False,
+              'live_direct_p2p_verified':False,
+              'public_internet_server_secure_for_all_users':False,
+              'fornex_modified':False,
+              'test_only_relay_fallback':'on_by_default',
+              'required_next_gates':[
+                 'two_actual_PCs_login_and_join',
+                 'five_simultaneous_game_clients',
+                 'gameplay_traffic_and_frametime_metrics',
+                 'live_Direct_P2P_crypto_and_ACK_handover']
+          }
+          p=Path('stage/SHYT-PR17-TEST-STATUS.json')
+          p.write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print('SHYT_INTERNAL_PLAYTEST_CANDIDATE_STAGED_NOT_PUBLIC_RELEASE')
+          PY
+      - name: Keep Windows game+server ZIP and isolated Ubuntu server
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-PR17-NATIVE-PLAYTEST-WIN-LINUX-TEST-ONLY
+          path: |
+            stage/SHYT-PR17-NATIVE-WINDOWS-TEST-ONLY.zip
+            stage/SHYT-PR17-NATIVE-WINDOWS-TEST-ONLY.zip.sha256
+            stage/SHYT-PR17-TEST-STATUS.json
+            inputs/linux-server/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz
+            inputs/linux-server/seamless-hunt-shadnet-ubuntu2404-qt683-INTERNAL.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
