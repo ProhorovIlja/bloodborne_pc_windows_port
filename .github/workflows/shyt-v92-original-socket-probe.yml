@@ -4,6 +4,7 @@ on:
     branches: [feature/shyt-hybrid-p2p-v52]
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_pair_list_v102.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_same_socket_probe_v92.py
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v92-original-socket-probe.yml
@@ -11,6 +12,7 @@ on:
     branches: [feature/seamless-hunt-mainline]
     paths:
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_pair_list_v102.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_same_socket_probe_v92.py
       - tools/poc/yharnam/unified-v9/compose_sources.py
       - .github/workflows/shyt-v92-original-socket-probe.yml
@@ -42,6 +44,7 @@ jobs:
           from pathlib import Path
           code=Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
           assert 'v92.patch_game(files[v92.NETWORK]' in code
+          assert 'sh_native_tls_pair_list_v102.hpp' in code
           assert 'V92-V93 original UDP host_socket SHN1 probe dev-only' in code
           patch=Path('tools/poc/yharnam/hybrid-transport-v52/patch_native_same_socket_probe_v92.py').read_text()
           assert '::socket(AF_INET' not in patch
@@ -50,5 +53,8 @@ jobs:
           assert 'SendFrame(' not in patch
           assert 'direct_egress.Arm(' not in patch
           assert 'SHYT_ENABLE_TEST_LOCAL_MTLS' in patch
+          assert 'TryListLocalTeamPairsForTest(' in patch
+          assert 'receipt,nullptr,v102_pair_id' in patch
+          assert 'grant->pair_binding!=v102_pair_id' in patch
           print('SHYT_V92_ORIGINAL_GAME_SOCKET_GUARDED_PROBE_PASS')
           PY
