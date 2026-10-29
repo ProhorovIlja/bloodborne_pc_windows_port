@@ -19,6 +19,8 @@ class FsrCountofTest(unittest.TestCase):
         self.assertEqual(fixed.count("sizeof((copyJobs)[0])"),1)
         self.assertNotIn("_countof(",fixed)
         self.assertEqual(m.SOURCE["opticalflow/ffx_opticalflow.cpp"][1],9)
+        self.assertEqual(m.SOURCE["fsr3upscaler/ffx_fsr3upscaler.cpp"][1],7)
+        self.assertEqual(sum(n for _,n in m.SOURCE.values()),30)
         self.assertEqual(m.SOURCE["frameinterpolation/ffx_frameinterpolation.cpp"][1],14)
 
     def test_double_patch_missing_marker_and_unexpected_macro_refused(self):
