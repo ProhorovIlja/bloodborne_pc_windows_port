@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""V92 native Yharnam Together ORIGINAL P2PTransport same-socket NAT probes.
+
+Developer-flag gated. Uses original receive thread's recvfrom, exact
+server-authenticated peer endpoint, original firewall, original LinkWelcomed
+generation and original host_socket's Transmit. ZERO effect on normal game
+datagrams, GameLink or live Direct routing. Caller-controlled flags do not
+authorize game routing. No additional UDP socket is created.
+"""
+from __future__ import annotations
+NETWORK="emulator/src/core/libraries/network/p2p_sockets.cpp"
+HEADER="emulator/src/core/libraries/network/sh_nat_probe_v91.hpp"
+TAG="SHYT-V92-ORIGINAL-SOCKET-SIGNED-PROBE"
+
+def one(s,old,new,what):
+    n=s.count(old)
+    if n!=1:
+        raise ValueError(f"V92 {what}: expected exact one pinned source anchor, got {n}")
+    return s.replace(old,new,1)
+
+def patch_game(src):
+    if TAG in src:raise ValueError("V92 already applied")
+    if ("SHYT-V87-TRUSTED-SERVER-LINK" not in src or
+        "SHYT-V70-NATIVE-RECV-HMAC" not in src or
+        "SeamlessHunt::Hybrid::IsSHP1(datagram)" not in src or
+        "native_grant_inbox_v84" not in src or
+        "shyt_link_generation_v87" not in src):
+        raise ValueError("V92 requires original game and V84-V87 verified integration")
+    src=one(src,
+        '#include "core/libraries/network/sh_native_game_identity_v87.hpp" // SHYT-V87-TRUSTED-SERVER-LINK\n',
+        '#include "core/libraries/network/sh_native_game_identity_v87.hpp" // SHYT-V87-TRUSTED-SERVER-LINK\n'
+        '#include "core/libraries/network/sh_nat_probe_v91.hpp" // '+TAG+'\n'
+        '#include "core/libraries/network/sh_native_tls_local_client_v91.hpp" // V92 paired TLS-only admission\n'
+        '#include "core/libraries/network/sh_native_tls_pair_list_v102.hpp" // native five-hunter selector discovery\n'
+        '#include "core/libraries/network/sh_native_team_grant_slots_v103.hpp" // V103 bounded game-owned team grants\n',
+        "dev-only native probe header")
+    src=one(src,
+        '    SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 native_grant_inbox_v84{};\n',
+        '    SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 native_grant_inbox_v84{};\n'
+        '    SeamlessHunt::Hybrid::NativeTeamGrantSlotsV103 nat_team_grants_v103{};\n'
+        '    std::optional<SeamlessHunt::Hybrid::NatProbeProofV91> nat_probe_v92;\n'
+        '    std::uint64_t nat_probe_link_generation_v92=0;\n'
+        '    std::uint64_t nat_paired_tls_generation_v92=0;\n'
+        '    std::uint64_t nat_paired_tls_binding_v92=0;\n'
+        '    std::atomic_flag nat_tls_request_active_v93=ATOMIC_FLAG_INIT;\n',
+        "existing full-identity native grant member")
+    for old,remark in (
+        ('            native_grant_inbox_v84.Revoke(); // V86 logout/sockets closed\n',"socket shutdown"),
+        ('            native_grant_inbox_v84.Revoke(); // V86 account/server change\n',"account/server change"),
+    ):
+        src=one(src,old,old+
+            '            nat_team_grants_v103.RevokeAll(); // bound to this signed-in game link\n'
+            '            nat_probe_v92.reset(); // V92 '+remark+', wipe probe secrets\n'
+            '            nat_probe_link_generation_v92=0;\n'
+            '            nat_paired_tls_generation_v92=0;\n'
+            '            nat_paired_tls_binding_v92=0;\n',
+            remark+" revocation")
+    method='''    // Native game worker can discover up to 16 server-issued selectors
+    // for its own mTLS identity. This performs no gameplay Direct Arm,
+    // caches no peer IPs and uses no second UDP socket. Every selector
+    // must still pass a separate certificate-bound OFFER/READY and SHG2.
+    bool TryListLocalTeamPairsForTest(
+        const SeamlessHunt::Hybrid::NativeTlsLocalConfig& cfg,
+        const SeamlessHunt::Hybrid::NativeOfferIdentityV84& expected,
+        SeamlessHunt::Hybrid::RefreshNativeOfferIdentityV84 refresh,
+        void* trusted_game_state,
+        SeamlessHunt::Hybrid::NativeTlsPairListV102::PairSelectors& ids,
+        std::size_t& count) {
+        ids.fill(0);count=0;
+        if(!running.load(std::memory_order_acquire) || LinkCut() ||
+           !refresh || !trusted_game_state)return false;
+        std::uint64_t generation=0;
+        std::string current_id;
+        bool welcomed=false,configured=false;
+        {
+            std::lock_guard lock(link_mutex);
+            generation=shyt_link_generation_v87;
+            current_id=link_online_id;
+            welcomed=link_welcomed;
+            configured=link_server.addr_nbo && link_server.port_nbo;
+        }
+        const bool accepted=generation &&
+            SeamlessHunt::Hybrid::NativeGameSelfIdentityV87::MatchesAcceptedLink(
+                current_id,welcomed,configured,expected);
+        std::fill(current_id.begin(),current_id.end(),char(0));
+        if(!accepted)return false;
+        const auto unchanged=[&]() {
+            SeamlessHunt::Hybrid::NativeOfferIdentityV84 actual{};
+            return refresh(actual,trusted_game_state) &&
+                actual.self_account==expected.self_account &&
+                actual.peer_account==expected.peer_account &&
+                actual.session_epoch==expected.session_epoch &&
+                actual.world_revision==expected.world_revision &&
+                actual.locally_opted_in && expected.locally_opted_in;
+        };
+        if(!unchanged())return false;
+        // No native_grant_mutex or link_mutex held during blocking TLS.
+        if(!SeamlessHunt::Hybrid::NativeTlsPairListV102::List(cfg,ids,count))
+            return false;
+        bool linked=false;
+        {
+            std::lock_guard lock(link_mutex);
+            linked=running.load(std::memory_order_acquire) &&
+                shyt_link_generation_v87==generation &&
+                link_welcomed && link_server.addr_nbo &&
+                link_server.port_nbo;
+        }
+        if(!linked || !unchanged()) {
+            ids.fill(0);count=0;return false;
+        }
+        return true;
+    }
+
+    // Read-only: a granted V102 pair has been committed to this native
+    // game's own per-peer slot, but is still NOT permitted to transmit
+    // gameplay over Direct. Call only from a trusted game worker.
+    bool HasLocalTeamGrantForNatTest(
+        std::uint64_t pair_id,std::uint64_t now_ms) {
+        if(!running.load(std::memory_order_acquire) || LinkCut())return false;
+        std::lock_guard lock(native_grant_mutex);
+        std::uint64_t generation=0;
+        {
+            std::lock_guard link_lock(link_mutex);
+            if(!link_welcomed || !shyt_link_generation_v87 ||
+               !link_server.addr_nbo || !link_server.port_nbo)return false;
+            generation=shyt_link_generation_v87;
+        }
+        // PendingForNat refreshes the real game account and may itself
+        // consult link_mutex. Never call it while owning that lock.
+        return nat_team_grants_v103.PendingForNat(
+            pair_id,generation,now_ms)!=nullptr;
+    }
+
+    // V92: ONLY a full SHG2 *coordinated* V90 pair can probe. The
+    // original game's authenticated online ID must agree with the
+    // certificate identity and must survive the entire blocking mTLS
+    // handshake. V85 standalone SHG2 is explicitly NOT sufficient.
+    bool TryPairedTlsReadyForNatTest(
+        const SeamlessHunt::Hybrid::NativeTlsLocalConfig& cfg,
+        const SeamlessHunt::Hybrid::NativeOfferIdentityV84& expected,
+        std::uint64_t serial,
+        SeamlessHunt::Hybrid::RefreshNativeOfferIdentityV84 current,
+        void* verified_game_state,std::uint64_t now_ms,bool& both_ready,
+        std::uint64_t v102_pair_id=0) {
+        both_ready=false;
+        if(nat_tls_request_active_v93.test_and_set(
+              std::memory_order_acquire))return false;
+        struct ClearBusyV93 {
+            std::atomic_flag& busy;
+            ~ClearBusyV93(){busy.clear(std::memory_order_release);}
+        } clear_busy{nat_tls_request_active_v93};
+        if(!running.load(std::memory_order_acquire) || LinkCut())
+            return false;
+        std::uint64_t generation=0;
+        std::string game_id;
+        bool welcomed=false,configured=false;
+        {
+            std::lock_guard link_lock(link_mutex);
+            generation=shyt_link_generation_v87;
+            game_id=link_online_id;
+            welcomed=link_welcomed;
+            configured=link_server.addr_nbo && link_server.port_nbo;
+        }
+        const bool valid=generation &&
+            SeamlessHunt::Hybrid::NativeGameSelfIdentityV87::MatchesAcceptedLink(
+                game_id,welcomed,configured,expected);
+        std::fill(game_id.begin(),game_id.end(),char(0));
+        if(!valid)return false;
+        if(!v102_pair_id) {
+            // Legacy one-pair developer path stays isolated from V103.
+            std::lock_guard lock(native_grant_mutex);
+            nat_probe_v92.reset();
+            nat_probe_link_generation_v92=0;
+            nat_paired_tls_generation_v92=0;
+            nat_paired_tls_binding_v92=0;
+            native_grant_inbox_v84.Revoke();
+        }
+        // TLS I/O must never block the game's original UDP receive path.
+        SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 temporary_inbox;
+        bool receipt=false;
+        if(!SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV91::Request(
+              cfg,temporary_inbox,expected,serial,current,
+              verified_game_state,now_ms,receipt,nullptr,v102_pair_id))
+            return false;
+        const auto received_ms=static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+        if(!running.load(std::memory_order_acquire) || LinkCut())
+            return false;
+        {
+            // Only short, in-memory transfer under the game grant lock.
+            std::lock_guard lock(native_grant_mutex);
+            // The refreshed game state callback may itself consult
+            // link_mutex. NEVER nest it under that lock.
+            const auto* grant=temporary_inbox.PendingForNat(received_ms);
+            if(!grant)return false;
+            bool original_session_stable=false;
+            {
+                std::lock_guard link_lock(link_mutex);
+                original_session_stable=running.load(std::memory_order_acquire) &&
+                    shyt_link_generation_v87==generation && link_welcomed &&
+                    link_server.addr_nbo && link_server.port_nbo;
+            }
+            if(!original_session_stable)return false;
+            // The TLS server binds OFFER and READY to this same opaque
+            // selector. A mismatched receipt must never reach the game.
+            if(v102_pair_id && grant->pair_binding!=v102_pair_id)
+                return false;
+            const auto binding=grant->pair_binding;
+            if(v102_pair_id) {
+                // V103: five hunters require FOUR independent grant slots
+                // per native game, not one shared V90 inbox. Every slot
+                // owns its secret and retains its own game-state refresh.
+                if(!nat_team_grants_v103.InstallVerified(
+                       temporary_inbox,binding,generation,received_ms))
+                    return false;
+            } else {
+                if(!temporary_inbox.TransferVerifiedTo(
+                      native_grant_inbox_v84,received_ms))return false;
+                nat_paired_tls_generation_v92=generation;
+                nat_paired_tls_binding_v92=binding;
+            }
+        }
+        both_ready=receipt;
+        return true; // Still NOT permission for Direct game traffic
+    }
+
+    // V92 DEV-ONLY. Called from trusted native game worker, never UDP
+    // receive thread. This sends only a 144-byte SIGNED challenge over
+    // the existing host_socket; it NEVER changes the guest game-frame sender.
+    bool TryStartSameSocketNatProbeForTest(bool initiator,std::uint64_t now_ms) {
+        if(!running.load(std::memory_order_acquire) || LinkCut())
+            return false;
+        SeamlessHunt::Hybrid::NatProbeCodecV91::Wire initial{};
+        sockaddr_in destination{};
+        bool send=false;
+        {
+            std::lock_guard lock(native_grant_mutex);
+            nat_probe_v92.reset();
+            nat_probe_link_generation_v92=0;
+            std::uint64_t generation=0;
+            bool welcomed=false;
+            {
+                std::lock_guard link_lock(link_mutex);
+                generation=shyt_link_generation_v87;
+                welcomed=link_welcomed && link_server.addr_nbo &&
+                          link_server.port_nbo;
+            }
+            const auto* grant=native_grant_inbox_v84.PendingForNat(now_ms);
+            if(!generation || !welcomed || !grant ||
+               nat_paired_tls_generation_v92!=generation ||
+               nat_paired_tls_binding_v92!=grant->pair_binding)
+                return false;
+            nat_probe_v92.emplace(
+                initiator ?
+                  SeamlessHunt::Hybrid::NatProbeProofV91::Role::Initiator :
+                  SeamlessHunt::Hybrid::NatProbeProofV91::Role::Responder);
+            if(!nat_probe_v92->Start(*grant,now_ms)) {
+                nat_probe_v92.reset();return false;
+            }
+            nat_probe_link_generation_v92=generation;
+            if(initiator) {
+                if(!nat_probe_v92->Initial(now_ms,initial)) {
+                    nat_probe_v92.reset();
+                    nat_probe_link_generation_v92=0;
+                    return false;
+                }
+                destination.sin_family=AF_INET;
+                destination.sin_addr.s_addr=grant->peer_ipv4_nbo;
+                destination.sin_port=grant->peer_port_nbo;
+                send=true;
+            }
+        }
+        // Release grant lock before the original socket's sendto path.
+        // Firewall, existing delay simulation and LinkCut still apply.
+        if(send && !Transmit(destination,std::vector<u8>(
+              initial.begin(),initial.end()))) {
+            std::lock_guard lock(native_grant_mutex);
+            nat_probe_v92.reset();
+            nat_probe_link_generation_v92=0;
+            return false;
+        }
+        return true; // NOT permission for Direct game routing
+    }
+
+    // V92 test diagnostic: valid signed challenge/response received, but
+    // NO GameLink migration and no UDP gameplay authorization.
+    bool SameSocketNatProbeVerifiedForTest() {
+        std::lock_guard lock(native_grant_mutex);
+        return nat_probe_v92 &&
+               (nat_probe_v92->InitiatorVerified() ||
+                nat_probe_v92->ResponderVerified());
+    }
+'''
+    # A manually invoked old V85 one-sided offer must never be permitted
+    # to inherit the pair-authorized NAT socket state from an earlier V91
+    # full two-recipient receipt (even if the same online ID reconnects).
+    src=one(src,
+        '''        const bool received=SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV85::Request(
+''',
+        '''        nat_probe_v92.reset();
+        nat_probe_link_generation_v92=0;
+        nat_paired_tls_generation_v92=0;
+        nat_paired_tls_binding_v92=0;
+        const bool received=SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV85::Request(
+''',
+        "legacy one-sided mTLS cannot inherit V92 paired-transport admission")
+    src=one(src,
+        '''private:
+#endif
+private:
+    P2PTransport() = default;
+
+    static bool TrustedReverseDirectReady(''',
+        method+'''private:
+#endif
+private:
+    P2PTransport() = default;
+
+    static bool TrustedReverseDirectReady(''',
+        "existing V83-V87 guarded public debug method")
+    handle='''    // V92 uses the EXACT original receive thread and host_socket.
+    // The caller has already executed LinkCut & existing firewall check.
+    // Recognized signed-control prefix never goes to a guest game socket.
+    bool ReceiveNativeSignedProbeV92(
+        u32 source_ip_nbo,u16 source_port_nbo,
+        std::span<const u8> bytes) {
+        if(bytes.size()<4 || bytes[0]!='S' || bytes[1]!='H' ||
+           bytes[2]!='N' || bytes[3]!='1')return false;
+        SeamlessHunt::Hybrid::NatProbeCodecV91::Wire response{};
+        sockaddr_in destination{};
+        bool send=false;
+        bool send_receipt=false;
+        const auto now=static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+        {
+            std::lock_guard lock(native_grant_mutex);
+            bool link_ok=false;
+            {
+                std::lock_guard link_lock(link_mutex);
+                link_ok=link_welcomed && shyt_link_generation_v87 &&
+                   shyt_link_generation_v87==nat_probe_link_generation_v92 &&
+                   link_server.addr_nbo && link_server.port_nbo;
+            }
+            const auto* grant=native_grant_inbox_v84.PendingForNat(now);
+            if(!link_ok || !grant || !nat_probe_v92 ||
+               nat_paired_tls_generation_v92!=nat_probe_link_generation_v92 ||
+               nat_paired_tls_binding_v92!=grant->pair_binding) {
+                nat_probe_v92.reset();
+                nat_probe_link_generation_v92=0;
+                return true; // consume only the SHN1 control prefix
+            }
+            // Route each signed control kind to its one-use parser.
+            // Complete() consumes ReadyAck and PREPARES the fifth Receipt;
+            // receipt success is committed only after native socket sendto.
+            // All paths check full HMAC, account pair, nonce and endpoint.
+            if(bytes.size()==SeamlessHunt::Hybrid::NatProbeCodecV91::kWireBytes &&
+               bytes[5]==static_cast<std::uint8_t>(
+                 SeamlessHunt::Hybrid::NatProbeKindV91::ReadyAck)) {
+                send=nat_probe_v92->Complete(
+                    bytes,source_ip_nbo,source_port_nbo,now,response);
+                send_receipt=send;
+            } else if(bytes.size()==SeamlessHunt::Hybrid::NatProbeCodecV91::kWireBytes &&
+               bytes[5]==static_cast<std::uint8_t>(
+                 SeamlessHunt::Hybrid::NatProbeKindV91::Receipt)) {
+                (void)nat_probe_v92->CompleteResponder(
+                    bytes,source_ip_nbo,source_port_nbo,now);
+            } else {
+                send=nat_probe_v92->Reply(
+                    bytes,source_ip_nbo,source_port_nbo,now,response);
+            }
+            if(send) {
+                destination.sin_family=AF_INET;
+                destination.sin_addr.s_addr=grant->peer_ipv4_nbo;
+                destination.sin_port=grant->peer_port_nbo;
+            }
+        }
+        if(send) {
+            // Use the EXISTING UDP host_socket, never open a new socket.
+            const bool written=Transmit(destination,
+                std::vector<u8>(response.begin(),response.end()));
+            if(send_receipt && written) {
+                // The native lock may have been revoked during sendto.
+                // ReceiptSent rejects any new grant (different signed wire).
+                std::lock_guard lock(native_grant_mutex);
+                if(nat_probe_v92)
+                    (void)nat_probe_v92->ReceiptSent(response);
+            }
+        }
+        return true;
+    }
+
+'''
+    src=one(src,
+        '''    void ReceiveMain() {
+''',
+        '''#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
+'''+handle+'''#endif
+    void ReceiveMain() {
+''',
+        "original game receive helper")
+    # Demand the pinned firewall immediately before the original datagram
+    # construction; a source rearrangement must fail closed rather than
+    # admitting SHN1 control before firewall policy.
+    firewall_and_frame='''            if (!FirewallAllows(from.sin_addr.s_addr, from.sin_port, "a datagram from")) {
+                continue;
+            }
+            const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
+'''
+    if src.count('            if (const auto server = LinkServer();\n') != 1:
+        raise ValueError("V92 requires original server link demux")
+    src=one(src,firewall_and_frame,
+        firewall_and_frame+'''#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
+            // SHN1 is authenticated out-of-band control, AFTER the original
+            // firewall and BEFORE server link, SHP1 and guest vport demux.
+            // With default build flag OFF this block does not exist.
+            if(ReceiveNativeSignedProbeV92(from.sin_addr.s_addr,from.sin_port,
+                                           datagram))continue;
+#endif
+''',
+        "original firewall and UDP frame before server and Direct demux")
+    return src

@@ -1,0 +1,122 @@
+name: Seamless Hunt V100 original Qt game session auto pair stage
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v100-live-pair-autostage.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v100-live-pair-autostage.yml
+permissions:
+  contents: read
+jobs:
+  fail-closed-adapter:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm two real game identities and pinned Qt main insertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -v \
+            -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_native_server_pair_autostage_v100.py'
+  composed-real-shadnet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Install actual Qt6 and original shadNet compiler dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev qt6-httpserver-dev qt6-websockets-dev \
+            libprotobuf-dev protobuf-compiler libssl-dev pkg-config
+      - name: Compose immutable original YT source and check default off
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v100-real
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          root=Path('/tmp/shyt-v100-real')
+          path='server/src/main.cpp'
+          src=(root/path).read_text()
+          data=(root/path).read_bytes()
+          m=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          assert m['sha256'][path]==hashlib.sha256(data).hexdigest()
+          assert src.count('SHYT-V100-REAL-GAME-PAIR-AUTOSTAGE-LOCAL-ONLY')==1
+          assert 'SHYT_P2P_TLS_AUTOPAIR_TEST' in src
+          assert 'qEnvironmentVariable("SHYT_P2P_TLS_LOCAL_TEST")=="1"' in src
+          assert 'p2p_tls.StartLocal(' in src
+          assert src.index('p2p_tls.StartLocal(')<src.index('p2p_tls.ConfigureLocalReciprocalPairV90(')
+          assert 'second_pin.isEmpty()!=second_account.isEmpty()' in src
+          assert 'linked_account==second_account' in src
+          assert 'server.CaptureLocalP2POffer(recipient,peer)' in src
+          assert 'QObject::connect(pair_clock,&QTimer::timeout,&p2p_tls' in src
+          assert 'V100 original Qt server current YT game pair auto-stage only under two pinned local mTLS test identities; Direct OFF' in m['applied']
+          client=(root/'emulator/src/core/libraries/network/p2p_sockets.cpp').read_text()
+          assert 'direct_ingress.Arm(' not in client
+          assert 'direct_egress.Arm(' not in client
+          print('SHYT_V100_COMPOSED_ORIGINAL_SERVER_REAL_WORLD_PAIR_DEFAULT_OFF_PASS')
+          PY
+      - name: Compile original Qt server with V100 and real protobuf types
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v100-proto
+          protoc --proto_path=/tmp/shyt-v100-real/server/coop \
+            --cpp_out=/tmp/shyt-v100-proto /tmp/shyt-v100-real/server/coop/coop.proto
+          protoc --proto_path=pinned-upstream/server/src \
+            --cpp_out=/tmp/shyt-v100-proto pinned-upstream/server/src/shadnet.proto
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          source=Path('pinned-upstream/server/src')
+          output=Path('/tmp/shyt-v100-real/server/src')
+          for f in source.rglob('*'):
+              if f.is_file():
+                  target=output/f.relative_to(source)
+                  if not target.exists():
+                      target.parent.mkdir(parents=True,exist_ok=True)
+                      shutil.copy2(f,target)
+          PY
+          c++ -std=c++20 -O0 -fPIC -fsyntax-only \
+            -I /tmp/shyt-v100-real/server/src \
+            -I pinned-upstream/server \
+            -I /tmp/shyt-v100-proto \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6HttpServer) \
+            /tmp/shyt-v100-real/server/src/main.cpp \
+            /tmp/shyt-v100-real/server/src/server.cpp \
+            /tmp/shyt-v100-real/server/src/link_server.cpp \
+            /tmp/shyt-v100-real/server/src/bloodborne_world.cpp
+          echo SHYT_V100_ORIGINAL_QT_SHADNET_LIVE_PAIR_SYNTAX_PASS

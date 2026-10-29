@@ -1,0 +1,88 @@
+name: Seamless Hunt V75 sealed AES-256-GCM P2P grants
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_secure_grant.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_secure_grant.cpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v75-sealed-peer-grants.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  authenticated-sealed-grant:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Test AES-GCM tampering, expiry, replay and identity (Ubuntu OpenSSL)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I "$ROOT" "$ROOT/test_secure_grant.cpp" -lcrypto \
+            -o /tmp/shyt-v75-aes-grants
+          /tmp/shyt-v75-aes-grants
+          echo SHYT_V75_OPENSSL_GCM_SEALED_GRANT_PASS
+      - name: Test AES-GCM tampering, expiry, replay and identity (Windows CNG)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $root = 'tools/poc/yharnam/hybrid-transport-v52'
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I $root "$root/test_secure_grant.cpp" bcrypt.lib /Fe:shyt-v75-aes-grants.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V75 AES-GCM MSVC compilation failed' }
+          & "./shyt-v75-aes-grants.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'V75 AES-GCM Windows CNG regression failed' }
+          echo SHYT_V75_WINDOWS_CNG_GCM_SEALED_GRANT_PASS
+  composed-native-game-and-qt-server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Verify shared encrypted grant source is composed and no plaintext secret delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v75-full
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path('/tmp/shyt-v75-full')
+          manifest=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          p='sh_secure_grant.hpp'
+          client=root/'emulator/src/core/libraries/network'/p
+          server=root/'server/src'/p
+          assert client.is_file() and server.is_file()
+          assert client.read_bytes()==server.read_bytes()
+          for f in (client,server):
+              relative=f.relative_to(root).as_posix()
+              assert hashlib.sha256(f.read_bytes()).hexdigest()==manifest['sha256'][relative]
+          source=(root/'emulator/src/core/libraries/network/p2p_sockets.cpp').read_text()
+          assert 'direct_ingress.Arm(' not in source
+          assert 'direct_egress.Arm(' not in source
+          assert 'V75 AES-GCM peer grant offer codec staged; no unencrypted SHLK grant delivery and no game Arm' in manifest['applied']
+          assert (root/'server/src/sh_direct_crypto.hpp').is_file()
+          assert (root/'server/src/sh_direct_datagram.hpp').is_file()
+          print('SHYT_V75_ACTUAL_CLIENT_SERVER_SEALED_CODEC_FAIL_CLOSED_PASS')
+          PY

@@ -1,0 +1,81 @@
+name: Seamless Hunt V84 SHG2 full-width peer grant
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_secure_grant_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_secure_grant_v84.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_tls_offer_v84.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_grant_inbox_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_grant_inbox_v84.cpp
+      - .github/workflows/shyt-v84-fullwidth-grant.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_secure_grant_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_secure_grant_v84.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_offer_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_tls_offer_v84.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_grant_inbox_v84.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_grant_inbox_v84.cpp
+      - .github/workflows/shyt-v84-fullwidth-grant.yml
+permissions:
+  contents: read
+jobs:
+  fullwidth-offer:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install original Qt server and crypto dev headers (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev libssl-dev pkg-config
+      - name: Linux OpenSSL real AES256-GCM SHG2 V84 regression
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I "$root" \
+            "$root/test_secure_grant_v84.cpp" -lcrypto -o /tmp/shyt-v84
+          /tmp/shyt-v84
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I "$root" \
+            "$root/test_native_grant_inbox_v84.cpp" -lcrypto -o /tmp/shyt-v84-native
+          /tmp/shyt-v84-native
+          echo SHYT_V84_LINUX_CRYPTOPROOF_PASS
+      - name: Linux actual Qt server issuer -> native SHG2 full-ID roundtrip
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -fPIC -Wall -Wextra -Werror -pedantic -I "$root" \
+            "$root/test_tls_offer_v84.cpp" $(pkg-config --cflags --libs Qt6Core) \
+            -lcrypto -o /tmp/shyt-v84-qt-issuer
+          /tmp/shyt-v84-qt-issuer
+          echo SHYT_V84_QT_FULL_HASH_ISSUER_PASS
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Windows CNG real AES256-GCM SHG2 V84 regression
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_secure_grant_v84.cpp bcrypt.lib /Fe:shyt-v84.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V84 native Windows compile failed' }
+          ./shyt-v84.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V84 Windows AEAD identity tests failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_native_grant_inbox_v84.cpp bcrypt.lib /Fe:shyt-v84-native.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V84 native inbox Windows compile failed' }
+          ./shyt-v84-native.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V84 native inbox rejection tests failed' }
+          Write-Host SHYT_V84_WINDOWS_CRYPTOPROOF_PASS

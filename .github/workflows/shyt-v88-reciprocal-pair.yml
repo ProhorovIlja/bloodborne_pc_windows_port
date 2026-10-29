@@ -1,0 +1,63 @@
+name: Seamless Hunt V88 reciprocal 2-peer SHG2 authority gate
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_reciprocal_pair_v88.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_reciprocal_pair_v88.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_qt_reciprocal_pair_v88.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_qt_reciprocal_pair_v88.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v88-reciprocal-pair.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_reciprocal_pair_v88.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_reciprocal_pair_v88.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_qt_reciprocal_pair_v88.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_qt_reciprocal_pair_v88.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v88-reciprocal-pair.yml
+permissions:
+  contents: read
+jobs:
+  qt-reciprocal-grants:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install original Qt6 and OpenSSL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev libssl-dev pkg-config
+      - name: Test fail-closed original Qt server source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_qt_reciprocal_pair_v88.py' -v
+          echo SHYT_V88_QT_LINKSERVER_PATCH_GUARD_PASS
+      - name: Compile and run real AES256-GCM 2-party reciprocal tickets
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_reciprocal_pair_v88.cpp" \
+            $(pkg-config --cflags --libs Qt6Core) -lcrypto -o /tmp/v88-reciprocal
+          /tmp/v88-reciprocal
+          echo SHYT_V88_TWO_FULL_ACCOUNT_RECIPROCAL_AUTHORIZATION_PASS
+      - name: Run original one-sided V84 regressions unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_tls_offer_v84.cpp" \
+            $(pkg-config --cflags --libs Qt6Core) -lcrypto -o /tmp/v84-issuer
+          /tmp/v84-issuer
+          echo SHYT_V88_LEGACY_V84_ISSUER_COMPAT_PASS

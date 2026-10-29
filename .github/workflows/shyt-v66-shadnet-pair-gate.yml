@@ -1,0 +1,64 @@
+name: Seamless Hunt V66-V67 real shadNet pair grant prechecks
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_authenticated_pair.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_pair_snapshot.py
+      - .github/workflows/shyt-v66-shadnet-pair-gate.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_authenticated_pair.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_pair_snapshot.py
+      - .github/workflows/shyt-v66-shadnet-pair-gate.yml
+permissions:
+  contents: read
+jobs:
+  upstream-qt-hub:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Install Qt6Core for real shadNet Hub compilation
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev pkg-config
+      - name: Patch exact real upstream server Hub and run its original tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/hybrid-transport-v52/patch_pair_snapshot.py pinned-upstream
+          c++ -std=c++20 -fPIC -O2 -Wall -Wextra -Werror -Wno-error=missing-field-initializers -pedantic \
+            -I pinned-upstream/server -I pinned-upstream/server/src \
+            '-DBLOODBORNE_SERVER_LINK_CONTRACTS="pinned-upstream/server/tests/contracts/server_link_frames.txt"' \
+            $(pkg-config --cflags Qt6Core) \
+            pinned-upstream/server/src/server_link.cpp \
+            pinned-upstream/server/tests/test_server_link.cpp \
+            $(pkg-config --libs Qt6Core) \
+            -o /tmp/shyt-v66-shadnet-pair-tests
+          /tmp/shyt-v66-shadnet-pair-tests
+          echo SHYT_V66_NATIVE_QT_SERVER_PAIR_ADMISSION_PASS
+      - name: No automatic grants, sockets, or live server changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/poc/yharnam/hybrid-transport-v52/patch_authenticated_pair.py').read_text()
+          assert 'direct_consent' in p and 'a.build != b.build' in p
+          assert 'now_ms - a.last_heard_ms > quiet_ms' in p
+          assert 'No client opt-ins or P2P feature by default' in p
+          assert 'DirectPairEligible' in Path('pinned-upstream/server/src/server_link.cpp').read_text()
+          assert 'CaptureDirectPairSnapshot' in Path('pinned-upstream/server/src/server_link.cpp').read_text()
+          assert 'DirectPairSnapshotRevocation()' in Path('pinned-upstream/server/tests/test_server_link.cpp').read_text()
+          print('SHYT_V66_NO_UNAUTHENTICATED_DIRECT_GRANTS_PASS')
+          PY

@@ -1,0 +1,98 @@
+name: Seamless Hunt V97 upstream native Doll level-up fix
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_upstream_doll_flag_v97.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_upstream_doll_v97.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_bloodborne_doll_v97.cpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v97-original-game-doll-levelup.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  pinned-real-game-flag-table:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate four original-game patch anchors and fail-closed semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_upstream_doll_v97.py' -v
+      - name: Fetch pinned original game and apply V97 as one transaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          from urllib.request import urlopen
+          from time import sleep
+          root=Path('tools/poc/yharnam/hybrid-transport-v52')
+          sp=importlib.util.spec_from_file_location('v97',root/'patch_upstream_doll_flag_v97.py')
+          v97=importlib.util.module_from_spec(sp);sp.loader.exec_module(v97)
+          base='https://raw.githubusercontent.com/lKaniel/bloodborne-server/77e350743a7cb4524cfcc1782fb6e3af64e25b15/'
+          sources={}
+          for name in v97.FILES:
+              last=None
+              for attempt in range(3):
+                  try:
+                      with urlopen(base+name,timeout=40) as r:
+                          sources[name]=r.read()
+                      break
+                  except Exception as exc:
+                      last=exc;sleep(1)
+              else: raise RuntimeError(f'Pinned upstream {name} inaccessible') from last
+          fixed=v97.patch(sources)
+          for name in v97.FILES:
+              dest=Path('v97-pinned')/name
+              dest.parent.mkdir(parents=True,exist_ok=True)
+              dest.write_bytes(fixed[name])
+          # For C++ header-only rule-table verification, supply just
+          # the integral aliases of original common/types.h.
+          common=Path('v97-pinned/stub/common/types.h')
+          common.parent.mkdir(parents=True,exist_ok=True)
+          common.write_text('#pragma once\n#include <cstdint>\n#include <cstddef>\nusing u8=std::uint8_t;\nusing u32=std::uint32_t;\nusing s32=std::int32_t;\n')
+          patched=fixed[v97.STORE].decode()
+          assert 'ClearStuckDollLevelUpFlag();' in patched
+          assert 'party_controller.has_value(), EventFlagOn(DollLevelUpFlag)' in patched
+          assert fixed[v97.PARTY_CPP].decode().count('return party_configured && flag_on;')==1
+          assert 'v97.patch(doll_sources)' in Path('tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
+          print('SHYT_V97_ORIGINAL_GAME_FOUR_SOURCE_PATCH_PASS')
+          PY
+      - name: Linux compile actual original native flag table
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I v97-pinned/stub -I v97-pinned/emulator/src/core \
+            tools/poc/yharnam/hybrid-transport-v52/test_bloodborne_doll_v97.cpp \
+            -o /tmp/shyt-v97-doll
+          /tmp/shyt-v97-doll
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Windows MSVC compile actual original native flag table
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I v97-pinned/stub /I v97-pinned/emulator/src/core tools/poc/yharnam/hybrid-transport-v52/test_bloodborne_doll_v97.cpp /Fe:shyt-v97-doll.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V97 original native game table did not compile' }
+          ./shyt-v97-doll.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V97 original native game Doll flag invariant failed' }
+          Write-Host SHYT_V97_WINDOWS_REAL_GAME_FLAG_TABLE_PASS

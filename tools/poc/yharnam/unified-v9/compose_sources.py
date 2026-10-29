@@ -380,6 +380,29 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    v46_module.LAUNCHER:output[LAUNCHER].decode("utf-8")}
     for name,body in v46_module.transform(remote_source).items():
         output[name]=body.encode("utf-8")
+    # V66: actual pinned Qt shadNet Hub read-only authenticated pair gate.
+    # Requires signed-in current same-team game links and a server-authoritative
+    # mutual opt-in callback. The callback is intentionally NOT installed:
+    # without a secure server-issued grant/control channel, runtime stays relay.
+    v66_script=Path(__file__).resolve().parent.parent/"hybrid-transport-v52/patch_authenticated_pair.py"
+    v66_module=types.ModuleType("sh_v66_authenticated_pair")
+    v66_module.__file__=str(v66_script)
+    exec(compile(v66_script.read_text("utf-8"),str(v66_script),"exec"),v66_module.__dict__)
+    v66_paths=(v66_module.HEADER,v66_module.SOURCE,v66_module.TEST)
+    v66_sources={p:output[p].decode("utf-8") for p in v66_paths}
+    for p, contents in v66_module.transform(v66_sources).items():
+        output[p]=contents.encode("utf-8")
+    # V67: server-internal ephemeral pair snapshots, validated against
+    # re-hello generation, same party and current authoritative world epoch.
+    # Never serialize snapshots as client grants or distribute keys over SHLK.
+    v67_script=Path(__file__).resolve().parent.parent/"hybrid-transport-v52/patch_pair_snapshot.py"
+    v67_module=types.ModuleType("sh_v67_pair_snapshot")
+    v67_module.__file__=str(v67_script)
+    exec(compile(v67_script.read_text("utf-8"),str(v67_script),"exec"),v67_module.__dict__)
+    v67_paths=(v67_module.HEADER,v67_module.SOURCE,v67_module.TEST)
+    v67_sources={p:output[p].decode("utf-8") for p in v67_paths}
+    for p, contents in v67_module.transform(v67_sources).items():
+        output[p]=contents.encode("utf-8")
     for path in output:
         if path.startswith("/") or ".." in Path(path).parts:
             raise ValueError("unsafe relative path "+path)
@@ -404,6 +427,8 @@ def compose(source: dict[str,str], archives: Path, v8patch, *, verify_files=True
                    "V28 opt-in bounded pre-database Hello admission",
                    "V29 bounded local RPC backpressure and signed-in credential cache",
                    "V30 live DB verification of cached account password and ban status",
+                   "V66 signed-in same-party, build, liveness and bidirectional consent gate (default deny)",
+                   "V67 ephemeral Qt Hub pair snapshot revoked by re-hello, world epoch and consent",
                    "Qt 6.4 / modern WebAPI ABI compatibility from full server build",
                    "Qt 6.4 / modern WebAPI session invitation UTC timestamp compatibility",
                    "Qt 6.4 / modern StatsServer and BloodborneBackendServer HTTP API compatibility",
@@ -433,9 +458,439 @@ def run(checkout:Path, repo:Path, out:Path):
     v8.__file__=str(patch_path)
     exec(compile(patch_path.read_text("utf-8"),str(patch_path),"exec"),v8.__dict__)
     v5=load_zip_module(archives/ARCHIVES["dbno"],"patch_native_dbno.py","v5_dbno_init")
-    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,HTTP_SESSION_CPP,HTTP_STATS_CPP,HTTP_BACKEND_CPP,HTTP_BLOODBORNE_CPP,WEB_AUTH_CPP,SERVER_LINK_TEST,"bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c"}
+    required=set(v5.PATCHES)|{NETWORK,COOP,LAUNCHER,MAP3D,TEXTURE_GC,MAPCHARTS,MAPART,SAVE_EDITOR,SAVE_EDITOR_H,SERVER_BOARDS,SERVER_WORLD,SERVER_WORLD_H,COOP_STREAM,SERVER_LINK_CPP,SERVER_LINK_H,LINK_SERVER_CPP,LINK_SERVER_H,DATABASE_CPP,DATABASE_H,ACCOUNT_TEST_CPP,HTTP_CPP,HTTP_SESSION_CPP,HTTP_STATS_CPP,HTTP_BACKEND_CPP,HTTP_BLOODBORNE_CPP,WEB_AUTH_CPP,SERVER_LINK_TEST,"server/src/stream_extractor.h","bbport/src/runtime_camhook.c","bbport/src/runtime_pad.c",
+        "emulator/src/core/bloodborne_flags.h",
+        "emulator/src/core/bloodborne_flags_store.cpp",
+        "emulator/src/core/bloodborne_party.h",
+        "emulator/src/core/bloodborne_party.cpp",
+        "emulator/src/core/bloodborne_party_death.cpp",
+        "emulator/src/core/bloodborne_re_internal.h",
+        "emulator/src/core/bloodborne_re.cpp"}
     sources={name:(checkout/name).read_text(encoding="utf-8") for name in required}
     files,meta=compose(sources,archives,v8)
+    # ALL additional pinned source text must be loaded with Python's
+    # universal newline decoder. Windows checkout can store CRLF, while
+    # immutable patch anchors deliberately require normalized LF. Binary
+    # headers/artifacts remain loaded via read_bytes() elsewhere.
+    def pinned_source(path: str) -> str:
+        if path in files:
+            return files[path].decode("utf-8").replace("\r\n","\n")
+        return (checkout/path).read_text(encoding="utf-8")
+    # V69: apply runtime-only optional byte/packet counters to the ENTIRE
+    # original p2p_sockets.cpp after the pinned source has been composed.
+    # Strict anchor matching ensures a changed V7 transport is never silently
+    # patched. The source-only synthetic unit fixtures intentionally do not
+    # approximate the whole 1,600-line native game socket translation unit.
+    metrics_dir=repo/"tools/poc/yharnam/hybrid-transport-v52"
+    metrics_script=metrics_dir/"patch_native_route_metrics.py"
+    metrics=types.ModuleType("sh_v69_native_metrics")
+    metrics.__file__=str(metrics_script)
+    exec(compile(metrics_script.read_text("utf-8"),str(metrics_script),"exec"),metrics.__dict__)
+    files[NETWORK]=metrics.patch(files[NETWORK].decode("utf-8")).encode("utf-8")
+    files[metrics.HEADER]=(metrics_dir/"sh_route_metrics.hpp").read_bytes()
+    meta["applied"].append("V69 opt-in real native P2PTransport relay volume counters")
+    # V70: REAL physical UDP ReceiveMain can now recognize a MAC-authenticated
+    # SHP1 peer payload and restore the server-attested virtual game endpoint.
+    # No trusted install/Arm exists yet: every peer SHP1 packet drops by default.
+    # The legacy SHLK server relay path and default user settings are unchanged.
+    ingress_script=metrics_dir/"patch_native_direct_rx.py"
+    v70=types.ModuleType("sh_v70_native_direct_rx")
+    v70.__file__=str(ingress_script)
+    exec(compile(ingress_script.read_text("utf-8"),str(ingress_script),"exec"),v70.__dict__)
+    files[NETWORK]=v70.patch(files[NETWORK].decode("utf-8")).encode("utf-8")
+    for filename in v70.DIRECT_HEADERS:
+        path="emulator/src/core/libraries/network/"+filename
+        files[path]=(metrics_dir/filename).read_bytes()
+    meta["applied"].append("V70 fail-closed HMAC direct RX hook in native P2PTransport socket")
+    # V71: Direct-first SEND boundary in actual native P2PTransport::SendFrame.
+    # The trusted server-grant installer does not exist, so it remains RELAY.
+    tx_script=metrics_dir/"patch_native_direct_tx.py"
+    v71=types.ModuleType("sh_v71_native_direct_tx")
+    v71.__file__=str(tx_script)
+    exec(compile(tx_script.read_text("utf-8"),str(tx_script),"exec"),v71.__dict__)
+    files[NETWORK]=v71.patch(files[NETWORK].decode("utf-8")).encode("utf-8")
+    files["emulator/src/core/libraries/network/sh_native_direct_tx.hpp"]=(metrics_dir/"sh_native_direct_tx.hpp").read_bytes()
+    meta["applied"].append("V71 fail-closed native SendFrame Direct/Relay TX hook")
+    # V72: LinkServer's snapshot epoch must read the real BloodborneWorld
+    # party/map/area/owner revision, not client-supplied booleans. Mutual
+    # P2P consent remains unconfigured => still no live direct grants.
+    v72_script=metrics_dir/"patch_live_world_epoch.py"
+    v72=types.ModuleType("sh_v72_authoritative_world_epoch")
+    v72.__file__=str(v72_script)
+    exec(compile(v72_script.read_text("utf-8"),str(v72_script),"exec"),v72.__dict__)
+    affected={p:files[p].decode("utf-8") for p in (v72.WORLD_H,v72.WORLD_CPP,v72.LINK_CPP)}
+    for path,body in v72.transform(affected).items():
+        files[path]=body.encode("utf-8")
+    files[v72.REVISION_H]=(metrics_dir/"sh_world_revision.hpp").read_bytes()
+    # Extend the ORIGINAL server world tests; do not rely solely on a toy
+    # revision helper. These tests compile/run against actual Qt+protobuf
+    # when the entire server candidate is built.
+    original_world_tests=(checkout/v72.WORLD_TEST).read_text(encoding="utf-8")
+    files[v72.WORLD_TEST]=v72.transform_test(original_world_tests).encode("utf-8")
+    meta["applied"].append("V72 server-derived party/map/owner world epoch for P2P candidate revocation")
+    # V73: even if a future caller claims reliable-stream authority, the
+    # REAL native TX/RX header hardcodes the handover gate to false until the
+    # original GameLink ACK/sequence/retransmit lane has genuinely migrated.
+    # Header bytes are already staged by V70/V71; record exactly what ships.
+    meta["applied"].append("V73 native Direct allows only ACK-free unreliable game frames until reliable GameLink migration")
+    # V74: a newer native client may explicitly opt in using an optional
+    # protobuf Hello field. ORIGINAL legacy clients emit no field => DENY.
+    # The shadNet Qt world holds each client's consent from its signed-in
+    # link, and the real Hub checks BOTH directions. Crucially this neither
+    # distributes addresses/keys nor Arm()s client Direct sockets yet.
+    v74_script=metrics_dir/"patch_mutual_p2p_consent.py"
+    v74=types.ModuleType("sh_v74_mutual_p2p_consent")
+    v74.__file__=str(v74_script)
+    exec(compile(v74_script.read_text("utf-8"),str(v74_script),"exec"),v74.__dict__)
+    v74_paths=(v74.PROTO,v74.WORLD_H,v74.WORLD_CPP,v74.LINK_CPP,
+               v74.CLIENT_WORLD,v74.WORLD_TEST)
+    v74_sources={p:pinned_source(p) for p in v74_paths}
+    for path,body in v74.transform(v74_sources).items():
+        files[path]=body.encode("utf-8")
+    meta["applied"].append("V74 opt-in protobuf native client Hello + game-world mutual consent, legacy DENY")
+    # V75: stage the same AES-256-GCM sealed-offer codec on BOTH game and
+    # original Qt server. Not included/called by any production transport yet:
+    # TLS-exporter keying, mutual TLS identities and grant issuance still
+    # require their authenticated control-plane integration.
+    sealed_header=(metrics_dir/"sh_secure_grant.hpp").read_bytes()
+    files["emulator/src/core/libraries/network/sh_secure_grant.hpp"]=sealed_header
+    files["server/src/sh_secure_grant.hpp"]=sealed_header
+    # The server-side codec's header imports the primitive from the same
+    # source tree, not via the game's include search path.
+    for shared in ("sh_direct_crypto.hpp","sh_direct_datagram.hpp"):
+        files["server/src/"+shared]=(metrics_dir/shared).read_bytes()
+    meta["applied"].append("V75 AES-GCM peer grant offer codec staged; no unencrypted SHLK grant delivery and no game Arm")
+    # V76: gather peer addresses/virtual IDs and world revision atomically
+    # from the REAL single Qt server game-world state, and require both
+    # current account-bound game Hello consents, before future TLS grants.
+    # No public/shadNet plaintext endpoint exposes this sensitive snapshot.
+    v76_script=metrics_dir/"patch_authoritative_pair_scope.py"
+    v76=types.ModuleType("sh_v76_direct_pair_scope")
+    v76.__file__=str(v76_script)
+    exec(compile(v76_script.read_text("utf-8"),str(v76_script),"exec"),v76.__dict__)
+    v76_files={p:files[p].decode("utf-8") for p in (
+        v76.WORLD_H,v76.WORLD_CPP,v76.WORLD_TEST)}
+    for path,body in v76.patch(v76_files).items():
+        files[path]=body.encode("utf-8")
+    meta["applied"].append("V76 single authoritative Qt peer scope, two consents, real/virtual endpoints, no key disclosure")
+    # V77: a pair can return to the exact same map/team/owner after
+    # leaving or a link restart. Include server-only monotonically
+    # allocated per-member generations to avoid an old grant matching
+    # this apparent same-world (ABA) state. No network/user DB updates.
+    v77_script=metrics_dir/"patch_p2p_session_generation.py"
+    v77=types.ModuleType("sh_v77_game_link_generation")
+    v77.__file__=str(v77_script)
+    exec(compile(v77_script.read_text("utf-8"),str(v77_script),"exec"),v77.__dict__)
+    for path,body in v77.patch({p:files[p].decode("utf-8") for p in
+                               (v77.H,v77.CPP,v77.TEST)}).items():
+        files[path]=body.encode("utf-8")
+    meta["applied"].append("V77 server-only game link epoch rejects old grants after same-map/owner rejoin")
+    # V78: OPTIONAL mutual TLS 1.3 readiness check inside the SAME Qt daemon,
+    # localhost-only even when explicitly enabled, otherwise zero listener.
+    # It intentionally issues NO grants/peer IPs; cannot fall back to SHLK.
+    v78_script=metrics_dir/"patch_tls_local_listener.py"
+    v78=types.ModuleType("sh_v78_mtls_local_listener")
+    v78.__file__=str(v78_script)
+    exec(compile(v78_script.read_text("utf-8"),str(v78_script),"exec"),v78.__dict__)
+    main_path=v78.MAIN
+    # On GitHub Windows runners Git checks out untouched main.cpp with
+    # CRLF. read_bytes().decode() preserved those CRLFs, so every pinned
+    # LF-only V78 anchor failed before *any* real game/server compilation.
+    # Path.read_text() uses universal newline decoding, matching the
+    # compose() sources already read above and preserving strict anchors.
+    main_original=(files[main_path].decode("utf-8") if main_path in files
+                   else (checkout/main_path).read_text(encoding="utf-8"))
+    files[main_path]=v78.patch(main_original).encode("utf-8")
+    files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
+    meta["applied"].append("V78 disabled-by-default loopback-only mTLS 1.3 Qt readiness, NO grants")
+    # V79: local, operator-pinned SHA256 X.509 certificate -> signed-in
+    # current game account and server-owned live link generation. CN/SAN
+    # and arbitrary client-provided ID are NEVER accepted as identity.
+    # No grants/keys/IPs issued even after a valid V79 BIND.
+    v79_script=metrics_dir/"patch_tls_account_binding.py"
+    v79=types.ModuleType("sh_v79_live_tls_game_identity")
+    v79.__file__=str(v79_script)
+    exec(compile(v79_script.read_text("utf-8"),str(v79_script),"exec"),v79.__dict__)
+    v79_paths=(v79.MAIN,v79.SERVER_H,v79.SERVER_CPP,v79.LINK_H,
+               v79.LINK_CPP,v79.WORLD_H,v79.WORLD_CPP,v79.WORLD_TEST)
+    v79_sources={p:pinned_source(p) for p in v79_paths}
+    for path,body in v79.patch(v79_sources).items():
+        files[path]=body.encode("utf-8")
+    files[v79.IDENTITY_H]=(metrics_dir/"sh_p2p_tls_identity.hpp").read_bytes()
+    # listener is included in main and now depends on the pinned identity.
+    files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
+    meta["applied"].append("V79 operator X509 SHA256 pin plus LIVE authenticated Qt game epoch, no grants")
+    # V80: a uniquely generated wrapping key is sent only INSIDE the
+    # verified TLS 1.3 connection to the operator-pinned current game account.
+    # A later command on the SAME socket must revalidate V77 link epoch.
+    # This is not the future V75 grant-issuance path and offers no peer IPs.
+    files["server/src/sh_p2p_tls_key_session.hpp"]=(metrics_dir/"sh_p2p_tls_key_session.hpp").read_bytes()
+    files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
+    meta["applied"].append("V80 per mTLS connection fresh wrapping key and live epoch recheck, NO peer offers")
+    # V81: the first (local/dev ONLY) real offer must be minted from
+    # server-owned CURRENT signed-in game links and mutual consent, then
+    # sealed with V80's one-time TLS application key using V75 AES-GCM.
+    # The destination peer is selected by the local server operator, NOT
+    # by a user-supplied plaintext SHLK/HTTP/TLS peer identifier.
+    v81_script=metrics_dir/"patch_tls_local_offer.py"
+    v81=types.ModuleType("sh_v81_tls_local_grant")
+    v81.__file__=str(v81_script)
+    exec(compile(v81_script.read_text("utf-8"),str(v81_script),"exec"),v81.__dict__)
+    v81_paths=(v81.MAIN,v81.SERVER_H,v81.SERVER_CPP,v81.LINK_H,v81.LINK_CPP)
+    v81_input={p:files[p].decode("utf-8") for p in v81_paths}
+    for path,body in v81.patch(v81_input).items():
+        files[path]=body.encode("utf-8")
+    cmake_source=pinned_source(v81.CMAKE)
+    files[v81.CMAKE]=v81.patch_cmake(cmake_source).encode("utf-8")
+    files[v81.OFFER_H]=(metrics_dir/"sh_p2p_tls_offer_issuer.hpp").read_bytes()
+    files["server/src/sh_p2p_tls_key_session.hpp"]=(metrics_dir/"sh_p2p_tls_key_session.hpp").read_bytes()
+    files[v78.HEADER]=(metrics_dir/"sh_p2p_tls_listener.hpp").read_bytes()
+    meta["applied"].append("V81 loopback mTLS peer offer from current mutually consenting Qt links, sealed SHG1 once")
+    # V82: the ACTUAL native game's P2PTransport now OWNS a fail-closed
+    # SHG1 receiver. It is only staged; no native client TLS adapter exists,
+    # no public grant installer and NO direct TX/RX Arm calls. Native socket
+    # stop / account-reconfigure clear pending secrets, leaving SHLK intact.
+    v82_script=metrics_dir/"patch_native_grant_inbox.py"
+    v82=types.ModuleType("sh_v82_native_offer_inbox")
+    v82.__file__=str(v82_script)
+    exec(compile(v82_script.read_text("utf-8"),str(v82_script),"exec"),v82.__dict__)
+    files[v82.NETWORK]=v82.patch_game(files[v82.NETWORK].decode("utf-8")).encode("utf-8")
+    files[v82.HEADER]=(metrics_dir/"sh_native_grant_inbox.hpp").read_bytes()
+    meta["applied"].append("V82 actual native game owns unarmed, replay-protected TLS SHG1 inbox, revoked with account/socket")
+    # V83: real non-Qt OpenSSL/LibreSSL TLS 1.3 client, pinned server
+    # certificate chain + loopback IP SAN, mutual X509, 1-use V80 key,
+    # actual V81 SHG1 -> V82 game-owned inbox. Only a dedicated native
+    # developer CMake opt-in exposes its callable entry point. DEFAULT OFF;
+    # NO autoconnect, remote endpoint, NAT or Direct Arm call.
+    v83_script=metrics_dir/"patch_native_tls_local_client.py"
+    v83=types.ModuleType("sh_v83_native_local_mtls")
+    v83.__file__=str(v83_script)
+    exec(compile(v83_script.read_text("utf-8"),str(v83_script),"exec"),v83.__dict__)
+    files[v83.NETWORK]=v83.patch_game(files[v83.NETWORK].decode("utf-8")).encode("utf-8")
+    cmake_game=pinned_source(v83.CMAKE)
+    files[v83.CMAKE]=v83.patch_cmake(cmake_game).encode("utf-8")
+    files[v83.HEADER]=(metrics_dir/"sh_native_tls_local_client.hpp").read_bytes()
+    meta["applied"].append("V83 real native LibreSSL TLS1.3 client callable DEV-only; default OFF, no Direct Arm")
+    # V84/V85: SAME original Qt loopback-only listener now offers an
+    # explicit SHG2 version, with full SHA256 IDs and a non-Qt recipient.
+    # Keep the production game call site UNWIRED and Direct disabled.
+    # These headers are staged to ensure the Qt server and native game
+    # have exactly the same audited protocol sources in the combined tree.
+    for name in ("sh_secure_grant_v84.hpp",):
+        blob=(metrics_dir/name).read_bytes()
+        files["server/src/"+name]=blob
+        files["emulator/src/core/libraries/network/"+name]=blob
+    files["server/src/sh_p2p_tls_offer_v84.hpp"]=(
+        metrics_dir/"sh_p2p_tls_offer_v84.hpp").read_bytes()
+    for name in ("sh_native_grant_inbox_v84.hpp",
+                 "sh_native_tls_local_client_v85.hpp"):
+        files["emulator/src/core/libraries/network/"+name]=(
+            metrics_dir/name).read_bytes()
+    meta["applied"].append(
+        "V84-V85 SHG2 256-bit recipient and peer identity, actual Qt/native local TLS source; no production P2P Arm")
+    # V86: the *same* original native game P2PTransport stores a SECOND
+    # sealed inbox while the dev-only TLS compile flag is enabled. Both
+    # account/reconfigure and socket shutdown revoke its pending secrets.
+    # No runtime caller, automatic connect, NAT probes, or Direct Arm here.
+    v86_script=metrics_dir/"patch_native_shg2_owner_v86.py"
+    v86=types.ModuleType("sh_v86_native_fullid_owner")
+    v86.__file__=str(v86_script)
+    exec(compile(v86_script.read_text("utf-8"),str(v86_script),"exec"),v86.__dict__)
+    files[v86.NETWORK]=v86.patch_game(files[v86.NETWORK].decode("utf-8")).encode("utf-8")
+    meta["applied"].append("V86 native P2PTransport owns SHG2 inbox, DEV-only OFF and revoked at logout/socket stop; Direct OFF")
+    # V87: only the original game P2PTransport's server-welcomed link
+    # online_id may become the local SHG2 ID; a link reconnect/build
+    # change/quiet epoch must fail closed even for the same account name.
+    v87_script=metrics_dir/"patch_native_link_identity_v87.py"
+    v87=types.ModuleType("sh_v87_native_accepted_server_link")
+    v87.__file__=str(v87_script)
+    exec(compile(v87_script.read_text("utf-8"),str(v87_script),"exec"),v87.__dict__)
+    files[v87.NETWORK]=v87.patch_game(files[v87.NETWORK].decode("utf-8")).encode("utf-8")
+    files[v87.HEADER]=(metrics_dir/"sh_native_game_identity_v87.hpp").read_bytes()
+    meta["applied"].append("V87 SHA256 game-self identity requires server Welcome, stable link epoch, Direct OFF")
+    # V88: stage full 2-way SHG2 reciprocal pair helper inside original
+    # SINGLE Qt shadNet, and add internal server-only capture API.
+    # It obtains two current mutually consenting LinkServer snapshots,
+    # refuses mismatch, generates a common pair binding and two distinct
+    # directional keys. NOT delivered on public TLS / NAT / UDP yet.
+    v88_script=metrics_dir/"patch_qt_reciprocal_pair_v88.py"
+    v88=types.ModuleType("sh_v88_qt_recipient_pair")
+    v88.__file__=str(v88_script)
+    exec(compile(v88_script.read_text("utf-8"),str(v88_script),"exec"),v88.__dict__)
+    files[v88.HEADER]=(metrics_dir/"sh_p2p_reciprocal_pair_v88.hpp").read_bytes()
+    v88_paths=(v88.SERVER_H,v88.SERVER_CPP,v88.LINK_H,v88.LINK_CPP)
+    v88_input={p:files[p].decode("utf-8") for p in v88_paths}
+    for name,body in v88.patch(v88_input).items():
+        files[name]=body.encode("utf-8")
+    # V89: shared pair master is delivered to BOTH native clients using
+    # separate authenticated TLS keys. Derive direction- and purpose-
+    # separated HMAC keys locally; never install the raw master on UDP.
+    files["emulator/src/core/libraries/network/sh_pair_key_schedule_v89.hpp"]=(
+        metrics_dir/"sh_pair_key_schedule_v89.hpp").read_bytes()
+    meta["applied"].append("V88-V89 Qt original LinkServer reciprocal pair, shared SHG2 secret, native directional probe/game KDF (no UDP Arm)")
+    # V90: same Qt shadNet loopback TLS listener owns one short-lived
+    # server-generated two-recipient pair lease. Each independently pinned
+    # TLS session consumes its half ONCE, always after fresh world checks.
+    # The separate native client is DEV-only and never auto-connects.
+    files["server/src/sh_p2p_pair_lease_v90.hpp"]=(
+        metrics_dir/"sh_p2p_pair_lease_v90.hpp").read_bytes()
+    # V101: the actual Qt TLS listener now has bounded independent V90
+    # leases, isolated per member pair. Existing client wire remains V90.
+    files["server/src/sh_p2p_pair_registry_v101.hpp"]=(
+        metrics_dir/"sh_p2p_pair_registry_v101.hpp").read_bytes()
+    files["server/src/sh_p2p_team_registry_v102.hpp"]=(
+        metrics_dir/"sh_p2p_team_registry_v102.hpp").read_bytes()
+    files["emulator/src/core/libraries/network/sh_native_tls_local_client_v90.hpp"]=(
+        metrics_dir/"sh_native_tls_local_client_v90.hpp").read_bytes()
+    meta["applied"].append("V90 original Qt loopback mTLS two-client one-use paired SHG2 lease; game UDP remains relay")
+    # V91 staged ONLY: signed NAT reverse challenges using V89 derived probe
+    # keys, full 256-bit identities, strict server-authorized endpoints,
+    # replay-protected wire + four-step key possession proof. No game
+    # socket read/write hook, no Direct Arm, no ACK/routing change.
+    files["emulator/src/core/libraries/network/sh_nat_probe_v91.hpp"]=(
+        metrics_dir/"sh_nat_probe_v91.hpp").read_bytes()
+    meta["applied"].append("V91 native CNG/OpenSSL signed NAT probe source, still UNWIRED from game UDP socket, Direct OFF")
+    # V91 server and native recipient must use exact same purpose-isolated
+    # READY HMAC header. Server checks two TLS receipts; this is *only*
+    # possession of pair master, never proof of completed UDP/GameLink.
+    ready_header=(metrics_dir/"sh_pair_ready_v91.hpp").read_bytes()
+    files["server/src/sh_pair_ready_v91.hpp"]=ready_header
+    files["emulator/src/core/libraries/network/sh_pair_ready_v91.hpp"]=ready_header
+    files["emulator/src/core/libraries/network/sh_native_tls_local_client_v91.hpp"]=(
+        metrics_dir/"sh_native_tls_local_client_v91.hpp").read_bytes()
+    # Native V102 real certificate-bound selector discovery is needed by
+    # the V92 game-owned same-socket pair admission. Still test-only.
+    files["emulator/src/core/libraries/network/sh_native_tls_pair_list_v102.hpp"]=(
+        metrics_dir/"sh_native_tls_pair_list_v102.hpp").read_bytes()
+    files["emulator/src/core/libraries/network/sh_native_team_grant_slots_v103.hpp"]=(
+        metrics_dir/"sh_native_team_grant_slots_v103.hpp").read_bytes()
+    # Stage the revised KDF on BOTH platforms; both need ReadyProof=3.
+    kdf_header=(metrics_dir/"sh_pair_key_schedule_v89.hpp").read_bytes()
+    files["server/src/sh_pair_key_schedule_v89.hpp"]=kdf_header
+    files["emulator/src/core/libraries/network/sh_pair_key_schedule_v89.hpp"]=kdf_header
+    meta["applied"].append("V91 original Qt TLS client READY HMAC requires both recipients, native V91 proof; all Direct game routes OFF")
+    # V92: native ORIGINALLY bound host_socket probes. This is under the
+    # existing SHYT_ENABLE_TEST_LOCAL_MTLS default-OFF build opt-in. It
+    # sends only HMAC-SHA256 SHN1 control probes, NEVER game payload,
+    # and never creates a new socket or touches GameLink ACK routing.
+    v92_file=metrics_dir/"patch_native_same_socket_probe_v92.py"
+    v92=types.ModuleType("sh_v92_native_original_socket")
+    v92.__file__=str(v92_file)
+    exec(compile(v92_file.read_text("utf-8"),str(v92_file),"exec"),v92.__dict__)
+    files[v92.NETWORK]=v92.patch_game(files[v92.NETWORK].decode("utf-8")).encode("utf-8")
+    meta["applied"].append("V92-V93 original UDP host_socket SHN1 probe dev-only; worker-local V91 TLS grant verification and short game-owned inbox handoff, relay unchanged")
+    # V94: backport real upstream Yharnam Together PR365 pre-auth
+    # 2GB blob-size parser crash fix. Original pinned source still has
+    # the cast to int; this changes only the unsafe bounds checks.
+    v94_path=metrics_dir/"patch_upstream_stream_bounds_v94.py"
+    v94=types.ModuleType("sh_v94_upstream_parser_bounds")
+    v94.__file__=str(v94_path)
+    exec(compile(v94_path.read_text("utf-8"),str(v94_path),"exec"),v94.__dict__)
+    # This original Qt file is not part of earlier compose overlays.
+    # Require the pinned upstream original (or an already-staged overlay)
+    # before applying the fail-closed, exact-anchor security backport.
+    v94_input=(files[v94.SERVER].decode("utf-8") if v94.SERVER in files
+               else sources[v94.SERVER])
+    files[v94.SERVER]=v94.patch_header(v94_input).encode("utf-8")
+    meta["applied"].append("V94 upstream PR365 shadNet pre-auth 2GB blob signed-overflow bounds fix, default enabled")
+    # V97 upstream Kaniel PR407: Doll talk/menu flag 6700 must remain
+    # PER PLAYER; stale host-world flag makes every guest unable to level
+    # up. Only scrub at party map loads, never during live Doll dialogue.
+    v97_path=metrics_dir/"patch_upstream_doll_flag_v97.py"
+    v97=types.ModuleType("sh_v97_doll_per_player")
+    v97.__file__=str(v97_path)
+    exec(compile(v97_path.read_text("utf-8"),str(v97_path),"exec"),v97.__dict__)
+    # The four native gameplay units were UNMODIFIED before V97, so
+    # they live in pinned originals, not the previously composed overlay.
+    # Patch exact current overlay when present, else the pinned source.
+    doll_sources={name:(files[name] if name in files else sources[name].encode("utf-8"))
+                  for name in v97.FILES}
+    files.update(v97.patch(doll_sources))
+    meta["applied"].append("V97 upstream PR407 Doll level-up flag 6700 per-player and stale-on-map-load clearing, solo unaffected")
+    # V98: upstream PR410 saves a respawned hunter from an instantly
+    # repeated down at the lamp. Apply *after* V97 (party.h/.cpp overlap),
+    # with two additional immutable original game source units.
+    v98_path=metrics_dir/"patch_upstream_lethal_catches_v98.py"
+    v98=types.ModuleType("sh_v98_no_resurrected_lethal_catches")
+    v98.__file__=str(v98_path)
+    exec(compile(v98_path.read_text("utf-8"),str(v98_path),"exec"),v98.__dict__)
+    v98_sources={name:(files[name] if name in files else sources[name].encode("utf-8"))
+                 for name in v98.FILES}
+    files.update(v98.patch(v98_sources))
+    meta["applied"].append("V98 upstream PR410 consume lethal catches on all real game death ticks, drop dead/down queue, preserve live hits")
+    # V99 backports original boss AI stale-death mark repair after BOTH
+    # PR407/410. Use their already changed original native game sources
+    # for overlaps; pull re.cpp directly from immutable pinned checkout.
+    v99_path=metrics_dir/"patch_upstream_stale_death_v99.py"
+    v99=types.ModuleType("sh_v99_revived_boss_target")
+    v99.__file__=str(v99_path)
+    exec(compile(v99_path.read_text("utf-8"),str(v99_path),"exec"),v99.__dict__)
+    v99_inputs={name:(files[name] if name in files else sources[name].encode("utf-8"))
+                for name in v99.FILES}
+    files.update(v99.patch(v99_inputs))
+    meta["applied"].append("V99 upstream PR413 revived co-op guests regain boss AI targeting after stable 3s, map visit and info-pointer fail-closed guards")
+    # V100: the existing original Qt shadNet daemon may (only with an
+    # explicit local dev opt-in and two distinct pinned X509 certificates)
+    # stage a real current, mutually consenting YT world pair automatically.
+    # This is NOT a public Internet listener or Direct game authorization.
+    v100_path=metrics_dir/"patch_native_server_pair_autostage_v100.py"
+    v100=types.ModuleType("sh_v100_real_game_pair_local")
+    v100.__file__=str(v100_path)
+    exec(compile(v100_path.read_text("utf-8"),str(v100_path),"exec"),v100.__dict__)
+    files[v100.MAIN]=v100.patch_main(files[v100.MAIN].decode("utf-8")).encode("utf-8")
+    meta["applied"].append("V100 original Qt server current YT game pair auto-stage only under two pinned local mTLS test identities; Direct OFF")
+    meta["applied"].append("V101 original Qt TLS server bounded 512 independent SHG2 pair leases with scoped replay revocation; Direct OFF")
+    meta["applied"].append("V102 original Qt team 3+ peer P2P pair registry: 512 grants, 16 peers/account, independent random selectors; Direct OFF")
+    # The original YT server already knows each live game UDP endpoint.
+    # Find current mutually opted-in team members from that authoritative
+    # world, not from legacy shadNet STUN's self-asserted 16-byte NP ID or
+    # a developer's manually enumerated A/B/C test identity list.
+    discover_path=metrics_dir/"patch_server_live_direct_team_discovery.py"
+    discovery=types.ModuleType("sh_current_world_direct_pair_directory")
+    discovery.__file__=str(discover_path)
+    exec(compile(discover_path.read_text("utf-8"),str(discover_path),"exec"),discovery.__dict__)
+    inputs={p:files[p].decode("utf-8") for p in discovery.FILES}
+    for name,body in discovery.patch(inputs).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("Original YT shadNet current signed-in real-world Direct pair discovery, 512 edges/16 per peer; no new STUN; Direct OFF")
+    # Candidate only: original game documents exactly FOUR remote player
+    # slots. Reuse native server's actual team size and summon-sign allocation
+    # for host + 4, never bypass the client's gameplay join validation.
+    # Slot/sign 4 conflicts with the unmerged invasion placeholder, so full
+    # five-player teams must NOT admit ordinary hostile phantom until verified.
+    five_path=metrics_dir/"patch_five_hunter_team.py"
+    five=types.ModuleType("sh_five_hunters_original_lobby")
+    five.__file__=str(five_path)
+    exec(compile(five_path.read_text("utf-8"),str(five_path),"exec"),five.__dict__)
+    five_inputs={p:pinned_source(p) for p in five.FILES}
+    for name,body in five.patch(five_inputs).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("5-hunter YT native lobby candidate: host+4, unique co-op signs 7/6/5/4, 6th denied; game full-party rig validation pending")
+    # Upstream YT PR #423 narrow security backport: real LinkServer rejects
+    # spoofed lobby/game names and uninvited game-world members.
+    # This must be last, after prior source patches to the SAME world Hello
+    # and the 5-hunter authenticated fixture. No friends or invasions merged.
+    auth_path=metrics_dir/"patch_hosted_identity_authority.py"
+    auth=types.ModuleType("sh_upstream_authenticated_lobby_authority")
+    auth.__file__=str(auth_path)
+    exec(compile(auth_path.read_text("utf-8"),str(auth_path),"exec"),auth.__dict__)
+    auth_inputs={p:files[p].decode("utf-8") for p in auth.FILES}
+    for name,body in auth.patch(auth_inputs).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("Upstream PR423 authenticated game-world/lobby identity backport: live signed-in LinkServer only; uninvited team-world joins denied")
+    # 5-player session must also lift the ORIGINAL native game's
+    # RoomForMore() limit, else the host stops re-ringing at two guests.
+    # The server's sign 4 is already propagated by TeamGuestSign, tested
+    # against the original game. No new P2P game route is authorized.
+    native5_path=metrics_dir/"patch_native_five_hunter_capacity.py"
+    native5=types.ModuleType("sh_native_five_hunters_original_game")
+    native5.__file__=str(native5_path)
+    exec(compile(native5_path.read_text("utf-8"),str(native5_path),"exec"),native5.__dict__)
+    native5_inputs={p:pinned_source(p) for p in native5.FILES}
+    for name,body in native5.patch(native5_inputs).items():
+        files[name]=body.encode("utf-8")
+    meta["applied"].append("5-hunter original game candidate: host re-rings until five, fourth guest sign=4 in real TeamGate; live game rig pending")
+    meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
     out.mkdir(parents=True,exist_ok=True)
     for path, data in files.items():
@@ -445,7 +900,7 @@ def run(checkout:Path, repo:Path, out:Path):
     (out/"SEAMLESS-HUNT-COMPOSE-MANIFEST.json").write_text(
         json.dumps(meta,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
     print("COMPOSE_PASS",len(files),"files; pinned source",PIN)
-    print("NOT A GAME BUILD. Server-side authenticated P2P and Qt lobby are missing.")
+    print("NOT A GAME BUILD. YT server has authoritative peer discovery; public Direct UDP / ACK handover remain OFF.")
     return meta
 
 if __name__=="__main__":

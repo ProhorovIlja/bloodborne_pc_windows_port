@@ -13,14 +13,81 @@
   },
   "target_transport": {
     "mode": "hybrid_direct_p2p_with_relay_fallback",
-    "status": "design_only_not_implemented",
+    "status": "source_only_selector_no_authenticated_rendezvous",
     "matchmaking_and_presence": "server",
     "world_authority": "server_until_explicitly_validated",
     "direct_game_packets": "only_after_negotiated_capability_and_live_validation",
     "relay_fallback": "when NAT/firewall cannot establish an authorized direct path",
     "require_consent_for_network_endpoint_exposure": true,
     "never_forward_account_password_or_auth_token_to_peers": true,
-    "must_not_auto_enable": true
+    "must_not_auto_enable": true,
+    "selector_source": "tools/poc/yharnam/hybrid-transport-v52/sh_hybrid_selector.hpp",
+    "integration_status": {
+      "native_selector_compiled_on_windows_and_ubuntu": "CI pending; no shipping game integration",
+      "authenticated_shadnet_peer_candidates": "not_implemented",
+      "nat_traversal": "not_implemented",
+      "authenticated_direct_packet_exchange": "not_implemented",
+      "validated_dynamic_relay_fallback": "policy_only_not_game_tested",
+      "gameplay_channel_gate": "V10 static Pass-only game packet gate; all stateful channels remain server relay",
+      "game_server_world_authority": "always_server",
+      "privacy_guards": "explicit dual consent and server authorization before any candidate disclosure"
+    },
+    "path_failover": {
+      "minimum_verified_probes": 3,
+      "probe_window_ms": 5000,
+      "stale_path_ms": 2000,
+      "cooldown_ms": 10000,
+      "live_network_validation": false
+    },
+    "movement_offload": {
+      "status": "source_only_no_game_or_network_integration",
+      "selector": "tools/poc/yharnam/hybrid-transport-v52/sh_channel_offload.hpp",
+      "initial_channels": [
+        "0x06 player movement with verified map/team epoch",
+        "0x04 enemy movement with additionally verified enemy stream ownership"
+      ],
+      "required_proof": [
+        "mutual_consent",
+        "current_signed_in_peers",
+        "same_team",
+        "same_map",
+        "authoritative_map_epoch",
+        "sender_enemy_authority_if_applicable",
+        "fresh_session_grant"
+      ],
+      "never_direct_until_proven": [
+        "reliable_game_stream",
+        "0x05 enemy HP",
+        "0x14 PvP hits",
+        "0x2C map items",
+        "0x2F world correction",
+        "0x27 boss kick"
+      ],
+      "mixed_frame_policy": "if any entry denied, keep whole native frame on shadNet",
+      "current_v10_filter": "existing game V10 Pass-only filter remains unmodified; no movement offload in a shipping binary"
+    },
+    "peer_game_stream_offload": {
+      "intent": "every upstream peer-forwarded game channel should use Direct whenever authorized; server-owned world and Drop channels must not bypass shadNet",
+      "pinned_packet_policy": "lKaniel/bloodborne-server server/coop/packet_routes.h at 77e350743a7cb4524cfcc1782fb6e3af64e25b15",
+      "runtime_status": "source_only_not_wired_to_live_network",
+      "eligible_categories": [
+        "NativeChannelPolicy::Pass",
+        "NativeChannelPolicy::SameMap after verified current map and owner role"
+      ],
+      "always_server_or_drop": [
+        "0x2C map item ownership",
+        "0x2F world correction",
+        "0x27 boss kick Drop",
+        "account/auth/session/world control envelopes"
+      ],
+      "reliable_stream_condition": "verified complete per-peer GameLink sender/instance/seq/ACK/retransmit and transport handover, not UDP reachability alone",
+      "ack_only_condition": "authenticated game frame and verified reliable stream handover",
+      "frame_parser_source": "tools/poc/yharnam/hybrid-transport-v52/sh_game_frame_offload.hpp",
+      "path_selector_source": "tools/poc/yharnam/hybrid-transport-v52/sh_hybrid_selector.hpp",
+      "peer_packet_mac_and_endpoint_rendezvous": "not_implemented",
+      "actual_game_and_server_link_integration": "not_implemented",
+      "legacy_compatibility": "fallback to shadNet relay; never require a Direct-only connection"
+    }
   },
   "benchmarks": {
     "verified_live_p2p": false,
@@ -35,7 +102,9 @@
       "optional_invasion",
       "host_disconnect_recovery",
       "two_hour_soak",
-      "bad_network_packet_loss_and_jitter"
+      "bad_network_packet_loss_and_jitter",
+      "nat_symmetric_and_double_nat_relay_fallback",
+      "direct_peer_connection_collapse_without_disconnect"
     ],
     "metrics": [
       "join_success_rate",
@@ -50,8 +119,24 @@
       "fornex_egress_mbps",
       "relay_datagrams_per_second",
       "crashes",
-      "saves_rolled_back"
-    ]
+      "saves_rolled_back",
+      "direct_eligible_movement_bytes_per_second",
+      "game_relay_outbound_bytes_by_channel",
+      "direct_peer_payload_bytes_per_second",
+      "relay_fallback_player_fraction",
+      "server_cpu_millicores_at_200_clients",
+      "server_peak_egress_mbps_at_200_clients"
+    ],
+    "relay_offload_accounting": {
+      "verified_live_movement_offload": false,
+      "verified_200_player_capacity": false,
+      "minimum_target_players": 200,
+      "estimate_only_until_game_packets_sampled": true,
+      "verify_per_channel_payload_bytes": true,
+      "verify_relay_fallback_share_by_nat_type": true,
+      "verify_game_udp_overhead_and_forwarded_peer_count": true,
+      "verify_fornex_egress_and_cores_under_load": true
+    }
   },
   "design_references": [
     {
@@ -111,7 +196,12 @@
         "stable_death_and_respawn",
         "crash_free_2_hour_sessions",
         "reproducible_windows_and_ubuntu_builds",
-        "measured_network_load"
+        "measured_network_load",
+        "hybrid_direct_p2p_relay_fallback_live_verified",
+        "authenticated_same_map_movement_direct_live_verified",
+        "two_hundred_client_relay_fallback_load_test",
+        "all_peer_forwarded_game_traffic_direct_when_authorized",
+        "reliable_game_link_direct_stream_migration_tested"
       ]
     },
     {
@@ -122,7 +212,9 @@
         "direct_connection_nature_and_fallback",
         "advanced_session_browser",
         "privacy_safe_world_presence",
-        "long_session_gpu_memory_regressions"
+        "long_session_gpu_memory_regressions",
+        "authenticated_peer_candidate_rendezvous",
+        "verified_nat_traversal_and_direct_path_recovery"
       ]
     },
     {

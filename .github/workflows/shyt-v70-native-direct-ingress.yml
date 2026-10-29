@@ -1,0 +1,99 @@
+name: Seamless Hunt V70 real native game UDP direct ingress (fail closed)
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_direct_rx.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_direct_rx.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_direct_rx.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v70-native-direct-ingress.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_direct_rx.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_direct_rx.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_direct_rx.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v70-native-direct-ingress.yml
+permissions:
+  contents: read
+jobs:
+  crypto-native-rx:
+    name: HMAC native game RX on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Compile/reject wrong HMAC and verify signed virtual game sender (Ubuntu)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_direct_rx.cpp \
+            -lcrypto -o /tmp/shyt-v70-native-rx
+          /tmp/shyt-v70-native-rx
+          echo SHYT_V70_HMAC_NATIVE_RX_UBUNTU_PASS
+      - name: Compile/reject wrong HMAC and verify signed virtual game sender (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_native_direct_rx.cpp bcrypt.lib /Fe:shyt-v70-native-rx.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V70 real HMAC client ingress compile failed' }
+          ./shyt-v70-native-rx.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V70 direct receive replay/MAC/virtual address regression failed' }
+          echo SHYT_V70_HMAC_NATIVE_RX_WINDOWS_PASS
+  real-composed-game:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Compose real pinned native Yharnam Together, assert default-deny SHP1 callback path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v70-composed
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path("/tmp/shyt-v70-composed")
+          m=json.loads((root/"SEAMLESS-HUNT-COMPOSE-MANIFEST.json").read_text())
+          p="emulator/src/core/libraries/network/p2p_sockets.cpp"
+          cpp=(root/p).read_text()
+          assert "#include \"core/libraries/network/sh_native_direct_rx.hpp\"" in cpp
+          assert cpp.count("NativeDirectReceiver direct_ingress{};") == 1
+          assert "direct_ingress.Receive(" in cpp
+          assert "route_metrics.NoteDirectReceive" in cpp
+          assert "Deliver(verified.sender.addr_nbo,verified.sender.port_nbo," in cpp
+          assert "if (!Link::TakesDatagramFrom(" in cpp
+          assert "if (const auto kind = Link::KindOf(datagram))" in cpp
+          assert "direct_ingress.Arm(" not in cpp
+          assert "direct_ingress.RevokeAll();" in cpp
+          assert m["sha256"][p] == hashlib.sha256((root/p).read_bytes()).hexdigest()
+          assert "V70 fail-closed HMAC direct RX hook in native P2PTransport socket" in m["applied"]
+          for hdr in ("sh_native_direct_rx.hpp","sh_direct_ingress.hpp","sh_direct_datagram.hpp",
+                      "sh_game_frame_offload.hpp","sh_channel_offload.hpp","sh_hybrid_selector.hpp"):
+              assert (root/"emulator/src/core/libraries/network"/hdr).is_file(),hdr
+          print("SHYT_V70_COMPOSED_NATIVE_GAME_UDP_SOCKET_PASS")
+          PY
+          python3 -m unittest discover -s tools/poc/yharnam/unified-v9 \
+            -p test_compose.py -v

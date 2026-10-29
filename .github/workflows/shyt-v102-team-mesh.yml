@@ -1,0 +1,317 @@
+name: Seamless Hunt V102 authenticated 3-player team mesh grants
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_pair_lease_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_team_registry_v102.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_team_grant_slots_v103.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_pair_list_v102.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_five_hunter_capacity.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v102-team-mesh.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_pair_lease_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_team_registry_v102.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_p2p_tls_listener.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_team_grant_slots_v103.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_pair_list_v102.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_five_hunter_team.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_five_hunter_capacity.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v90.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_local_client_v91.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v102-team-mesh.yml
+permissions:
+  contents: read
+jobs:
+  guard:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check identity, scoped ticket selection and no Direct activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          root=Path('tools/poc/yharnam/hybrid-transport-v52')
+          listener=(root/'sh_p2p_tls_listener.hpp').read_text()
+          registry=(root/'sh_p2p_team_registry_v102.hpp').read_text()
+          native=(root/'sh_native_tls_local_client_v90.hpp').read_text()
+          wrapper=(root/'sh_native_tls_local_client_v91.hpp').read_text()
+          adapter=(root/'patch_native_server_pair_autostage_v100.py').read_text()
+          assert 'P2PTeamPairRegistryV102 team_registry_{};' in listener
+          assert 'team_registry_.Take(' in listener
+          assert 'team_registry_.MarkReady(' in listener
+          assert 'team_registry_.AvailableFor(' in listener
+          assert 'ConfigureLocalTeamPairV102(' in listener
+          assert 'YT-P2P/V102 LIST\\n' in listener
+          assert 'YT-P2P/V102 OFFER ' in listener
+          assert 'YT-P2P/V102 READY ' in listener
+          assert 'if(!session->PairedIssued() || !bound || *v102_selected ||' in listener
+          assert 'team_registry_.RevokePair(*v102_selected)' in listener
+          assert 'std::uint64_t v102_pair_id=0' in native
+          assert 'std::string(pair_selector,sizeof(pair_selector))' in native
+          assert 'QByteArray::number' not in native
+          assert 'v102_pair_id' in wrapper
+          assert 'kMaxPairs=512' in registry
+          assert 'kMaxPeersPerAccount=16' in registry
+          assert 'std::size_t RevokeNotIn(' in registry
+          assert 'ReconcileLocalTeamPairsV102(' in listener
+          assert 'SHYT_P2P_TLS_AUTOTEAM_TEST' in adapter
+          assert 'SHYT_P2P_TLS_THIRD_CLIENT_CERT_SHA256' in adapter
+          assert 'SHYT_P2P_TLS_FOURTH_CLIENT_CERT_SHA256' in adapter
+          assert 'SHYT_P2P_TLS_FIFTH_CLIENT_CERT_SHA256' in adapter
+          assert 'fourth_pin,fourth_account' in adapter
+          assert 'fifth_pin,fifth_account' in adapter
+          assert 'e=fifth_account' in adapter
+          assert adapter.count('p2p_tls.ConfigureLocalTeamPairV102(')==3
+          assert 'direct_egress.Arm(' not in listener
+          assert 'listen(QHostAddress::Any' not in listener
+          print('SHYT_V102_NATIVE_TLS_PAIR_SCOPING_TEST_ONLY_PASS')
+          PY
+  qt-real-world:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Install real Qt6 server and protobuf dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev qt6-httpserver-dev qt6-websockets-dev \
+            libprotobuf-dev protobuf-compiler libssl-dev pkg-config
+      - name: Compile and execute A-B A-C B-C real crypto grant mesh
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_team_registry_v102.cpp" \
+            $(pkg-config --cflags --libs Qt6Core) -lcrypto \
+            -o /tmp/shyt-v102-team
+          /tmp/shyt-v102-team
+          echo SHYT_V102_THREE_HUNTER_512_PAIRS_NATIVE_CRYPTO_PASS
+      - name: Provision CI-only CA, server IP SAN and THREE distinct TLS clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shyt-v102-certs
+          cd /tmp/shyt-v102-certs
+          openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 \
+            -keyout ca.key -out ca.pem -subj '/CN=V102 test CA' \
+            -addext 'basicConstraints=critical,CA:TRUE'
+          openssl req -newkey rsa:2048 -sha256 -nodes \
+            -keyout server.key -out server.csr -subj '/CN=127.0.0.1'
+          printf 'subjectAltName=IP:127.0.0.1\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n' > server.ext
+          openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key \
+            -CAcreateserial -out server.pem -days 1 -sha256 -extfile server.ext
+          printf 'extendedKeyUsage=clientAuth\nkeyUsage=digitalSignature\n' > client.ext
+          for hunter in a b c d e; do
+            openssl req -newkey rsa:2048 -sha256 -nodes \
+              -keyout "$hunter.key" -out "$hunter.csr" \
+              -subj "/CN=V102 test client $hunter"
+            openssl x509 -req -in "$hunter.csr" -CA ca.pem -CAkey ca.key \
+              -CAserial ca.srl -out "$hunter.pem" -days 1 -sha256 -extfile client.ext
+          done
+          chmod 600 *.key
+      - name: THREE real native TLS clients list and exchange 3 SHG2 READY grants
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_real_mtls_team_v102.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -lssl -lcrypto -pthread -o /tmp/shyt-v102-three-real-tls
+          dir=/tmp/shyt-v102-certs
+          /tmp/shyt-v102-three-real-tls \
+            "$dir/server.pem" "$dir/server.key" "$dir/ca.pem" \
+            "$dir/a.pem" "$dir/a.key" \
+            "$dir/b.pem" "$dir/b.key" \
+            "$dir/c.pem" "$dir/c.key"
+          echo SHYT_V102_THREE_REAL_TLS_NATIVE_PAIR_READY_PASS
+      - name: FIVE real native mTLS clients verify every one of ten independent SHG2 pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O0 -fPIC -Wall -Wextra -Werror -pedantic \
+            -I "$root" "$root/test_real_mtls_five_v102.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -lssl -lcrypto -pthread -o /tmp/shyt-v102-five-real-tls
+          dir=/tmp/shyt-v102-certs
+          /tmp/shyt-v102-five-real-tls \
+            "$dir/server.pem" "$dir/server.key" "$dir/ca.pem" \
+            "$dir/a.pem" "$dir/a.key" \
+            "$dir/b.pem" "$dir/b.key" \
+            "$dir/c.pem" "$dir/c.key" \
+            "$dir/d.pem" "$dir/d.key" \
+            "$dir/e.pem" "$dir/e.key"
+          echo SHYT_V102_FIVE_REAL_TLS_TEN_MUTUAL_READY_PASS
+      - name: Compose immutable original YT and compile actual Qt main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v102-real
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          root=Path('/tmp/shyt-v102-real')
+          main=(root/'server/src/main.cpp').read_text()
+          header=(root/'server/src/sh_p2p_tls_listener.hpp').read_text()
+          manifest=json.loads((root/'SEAMLESS-HUNT-COMPOSE-MANIFEST.json').read_text())
+          assert 'SHYT_P2P_TLS_AUTOTEAM_TEST' in main
+          assert main.count('p2p_tls.ConfigureLocalTeamPairV102(')==1
+          assert 'server.DiscoverLiveDirectPairs()' in main
+          assert '(!d.isEmpty() && id==d)' in main
+          assert '(!e.isEmpty() && id==e)' in main
+          assert 'p2p_tls.ReconcileLocalTeamPairsV102(current)' in main
+          assert 'SHYT-LIVE-YT-WORLD-PAIR-DISCOVERY' in main
+          team=(root/'server/coop/team_lobby.h').read_text()
+          signs=(root/'server/coop/team_lobby.cpp').read_text()
+          tests=(root/'server/tests/test_team_lobby.cpp').read_text()
+          world_test=(root/'server/tests/test_bloodborne_world.cpp').read_text()
+          assert 'constexpr size_t TeamSize = 5;' in team
+          assert 'GuestSigns{7, 6, 5, 4}' in signs
+          assert 'TeamHoldsFive()' in tests
+          assert 'SignOf(lobby, "e") == 4' in tests
+          native_party=(root/'emulator/src/core/bloodborne_party.cpp').read_text()
+          native_join=(root/'emulator/src/core/bloodborne_join.cpp').read_text()
+          room_test=(root/'emulator/tests/bloodborne/test_bloodborne_three_players.cpp').read_text()
+          sign_test=(root/'emulator/tests/bloodborne/test_bloodborne_team.cpp').read_text()
+          assert 'constexpr size_t MaxPlayers = 5; // the host and FOUR cooperators' in native_party
+          assert 'fewer than five in the session' in native_join
+          assert 'RoomForMore(true, 4, 5)' in room_test
+          assert 'RoomForMore(true, 5, 6)' in room_test
+          assert 'TeamGuestSign(lobby, "e"), 4u' in sign_test
+          assert 'CHECK(valid.size()==10)' in world_test
+          assert 'CHECK(service.DiscoverLiveDirectPairs().size()==6)' in world_test
+          world=(root/'server/src/bloodborne_world.cpp').read_text()
+          link=(root/'server/src/link_server.cpp').read_text()
+          assert 'Service::DiscoverLiveDirectPairs()' in world
+          assert 'member.online_id.toHex().toStdString()' in world
+          assert 'require_authenticated_identity' in world
+          assert 'not in the team that plays this world' in world
+          assert 'RequireAuthenticatedIdentity();' in link
+          assert 'service.RequireAuthenticatedIdentity();' in world_test
+          assert 'forged.mutable_lobby_hello()->set_member(identity(a));' in world_test
+          assert 'LinkServer::DiscoverLiveDirectPairs()' in link
+          assert 'm_signedIn.contains(pair.first)' in link
+          assert 'SHYT_P2P_TLS_LOCAL_TEST' in main
+          assert (root/'emulator/src/core/libraries/network/sh_native_team_grant_slots_v103.hpp').is_file()
+          assert 'NativeTeamGrantSlotsV103' in (root/'emulator/src/core/libraries/network/sh_native_team_grant_slots_v103.hpp').read_text()
+          assert 'P2PTeamPairRegistryV102 team_registry_' in header
+          assert 'V102 original Qt team 3+ peer P2P pair registry' in ' '.join(manifest['applied'])
+          for name in ('server/src/main.cpp','server/src/sh_p2p_team_registry_v102.hpp'):
+              assert manifest['sha256'][name]==hashlib.sha256((root/name).read_bytes()).hexdigest()
+          print('SHYT_V102_PINNED_YT_TEAM_QT_COMPOSE_PASS')
+          PY
+          mkdir -p /tmp/shyt-v102-proto
+          protoc --proto_path=/tmp/shyt-v102-real/server/coop \
+            --cpp_out=/tmp/shyt-v102-proto /tmp/shyt-v102-real/server/coop/coop.proto
+          protoc --proto_path=pinned-upstream/server/src \
+            --cpp_out=/tmp/shyt-v102-proto pinned-upstream/server/src/shadnet.proto
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          source=Path('pinned-upstream/server/src')
+          dest=Path('/tmp/shyt-v102-real/server/src')
+          for item in source.rglob('*'):
+              if item.is_file():
+                  target=dest/item.relative_to(source)
+                  if not target.exists():
+                      target.parent.mkdir(parents=True,exist_ok=True)
+                      shutil.copy2(item,target)
+          PY
+          c++ -std=c++20 -O0 -fPIC -fsyntax-only \
+            -I /tmp/shyt-v102-real/server/src \
+            -I /tmp/shyt-v102-real/server \
+            -I pinned-upstream/server \
+            -I /tmp/shyt-v102-proto \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6HttpServer) \
+            /tmp/shyt-v102-real/server/src/main.cpp \
+            /tmp/shyt-v102-real/server/src/server.cpp \
+            /tmp/shyt-v102-real/server/src/link_server.cpp \
+            /tmp/shyt-v102-real/server/src/bloodborne_world.cpp
+          echo SHYT_V102_ORIGINAL_QT_SERVER_TEAM_TLS_SYNTAX_PASS
+      - name: Compile and run original YT five-hunter lobby with 4 unique guest slots
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=/tmp/shyt-v102-real/server
+          proto=/tmp/shyt-v102-proto
+          # Original pinned upstream TeamLobby uses valid designated partial
+          # Outcome initializers; GCC -Wextra warns on its existing source.
+          # Keep -Werror for all other diagnostics, without rewriting upstream.
+          c++ -std=c++20 -O0 -fPIC -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -I "$root/src" -I "$proto" -I "$root" -I pinned-upstream/server \
+            "$root/tests/test_team_lobby.cpp" \
+            "$root/coop/team_lobby.cpp" \
+            "$proto/coop.pb.cc" \
+            $(pkg-config --cflags --libs Qt6Core) -lprotobuf -pthread \
+            -o /tmp/shyt-v102-five-hunter-lobby
+          /tmp/shyt-v102-five-hunter-lobby
+          echo SHYT_V102_FIVE_HUNTER_ORIGINAL_QT_TEAM_TEST_PASS
+      - name: Execute real Qt world game tests with signed-in team and outsider P2P denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRV=/tmp/shyt-v102-real/server
+          ROOT=pinned-upstream/server
+          c++ -std=c++20 -O0 -g0 -fPIC \
+            -I "$SRV/src" -I "$SRV" -I "$ROOT/src" -I "$ROOT" -I /tmp/shyt-v102-proto \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql) \
+            "$SRV/tests/test_bloodborne_world.cpp" \
+            "$SRV/src/bloodborne_world.cpp" \
+            "$SRV/src/bloodborne_party_boards.cpp" \
+            "$SRV/src/server_link.cpp" \
+            "$ROOT/coop/world_log.cpp" \
+            "$ROOT/coop/coop_messages.cpp" \
+            "$SRV/coop/team_lobby.cpp" \
+            "$ROOT/coop/trade.cpp" \
+            /tmp/shyt-v102-proto/coop.pb.cc \
+            $(pkg-config --libs Qt6Core Qt6Network Qt6Sql) -lprotobuf \
+            -o /tmp/shyt-v102-authenticated-teams-world-test
+          /tmp/shyt-v102-authenticated-teams-world-test
+          echo SHYT_V102_AUTHENTICATED_TEAM_DIRECT_DISCOVERY_QT_PASS

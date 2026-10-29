@@ -74,12 +74,54 @@ def check_transport_feature_policy(policy: dict) -> None:
         raise SourceDrift("cannot advertise untested direct P2P or server load figures")
     target = policy.get("target_transport", {})
     if (target.get("mode") != "hybrid_direct_p2p_with_relay_fallback"
-            or target.get("status") != "design_only_not_implemented"
+            or target.get("status") != "source_only_selector_no_authenticated_rendezvous"
             or target.get("must_not_auto_enable") is not True
             or target.get("require_consent_for_network_endpoint_exposure") is not True
             or target.get("never_forward_account_password_or_auth_token_to_peers") is not True):
         raise SourceDrift("experimental direct P2P must be opt-in and protect credentials")
+    if target.get("selector_source") != "tools/poc/yharnam/hybrid-transport-v52/sh_hybrid_selector.hpp":
+        raise SourceDrift("hybrid Direct P2P selector source missing")
+    stages_now = target.get("integration_status", {})
+    if (stages_now.get("authenticated_shadnet_peer_candidates") != "not_implemented"
+            or stages_now.get("nat_traversal") != "not_implemented"
+            or stages_now.get("authenticated_direct_packet_exchange") != "not_implemented"
+            or stages_now.get("validated_dynamic_relay_fallback") != "policy_only_not_game_tested"
+            or stages_now.get("game_server_world_authority") != "always_server"):
+        raise SourceDrift("cannot claim unverified authenticated P2P rendezvous or NAT traversal")
+    failover = target.get("path_failover", {})
+    if (failover.get("minimum_verified_probes") != 3
+            or failover.get("stale_path_ms") != 2000
+            or failover.get("cooldown_ms") != 10000
+            or failover.get("live_network_validation") is not False):
+        raise SourceDrift("hybrid fallback requires measured live network proof")
+    movement = target.get("movement_offload", {})
+    if (movement.get("status") != "source_only_no_game_or_network_integration"
+            or movement.get("selector") !=
+            "tools/poc/yharnam/hybrid-transport-v52/sh_channel_offload.hpp"
+            or "0x06 player movement with verified map/team epoch" not in
+                movement.get("initial_channels", [])
+            or "0x04 enemy movement with additionally verified enemy stream ownership" not in
+                movement.get("initial_channels", [])
+            or movement.get("current_v10_filter") !=
+                "existing game V10 Pass-only filter remains unmodified; no movement offload in a shipping binary"):
+        raise SourceDrift("high-volume movement Direct P2P is source-only until verified")
+    bulk = target.get("peer_game_stream_offload", {})
+    if (bulk.get("runtime_status") != "source_only_not_wired_to_live_network"
+            or bulk.get("frame_parser_source") !=
+                "tools/poc/yharnam/hybrid-transport-v52/sh_game_frame_offload.hpp"
+            or bulk.get("peer_packet_mac_and_endpoint_rendezvous") != "not_implemented"
+            or bulk.get("actual_game_and_server_link_integration") != "not_implemented"
+            or "NativeChannelPolicy::Pass" not in bulk.get("eligible_categories", [])
+            or "NativeChannelPolicy::SameMap after verified current map and owner role"
+               not in bulk.get("eligible_categories", [])):
+        raise SourceDrift("broad Direct P2P game traffic is not wired or game verified")
     benchmarks = policy.get("benchmarks", {})
+    offload = benchmarks.get("relay_offload_accounting", {})
+    if (offload.get("verified_live_movement_offload") is not False
+            or offload.get("verified_200_player_capacity") is not False
+            or offload.get("minimum_target_players") != 200
+            or offload.get("estimate_only_until_game_packets_sampled") is not True):
+        raise SourceDrift("cannot certify 200 hunters or P2P offload without real measurements")
     if (benchmarks.get("verified_live_p2p") is not False
             or benchmarks.get("verified_fornex_relay_load") is not False):
         raise SourceDrift("cannot mark P2P or production bandwidth measured without a real test")
@@ -93,7 +135,12 @@ def check_transport_feature_policy(policy: dict) -> None:
             or [s.get("priority") for s in stages] != [0, 1, 2]):
         raise SourceDrift("P0 core stability must precede optional gameplay changes")
     core = set(stages[0].get("features", []))
-    for requirement in ("native_game_boot", "reliable_login_and_discovery",
+    for requirement in ("all_peer_forwarded_game_traffic_direct_when_authorized",
+                        "reliable_game_link_direct_stream_migration_tested",
+                        "authenticated_same_map_movement_direct_live_verified",
+                        "two_hundred_client_relay_fallback_load_test",
+                        "hybrid_direct_p2p_relay_fallback_live_verified",
+                        "native_game_boot", "reliable_login_and_discovery",
                         "join_and_host_coop", "opt_in_invasions", "safe_save_backups", "doors_and_npc_signs",
                         "crash_free_2_hour_sessions", "measured_network_load"):
         if requirement not in core:

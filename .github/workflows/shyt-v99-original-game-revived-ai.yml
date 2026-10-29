@@ -1,0 +1,119 @@
+name: Seamless Hunt V99 original revived boss AI targets
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/patch_upstream_stale_death_v99.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_upstream_stale_death_v99.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_stale_death_v99.cpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v99-original-game-revived-ai.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+permissions:
+  contents: read
+jobs:
+  original-native-revived-ai:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate original five-file fail-closed memory safety patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p 'test_patch_upstream_stale_death_v99.py' -v
+      - name: Stage actual pinned original Yharnam Together V97 V98 V99
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          from urllib.request import urlopen
+          from time import sleep
+          root=Path('tools/poc/yharnam/hybrid-transport-v52')
+          def load(name):
+              p=root/('patch_upstream_'+name+'.py')
+              spec=importlib.util.spec_from_file_location(name,p)
+              mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+              return mod
+          # V97 has a different filename and must be pinned precisely.
+          def module(file,name):
+              p=root/file
+              spec=importlib.util.spec_from_file_location(name,p)
+              mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+              return mod
+          doll=module('patch_upstream_doll_flag_v97.py','doll')
+          lethal=module('patch_upstream_lethal_catches_v98.py','lethal')
+          ai=module('patch_upstream_stale_death_v99.py','ai')
+          required=set(doll.FILES)|set(lethal.FILES)|set(ai.FILES)
+          pin='77e350743a7cb4524cfcc1782fb6e3af64e25b15'
+          content={}
+          for path in sorted(required):
+              last=None
+              for attempt in range(3):
+                  try:
+                      with urlopen(
+                          f'https://raw.githubusercontent.com/lKaniel/bloodborne-server/{pin}/{path}',
+                          timeout=45) as reply:
+                          content[path]=reply.read()
+                      break
+                  except Exception as exc:
+                      last=exc;sleep(2)
+              else:raise RuntimeError('Cannot fetch pinned native source '+path) from last
+          merged=dict(content)
+          for version in (doll,lethal,ai):
+              sub={key:merged[key] for key in version.FILES}
+              merged.update(version.patch(sub))
+          cpp=merged[ai.PARTY_CPP].decode()
+          header=merged[ai.PARTY_H].decode()
+          start=header.index('class StaleDeathMarks {')
+          end=header.index('\n};',start)+3
+          method=cpp.index('std::vector<u32> StaleDeathMarks::Tick(')
+          method_end=cpp.index('\n}\n',method)+2
+          Path('sh_v99_extracted_class.inc').write_text(header[start:end]+'\n')
+          Path('sh_v99_extracted_method.inc').write_text(cpp[method:method_end]+'\n')
+          death=merged[ai.DEATH_CPP].decode()
+          tick=merged[ai.RE_CPP].decode()
+          assert 'SHYT-V97-UPSTREAM-DOLL-6700' in header or (
+              'SHYT-V97-UPSTREAM-DOLL-6700' in merged[doll.HEADER].decode())
+          assert 'run.lethal_catches.Take(' in death
+          assert 'ClearStaleDeathMarks();' in tick
+          assert 'CurrentPlace().visit!=visit' in death
+          assert 'std::ranges::find(invaders,handle)!=invaders.end()' in death
+          assert 'v99.patch(v99_inputs)' in Path(
+             'tools/poc/yharnam/unified-v9/compose_sources.py').read_text()
+          print('SHYT_V99_ACTUAL_PINNED_NATIVE_FIVE_SOURCE_COMPOSITION_PASS')
+          PY
+      - name: Compile and execute actual original C++ policy on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -I . \
+            tools/poc/yharnam/hybrid-transport-v52/test_stale_death_v99.cpp \
+            -o /tmp/shyt-v99
+          /tmp/shyt-v99
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Compile and execute actual original C++ policy on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I . tools/poc/yharnam/hybrid-transport-v52/test_stale_death_v99.cpp /Fe:shyt-v99.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V99 actual source Windows compile failed' }
+          ./shyt-v99.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V99 native target regression failed' }
+          Write-Host SHYT_V99_WINDOWS_ORIGINAL_TARGET_STATE_PASS

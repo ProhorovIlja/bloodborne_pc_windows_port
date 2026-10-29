@@ -1,0 +1,93 @@
+name: Seamless Hunt V71 native Direct-first game SendFrame / relay failover
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_direct_tx.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_direct_tx.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_direct_tx.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v71-native-direct-send.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_direct_tx.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_direct_tx.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_direct_tx.py
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+      - .github/workflows/shyt-v71-native-direct-send.yml
+permissions:
+  contents: read
+jobs:
+  real-crypto-sender:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Compile and run signed SHP1 game-send regression on Ubuntu
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_direct_tx.cpp \
+            -lcrypto -o /tmp/shyt-v71-send
+          /tmp/shyt-v71-send
+          echo SHYT_V71_SIGNED_GAME_SEND_LINUX_PASS
+      - name: Compile and run signed SHP1 game-send regression on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_native_direct_tx.cpp bcrypt.lib /Fe:shyt-v71-send.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V71 MSVC signed game sender compile failed' }
+          ./shyt-v71-send.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V71 MSVC signed game sender regression failed' }
+          echo SHYT_V71_SIGNED_GAME_SEND_WINDOWS_PASS
+  actual-game-send-hook:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Compose real pinned game and ensure same UDP socket / original shadNet fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-upstream --repo . --out /tmp/shyt-v71-game
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path("/tmp/shyt-v71-game")
+          p="emulator/src/core/libraries/network/p2p_sockets.cpp"
+          src=(root/p).read_text()
+          m=json.loads((root/"SEAMLESS-HUNT-COMPOSE-MANIFEST.json").read_text())
+          assert src.count("NativeDirectSender direct_egress{};") == 1
+          assert "direct_egress.TrySend(" in src
+          assert src.index("direct_egress.TrySend(") < src.index("framed = Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed);")
+          assert "direct_egress.Arm(" not in src
+          assert "direct_egress.RevokeAll();" in src
+          assert "direct_ingress.Receive(" in src
+          assert src.count("net_socket host_socket{kInvalidSocket};")==1
+          assert (root/"emulator/src/core/libraries/network/sh_native_direct_tx.hpp").is_file()
+          assert m["sha256"][p]==hashlib.sha256((root/p).read_bytes()).hexdigest()
+          assert "V71 fail-closed native SendFrame Direct/Relay TX hook" in m["applied"]
+          print("SHYT_V71_COMPOSED_NATIVE_DIRECT_FIRST_RELAY_FALLBACK_PASS")
+          PY
+          python3 -m unittest discover -s tools/poc/yharnam/unified-v9 -p test_compose.py -v

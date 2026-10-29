@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""V92 fail-closed game source adapter: same UDP socket, default-inert."""
+import importlib.util
+from pathlib import Path
+import unittest
+
+root=Path(__file__).resolve().parent
+spec=importlib.util.spec_from_file_location(
+    "shyt_v92",root/"patch_native_same_socket_probe_v92.py")
+v92=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(v92)
+
+SOURCE='''// SHYT-V87-TRUSTED-SERVER-LINK
+#include "core/libraries/network/sh_native_game_identity_v87.hpp" // SHYT-V87-TRUSTED-SERVER-LINK
+    SeamlessHunt::Hybrid::NativeSealedGrantInboxV84 native_grant_inbox_v84{};
+    std::uint64_t shyt_link_generation_v87=1;
+    void Stop() {
+        std::lock_guard lock(native_grant_mutex);
+            native_grant_inbox_v84.Revoke(); // V86 logout/sockets closed
+    }
+    void ConfigureLink() {
+        std::lock_guard lock(native_grant_mutex);
+            native_grant_inbox_v84.Revoke(); // V86 account/server change
+    }
+#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
+public:
+    bool TryLocalShg2OfferForTest() {
+        const bool received=SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV85::Request(
+            cfg,native_grant_inbox_v84,expected,serial,current,
+            verified_game_state,now_ms);
+        return received;
+    }
+private:
+#endif
+private:
+    P2PTransport() = default;
+
+    static bool TrustedReverseDirectReady(
+    void ReceiveMain() {
+        const auto rc = ::recvfrom(host_socket, nullptr,0,0,nullptr,nullptr);
+            if (!FirewallAllows(from.sin_addr.s_addr, from.sin_port, "a datagram from")) {
+                continue;
+            }
+            const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};
+            if (const auto server = LinkServer();
+                server.addr_nbo == from.sin_addr.s_addr && server.port_nbo == from.sin_port) {
+                if (const auto kind = Link::KindOf(datagram)) {
+                    OnLinkDatagram(*kind, datagram);
+                    continue;
+                }
+            }
+            // SHYT-V70-NATIVE-RECV-HMAC: the existing real recvfrom() host
+            if (SeamlessHunt::Hybrid::IsSHP1(datagram))continue;
+            if (!Link::TakesDatagramFrom(LinkServer(), from.sin_addr.s_addr, from.sin_port)) {
+                continue;
+            }
+    }
+'''
+class V92Tests(unittest.TestCase):
+    def test_probe_on_exact_original_udp_socket_not_game_route(self):
+        result=v92.patch_game(SOURCE)
+        self.assertEqual(result.count(v92.TAG),1)
+        self.assertIn("TryPairedTlsReadyForNatTest(",result)
+        self.assertIn("TryListLocalTeamPairsForTest(",result)
+        self.assertIn("NativeTlsPairListV102::List(cfg,ids,count)",result)
+        self.assertIn("std::uint64_t v102_pair_id=0",result)
+        self.assertIn("receipt,nullptr,v102_pair_id",result)
+        self.assertIn("grant->pair_binding!=v102_pair_id",result)
+        self.assertIn("ids.fill(0);count=0;return false;",result)
+        self.assertIn("sh_native_tls_pair_list_v102.hpp",result)
+        self.assertIn("sh_native_team_grant_slots_v103.hpp",result)
+        self.assertIn("NativeTeamGrantSlotsV103 nat_team_grants_v103{};",result)
+        self.assertEqual(result.count("nat_team_grants_v103.RevokeAll();"),2)
+        self.assertIn("nat_team_grants_v103.InstallVerified(",result)
+        self.assertIn("if(v102_pair_id) {",result)
+        self.assertIn("HasLocalTeamGrantForNatTest(",result)
+        self.assertIn("nat_team_grants_v103.PendingForNat(",result)
+        self.assertIn("NativeTlsLocalOfferClientV91::Request(",result)
+        self.assertIn("NativeSealedGrantInboxV84 temporary_inbox;",result)
+        self.assertIn("TransferVerifiedTo(",result)
+        self.assertIn("nat_tls_request_active_v93.test_and_set(",result)
+        # A blocking TLS call MUST run outside native_grant_mutex, which
+        # the ORIGINAL game UDP receive thread also uses for signed SHN1.
+        call=result.index("if(!SeamlessHunt::Hybrid::NativeTlsLocalOfferClientV91::Request(")
+        scope_end=result.rfind("        }\n        // TLS I/O must never block",0,call)
+        self.assertGreaterEqual(scope_end,0)
+        self.assertNotIn("std::lock_guard lock(native_grant_mutex);",
+                         result[scope_end+9:call])
+        self.assertIn("std::lock_guard lock(native_grant_mutex);",result[call:])
+        self.assertIn("nat_paired_tls_generation_v92!=generation",result)
+        self.assertIn("nat_paired_tls_binding_v92!=grant->pair_binding",result)
+        self.assertIn("TryStartSameSocketNatProbeForTest(",result)
+        self.assertIn("SameSocketNatProbeVerifiedForTest(",result)
+        self.assertIn("ReceiveNativeSignedProbeV92(",result)
+        # Completion must not call Reply first: a valid ReadyAck has one
+        # sequence and a double-open would reject it as a replay.
+        self.assertIn("NatProbeKindV91::ReadyAck",result)
+        self.assertIn("NatProbeKindV91::Receipt",result)
+        self.assertIn("nat_probe_v92->Complete(",result)
+        self.assertIn("nat_probe_v92->CompleteResponder(",result)
+        self.assertIn("nat_probe_v92->ReceiptSent(response)",result)
+        self.assertIn("nat_probe_v92->ResponderVerified()",result)
+        self.assertIn("const bool written=Transmit(destination,",result)
+        self.assertLess(result.index("NatProbeKindV91::ReadyAck"),
+                        result.index("nat_probe_v92->Complete("))
+        self.assertLess(result.index("const bool written=Transmit(destination,"),
+                        result.index("nat_probe_v92->ReceiptSent(response)"))
+        self.assertIn("::recvfrom(host_socket",result)
+        self.assertIn("Transmit(destination",result)
+        self.assertNotIn("::socket(AF_INET",result)
+        self.assertNotIn("SendFrame(",result)
+        self.assertNotIn("direct_egress.Arm(",result)
+        self.assertIn("shyt_link_generation_v87==nat_probe_link_generation_v92",result)
+        self.assertIn("native_grant_inbox_v84.PendingForNat(now)",result)
+        self.assertEqual(result.count("nat_probe_v92.reset(); // V92"),2)
+        # SHN1 routing occurs strictly after existing firewall and before
+        # original LinkServer relayed/guest vport processing.
+        check=result.index("if(ReceiveNativeSignedProbeV92(from.sin_addr.s_addr")
+        firewall=result.index('if (!FirewallAllows(from.sin_addr.s_addr')
+        server_demux=result.index("if (const auto server = LinkServer();",check)
+        direct_demux=result.index("SeamlessHunt::Hybrid::IsSHP1(datagram)",server_demux)
+        guest_demux=result.index("if (!Link::TakesDatagramFrom(",direct_demux)
+        self.assertLess(firewall,check)
+        self.assertLess(check,server_demux)
+        self.assertLess(server_demux,direct_demux)
+        self.assertLess(direct_demux,guest_demux)
+        self.assertIn("#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS\n            // SHN1",result)
+        self.assertIn("#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS\n    // V92",result)
+        with self.assertRaisesRegex(ValueError,"already applied"):
+            v92.patch_game(result)
+
+    def test_source_drift_and_missing_identity_rejected(self):
+        invalid=[
+            SOURCE.replace("SHYT-V87-TRUSTED-SERVER-LINK","missing"),
+            SOURCE.replace("SHYT-V70-NATIVE-RECV-HMAC","missing"),
+            SOURCE.replace("SeamlessHunt::Hybrid::IsSHP1","Unrelated"),
+            SOURCE.replace("shyt_link_generation_v87","missing"),
+            SOURCE.replace("NativeSealedGrantInboxV84","NativeSealedGrantInboxV82"),
+            SOURCE.replace("V86 logout/sockets closed","V80 stop"),
+            SOURCE.replace("V86 account/server change","V80 relink"),
+            SOURCE.replace("void ReceiveMain()","void ReceiveGame()"),
+            SOURCE.replace("P2PTransport() = default;","P2PTransport() noexcept = default;"),
+            SOURCE.replace('if (!FirewallAllows(from.sin_addr.s_addr, from.sin_port, "a datagram from"))', 'if (true)'),
+            SOURCE.replace('const std::span<const u8> datagram{buffer.data(), static_cast<size_t>(rc)};', 'const std::span<const u8> bytes{buffer.data(), static_cast<size_t>(rc)};'),
+            SOURCE.replace('if (const auto server = LinkServer();',
+                           'if (auto server = LinkServer();'),
+        ]
+        for x in invalid:
+            with self.subTest(index=invalid.index(x)):
+                with self.assertRaises(ValueError):
+                    v92.patch_game(x)
+if __name__=="__main__":
+    unittest.main()

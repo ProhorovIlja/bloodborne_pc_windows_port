@@ -1,0 +1,120 @@
+name: Seamless Hunt V52 hybrid Direct P2P policy safety
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/**
+      - tools/poc/yharnam/mainline/**
+      - .github/workflows/shyt-v52-hybrid-transport.yml
+  pull_request:
+    branches: [feature/seamless-hunt-mainline]
+    paths:
+      - tools/poc/yharnam/hybrid-transport-v52/**
+      - tools/poc/yharnam/mainline/**
+      - .github/workflows/shyt-v52-hybrid-transport.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transport-policy:
+    name: hybrid-policy (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Enforce honest release/transport policy and pinned Yharnam source
+        run: |
+          python tools/poc/yharnam/mainline/check_source_of_truth.py
+          python -m unittest discover -s tools/poc/yharnam/mainline -p 'test_source_of_truth.py' -v
+      - name: Native Linux C++ hybrid selector regression (no real P2P claim)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_hybrid_selector.cpp \
+            -o /tmp/shyt-v52-transport-policy
+          /tmp/shyt-v52-transport-policy
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_channel_offload.cpp \
+            -o /tmp/shyt-v53-channel-offload
+          /tmp/shyt-v53-channel-offload
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_game_frame_offload.cpp \
+            -o /tmp/shyt-v54-game-frame-offload
+          /tmp/shyt-v54-game-frame-offload
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_direct_datagram.cpp \
+            -o /tmp/shyt-v58-direct-datagram
+          /tmp/shyt-v58-direct-datagram
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_direct_ingress.cpp \
+            -o /tmp/shyt-v59-direct-ingress
+          /tmp/shyt-v59-direct-ingress
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_direct_crypto.cpp \
+            -lcrypto -o /tmp/shyt-v60-cryptographic-udp
+          /tmp/shyt-v60-cryptographic-udp
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_direct_loopback_udp.cpp \
+            -lcrypto -o /tmp/shyt-v61-direct-udp-loopback
+          /tmp/shyt-v61-direct-udp-loopback
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_direct_egress.cpp \
+            -lcrypto -o /tmp/shyt-v65-direct-udp-egress
+          /tmp/shyt-v65-direct-udp-egress
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Native MSVC C++ hybrid selector regression (no real P2P claim)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_hybrid_selector.cpp /Fe:shyt-v52-selector.exe
+          if ($LASTEXITCODE -ne 0) { throw 'hybrid transport policy compile failed' }
+          ./shyt-v52-selector.exe
+          if ($LASTEXITCODE -ne 0) { throw 'hybrid transport policy regression failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_channel_offload.cpp /Fe:shyt-v53-channel-offload.exe
+          if ($LASTEXITCODE -ne 0) { throw 'channel offload compile failed' }
+          ./shyt-v53-channel-offload.exe
+          if ($LASTEXITCODE -ne 0) { throw 'channel offload auth and map tests failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_game_frame_offload.cpp /Fe:shyt-v54-frame-offload.exe
+          if ($LASTEXITCODE -ne 0) { throw 'SHAD frame offload compile failed' }
+          ./shyt-v54-frame-offload.exe
+          if ($LASTEXITCODE -ne 0) { throw 'SHAD frame offload security tests failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_direct_datagram.cpp /Fe:shyt-v58-direct-datagram.exe
+          if ($LASTEXITCODE -ne 0) { throw 'direct UDP datagram compile failed' }
+          ./shyt-v58-direct-datagram.exe
+          if ($LASTEXITCODE -ne 0) { throw 'direct UDP MAC, grant and replay regressions failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_direct_ingress.cpp /Fe:shyt-v59-direct-ingress.exe
+          if ($LASTEXITCODE -ne 0) { throw 'direct UDP game ingress compile failed' }
+          ./shyt-v59-direct-ingress.exe
+          if ($LASTEXITCODE -ne 0) { throw 'direct UDP game ingress authorization regression failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_direct_crypto.cpp bcrypt.lib /Fe:shyt-v60-cryptographic-udp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'native Windows CNG crypto compile failed' }
+          ./shyt-v60-cryptographic-udp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'real HMAC direct UDP auth tests failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_direct_loopback_udp.cpp bcrypt.lib ws2_32.lib /Fe:shyt-v61-direct-udp-loopback.exe
+          if ($LASTEXITCODE -ne 0) { throw 'native WinSock direct UDP loopback compile failed' }
+          ./shyt-v61-direct-udp-loopback.exe
+          if ($LASTEXITCODE -ne 0) { throw 'native WinSock encrypted-tag direct UDP loopback failed' }
+          cl /nologo /std:c++20 /W4 /WX /EHsc /O2 /I tools/poc/yharnam/hybrid-transport-v52 tools/poc/yharnam/hybrid-transport-v52/test_direct_egress.cpp bcrypt.lib ws2_32.lib /Fe:shyt-v65-direct-udp-egress.exe
+          if ($LASTEXITCODE -ne 0) { throw 'native direct/relay egress compile failed' }
+          ./shyt-v65-direct-udp-egress.exe
+          if ($LASTEXITCODE -ne 0) { throw 'real UDP HMAC game egress and relay failover regression failed' }
