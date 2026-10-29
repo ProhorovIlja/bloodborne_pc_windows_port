@@ -9,6 +9,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_pair_list_v102.hpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
@@ -27,6 +28,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_team_registry_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_team_v102.cpp
       - tools/poc/yharnam/hybrid-transport-v52/test_real_mtls_five_v102.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/sh_native_tls_pair_list_v102.hpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_server_pair_autostage_v100.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_server_live_direct_team_discovery.py
       - tools/poc/yharnam/hybrid-transport-v52/patch_hosted_identity_authority.py
