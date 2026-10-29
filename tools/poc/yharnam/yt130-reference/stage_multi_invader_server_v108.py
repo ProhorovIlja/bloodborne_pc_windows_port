@@ -551,10 +551,25 @@ void Service::EndInvasion(const QString& world, bbcoop::InvasionEnd::Reason reas
     after=r'''        if (const bbcoop::Team* team=lobby.TeamOf(member.lobby);
             team && !team->party().empty()) {
             const QString party=FolderOf(QByteArray::fromStdString(team->party()));
+            std::set<std::uint32_t> cooperative_signs;
+            for (const auto& mate:team->members()) cooperative_signs.insert(mate.sign());
             for (;;) {
                 const auto bucket=invasions.find(party);
-                if (bucket==invasions.end() ||
-                    static_cast<size_t>(team->members_size())+bucket->second.size()
+                if (bucket==invasions.end()) break;
+                // A new genuine cooperator reserves a specific native slot.
+                // Even with room numerically, that slot might already be
+                // held by an in-progress hostile: revoke THAT visitor first.
+                const auto collision=std::find_if(
+                    bucket->second.begin(),bucket->second.end(),
+                    [&](const auto& item){
+                        return cooperative_signs.contains(item.second.sign);
+                    });
+                if (collision!=bucket->second.end()) {
+                    EndInvasion(party,collision->first,
+                        bbcoop::InvasionEnd::REFUSED,now_ms,result);
+                    continue;
+                }
+                if (static_cast<size_t>(team->members_size())+bucket->second.size()
                         <= InvasionMaxPlayers) break;
                 const quint64 newest=bucket->second.rbegin()->first;
                 EndInvasion(party,newest,bbcoop::InvasionEnd::REFUSED,now_ms,result);
@@ -643,12 +658,56 @@ void Service::EndInvasion(const QString& world, bbcoop::InvasionEnd::Reason reas
 int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {''',
         "three real visitors functional test")
     test=one(test,
+        "int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {",
+        r'''int ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved() {
+  InvasionRig rig;
+  Game blue{1003,"bl",14},green{1004,"gn",15},third{1005,"cc",16};
+  for (Game* guest:std::vector<Game*>{&blue,&green,&third}) {
+    rig.games.push_back(guest);
+    guest->LobbyHello(false,rig.now);
+  }
+  rig.Step();
+  for (Game* invader:std::vector<Game*>{&rig.red,&blue,&green}) {
+    invader->Invade(60,rig.now);
+    invader->Map(InvadedMap,rig.now);
+    rig.Step();
+    CHECK(invader->notices.size()==1);
+  }
+  rig.Step(InvasionNoticeMs);
+  CHECK(rig.red.invasion && blue.invasion && green.invasion);
+  CHECK(rig.red.invasion->session().sign()==4);
+  CHECK(blue.invasion->session().sign()==5);
+  CHECK(green.invasion->session().sign()==6);
+  // The third co-op body takes sign6. It must evict ONLY the hostile
+  // owning that sign, preserving both other legitimate PvP participants.
+  rig.a.Team(bbcoop::TeamRequest::INVITE,rig.now,third.name);
+  rig.Step();
+  CHECK(third.lobby.invites_size()==1);
+  third.Team(bbcoop::TeamRequest::ACCEPT,rig.now,{},
+             third.lobby.invites(0).team());
+  rig.Step();
+  CHECK(rig.a.lobby.team().members_size()==3);
+  CHECK(EndedFor(green,bbcoop::InvasionEnd::REFUSED));
+  CHECK(rig.service.VisitingOf(green.endpoint).isEmpty());
+  CHECK(rig.service.VisitingOf(rig.red.endpoint)==
+        rig.service.PartyOf(rig.a.endpoint));
+  CHECK(rig.service.VisitingOf(blue.endpoint)==
+        rig.service.PartyOf(rig.a.endpoint));
+  CHECK(rig.Routes(rig.red,blue,0x06));
+  return 0;
+}
+
+int AnInvasionNeedsTheServerAndTheTeamToAllowIt() {''',
+        "3 coop + 2 hostile native Qt transition test")
+    test=one(test,
         '      {"AnInvaderJoinsATeamWorldAfterANotice",\n'
         '       AnInvaderJoinsATeamWorldAfterANotice},',
         '      {"AnInvaderJoinsATeamWorldAfterANotice",\n'
         '       AnInvaderJoinsATeamWorldAfterANotice},\n'
         '      {"ThreeInvadersShareTwoCooperatorsAndCleanupIndependently",\n'
-        '       ThreeInvadersShareTwoCooperatorsAndCleanupIndependently},',
+        '       ThreeInvadersShareTwoCooperatorsAndCleanupIndependently},\n'
+        '      {"ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved",\n'
+        '       ThreeCooperatorsKeepTwoHostilesAfterSlotSixIsReserved},',
         "register original Qt test")
     return dict(zip(FILES,(h,cpp,policy,rules,link,test)))
 
