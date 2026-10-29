@@ -21,7 +21,7 @@ def extract(source: str) -> str:
         raise ValueError("Pinned original C++ PARAM function location changed")
     start = source.index(START)
     end = source.index(END, start)
-    body = source[start:end + 2]
+    body = source[start:end + 3]
     for mark in ("std::memcpy(&offset", "param.size() < entries",
                  "std::numeric_limits<u64>::max()", "offset + row_size"):
         if mark not in body:
