@@ -111,21 +111,21 @@ int main(int argc,char** argv) {
     NativeTlsPairListV102::PairSelectors parsed{};
     std::size_t parsed_count=99;
     assert(NativeTlsPairListV102::Parse(
-        "YT-P2P/V102 PAIRS\\n",parsed,parsed_count) &&
+        "YT-P2P/V102 PAIRS\n",parsed,parsed_count) &&
         parsed_count==0);
     assert(NativeTlsPairListV102::Parse(
-        "YT-P2P/V102 PAIRS 0000000000000001 0000000000000002\\n",
+        "YT-P2P/V102 PAIRS 0000000000000001 0000000000000002\n",
         parsed,parsed_count) && parsed_count==2 &&
         parsed[0]==1 && parsed[1]==2);
     assert(!NativeTlsPairListV102::Parse(
-        "YT-P2P/V102 PAIRS 0000000000000001 0000000000000001\\n",
+        "YT-P2P/V102 PAIRS 0000000000000001 0000000000000001\n",
         parsed,parsed_count) && parsed_count==0);
     assert(!NativeTlsPairListV102::Parse(
-        "YT-P2P/V102 PAIRS 0000000000000000\\n",parsed,parsed_count));
+        "YT-P2P/V102 PAIRS 0000000000000000\n",parsed,parsed_count));
     assert(!NativeTlsPairListV102::Parse(
-        "YT-P2P/V102 PAIRS 000000000000000A\\n",parsed,parsed_count));
+        "YT-P2P/V102 PAIRS 000000000000000A\n",parsed,parsed_count));
     assert(!NativeTlsPairListV102::Parse(
-        "YT-P2P/V102 PAIRS 0000000000000001 X\\n",parsed,parsed_count));
+        "YT-P2P/V102 PAIRS 0000000000000001 X\n",parsed,parsed_count));
     // server cert/key, CA, then FIVE distinct cert/key pairs, all loopback.
     assert(argc==14);
     P2PTlsListener server;
