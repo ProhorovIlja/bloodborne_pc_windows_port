@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify exact AMD FSR 1.1.4 host sources and fix ALL 23 MSVC-only array lengths
+      - name: Verify exact AMD FSR 1.1.4 host sources and fix ALL 30 MSVC-only array lengths
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -41,7 +41,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Source-pinned FSR host array tests failed' }
           python tools/poc/yharnam/package-v41/patch_pinned_fsr_countof_clang64.py --upstream pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR host source drift or incomplete _countof migration' }
-          Write-Host 'PINNED_FSR_HOST_ALL_23_COUNT_OF_CALLS_PORTABLE'
+          Write-Host 'PINNED_FSR_HOST_ALL_30_COUNT_OF_CALLS_PORTABLE'
       - name: Compose all native source overlays against immutable upstream
         shell: pwsh
         run: |
@@ -155,10 +155,14 @@ jobs:
           clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
             -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
             -fsyntax-only "$sdk/src/shared/ffx_message.cpp"
-          # These are the ACTUAL next two TUs that failed the full 418-object
+          # These are ALL remaining FSR3 host TUs from the real 418-object
           # Windows build after original vk.cpp compilation was repaired.
-          for source in "$sdk/src/components/opticalflow/ffx_opticalflow.cpp" \
-                        "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp"; do
+          for source in "$sdk/src/shared/ffx_assert.cpp" \
+                        "$sdk/src/shared/ffx_object_management.cpp" \
+                        "$sdk/src/components/fsr3upscaler/ffx_fsr3upscaler.cpp" \
+                        "$sdk/src/components/opticalflow/ffx_opticalflow.cpp" \
+                        "$sdk/src/components/frameinterpolation/ffx_frameinterpolation.cpp" \
+                        "$sdk/src/components/fsr3/ffx_fsr3.cpp"; do
             clang++ -std=c++17 -O2 -g -DNDEBUG -fno-omit-frame-pointer \
               -I "$sdk/include" -I "$sdk/src/shared" -I "$sdk/src/components" \
               -fsyntax-only "$source"
