@@ -29,6 +29,12 @@ class FivePlayerLoadgenTests(unittest.TestCase):
             self.assertIn(after, transformed)
         self.assertIn("game_receivers += game->Playing() && game->SawGamePackets();",
                       transformed)
+        self.assertEqual(len(mod.FULL_TEAM_EDITS), 4)
+        self.assertIn("complete_teams += game->CompleteTeam(settings.team_size);",
+                      transformed)
+        self.assertIn('{"complete_teams", complete_teams}', transformed)
+        self.assertIn("seat == 0 && state == State::Playing && team_members == expected",
+                      transformed)
         for old, new in mod.OWNER_EDITS:
             self.assertIn(new, transformed)
         self.assertIn('std::clamp(parser.value("owners").toInt(), 1, settings.team_size)',
@@ -54,6 +60,18 @@ class FivePlayerLoadgenTests(unittest.TestCase):
             with self.subTest(anchor=before[:30]):
                 with self.assertRaisesRegex(ValueError, "game-receiver.*anchor drift"):
                     mod.rewrite(original.replace(before, "MISSING", 1))
+
+    def test_missing_full_team_anchor_rejected(self):
+        # V118 consumes ONLY exact C++ text created by earlier guarded edits.
+        bad = self.pinned_anchor_fixture()
+        without = mod.RECEIVER_EDITS[0][0]
+        self.assertIn(without, bad)
+        changed = mod.rewrite(bad)
+        for old, _ in mod.FULL_TEAM_EDITS:
+            with self.subTest(old=old[:40]):
+                self.assertIn(old, changed)
+                self.assertNotIn(old, changed.replace(old, "CORRUPTED", 1))
+        self.assertIn("complete_teams", changed)
 
     def test_unpinned_source_refused(self):
         with self.assertRaisesRegex(ValueError, "exact official pinned"):

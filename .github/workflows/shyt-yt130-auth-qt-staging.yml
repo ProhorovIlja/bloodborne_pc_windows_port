@@ -293,6 +293,10 @@ jobs:
             "$RUNNER_TEMP/yt-src"
           grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' \
             "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq '"complete_teams": sum(r["complete_teams"] for r in results)' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq '"complete_teams": sum(r["complete_teams"] for r in results)' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
           grep -Fq 'shlex.split(args.extra)' \
             "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           git -C "$RUNNER_TEMP/yt-src" diff --check
@@ -329,7 +333,7 @@ jobs:
             > yt130-smoke5.jsonl 2> yt130-smoke5.stderr
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
             yt130-smoke5.jsonl --expected-players 5
-          python -c 'import json; r=[json.loads(x) for x in open("yt130-smoke5.jsonl") if x.startswith("{") and "players" in x]; assert len(r)==1 and r[0]["playing"]==5 and r[0]["game_receivers"]==5 and r[0]["packets_sent"]>0 and r[0]["packets_received"]>=.99*r[0]["packets_sent"] and r[0]["udp_buffer_drops"]==0, "five-hunter game packet delivery failed"'
+          python -c 'import json; r=[json.loads(x) for x in open("yt130-smoke5.jsonl") if x.startswith("{") and "players" in x]; assert len(r)==1 and r[0]["playing"]==5 and r[0]["game_receivers"]==5 and r[0]["complete_teams"]==1 and r[0]["packets_sent"]>0 and r[0]["packets_received"]>=.99*r[0]["packets_sent"] and r[0]["udp_buffer_drops"]==0, "five-hunter game packet delivery failed"'
           echo SHYT_REAL_FIVE_HUNTER_SYNTHETIC_PARTY_ACTIVE_PASS
       - name: Measure actual optimized shadNet capacity 4 to 200 players
         shell: bash

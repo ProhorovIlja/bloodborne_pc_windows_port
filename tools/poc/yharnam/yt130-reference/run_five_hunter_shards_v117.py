@@ -41,7 +41,8 @@ def grade(item: dict, expected_shards: int) -> dict:
         cpu = row.get("link_thread_cpu_avg")
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
             return {"quality": "INVALID_PER_SHARD_CPU"}
-    for key in ("playing", "game_receivers", "packets_sent", "packets_received",
+    for key in ("playing", "game_receivers", "complete_teams",
+                "packets_sent", "packets_received",
                 "packets_lost", "refused", "udp_buffer_drops"):
         value = item.get(key)
         if type(value) is not int or value < 0:
@@ -56,6 +57,8 @@ def grade(item: dict, expected_shards: int) -> dict:
         quality = "NOT_ALL_PLAYING"
     elif receivers != POPULATION:
         quality = "GAME_RECEIVERS_MISSING"
+    elif item["complete_teams"] != POPULATION // SIZE:
+        quality = "FIVE_HUNTER_TEAMS_INCOMPLETE"
     elif item["refused"] or sent < POPULATION * 10:
         quality = "INSUFFICIENT_ACCEPTED_GAME_TRAFFIC"
     elif received > sent or received * 100 < sent * 99 or item["packets_lost"]:
@@ -73,7 +76,8 @@ def grade(item: dict, expected_shards: int) -> dict:
         quality = "FULL_GAMEPLAY_SYNTHETIC_ONLY"
     return {
         "quality": quality, "players": POPULATION, "shards": expected_shards,
-        "playing": playing, "game_receivers": receivers, "packets_sent": sent,
+        "playing": playing, "game_receivers": receivers,
+        "complete_teams": item["complete_teams"], "packets_sent": sent,
         "packets_received": received, "packets_lost": item["packets_lost"],
         "relay_ms_p99": item["relay_ms_p99"],
         "redirects": item["redirects"], "redirect_ms_p99": item["redirect_ms_p99"],
@@ -146,7 +150,8 @@ def run(args) -> int:
         results.append(result)
         print("YT130_V117_REAL_5P_SHARDS", shards, result["quality"],
               "PLAYING", result.get("playing", "?"), "GAME_RECEIVERS",
-              result.get("game_receivers", "?"), flush=True)
+              result.get("game_receivers", "?"), "COMPLETE_FIVE_TEAMS",
+              result.get("complete_teams", "?"), flush=True)
         if rc == 124:
             break
     args.output.parent.mkdir(parents=True, exist_ok=True)

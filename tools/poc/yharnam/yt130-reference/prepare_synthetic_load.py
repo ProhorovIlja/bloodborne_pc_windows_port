@@ -21,7 +21,8 @@ def transform(raw):
     s = s.replace("import argparse\n","import argparse\nimport shlex\n",1)
     s = s.replace("args.extra.split()","shlex.split(args.extra)",1)
     return s.replace(anchor, anchor + '\n' +
-        '        "game_receivers": sum(r["game_receivers"] for r in results),', 1).encode()
+        '        "game_receivers": sum(r["game_receivers"] for r in results),\n' +
+        '        "complete_teams": sum(r["complete_teams"] for r in results),', 1).encode()
 def check_argv():
     if shlex.split("--build '"+FINGERPRINT+"'")!=["--build",FINGERPRINT]:
         raise ValueError("Bad build fingerprint command parsing")

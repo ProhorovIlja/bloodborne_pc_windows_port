@@ -23,6 +23,7 @@ COUNTERS_NEW = """            # SHYT-V117-TRUE-FIVE-HUNTER-SHARD-GAME-RECEIVERS:
             # Every REAL original bbload child must return this metric.
             # No client may be called PLAYING/healthy without game receipt.
             "game_receivers": sum(r["game_receivers"] for r in results),
+            "complete_teams": sum(r["complete_teams"] for r in results),
             "packets_sent": sum(r["packets_sent"] for r in results),
             "packets_lost": sum(r["packets_lost"] for r in results),
             "packets_received": sum(r["packets_received"] for r in results),"""

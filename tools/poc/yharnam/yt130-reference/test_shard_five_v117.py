@@ -17,6 +17,7 @@ run=load("yt117_run","run_five_hunter_shards_v117.py")
 def sample(shards=3):
     return dict(
         players=200, shards=shards, playing=200, game_receivers=200,
+        complete_teams=40,
         packets_sent=16000, packets_received=16000, packets_lost=0,
         refused=0, udp_buffer_drops=0, relay_ms_p99=11.5,
         redirects=50 if shards==3 else 0, redirect_ms_p99=450 if shards==3 else 0,
@@ -33,6 +34,7 @@ class OriginalShardSourceTests(unittest.TestCase):
         self.assertIn("import shlex", s)
         self.assertIn("shlex.split(args.extra)", s)
         self.assertIn('sum(r["game_receivers"] for r in results)',s)
+        self.assertIn('sum(r["complete_teams"] for r in results)',s)
         self.assertIn('sum(r["packets_sent"] for r in results)',s)
         self.assertIn('sum(r["packets_received"] for r in results)',s)
         self.assertEqual(patch.PIN, "0645740a33ae21c56df3b4a0d9777086dbca6053")
@@ -61,6 +63,10 @@ class OriginalShardsQoSTests(unittest.TestCase):
                 self.assertEqual(run.grade(s,shards)["quality"],
                                  "GAME_RECEIVERS_MISSING")
                 s=sample(shards)
+                s["complete_teams"]=39
+                self.assertEqual(run.grade(s,shards)["quality"],
+                                 "FIVE_HUNTER_TEAMS_INCOMPLETE")
+                s=sample(shards)
                 s["packets_received"]=14000
                 self.assertEqual(run.grade(s,shards)["quality"],
                                  "REAL_GAME_DELIVERY_DEGRADED")
@@ -87,6 +93,7 @@ class OriginalShardsQoSTests(unittest.TestCase):
         for key,value in [
             ("shards",1),("players",199),("playing","200"),("game_receivers",None),
             ("packets_lost",-1),("packets_sent",float("nan")),
+            ("complete_teams",None),("complete_teams",False),
             ("relay_ms_p99",float("inf")),("udp_buffer_drops",True),
             ("per_shard",[]),("per_shard",[{},{}]),
             ("per_shard",[{"shard":["unsafe"]}, {}, {}]),

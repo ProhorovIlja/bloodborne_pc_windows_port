@@ -63,6 +63,25 @@ RECEIVER_EDITS = (
      '    ++load.totals.packets_received;\n    ++received_game_packets;\n'),
 )
 
+# V118: "PLAYING" and one received packet do not demonstrate forty complete
+# five-hunter teams. Count original bbload leaders seeing all five members.
+# This is a synthetic-test measurement only, never modifies server decisions.
+FULL_TEAM_EDITS = (
+    ("  bool SawGamePackets() const { return received_game_packets != 0; }\n",
+     "  bool SawGamePackets() const { return received_game_packets != 0; }\n"
+     "  bool CompleteTeam(int expected) const {\n"
+     "    return seat == 0 && state == State::Playing && team_members == expected;\n"
+     "  }\n"),
+    ("    int game_receivers = 0;\n",
+     "    int game_receivers = 0;\n    int complete_teams = 0;\n"),
+    ("      game_receivers += game->Playing() && game->SawGamePackets();\n",
+     "      game_receivers += game->Playing() && game->SawGamePackets();\n"
+     "      complete_teams += game->CompleteTeam(settings.team_size);\n"),
+    ('        {"game_receivers", game_receivers},\n',
+     '        {"game_receivers", game_receivers},\n'
+     '        {"complete_teams", complete_teams},\n'),
+)
+
 def blob_sha(raw: bytes) -> str:
     return hashlib.sha1(
         b"blob " + str(len(raw)).encode() + b"\x00" + raw
@@ -83,6 +102,10 @@ def rewrite(text: str) -> str:
     for old, replacement in RECEIVER_EDITS:
         if text.count(old) != 1:
             raise ValueError("Pinned game-receiver bbload anchor drift")
+        text = text.replace(old, replacement, 1)
+    for old, replacement in FULL_TEAM_EDITS:
+        if text.count(old) != 1:
+            raise ValueError("Pinned complete-five-team bbload anchor drift")
         text = text.replace(old, replacement, 1)
     return text
 
