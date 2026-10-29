@@ -1,8 +1,11 @@
 # Five total hunters: co-op + invasion seat policy
 
-Status: design contract and original Qt server admission test, **NOT** evidence of playable
-multi-invader Bloodborne or WAN P2P. Main delivery still PR #17; original Qt server
-functional/load regressions are in **existing PR #37**. No deployment to Fornex.
+Status: **REQUIRED first public release feature**, not a later optional expansion.
+Native game and Qt server source candidates are actively being integrated into
+the same 5-total-body session model. Not playable or validated yet.
+The original Qt server/current upstream native-game source gates are existing
+PR #37; the Windows game/launcher and secure Direct build are existing PR #17.
+No production Fornex change.
 
 ## Source facts (2026-10-29)
 
@@ -34,8 +37,8 @@ it does not increase the five-player cap.
 |---:|---:|---:|---|
 | 5 | 0 | 5 | Five-hunter server lobby and original C++ tests verified; five real games not yet shown |
 | 4 | 1 | 5 | Single-invader server admission C++ tests verified; native hostile rendering still experimental |
-| 3 | 2 | 5 | Future candidate, **not implemented** in current YT server/game |
-| 2 | 3 | 5 | Future candidate, **not implemented**; requires native sign/type/slot proof |
+| 3 | 2 | 5 | **Required at launch**; multi-invader original Qt server and native-game source patch under CI, not yet a playable build |
+| 2 | 3 | 5 | **Required at launch**; up to 3 independent server+client hostile IDs, native kind/sign proof and five actual game clients required |
 | 5 | 1 | 6 | Always refuse: overflow |
 | 4 | 2 | 6 | Always refuse: overflow |
 | 3 | 3 | 6 | Always refuse: overflow |
@@ -51,15 +54,21 @@ There are three distinct budgets:
 1. **Absolute game/session cap:** `cooperators + active_invaders <= 5`.
    No actor bypasses this, including disconnected team members with reserved
    places, an invader in 10-second matchmaking notice, or join/host migration.
-2. **Server implementation cap NOW:** `active_invaders + pending_invaders <= 1`
-   for each world. Its live model cannot represent two `Invasion` objects.
-   `SupportsCurrentServerInvasion` must fail closed on requests beyond one.
-3. **Potential expanded PvP cap:** **up to three hostile participants only if
-   separately proven** by native game captures, per-hostile session signs,
-   correct hostile character type, packet routes, lifecycles, network ACK
-   behavior, UI and actual five-game tests. The pure
-   `FitsFiveHunterRoles(3,2)`/`(2,3)` static asserts establish only integer
-   budget consistency, never enable either mode.
+2. **Original vanilla YT 1.3 cap:** one invader per world. Our V108
+   original Qt staged candidate replaces it with a bounded map keyed by
+   **world + invasion ID**, with `active + pending <= 3`, unique
+   reserved signs and sign-collision cleanup on cooperative arrivals.
+   Original Qt C++ compilation and 2+3/3+2 functional tests are required
+   before marking the server implementation verified.
+3. **Native game required cap:** V107 original native game
+   `InvadedTeam` has a bounded three-hostile ID ledger on upstream
+   `0645740a`, preserving each visitor's notice/join/end independently.
+   The prior Windows composition PIN `77e350` predates the **entire**
+   invasion game subsystem: do not claim the native feature is present
+   until a compatible complete upstream rebase/backport builds the true
+   native Windows game. After that, actual 2+3 and 3+2 playtests must
+   confirm hostile rendering, mutual PvP hits, native sign/kind, UI,
+   death handling and save isolation, not only source tests.
 
 ## Concrete implementation gates before multi-invader goes live
 
@@ -79,10 +88,12 @@ There are three distinct budgets:
   without destroying other invaders' state or co-op gameplay. A party joining
   its fifth member must not produce a sixth actor. This can initially mean
   cancelling PvP; client despawn and ACK must be verified before release.
-- Multi-hostile damage/kill/target semantics, different teams including
-  invader-against-invader, friendly fire, boss possession, Duel Bell modes,
-  HUD party roles, rewards and save isolation are separately gated features.
-  No boss-possession mode is implemented now.
+- **Required at first release:** correct hostile damage, kill/target
+  semantics, invader-against-invader routing, friendly-fire policy, all
+  invader names/IDs on the HUD, host PvP toggle, independent disconnect
+  and respawn, Duel Bell compatibility and personal save isolation.
+  **Optional later:** controlling an in-progress boss as an invader and
+  expanded event/reward experiments. No boss-possession mode is implemented.
 - Hybrid P2P must encrypt each pair, carry signed server identity and
   NAT-ready proof, preserve server-owned world state and GameLink reliable
   ACK, and automatically fall back to relay. No live Direct bypass of
@@ -91,14 +102,27 @@ There are three distinct budgets:
   server build, then real 2-PC and five-client tests, capacity/loss/latency
   on the 4-vCPU Fornex configuration **before** production rollout.
 
-## Current change
+## Current implementation work (not a release claim)
 
-`tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py`
-stages the original upstream invasion vacancy/notice/routing patches.
-`SupportsCurrentServerInvasion` checks the live one-invader implementation,
-while `FitsFiveHunterRoles` records requested upper-bound combinations.
-The original Qt world tests cover mid-notice fifth joining, legitimate
-four-co-op+one-invader, and late fifth joining after invasion starts.
-Targeted Qt CI is `.github/workflows/shyt-yt130-five-invasion-fast-gate.yml`.
+- `stage_five_hunter_invasion_guard.py`: original Qt five-person admission,
+  10-second notice recheck and host/party overflow protection.
+- `stage_multi_invader_server_v108.py`: original Qt per-world three-invasion
+  ledger, unique reservation of signs 4–7, own timeout/vitals/end/owner
+  routing, same-world hostile-to-hostile game channels, exact-slot collision
+  cleanup. Includes original Qt scenarios 2+3 and 3+2, plus selective
+  invader death, opt-out and fifth cooperator admission tests.
+- `patch_original_multi_invader_client_v107.py`: actual newer upstream
+  game's native `InvadedTeam` replaced with per-ID three-hostile ledger
+  and an original native game gtest; tested only after integration into
+  an updated native build.
+- CI: `.github/workflows/shyt-yt130-five-invasion-fast-gate.yml`
+  composes disposable source on upstream SHA `0645740a` and compiles
+  original Qt tests. The new server/game multi-visitor code is NOT
+  production until latest CI passes and native gameplay proves behavior.
+- PR #17's `77e350` Windows game base remains a specific release
+  blocker. AES-GCM/P2P can pass while native invasions are absent:
+  **such a binary is not feature-complete and cannot be advertised as
+  the target release.**
 
-**No public PvP and no server-capacity boast from these tests.**
+**No five-game PvP gameplay, verified hostile sign/kind, or real WAN Direct
+has been demonstrated yet. Do not deploy to production Fornex.**
