@@ -1,0 +1,90 @@
+name: SHYT five-hunter invasion race original Qt functional gate
+on:
+  push:
+    branches: [feature/yt130-1000-2000-scale-ladder-20261028]
+    paths:
+      - tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py
+      - tools/poc/yharnam/yt130-reference/test_stage_five_hunter_invasion_guard.py
+      - tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py
+      - tools/poc/yharnam/yt130-reference/patch_five_hunter_team.py
+      - .github/workflows/shyt-yt130-five-invasion-fast-gate.yml
+permissions:
+  contents: read
+jobs:
+  authentic-qt-five-hunter-pvp-race:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run all source-exact Python guards, including three invasion races
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-auth-stage -p 'test_stage_auth.py' -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p 'test_*.py' -v
+      - name: Install real Qt6, SQLite, Ninja and original protobuf dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config qt6-base-dev \
+            qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite ccache
+      - name: Fetch pinned actual upstream and protobuf original C++ source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
+          git -C "$RUNNER_TEMP/yt-src" submodule update --init --recursive \
+            server/externals/protobuf
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
+      - name: Compose EXACT same Qt world as full 1000-player scale pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-auth-stage/stage_auth.py \
+            "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" \
+            "$RUNNER_TEMP/yt-src"
+          for stage in \
+            stage_lobby_dedupe.py \
+            stage_wire_traffic.py \
+            stage_coop_reliability.py \
+            stage_lobby_coalesce.py \
+            stage_lobby_coalesce_cpp_test.py \
+            stage_eventloop_timing.py \
+            stage_five_hunter_server.py \
+            stage_five_hunter_invasion_guard.py; do
+            python3 "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 12
+          grep -Fq 'constexpr size_t InvasionMaxPlayers = 5;' \
+            "$RUNNER_TEMP/yt-src/server/coop/invasions.h"
+          grep -Fq 'AJoinedFiveHunterTeamRejectsAnAlreadyNotifiedInvader' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          grep -Fq 'AJoiningFifthHunterRevokesAlreadyJoinedInvader' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          echo SHYT_ACTUAL_FIVE_HUNTER_QT_INVASION_SOURCE_RACES_STAGED
+      - name: Configure original Qt6 server and build native game-world tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" \
+            -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+            "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" \
+            "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target \
+            test_bloodborne_world test_team_lobby test_invasions
+      - name: Execute REAL Qt C++ five-member and three invasion-race cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure \
+            --timeout 120 -j 2 -R '^(bloodborne_world|team_lobby|invasions)$'
+          echo SHYT_FIVE_HUNTER_INVASION_ACTUAL_QT_CPP_3_TEST_BINARIES_PASS
