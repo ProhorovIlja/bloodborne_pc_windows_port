@@ -10,6 +10,7 @@ on:
       - tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead_ingress.cpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_native_game_aead_egress.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead_egress.cpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_native_game_shy2_udp_loopback.cpp
       - tools/poc/yharnam/hybrid-transport-v52/sh_pair_aead_keys.hpp
       - tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp
       - tools/poc/yharnam/hybrid-transport-v52/patch_native_game_aead_drop_guard.py
@@ -104,6 +105,13 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead_egress.cpp \
             -lcrypto -o /tmp/shyt-aead-game-egress
           /tmp/shyt-aead-game-egress
+          # Real POSIX UDP sendto/recvfrom: encrypted two-way game frames,
+          # virtual peer identity, active world changes, and original relay.
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_game_shy2_udp_loopback.cpp \
+            -lcrypto -o /tmp/shyt-shy2-kernel-udp
+          timeout 25s /tmp/shyt-shy2-kernel-udp
           c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
             -I tools/poc/yharnam/hybrid-transport-v52 \
             tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \
@@ -144,6 +152,12 @@ jobs:
             tools/poc/yharnam/hybrid-transport-v52/test_native_game_aead_egress.cpp \
             -lcrypto -o shyt-aead-game-egress.exe
           ./shyt-aead-game-egress.exe
+          # Same exact kernel UDP test on Windows WinSock2 (not simulation).
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I tools/poc/yharnam/hybrid-transport-v52 \
+            tools/poc/yharnam/hybrid-transport-v52/test_native_game_shy2_udp_loopback.cpp \
+            -lcrypto -lws2_32 -o shyt-shy2-kernel-udp.exe
+          ./shyt-shy2-kernel-udp.exe
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
             -I tools/poc/yharnam/hybrid-transport-v52 \
             tools/poc/yharnam/hybrid-transport-v52/test_pair_aead_keys.cpp \
