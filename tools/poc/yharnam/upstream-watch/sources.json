@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "recorded_utc_date": "2026-10-28",
+  "recorded_utc_date": "2026-10-29",
   "policy": "REPORT_ONLY_NEVER_AUTOMATICALLY_IMPORT_OR_DEPLOY",
   "source_revision": "7a0135bcfe0e8e7afc1a9372902abfffcad3d3f8",
   "pinned_yt_game_server": "0645740a33ae21c56df3b4a0d9777086dbca6053",
@@ -92,6 +92,41 @@
       "known_head": "9a4e837115b130038b0cfe9505ab2fe11e6dcee7",
       "known_release_tag": "v2.3.1",
       "compatibility": "NATIVE_BBPORT_CLIENT_YHARNAM_PC_2_3_1_THDSERVER_REQUIRES_ACCEPTANCE; DISCORD_STATS_READONLY_VERIFY_MEMORY_OFFSETS_LICENSE"
+    },
+    {
+      "full_name": "shadps4-emu/shadnet",
+      "category": "network-server-authoritative-staging-production",
+      "known_head": "ee586b669d071d03bbc169e50bb03ce765f324a8",
+      "known_release_tag": "0.1.1",
+      "compatibility": "SHADNET_UPSTREAM_REVIEW_PROTOCOL_AND_DB_COMPAT_FIRST"
+    },
+    {
+      "full_name": "Wozzardman/shadp2p",
+      "category": "experimental-emulator-peer-transport",
+      "known_head": "6e97b404d6f89e7dab58f98c69678b69af9a3c4f",
+      "known_release_tag": "unverified",
+      "compatibility": "NAT_AND_SIGNALING_RESEARCH_ONLY_NO_EMULATOR_TO_NATIVE_IMPORT"
+    },
+    {
+      "full_name": "CLSAMG22/BBSC",
+      "category": "legacy-bbsc-gameplay-source",
+      "known_head": "4f11faf88b6ba658ebde6fe5fbefdadedba4fa41",
+      "known_release_tag": "unverified",
+      "compatibility": "GAMEPLAY_ONLY_LEGACY_BBSC_WIRE_NEVER_REPLACE_YT_SERVER"
+    },
+    {
+      "full_name": "fhody125-web/NoDreamForTheHunterBB",
+      "category": "bloodborne-community-web-examples",
+      "known_head": "761973f547850f0ec329b00ff2ad30ef610815bd",
+      "known_release_tag": "unverified",
+      "compatibility": "WEBSITE_UX_IDEAS_ONLY_AUTH_AND_PRIVACY_REVIEW"
+    },
+    {
+      "full_name": "ProhorovIlja/bloodborne_pc_windows_port",
+      "category": "seamless-hunt-own-development-repo",
+      "known_head": "8ded22d75bf931fe89f97a6f12c0c37518c79eeb",
+      "known_release_tag": "unverified",
+      "compatibility": "INTERNAL_PR_AND_BRANCH_DRIFT_REVIEW_ONLY_NEVER_AUTO_MERGE_OR_DEPLOY"
     }
   ],
   "pull_requests": [
@@ -582,6 +617,542 @@
       "area": "combined LDS barrier mipmap index and compute texture copy Vulkan repairs",
       "priority": "P1",
       "action": "COMPARE_NATIVE_VULKAN_RENDER_PATH_AND_DEDUP_SHADPS4_5368"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 50,
+      "last_seen": "open",
+      "area": "PERFORMANCE: coalesce measured 98.6% Coop7 LobbyState bytes at 64+/128+ players",
+      "priority": "P0",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 49,
+      "last_seen": "closed",
+      "area": "PERFORMANCE: encode identical Coop(7) party broadcasts once, keep per-peer ACK",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 48,
+      "last_seen": "closed",
+      "area": "DIAGNOSTIC: measure actual Coop(7) encoded bytes by protobuf origin, not guesses",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 47,
+      "last_seen": "closed",
+      "area": "PERFORMANCE: full Qt UDP socket drain + bounded FIFO 2ms processing (native YT1.3)",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 46,
+      "last_seen": "closed",
+      "area": "PERFORMANCE: remove redundant O(N²) reliable retransmit scan, native YT 1.3 ACK test",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 45,
+      "last_seen": "closed",
+      "area": "PERFORMANCE: isolated Qt UDP fairness A/B against PR41 (no world index)",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 44,
+      "last_seen": "closed",
+      "area": "PERFORMANCE: prevent Qt UDP read-loop starving 50ms world ticks (native YT1.3)",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 43,
+      "last_seen": "closed",
+      "area": "PERFORMANCE: bound reliable CoopStream resend duplicate scans (native YT1.3 C++ + ACK test)",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 42,
+      "last_seen": "closed",
+      "area": "PERFORMANCE: index private Hosted worlds per player, eliminate full world scans (native YT1.3 tests)",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 41,
+      "last_seen": "open",
+      "area": "PERFORMANCE: remove Hosted lobby O(N²) scans across 1000 peers; real C++ 512-player regression + 1/3 shar",
+      "priority": "P0",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 40,
+      "last_seen": "closed",
+      "area": "1000+ SCALE: source-pinned Hosted=true Redis shards 1-vs-3 real game traffic baseline",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 39,
+      "last_seen": "open",
+      "area": "ROOT CAUSE: 250-player admission burst vs full-drain UDP FIFO and reliable resend storm (no raw logs)",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 38,
+      "last_seen": "open",
+      "area": "EXPERIMENT: 1k scale with full-drain UDP + bounded FIFO auth/relay scheduling, prevent Qt timer starvatio",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 37,
+      "last_seen": "open",
+      "area": "SCALE GATE: actual YT1.3 1000-player game UDP + 1024 four-player groups, opt-in 2000",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 36,
+      "last_seen": "open",
+      "area": "NATIVE WINDOWS QA: real frozen BLauncher.exe executable and Cyrillic TLS smoke",
+      "priority": "P0",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 35,
+      "last_seen": "open",
+      "area": "QA gate: actually run pinned YT1.3 Windows frozen BLauncher.exe offline smoke",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 34,
+      "last_seen": "open",
+      "area": "DIAGNOSTIC ONLY: identify Qt UDP readyRead starvation vs 50ms world timer at 64–200 YT peers",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 33,
+      "last_seen": "open",
+      "area": "QA BINARY ONLY: build actual Windows BLauncher.exe and smoke Unicode + truststore from integrated YT v1.3",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 32,
+      "last_seen": "open",
+      "area": "NATIVE WINDOWS integration QA: official TLS+UTF8, game discovery, atomic settings in one YT1.3 launcher",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 31,
+      "last_seen": "open",
+      "area": "NATIVE WINDOWS LAUNCHER: atomic settings, INI, mods and patches writes under disk failure",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 30,
+      "last_seen": "open",
+      "area": "EXPERIMENT ONLY: coalesce non-hosted YT lobby broadcasts at 50ms world ticks",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 29,
+      "last_seen": "open",
+      "area": "NATIVE WINDOWS: import YT #433 Cyrillic game paths, guaranteed UTF-8 and startup failure logs",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 28,
+      "last_seen": "open",
+      "area": "NATIVE LAUNCHER: survive inaccessible folders during Bloodborne auto-discovery",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 27,
+      "last_seen": "open",
+      "area": "NATIVE LAUNCHER QA: port upstream YT #429 Windows system TLS trust without disabling verification",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 26,
+      "last_seen": "open",
+      "area": "EXPERIMENT ONLY: identify exact CoopStream retransmission and ACK amplification at 32–200 peers",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 25,
+      "last_seen": "open",
+      "area": "READ-ONLY: native Bloodborne cross-fork upstream monitor and reviewed integration matrix",
+      "priority": "P0",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 24,
+      "last_seen": "open",
+      "area": "EXPERIMENT ONLY: attribute Qt shadNet UDP Data / Coop / RPC bytes at 32-200 synthetic peers",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 23,
+      "last_seen": "open",
+      "area": "EXPERIMENT ONLY: eliminate unchanged lobby-state broadcasts on non-hosted YT1.3",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 22,
+      "last_seen": "closed",
+      "area": "EXPERIMENT ONLY: bounded Qt UDP read fairness under 64–200 synthetic peers",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 21,
+      "last_seen": "open",
+      "area": "Clean Yharnam Together v1.3.0 native baseline, verified installer and Qt security regression (DRAFT)",
+      "priority": "P0",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 20,
+      "last_seen": "open",
+      "area": "Full-stack source audit, real Qt server PASS + Windows pre-C++ Git-stall fix V123 (DRAFT)",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 19,
+      "last_seen": "open",
+      "area": "V62–V64: CLS Friends snapshot, one-server P2P-first contract and unified matchmaking",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 18,
+      "last_seen": "open",
+      "area": "V56: original Yharnam Together-only BLauncher guided co-op setup",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 17,
+      "last_seen": "open",
+      "area": "V52–V99: secure original-game hybrid + Doll/respawn/boss AI fixes, Direct OFF",
+      "priority": "P0",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 16,
+      "last_seen": "merged",
+      "area": "Fix final Windows + Qt server kit rejecting valid Qt 6.8.3 packages",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 15,
+      "last_seen": "open",
+      "area": "V47: secure private-session admission for native Friends, invite and join UX",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 14,
+      "last_seen": "merged",
+      "area": "Reject ambiguous schema values in opt-in Fornex staging profiles",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 13,
+      "last_seen": "merged",
+      "area": "Fix Windows Qt backend parity disconnects on Unicode login",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 12,
+      "last_seen": "open",
+      "area": "Draft: single Yharnam Together Seamless Hunt mainline, native game/launcher and unified server kit",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 11,
+      "last_seen": "open",
+      "area": "Draft V41: build real MSVC Qt 6.8.3 shadnet/server DLL kit for Windows launcher",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 10,
+      "last_seen": "open",
+      "area": "Draft V39: native Ubuntu 24.04 Fornex shadnet with exact Qt 6.8.3",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 9,
+      "last_seen": "open",
+      "area": "Draft V38: fail-closed portable Windows Bloodborne candidate validation",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 8,
+      "last_seen": "open",
+      "area": "Draft V36: compile composed native Yharnam Together Windows client in CI",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 7,
+      "last_seen": "open",
+      "area": "Draft V34: fail-closed Seamless Hunt release notices and cache compatibility",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 6,
+      "last_seen": "open",
+      "area": "Draft V33: Hunter Portal, live presence privacy contract and offline challenge generator",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 5,
+      "last_seen": "open",
+      "area": "Draft V32: account modes, public realm authentication design and banned-token fix",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 4,
+      "last_seen": "open",
+      "area": "Draft V31.1: preserve active credential revocation after login-cache eviction",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 3,
+      "last_seen": "open",
+      "area": "Draft V31: live account revocation and ghost-matchmaking cleanup (staging)",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 2,
+      "last_seen": "open",
+      "area": "Draft: validate V3–V30 native Bloodborne + shadNet security fixes",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "number": 1,
+      "last_seen": "open",
+      "area": "WIP: Seamless Hunt native PC, BBSC crossplay bridge and launcher",
+      "priority": "P2",
+      "action": "TRACK_CI_AND_RELEASE_GATES_CHECK_BASE_BRANCH_NO_AUTOMERGE"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 450,
+      "last_seen": "open",
+      "area": "Linux native build and launcher",
+      "priority": "P1",
+      "action": "COMPARE_QT_AND_NATIVE_WIN_GAMESERVER_NO_FORK_WIRE_SWAP"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 442,
+      "last_seen": "open",
+      "area": "long-session client tick spikes",
+      "priority": "P0",
+      "action": "BENCH_CLIENT_TICKS_AND_COLD_START_BEFORE_PORT"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 444,
+      "last_seen": "open",
+      "area": "loadtest enemy-owner fanout",
+      "priority": "P0",
+      "action": "RUN_ON_ISOLATED_GAME_SERVER_BEFORE_200_PLAYERS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 451,
+      "last_seen": "open",
+      "area": "Ludwig exit wall",
+      "priority": "P1",
+      "action": "COMPARE_EXISTING_PR17_LUDWIG_FIX_NO_DOUBLE_PATCH"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 135,
+      "last_seen": "open",
+      "area": "Linux native renderer and test fixes",
+      "priority": "P2",
+      "action": "COMPARE_NATIVE_VULKAN_NO_PLATFORM_MIX"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 134,
+      "last_seen": "open",
+      "area": "mods and PC game menus",
+      "priority": "P1",
+      "action": "USER_MOD_SAFETY_AND_NATIVE_RUNTIME_TESTS"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 123,
+      "last_seen": "open",
+      "area": "exit save backup and simplified Chinese UI",
+      "priority": "P1",
+      "action": "VERIFY_ATOMIC_SAVE_ROTATION_AND_BACKUP_RESTORATION"
+    },
+    {
+      "repo": "visy/bloodborne_pc_windows_port",
+      "number": 24,
+      "last_seen": "open",
+      "area": "host-selected party capacity",
+      "priority": "P0",
+      "action": "FIVE_HUNTERS_JOIN_OWN_AUTH_PROTOCOL_ONLY"
+    },
+    {
+      "repo": "droogie/bbhost",
+      "number": 161,
+      "last_seen": "open",
+      "area": "Discord Rich Presence character and area",
+      "priority": "P2",
+      "action": "CONSENT_BL_BUILD_NO_PRIVATE_PLAYER_METADATA"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5564,
+      "last_seen": "open",
+      "area": "shutdown backup thread crash",
+      "priority": "P1",
+      "action": "CHECK_NATIVE_RUNTIME_THREAD_LIFETIME_REPRO"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5561,
+      "last_seen": "open",
+      "area": "out of bounds GPU buffer copies",
+      "priority": "P1",
+      "action": "VULKAN_MEMORY_BOUND_GUARD_NATIVE_ADAPTATION_ONLY"
+    },
+    {
+      "repo": "shadps4-emu/shadPS4",
+      "number": 5560,
+      "last_seen": "open",
+      "area": "zero texture layer and slice guards",
+      "priority": "P1",
+      "action": "NATIVE_RENDERER_REPRO_GUARD"
+    },
+    {
+      "repo": "shadps4-emu/shadnet",
+      "number": 51,
+      "last_seen": "open",
+      "area": "http2 server experiment",
+      "priority": "P3",
+      "action": "DO_NOT_CHANGE_SHADNET_HTTP_PROTOCOL_UNTIL_BENCHMARK"
+    },
+    {
+      "repo": "CLSAMG22/BBSC",
+      "number": 29,
+      "last_seen": "open",
+      "area": "spectator free camera controller",
+      "priority": "P2",
+      "action": "COMPARE_EXISTING_YT_CAMERA_AND_NATIVE_INPUT"
+    },
+    {
+      "repo": "CLSAMG22/BBSC",
+      "number": 38,
+      "last_seen": "open",
+      "area": "revive teammate",
+      "priority": "P2",
+      "action": "YT_REVIVE_ALREADY_EXISTS_COMPARE_GAME_STATE"
+    },
+    {
+      "repo": "CLSAMG22/BBSC",
+      "number": 42,
+      "last_seen": "open",
+      "area": "Ludwig exit wall",
+      "priority": "P2",
+      "action": "COMPARE_EXISTING_PR17_FIX"
+    },
+    {
+      "repo": "Jgamrot/yharnam-pc",
+      "number": 155,
+      "last_seen": "open",
+      "area": "safe BBSC upgrade versioning",
+      "priority": "P1",
+      "action": "ADAPT_SAFE_PACKAGE_ATOMIC_UPDATE_ONLY_NOT_BBSC_PROTOCOL"
     }
   ],
   "branches": [
@@ -640,6 +1211,433 @@
       "known_head": "bf09c21e760f4907768b9aa92986693e5c4ad202",
       "area": "native launcher UX",
       "constraint": "OLDER_BRANCH_REVIEW_DESIGN_ONLY_NO_NETWORK_IMPORT"
+    },
+    {
+      "repo": "shadps4-emu/shadnet",
+      "branch": "staging",
+      "known_head": "6b12966c79102f7b3f749bce229e070f34e68ccd",
+      "area": "network server staging",
+      "constraint": "DO_NOT_ASSUME_STAGING_BINARY_IS_YT_COMPATIBLE"
+    },
+    {
+      "repo": "shadps4-emu/shadnet",
+      "branch": "production",
+      "known_head": "6b12966c79102f7b3f749bce229e070f34e68ccd",
+      "area": "network server production",
+      "constraint": "DO_NOT_DEPLOY_UPSTREAM_SHADNET_TO_FORNEX"
+    },
+    {
+      "repo": "Wozzardman/shadp2p",
+      "branch": "dev/bloodborne-seamless-co-op",
+      "known_head": "26bb459b21302a6ebf2602a25be736f8c9a07229",
+      "area": "peer NAT signals and co-op research",
+      "constraint": "EMULATOR_FORK_REFERENCE_ONLY"
+    },
+    {
+      "repo": "droogie/bbhost",
+      "branch": "perf/flip-timeline",
+      "known_head": "90ca92b69616df50eabb2a09330c73b332b1a18d",
+      "area": "native GPU performance",
+      "constraint": "REPRODUCTION_AND_LICENSE_REQUIRED"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "branch": "boss-fight-spectate",
+      "known_head": "b8f7db8dc4274ed6dde94774aa3251940cc5ff43",
+      "area": "spectator logic",
+      "constraint": "MATCH_CURRENT_NATIVE_GAME_EVENT_HOOKS"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "branch": "boss-whole-fight",
+      "known_head": "932dc997d331e26c2d45aa25d956863779b36257",
+      "area": "full boss fight",
+      "constraint": "MUST_PRESERVE_GAME_WORLD_AND_PLAYER_LIFECYCLE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/seamless-hunt",
+      "known_head": "50e285475ba5f089276ec2d2800eac9f69eda666",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/seamless-hunt-mainline",
+      "known_head": "318964614dfa8b1d4653cc66f237b06683fb128f",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/shyt-cls-friends-one-server-v62",
+      "known_head": "707ddadefbc8dde2935262288a26e9072320e8b6",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/shyt-hybrid-p2p-v52",
+      "known_head": "f193fdf8c1c8c46b49fc3e5f3f5192b69012aded",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/shyt-launcher-onboarding-v56",
+      "known_head": "9fa2eaaa7d7ff770f67a64c3573dfcfdfcf5dc9d",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/shyt-win-fsr-countof-v63",
+      "known_head": "d52c4ea30761fc3a3aaecfc9b69e07d87b4ff82b",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/shyt-yt130-auth-revocation-staging",
+      "known_head": "e1326437a4277d7ddbc02eec0e3155bc0b583b0f",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-dedicated-server-poc",
+      "known_head": "0d5648877fba629cbd79078b74970d9543d85cf5",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v31-1-active-credential-epoch",
+      "known_head": "a804db957499dd44cbb0e4eba2ae46edebdfc7ba",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v31-active-revocation-staging",
+      "known_head": "a13afa54e3303ca0a210f08f9cf29eea817295cd",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v31-ci-candidate",
+      "known_head": "c354df350fa4185b505479dde7c8c04fd2c3954b",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v32-account-gateway-staging",
+      "known_head": "2e2329ee7511946ef32f00f77bcc842f503c3a46",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v33-hunter-web-portal",
+      "known_head": "79e99c7134bfdaca21608af097b72ced5aa39356",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v34-release-channel-safety",
+      "known_head": "0f3add1142d96fed00973f05b31d8a0f2f2ad902",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v36-windows-composed-client-ci",
+      "known_head": "96d586a1b43f07f06fa7ad0234685ebec35525e4",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v38-candidate-package-verification",
+      "known_head": "e4ffc3fa4a9b2174b15bb4d320feff35ddb39840",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v39-fornex-ubuntu2404-qt683",
+      "known_head": "3b5b2a3303ae7d85ff31d5552d6a33bacfb56b69",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yharnam-v41-win-qt683-server-kit",
+      "known_head": "8716049debe243915d4f463eab457ae798b6005b",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-250-signin-rootcause-diagnostics-20261028",
+      "known_head": "9fe3c87b32185feb77de81c746ecbcf7811fbd41",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-1000-2000-scale-ladder-20261028",
+      "known_head": "da22a19a15fe0e91f98171e7761aa3e2a44e2719",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-capacity-evidence-guard-20261026",
+      "known_head": "7a0135bcfe0e8e7afc1a9372902abfffcad3d3f8",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-clean-native-baseline",
+      "known_head": "7a0135bcfe0e8e7afc1a9372902abfffcad3d3f8",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-coop7-byte-attribution-20261028",
+      "known_head": "b9c774e4698fbdada9c55b0eb03737b85e61420d",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-coop-reliable-resend-index-20261028",
+      "known_head": "8eac2a4275c776f715be11dae96292f16f68e7e9",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-coop-shared-encode-20261028",
+      "known_head": "d6089ec93a89c1bb693e2fbb4197ab1a2ec11aba",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-coopstream-retransmit-attribution-20261027",
+      "known_head": "29a09ba7f0d5b3522275956ce9a3065efe405d12",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-crossfork-integration-watch-20261027",
+      "known_head": "63e2851549b2ec06f39830b102483ebe87f45f53",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-eventloop-starvation-profiler-20261027",
+      "known_head": "287a4770dee7d53048a5f4862fb5a6426f2164bb",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-frozen-blauncher-executable-qa-20261028",
+      "known_head": "1e403ff53d3c63488c2563e38b4f6f48e324f6bb",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-frozen-launcher-ci-registration-20261028",
+      "known_head": "1e403ff53d3c63488c2563e38b4f6f48e324f6bb",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-frozen-launcher-winqa-20261027",
+      "known_head": "041b49b49d1f050cd8d2a382fc1dc961f5b22f46",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-hosted-index-scaling-20261028",
+      "known_head": "6299346d19ccb7ce3c445a89e043b2735ab95d58",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-hosted-shards-1000-scale-20261028",
+      "known_head": "90215bcc5be8c54ef593ec2af648b2393bed2475",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-hosted-world-index-20261028",
+      "known_head": "de637b876c8540d74e6f3d62281467dfcb57def4",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-launcher-game-search-permission-guard-20261027",
+      "known_head": "fd3e78f23b17eb51c842a697f75ea642b2aabce8",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-launcher-unicode-crash-log-20261027",
+      "known_head": "fe9d03c5cae67eb7ecf7754703f3b34c39073b52",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-lobby-coalesce-50ms-20261027",
+      "known_head": "44d0fe98c92faa0ba5a33ae5b855df6b955ed22e",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-lobby-dedupe-experiment-20261026",
+      "known_head": "173b571fae1383b3d9e3245a5147ec30ff76baef",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-native-launcher-atomic-settings-20261027",
+      "known_head": "cecf33dd6d474b0016b873aa6d7460b70be5b8ba",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-native-launcher-integrated-qa-20261027",
+      "known_head": "df509976a3d013731b5377678d5bae4acfdf342c",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-nonhosted-lobby-fanout-20261028",
+      "known_head": "34fcbc6ec2951d26dade65a1f430b1fb1ce6f7ae",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-queued-udp-fairness-scale-1000-20261028",
+      "known_head": "90c7a4d158f32aa527888b391f9dae7d2bab7aa9",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-reliable-resend-no-quadratic-scan-20261028",
+      "known_head": "a0c7a5330736f4e2a5c47ace1754ef9a4cb38907",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-udp-drain-fifo-20261028",
+      "known_head": "6f853656d09f315fb59b60c30d8ba7740dccf643",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-udp-fairness-20261028",
+      "known_head": "c3f39af4df2258985cef0d4a23e4a57cf0aedc98",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-udp-fairness-isolated-20261028",
+      "known_head": "4fa93f6b2f5ec7b9d02715d580b5ecdf28b22658",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-udp-read-fairness-experiment-20261026",
+      "known_head": "7b7f025c1559e05131db3586297346912d7e88ad",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-windows-launcher-truststore-20261027",
+      "known_head": "09f1d03f7d67ee20998a047e6a35f15095ae626c",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "feature/yt130-wire-traffic-attribution-20261027",
+      "known_head": "f4577c7c729e0fb7d4a43cd5cd6f0f7b918e45a3",
+      "area": "native YT1.3 workstream",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "fix/shyt-assembly-required-runtime",
+      "known_head": "083820af312bf8dcdc613b51c4b984bf66996cde",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "fix/shyt-friends-private-session-gate",
+      "known_head": "b5241bbb0d57bba04ffbe0efffed087e7077e397",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "fix/shyt-remote-profile-schema",
+      "known_head": "458f92a854e5bf86015620f61b65f14eb3b2fb7b",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "fix/shyt-windows-parity-utf8",
+      "known_head": "4c745cc906bd5d78257e674845448874311d4e13",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "master",
+      "known_head": "8ded22d75bf931fe89f97a6f12c0c37518c79eeb",
+      "area": "production base",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
+    },
+    {
+      "repo": "ProhorovIlja/bloodborne_pc_windows_port",
+      "branch": "staging/native-bbsc-loader-smoke",
+      "known_head": "0dc27cd074871d41d59953315b3b53573acbac68",
+      "area": "Seamless Hunt project branch",
+      "constraint": "INTERNAL_BRANCH_CHANGE_REQUIRES_CI_AND_PROTOCOL_REVIEW_NO_AUTO_MERGE"
     }
   ]
 }
