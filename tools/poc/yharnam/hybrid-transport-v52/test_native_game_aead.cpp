@@ -98,6 +98,10 @@ int main(){
     tx.Revoke();rx.Revoke();
     assert(!tx.SealGame(game,100,out));
     assert(!rx.OpenGame(four,100,plain));
+    // Revoke/expiry must NOT allow resetting AES-GCM sequence under the
+    // same authenticated server lease, even if the caller offers a new salt.
+    assert(!tx.Arm(ticket,key,Salt(60),100));
+    assert(!rx.Arm(ticket,key,Salt(60),100));
     // Ciphertext from a previous server epoch cannot cross into a new one.
     auto next=ticket;next.session_epoch++;
     assert(tx.Arm(next,Key(91),Salt(91),100));
