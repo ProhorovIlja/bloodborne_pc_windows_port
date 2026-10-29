@@ -16,6 +16,7 @@ RELATIVE = ("bbport/gpu/third_party/fsr-vulkan/"
             "upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp")
 SUBMODULE_COMMIT = "c64f093404125e960813f95f1996c14780f0dd69"
 ORIGINAL_BLOB = "b2439b6bb8c32196c4ba88c0aa61fd4d8333c200"
+VENDOR_MUTEX = b"#include <mutex> // bbport: libc++ does not include it transitively\\n".replace(b"\\n", b"\n")
 HEADER = "#include <ffx_breadcrumbs_list.h>\n"
 LOG2 = "floor(log2(FFX_MAXIMUM("
 FIXED_LOG2 = "std::floor(std::log2(FFX_MAXIMUM("
@@ -41,7 +42,12 @@ def patch_file(path: Path) -> None:
     before = path.read_bytes()
     normalized = before.replace(b"\r\n", b"\n")
     if git_blob(normalized) != ORIGINAL_BLOB:
-        raise ValueError("Pinned FSR Vulkan git blob mismatch: " + git_blob(normalized))
+        # The actual pinned port first installs its existing GPL-compatible
+        # vendor patch 0002 with <mutex>. Verify that removing exactly this
+        # vetted line restores the ORIGINAL unmodified source blob.
+        if normalized.count(VENDOR_MUTEX) != 1 or git_blob(
+                normalized.replace(VENDOR_MUTEX, b"", 1)) != ORIGINAL_BLOB:
+            raise ValueError("Pinned FSR Vulkan git blob mismatch: " + git_blob(normalized))
     updated = patch_text(normalized.decode("utf-8")).encode("utf-8")
     path.write_bytes(updated)
     print("SHYT_PINNED_FSR_VK_CLANG64_HEADERS_AND_STD_MATH_FIX_PASS " + git_blob(updated))
