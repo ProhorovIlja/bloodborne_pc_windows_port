@@ -115,6 +115,14 @@ class Scale1000PlanTests(unittest.TestCase):
         full = m.inspect(json.dumps(self.playing()) + "\n", 0, 1000)
         self.assertEqual(full["quality"], "FULL_GAMEPLAY")
         self.assertTrue(full["observed"])
+        self.assertEqual(full["metrics"]["packets_lost"], 0)
+        # This report must not claim healthy gameplay when the native
+        # generator observes holes even if fanout inflates receives.
+        with_gaps = self.playing(received=400000)
+        with_gaps["packets_lost"] = 10000
+        degraded = m.inspect(json.dumps(with_gaps), 0, 1000)
+        self.assertEqual(degraded["quality"], "SEQUENCE_GAPS_DEGRADED")
+        self.assertEqual(degraded["metrics"]["packets_lost"], 10000)
         partial = self.playing()
         partial["playing"] = 600
         self.assertEqual(

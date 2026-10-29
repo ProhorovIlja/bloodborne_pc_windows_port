@@ -78,6 +78,14 @@ class CapacityUnitTests(unittest.TestCase):
         # Broadcast/fan-out and detected sequence gaps do not prove corruption.
         self.assertEqual(mod.quality(baseline | {"packets_received":3000}, 200),
                          "FULL_GAMEPLAY")
+        # Fanout must not mask real per-recipient sequence gaps: 3000
+        # received from 2000 sent is not proof of zero loss.
+        self.assertEqual(mod.quality(baseline | {"packets_received":3000,
+                                                 "packets_lost":100}, 200),
+                         "SEQUENCE_GAPS_DEGRADED")
+        self.assertEqual(mod.quality(baseline | {"packets_received":3000,
+                                                 "packets_lost":1}, 200),
+                         "FULL_GAMEPLAY")
         self.assertEqual(mod.quality(baseline | {"packets_received":1900}, 200),
                          "DELIVERY_DEGRADED")
         self.assertEqual(mod.quality(baseline | {"relay_ms_p99":262.676}, 200),

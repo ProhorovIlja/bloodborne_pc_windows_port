@@ -55,6 +55,12 @@ def quality(m: dict, players: int) -> str:
             return "INVALID_METRICS"
     if m["packets_received"] / m["packets_sent"] < 0.99:
         return "DELIVERY_DEGRADED"
+    # Native bbload counts sequence holes separately for each recipient.
+    # Fanout can make aggregate packets_received > packets_sent, masking
+    # loss in the simple sent/received ratio. Reject >1% observed holes.
+    # This still does NOT prove per-client delivery or real WAN gameplay.
+    if m["packets_lost"] / (m["packets_received"] + m["packets_lost"]) > 0.01:
+        return "SEQUENCE_GAPS_DEGRADED"
     if m["relay_ms_p99"] > 50.0:
         return "RELAY_LATENCY_DEGRADED"
     if m["main_thread_cpu_avg"] >= 75.0:
