@@ -26,11 +26,12 @@ jobs:
       - name: Compose exact current server link sources, no game build
         shell: pwsh
         run: |
-          python tools/poc/yharnam/unified-v9/compose_sources.py --upstream pinned-upstream --repo . --out composed
+          $out = Join-Path $env:RUNNER_TEMP 'shyt-server-link-diagnostic-composed'
+          python tools/poc/yharnam/unified-v9/compose_sources.py --upstream pinned-upstream --repo . --out $out
           if ($LASTEXITCODE -ne 0) { throw 'Composition failed' }
           git -C pinned-upstream submodule update --init --depth 1 -- server/externals/protobuf
           if ($LASTEXITCODE -ne 0) { throw 'Pinned protobuf checkout failed' }
-          Copy-Item composed/server/* pinned-upstream/server/ -Recurse -Force
+          Copy-Item "$out/server/*" pinned-upstream/server/ -Recurse -Force
           @'
           from pathlib import Path
           import re
