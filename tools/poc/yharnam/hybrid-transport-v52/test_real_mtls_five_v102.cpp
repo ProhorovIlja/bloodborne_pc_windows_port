@@ -3,6 +3,7 @@
 // ten cert-pinned SHG2 exchanges; no cross-team pair selector. Direct OFF.
 #include "sh_p2p_tls_listener.hpp"
 #include "sh_native_tls_local_client_v91.hpp"
+#include "sh_native_tls_pair_list_v102.hpp"
 #include "sh_pair_key_schedule_v89.hpp"
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -11,6 +12,7 @@
 #include <QSslKey>
 #include <QSslSocket>
 #include <QTimer>
+#include <algorithm>
 #include <atomic>
 #include <array>
 #include <optional>
@@ -32,44 +34,11 @@ static QByteArray Pin(const QString& path) {
     return QCryptographicHash::hash(Leaf(path).toDer(),
                                     QCryptographicHash::Sha256).toHex();
 }
-static std::string HexId(std::uint64_t id) {
-    char hex[16]{};
-    constexpr char lut[]="0123456789abcdef";
-    for(unsigned i=0;i<16;++i)
-        hex[15U-i]=lut[(id>>(4U*i))&0x0fU];
-    return std::string(hex,sizeof(hex));
-}
-static bool ListFromActualTls(const QString& ca,const QString& cert,
-                              const QString& key,quint16 port,
-                              QByteArray& response) {
-    response.clear();
-    QFile f(key);
-    if(!f.open(QIODevice::ReadOnly))return false;
-    const QSslKey private_key(&f,QSsl::Rsa,QSsl::Pem,QSsl::PrivateKey);
-    if(private_key.isNull())return false;
-    QSslConfiguration cfg=QSslConfiguration::defaultConfiguration();
-    cfg.setProtocol(QSsl::TlsV1_3);
-    cfg.setCaCertificates({Leaf(ca)});
-    cfg.setLocalCertificate(Leaf(cert));
-    cfg.setPrivateKey(private_key);
-    cfg.setPeerVerifyMode(QSslSocket::VerifyPeer);
-    QSslSocket s;
-    s.setSslConfiguration(cfg);
-    s.connectToHostEncrypted("127.0.0.1",port);
-    if(!s.waitForEncrypted(3000))return false;
-    constexpr char cmd[]="YT-P2P/V102 LIST\n";
-    if(s.write(cmd,sizeof(cmd)-1)!=sizeof(cmd)-1 ||
-       !s.waitForBytesWritten(3000))return false;
-    for(int i=0;i<4 && !response.contains('\n');++i) {
-        if(!s.waitForReadyRead(1500))break;
-        response+=s.readAll();
-    }
-    if(response.contains('\n')) {
-        response=response.left(response.indexOf('\n')+1);
-        return response.startsWith("YT-P2P/V102 PAIRS") &&
-               response.endsWith('\n');
-    }
-    return false;
+static bool ListFromActualTls(
+    const NativeTlsLocalConfig& cfg,
+    NativeTlsPairListV102::PairSelectors& pairs,std::size_t& count) {
+    // Actual native OpenSSL mTLS LIST, not a separate Qt test client.
+    return NativeTlsPairListV102::List(cfg,pairs,count);
 }
 struct GameState {
     NativeOfferIdentityV84 current{};
@@ -138,6 +107,25 @@ static bool RealEdge(const NativeTlsLocalConfig& x,
 }
 int main(int argc,char** argv) {
     QCoreApplication app(argc,argv);
+    // Fail closed before the network test: canonical lower-hex IDs only.
+    NativeTlsPairListV102::PairSelectors parsed{};
+    std::size_t parsed_count=99;
+    assert(NativeTlsPairListV102::Parse(
+        "YT-P2P/V102 PAIRS\\n",parsed,parsed_count) &&
+        parsed_count==0);
+    assert(NativeTlsPairListV102::Parse(
+        "YT-P2P/V102 PAIRS 0000000000000001 0000000000000002\\n",
+        parsed,parsed_count) && parsed_count==2 &&
+        parsed[0]==1 && parsed[1]==2);
+    assert(!NativeTlsPairListV102::Parse(
+        "YT-P2P/V102 PAIRS 0000000000000001 0000000000000001\\n",
+        parsed,parsed_count) && parsed_count==0);
+    assert(!NativeTlsPairListV102::Parse(
+        "YT-P2P/V102 PAIRS 0000000000000000\\n",parsed,parsed_count));
+    assert(!NativeTlsPairListV102::Parse(
+        "YT-P2P/V102 PAIRS 000000000000000A\\n",parsed,parsed_count));
+    assert(!NativeTlsPairListV102::Parse(
+        "YT-P2P/V102 PAIRS 0000000000000001 X\\n",parsed,parsed_count));
     // server cert/key, CA, then FIVE distinct cert/key pairs, all loopback.
     assert(argc==14);
     P2PTlsListener server;
@@ -198,19 +186,25 @@ int main(int argc,char** argv) {
     std::thread worker;
     QTimer::singleShot(0,&app,[&] {
         worker=std::thread([&] {
-            std::array<QByteArray,5> lists{};
+            // Five REAL native TLS clients discover their 4 current
+            // server-issued selectors without client-supplied peer IDs.
+            std::array<NativeTlsPairListV102::PairSelectors,5> lists{};
+            std::array<std::size_t,5> counts{};
             bool good=true;
             for(int i=0;i<5 && good;++i)
-                good=ListFromActualTls(
-                    argv[3],argv[4+i*2],argv[5+i*2],port,
-                    lists[static_cast<size_t>(i)]);
-            for(int who=0;who<5;++who)
+                good=ListFromActualTls(configs[static_cast<size_t>(i)],
+                    lists[static_cast<size_t>(i)],
+                    counts[static_cast<size_t>(i)]) &&
+                    counts[static_cast<size_t>(i)]==4;
+            for(int who=0;who<5 && good;++who)
                 for(int i=0;i<5;++i)
                     for(int j=i+1;j<5;++j) {
-                        const auto id=QByteArray::fromStdString(HexId(grant[i][j]));
+                        const auto& pairs=lists[static_cast<size_t>(who)];
+                        const auto last=pairs.begin()+counts[static_cast<size_t>(who)];
+                        const bool found=std::find(
+                            pairs.begin(),last,grant[i][j])!=last;
                         const bool authorized=(who==i || who==j);
-                        if(lists[static_cast<size_t>(who)].contains(id)!=authorized)
-                            good=false;
+                        if(found!=authorized)good=false;
                     }
             std::fprintf(stderr,"V102 actual TLS five-client scoped LIST: %s\n",
                          good?"PASS":"FAIL");
