@@ -59,9 +59,11 @@ jobs:
             stage_eventloop_timing.py; do
             python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
           done
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py \
+            "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
-          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
+          # Three additional original files: team lobby header, implementation and C++ tests.
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 11
           grep -q 'YT130_EVENTLOOP read_batches=' \
             "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           grep -q 'RecordWire(raw, true)' \
@@ -174,6 +176,19 @@ jobs:
           # wire counters already modified link_server.cpp/.h: profiler adds NO new file paths
           test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 8
           echo SHYT_YT130_QT_EVENTLOOP_OBSERVE_ONLY_NO_SCHEDULING_CHANGE
+      - name: Stage ORIGINAL Qt server five-hunter team slots and real C++ regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 11
+          grep -Fq 'constexpr size_t TeamSize = 5' \
+            "$RUNNER_TEMP/yt-src/server/coop/team_lobby.h"
+          grep -Fq 'GuestSigns{7, 6, 5, 4}' \
+            "$RUNNER_TEMP/yt-src/server/coop/team_lobby.cpp"
+          echo SHYT_QT_FIVE_HUNTER_CPP_REGRESSION_STAGE_PASS
       - name: Configure REAL upstream Qt6 shadNet + SQLite C++ test
         shell: bash
         run: |
@@ -243,6 +258,21 @@ jobs:
             yt130-smoke4.stderr --output yt130-smoke4-diagnostics.log
           python tools/poc/yharnam/yt130-reference/verify_load_report.py \
             yt130-smoke4.jsonl --expected-players 4
+      - name: Verify all five hunters in one original Qt party are actually PLAYING
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90s python3 "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --players 5 --team-size 5 --processes 1 \
+            --seconds 15 --ramp-ms 10 --cfg CheckServerBuild=false \
+            --extra "--build 'bb-build 1;version=dev;protocol=9;'" \
+            > yt130-smoke5.jsonl 2> yt130-smoke5.stderr
+          python tools/poc/yharnam/yt130-reference/verify_load_report.py \
+            yt130-smoke5.jsonl --expected-players 5
+          python -c 'import json; r=[json.loads(x) for x in open("yt130-smoke5.jsonl") if x.startswith("{") and "players" in x]; assert len(r)==1 and r[0]["playing"]==5 and r[0]["packets_sent"]>0 and r[0]["packets_received"]>=.99*r[0]["packets_sent"] and r[0]["udp_buffer_drops"]==0, "five-hunter game packet delivery failed"'
+          echo SHYT_REAL_FIVE_HUNTER_SYNTHETIC_PARTY_ACTIVE_PASS
       - name: Measure actual optimized shadNet capacity 4 to 200 players
         shell: bash
         run: |
@@ -347,6 +377,8 @@ jobs:
             yt130-wire-logs/
             yt130-smoke4.jsonl
             yt130-smoke4.stderr
+            yt130-smoke5.jsonl
+            yt130-smoke5.stderr
             yt130-load200.stderr
             yt130-smoke4-diagnostics.log
             yt130-load200-diagnostics.log
