@@ -3,6 +3,7 @@
 #pragma once
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <map>
@@ -18,8 +19,8 @@ enum class Mode { Coop, Invasion };
 enum class Visibility { Public, Private };
 enum class Scaling { Vanilla, PartyBalanced, Challenging };
 enum class RoutePreference { DirectP2P, RelayOnly };
-enum class Reject { None, Closed, Private, InvasionsDisabled, InvasionCap, Full, InvalidGroup, MismatchedBuild, LevelMismatch, DuplicatePlayer };
-struct Hunter { std::string id; int level=4; };
+enum class Reject { None, Closed, Private, InvasionsDisabled, InvasionCap, Full, InvalidGroup, MismatchedBuild, LevelMismatch, DuplicatePlayer, Blocked };
+struct Hunter { std::string id; int level=4; std::string public_name; };
 struct Party { std::string id; std::vector<Hunter> members; };
 struct Rules {
     Visibility visibility=Visibility::Public;
@@ -39,6 +40,8 @@ struct Room {
     std::string title, region="any";
     Rules rules;
     std::vector<Party> defenders, invaders;
+    // Server-owned host blacklist: auth principal IDs, not spoofable display names.
+    std::set<std::string> blocked_account_ids;
     bool open=true;
     bool started=false;
     std::uint64_t rules_revision=1;
@@ -78,6 +81,8 @@ inline Admission CanJoin(const Room& r, const Party& group, Mode mode,
             for(const auto& h:group.members) for(const auto& existing:p.members)
                 if(h.id==existing.id) return {Reject::DuplicatePlayer};
         }
+    for(const auto& hunter:group.members)
+        if(r.blocked_account_ids.contains(hunter.id)) return {Reject::Blocked};
     if(mode==Mode::Invasion && !r.rules.invasions_enabled) return {Reject::InvasionsDisabled};
     if(mode==Mode::Invasion && Count(r.invaders)+reserved_invaders+group.members.size()>r.rules.invasion_slots)
         return {Reject::InvasionCap};
@@ -97,6 +102,7 @@ struct RoomFilters {
     std::optional<Scaling> scaling;
     std::optional<RoutePreference> route;
     std::string region="any";
+    std::string host_name_query, title_query; // public names only; not account IDs
     unsigned min_free_slots=1;
     bool hide_full=true;
     bool include_started=false;
@@ -109,10 +115,28 @@ struct RoomView {
     RoutePreference route=RoutePreference::DirectP2P;
     std::uint64_t rules_revision=0;
     Reject reason=Reject::None;
+    std::string host_name;
+    std::vector<std::string> public_members; // explicit public_name only
 };
+struct RoomPage {
+    std::vector<RoomView> rooms;
+    std::size_t next_offset=0;
+    bool has_more=false;
+};
+// ASCII-insensitive only; production UI must use Unicode case folding.
+inline bool ContainsAsciiFolded(std::string_view source,std::string_view fragment) {
+    if(fragment.empty())return true;
+    const auto eq=[](unsigned char a,unsigned char b) {
+        return std::tolower(a)==std::tolower(b);
+    };
+    return std::search(source.begin(),source.end(),fragment.begin(),fragment.end(),eq)!=source.end();
+}
 inline bool MatchesFilters(const Room& r, const RoomFilters& f) {
     if(!r.open || r.rules.visibility!=Visibility::Public || r.rules.password_protected)return false;
     if(r.started && !f.include_started)return false;
+    if(!ContainsAsciiFolded(r.title,f.title_query))return false;
+    const auto& host=r.defenders.front().members.front();
+    if(!ContainsAsciiFolded(host.public_name,f.host_name_query))return false;
     if(f.dbno && r.rules.dbno_enabled!=*f.dbno)return false;
     if(f.invasions && r.rules.invasions_enabled!=*f.invasions)return false;
     if(f.scaling && r.rules.scaling!=*f.scaling)return false;
@@ -162,11 +186,17 @@ public:
             if((filters.hide_full&&free==0) || free<filters.min_free_slots)continue;
             const Admission admit=CanJoin(r,p,m,build,false,reserved,inv,certified_);
             // When 'show full' is selected, display a disabled room, not an invalid match.
+            if(admit.reject==Reject::Blocked)continue; // never expose a blacklisted host's lobby
             if(!admit && !(admit.reject==Reject::Full&&!filters.hide_full))continue;
             out.push_back(RoomView{id,r.title,r.region,Players(r),reserved,cap,free,
                 r.rules.dbno_enabled,r.rules.invasions_enabled,r.started,
                 static_cast<bool>(admit),r.rules.scaling,r.rules.route,r.rules_revision,
                 admit.reject});
+            out.back().host_name=r.defenders.front().members.front().public_name;
+            for(const auto* side:{&r.defenders,&r.invaders})
+                for(const auto& squad:*side)
+                    for(const auto& member:squad.members)
+                        if(!member.public_name.empty())out.back().public_members.push_back(member.public_name);
         }
         std::stable_sort(out.begin(),out.end(),[](const RoomView& a,const RoomView& b) {
             if(a.joinable!=b.joinable)return a.joinable>b.joinable;
@@ -174,6 +204,50 @@ public:
             return a.id<b.id;
         });
         return out;
+    }
+    // Wire-safe bounded results: never broadcast a global full directory to all players.
+    // An HTTP handler must still rate-limit and bind query to its authenticated principal.
+    RoomPage BrowsePage(const Party& viewer,Mode mode,std::string_view build,Time now,
+                        const RoomFilters& filters={},std::size_t offset=0,
+                        std::size_t page_size=25) {
+        auto all=Browse(viewer,mode,build,now,filters);
+        const std::size_t cap=std::clamp(page_size,std::size_t{1},std::size_t{50});
+        RoomPage page;
+        if(offset>=all.size())return page;
+        const auto end=offset+std::min(cap,all.size()-offset);
+        page.rooms.assign(all.begin()+offset,all.begin()+end);
+        page.next_offset=end;
+        page.has_more=end<all.size();
+        return page;
+    }
+    // Caller identity MUST come from authenticated shadNet session, never arbitrary request text.
+    // Block applies to future admissions/tickets. Live kick + route/token revocation
+    // must be implemented at the authoritative game server before production.
+    bool SetBlocked(std::string_view room_id,std::string_view authenticated_host,
+                    std::string_view target_id,bool blocked) {
+        std::scoped_lock lock(mu_);
+        auto it=rooms_.find(std::string(room_id));
+        if(it==rooms_.end()||it->second.defenders.empty()||
+           it->second.defenders.front().members.empty())return false;
+        Room& room=it->second;
+        const auto& host=room.defenders.front().members.front().id;
+        if(authenticated_host!=host||target_id.empty()||target_id==host)return false;
+        if(blocked) {
+            if(!room.blocked_account_ids.contains(std::string(target_id)) &&
+               room.blocked_account_ids.size()>=512)return false;
+            room.blocked_account_ids.insert(std::string(target_id));
+            for(auto ticket=tickets_.begin();ticket!=tickets_.end();) {
+                if(ticket->second.room_id==room.id &&
+                   std::any_of(ticket->second.party.members.begin(),ticket->second.party.members.end(),
+                    [&](const Hunter& h){return h.id==target_id;}))
+                    ticket=tickets_.erase(ticket);
+                else ++ticket;
+            }
+        } else {
+            room.blocked_account_ids.erase(std::string(target_id));
+        }
+        ++room.rules_revision;
+        return true;
     }
     // Only a server-authenticated room host may call this. Never accept a claimed
     // host_id directly from an unauthenticated HTTP request.
