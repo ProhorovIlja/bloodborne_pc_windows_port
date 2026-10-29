@@ -104,6 +104,45 @@ def patch_game(src: str) -> str:
     }
 
 """
+    method = """    // SHYT-SHY2-DEV-TRUSTED-CUTOVER: a game-owned worker only.
+    // This stages encrypted RX/TX keys but DOES NOT install the game's
+    // outgoing direct router. Ordinary SHLK relay stays in use.
+#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
+    bool TryInstallVerifiedShy2ForTest(
+        std::string_view local_native_sender,
+        std::string_view remote_native_sender,
+        SeamlessHunt::Hybrid::CurrentWorld current_world,
+        void* stable_game_world, std::uint64_t now_ms) {
+        if(!running.load(std::memory_order_acquire) || LinkCut() ||
+           !now_ms || !current_world || !stable_game_world)
+            return false;
+        std::lock_guard grant_lock(native_grant_mutex);
+        if(!nat_probe_v92)return false;
+        std::uint64_t game_generation=0;
+        {
+            std::lock_guard link_lock(link_mutex);
+            if(link_welcomed && link_server.addr_nbo &&
+               link_server.port_nbo)
+                game_generation=shyt_link_generation_v87;
+        }
+        if(!game_generation ||
+           nat_probe_link_generation_v92!=game_generation ||
+           nat_paired_tls_generation_v92!=game_generation ||
+           !nat_paired_tls_binding_v92)
+            return false;
+        const auto* offer=native_grant_inbox_v84.PendingForNat(now_ms);
+        if(!offer || offer->pair_binding!=nat_paired_tls_binding_v92)
+            return false;
+        std::lock_guard crypto_lock(native_shy2_mutex);
+        return SeamlessHunt::Hybrid::NativeShy2GrantCutoverV106::Install(
+            native_grant_inbox_v84,*nat_probe_v92,0,
+            native_shy2_ingress,native_shy2_egress,
+            local_native_sender,remote_native_sender,
+            current_world,stable_game_world,now_ms);
+    }
+#endif
+
+"""
     src = one(src,
         '    static bool TrustedReverseDirectReady(\n',
         method + callback + '    static bool TrustedReverseDirectReady(\n',

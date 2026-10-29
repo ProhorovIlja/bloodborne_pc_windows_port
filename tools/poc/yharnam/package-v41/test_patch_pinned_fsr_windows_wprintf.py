@@ -33,7 +33,7 @@ class FsrCompatibilityTest(unittest.TestCase):
         self.assertEqual(patched.count("#include <cwchar>"), 1)
         self.assertNotIn("swprintf_s(", patched)
         self.assertIn("OutputDebugStringW(buffer)", patched)
-        self.assertIn("AMD", patched)
+        self.assertIn("Advanced Micro Devices", patched)
         self.assertIn("wchar_t buffer[512]", patched)
         self.assertEqual(
             patched.replace(
