@@ -90,6 +90,7 @@ int main(){
     assert(!NativePairAeadKeys::DeriveFromVerifiedInbox(forged,false,1001,blocked));
     assert(std::all_of(blocked.key.begin(),blocked.key.end(),[](auto x){return x==0;}));
     assert(!NativePairAeadKeys::DeriveFromVerifiedInbox(b,false,2000,blocked));
-    assert(!NativePairAeadKeys::DeriveFromVerifiedInbox(b,false,1001,blocked) == false ? false : true); // no raw grant sent
+    assert(NativePairAeadKeys::DeriveFromVerifiedInbox(b,false,1001,blocked));
+    assert(blocked.key==a_out.key && blocked.salt==a_out.salt);
     return 0;
 }
