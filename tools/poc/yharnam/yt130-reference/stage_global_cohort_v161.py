@@ -65,15 +65,11 @@ FINISH_NEW="""    const s64 cohort_finish_us = NowUs();
         {"cohort_finish_us", static_cast<double>(cohort_finish_us)},
         {"cohort_epoch_entries", cohort_json},
 """
-ANCHOR_AGG="""        def worst(name):
-            return max((r.get(name, 0) for r in results), default=0)
-
-        per_shard = []
+ANCHOR_AGG="""        per_shard = []
+        for i in range(args.shards):
+            wire_in, wire_out, wire_bytes_in, wire_bytes_out, wire_windows = data_wire(i)
 """
-PATCH_AGG="""        def worst(name):
-            return max((r.get(name, 0) for r in results), default=0)
-
-        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original C++
+PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original C++
         # steady_clock send-time stamps are the same monotonic clock across
         # all hosted bbload worker processes (and the source packet contains
         # the same send time when decoded by the receiver).
@@ -134,6 +130,8 @@ PATCH_AGG="""        def worst(name):
                     cohort_quality = "INVALID_GLOBAL_COHORT_BUCKETS"
 
         per_shard = []
+        for i in range(args.shards):
+            wire_in, wire_out, wire_bytes_in, wire_bytes_out, wire_windows = data_wire(i)
 """
 SUMMARY_OLD="""            "per_shard": per_shard,
 """
