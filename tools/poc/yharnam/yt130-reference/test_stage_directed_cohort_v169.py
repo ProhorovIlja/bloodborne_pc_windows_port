@@ -74,6 +74,30 @@ class DirectedSource(unittest.TestCase):
         x=evaluate([w,z])
         self.assertGreater(x['cohort_received']*100,x['cohort_sent']*99)
         self.assertEqual(x['directed_quality'],'DIRECTED_GAME_COHORT_DELIVERY_DEGRADED')
+    def test_real_200_hunter_40_team_800_flow_shape(self):
+        # Four original Qt children, ten complete five-seat teams each,
+        # 800 directed flows over thirty synchronized full seconds.
+        one=worker()
+        chunks=[]
+        for _ in range(4):
+            rows=[dict(entry,route=entry["route"]+25*team)
+                  for team in range(10)
+                  for entry in one["cohort_directed_entries"]]
+            epochs=[dict(entry,sent_entries=entry["sent_entries"]*10,
+                         received_entries=entry["received_entries"]*10)
+                    for entry in one["cohort_epoch_entries"]]
+            chunks.append({"cohort_directed_entries":rows,
+                           "cohort_unknown_senders":0,
+                           "cohort_epoch_entries":epochs})
+        self.assertEqual(sum(len(x["cohort_directed_entries"]) for x in chunks),24000)
+        result=evaluate(chunks,per=[10]*4)
+        self.assertEqual(result["directed_routes"],800)
+        self.assertEqual(result["directed_quality"],
+                         "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        chunks[-1]["cohort_directed_entries"].pop()
+        self.assertEqual(evaluate(chunks,per=[10]*4)["directed_quality"],
+                         "INVALID_DIRECTED_GAME_COHORT")
+
     def test_missing_extra_and_invalid_routes_fail_closed(self):
         good=worker()
         cases=[]
