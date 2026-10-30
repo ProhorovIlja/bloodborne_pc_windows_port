@@ -144,21 +144,34 @@ class GlobalCohortV161(unittest.TestCase):
                 out=inspect([a,worker(12_000_000,42_000_000,intermittent)])
                 self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
 
-    def test_one_lossy_five_seat_worker_not_hidden_by_large_healthy_peer(self):
-        # Global packets: 301000 sent, 300700 received (>99%).
-        # But worker B receives 10/20 each second (<99%).
-        huge={sec:(10000,10000) for sec in range(10,40)}
-        weak={sec:(20,10) for sec in range(10,40)}
-        fast=worker(12_000_000,42_000_000,huge)
-        lossy=worker(12_000_000,42_000_000,weak)
-        report=inspect([fast,lossy])
-        self.assertGreater(report["cohort_received"] * 100,
-                           report["cohort_sent"] * 99)
+    def test_owner_follower_asymmetry_cannot_be_mistaken_for_loss(self):
+        # Source verified: the enemy owner sends multiple 0x31 frames
+        # per teammate; followers usually send one 0x06. A worker's
+        # own sent packets are NOT the expected packets it should receive.
+        owner={sec:(1000,200) for sec in range(10,40)}
+        follower={sec:(200,1000) for sec in range(10,40)}
+        a=worker(12_000_000,42_000_000,owner)
+        b=worker(12_000_000,42_000_000,follower)
+        report=inspect([a,b])
+        self.assertEqual(report["cohort_sent"],report["cohort_received"])
+        self.assertEqual(report["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        # Truly missing globally aligned entries must still go RED.
+        damaged={sec:(200,950) for sec in range(10,40)}
+        report=inspect([a,worker(12_000_000,42_000_000,damaged)])
         self.assertEqual(report["cohort_quality"],
                          "GLOBAL_GAME_COHORT_DELIVERY_DEGRADED")
-        # Individual 99% delivery can still pass in an aligned full cohort.
-        healthy={sec:(100,99) for sec in range(10,40)}
-        report=inspect([fast,worker(12_000_000,42_000_000,healthy)])
+
+    def test_imbalanced_worker_volume_is_not_a_loss_proof(self):
+        # A 20->10 local send/receive ratio is compatible with
+        # asymmetric owner role or map distribution. It is NOT a
+        # packet-loss verdict absent per-sender directed flow evidence.
+        heavy={sec:(10000,10000) for sec in range(10,40)}
+        light={sec:(20,10) for sec in range(10,40)}
+        report=inspect([worker(12_000_000,42_000_000,heavy),
+                        worker(12_000_000,42_000_000,light)])
+        self.assertGreater(report["cohort_received"]*100,
+                           report["cohort_sent"]*99)
         self.assertEqual(report["cohort_quality"],
                          "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
 
