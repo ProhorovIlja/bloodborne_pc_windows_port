@@ -12,6 +12,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_lobby_notice_detail_v159.py
       - tools/poc/yharnam/yt130-reference/stage_global_cohort_v161.py
       - tools/poc/yharnam/yt130-reference/test_stage_global_cohort_v161.py
+      - tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py
+      - tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py
   workflow_dispatch:
 permissions:
   contents: read
