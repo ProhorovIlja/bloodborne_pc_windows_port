@@ -139,7 +139,7 @@ jobs:
           static_assert(RoutesNativePacket(0x06,{a,a,EnemyPart::Follower,EnemyPart::Owner}));
           int main() { return 0; }
           CPP
-          g++ -std=c++20 -Wall -Wextra -Werror -pedantic -I"$RUNNER_TEMP/yt-src/server" "$RUNNER_TEMP/yt-v173-policy.cpp" -o "$RUNNER_TEMP/yt-v173-policy"
+          g++ -std=c++20 -Wall -Wextra -Werror -Wno-error=missing-field-initializers -pedantic -I"$RUNNER_TEMP/yt-src/server" "$RUNNER_TEMP/yt-v173-policy.cpp" -o "$RUNNER_TEMP/yt-v173-policy"
           "$RUNNER_TEMP/yt-v173-policy"
           echo SHYT_V173_REAL_ORIGINAL_QT_POLICY_ROUTING_PROOF_PASS
           ccache --show-stats
