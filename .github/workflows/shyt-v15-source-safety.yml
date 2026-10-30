@@ -274,8 +274,10 @@ jobs:
           hub=v28.patch_link_cpp(v27.transform(m.patch_link(base)))
           hdr=v28.patch_link_h(patched[v27.LINK_H])
           qt=v28.patch_test(patched[v27.TEST])
-          assert 'hello_admission.Allow(from.ipv4, now_ms)' in hub
-          assert 'LoginAdmission::Gate hello_admission;' in hdr
+          assert 'hello_admission->Allow(from.ipv4, now_ms)' in hub
+          assert 'if (!hello_admission || !hello_admission->Allow(' in hub
+          assert 'std::unique_ptr<SeamlessHunt::LoginAdmission::Gate> hello_admission;' in hdr
+          assert 'static_assert(sizeof(Hub) < 16384' in qt
           assert 'HelloAdmissionLimitsDbCalls' in qt
           bp=Path('tools/poc/yharnam/rpc-budget-v29/patch_rpc_budget.py')
           spec=importlib.util.spec_from_file_location('v29',bp)
