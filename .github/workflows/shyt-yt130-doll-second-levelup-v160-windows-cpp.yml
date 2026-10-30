@@ -1,0 +1,268 @@
+name: SHYT V160 original guest Doll second level-up native Windows C++ game compiler
+on:
+  push:
+    branches: [feature/yt130-doll-levelup-v151-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-doll-second-levelup-v160-windows-cpp.yml
+      - tools/poc/yharnam/yt130-reference/stage_doll_own_flag_v151.py
+      - tools/poc/yharnam/yt130-reference/test_stage_doll_own_flag_v151.py
+      - tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py
+      - tools/poc/yharnam/yt130-reference/test_stage_doll_second_levelup_v160.py
+      - tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py
+      - tools/poc/yharnam/yt130-reference/test_stage_doll_talk_v162.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-source-and-rule:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 3ce88c205648616b52b729fc2764b6fe27f7af83
+          path: reviewed-yt457
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: b18c5f371a19ca9a605e8fc40f8a57876ed12aac
+          path: reviewed-yt468
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: a64214d4875ff7cbe735b155e8b075261891e1cc
+          path: reviewed-yt468latest
+          persist-credentials: false
+          fetch-depth: 3
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 4a55f02c48207770273e0cf0ed5d06e85a9143e5
+          path: reviewed-yt471
+          persist-credentials: false
+          submodules: false
+      - name: Verify all original/reviewed Git SHA1 blobs and run exact original Doll regressions
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_doll_own_flag_v151.py -v
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_own_flag_v151.py \
+            --original pinned-upstream --reviewed reviewed-yt457
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_second_levelup_v160.py -v
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-upstream --reviewed reviewed-yt468
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --donor151 reviewed-yt457 --original pinned-upstream --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
+          git -C pinned-upstream diff --check
+          git -C pinned-upstream diff --name-only > /tmp/v151-original-doll-files.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0,"tools/poc/yharnam/yt130-reference")
+          from stage_doll_own_flag_v151 import FILES
+          paths=set(Path("/tmp/v151-original-doll-files.txt").read_text().splitlines())
+          assert paths==set(FILES), (paths,set(FILES))
+          p=Path("pinned-upstream/emulator/src/core/bloodborne_party.cpp").read_text()
+          assert "party_configured && level_up_on && blessing_on;" in p
+          p=Path("pinned-upstream/emulator/src/core/bloodborne_flags.h").read_text()
+          assert "Range(72100100, 72100102, FlagOwner::PerPlayer, 0," in p
+          p=Path("pinned-upstream/emulator/src/core/bloodborne_travel.cpp").read_text()
+          assert "ClearDollLevelUpFlagAfterHerMenu(blessing_begun);" in p
+          assert "std::ranges::any_of(OtherPlayers()" in p
+          assert "doll_blessing_end_asked.store(true);" in p
+          print("SHYT_V162_YT130_EXACT_ORIGINAL_DOLL_BEGIN_END_SOURCE_TESTS_PASS")
+          PY
+      - name: Compile and run exact extracted original C++ menu-close predicate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0,"tools/poc/yharnam/yt130-reference")
+          from stage_doll_own_flag_v151 import region,HELPER_START,HELPER_END
+          src=Path("pinned-upstream/emulator/src/core/bloodborne_party.cpp").read_text()
+          helper=region(src,HELPER_START,HELPER_END,"staged native helper")
+          assert "return party_configured && level_up_on && blessing_on;" in helper
+          Path("/tmp/v151-doll-real-helper.cpp").write_text(
+              "#include <optional>\nusing s32=int; constexpr s32 DollBlessingFlag=72100100;\n"+helper+"""
+          int main() {
+              for (int m=0;m<8;++m) {
+                  bool party=(m&4)!=0, level=(m&2)!=0, blessing=(m&1)!=0;
+                  if (ClearsDollLevelUpFlagAfterHerMenu(party,level,blessing)
+                      != (party && level && blessing)) return 1;
+              }
+              for (int m=0;m<8;++m) {
+                  bool party=(m&4)!=0, other=(m&2)!=0;
+                  s32 flag=(m&1)!=0 ? DollBlessingFlag : DollBlessingFlag+1;
+                  bool expected=party && !other && flag==DollBlessingFlag;
+                  if (ClearsDollLevelUpFlagOnHerBlessing(party,other,flag)!=expected) return 2;
+              }
+              for(int guest=0;guest<2;++guest) for(int begin=0;begin<2;++begin)
+                  for(int end=0;end<2;++end) for(int active=0;active<2;++active) {
+                  const auto observed=DollBlessingStepFor(guest,begin,end,active);
+                  std::optional<bool> expected;
+                  if (guest && begin && !active) expected=true;
+                  else if (guest && end && active) expected=false;
+                  if (observed!=expected) return 3;
+              }
+              if(!BeginsDollBlessing(true) || BeginsDollBlessing(false)) return 4;
+              if(!EndsDollBlessing(71) || EndsDollBlessing(68) || EndsDollBlessing(31)) return 5;
+              return 0;
+          }
+          """)
+          PY
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror /tmp/v151-doll-real-helper.cpp \
+            -o /tmp/v151-doll-real-helper
+          /tmp/v151-doll-real-helper
+          echo SHYT_V160_ACTUAL_SOURCE_ORIGINAL_DOLL_CXX_HELPERS_COMPILED_AND_RUN
+  native-game-client:
+    needs: original-source-and-rule
+    runs-on: windows-2022
+    timeout-minutes: 50
+    env:
+      PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+      BB_LTO: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enable long Win32 Git paths before checking out nested shader submodules
+        shell: pwsh
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          submodules: false
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 3ce88c205648616b52b729fc2764b6fe27f7af83
+          path: reviewed-yt457
+          submodules: false
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: b18c5f371a19ca9a605e8fc40f8a57876ed12aac
+          path: reviewed-yt468
+          submodules: false
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: a64214d4875ff7cbe735b155e8b075261891e1cc
+          path: reviewed-yt468latest
+          fetch-depth: 3
+          submodules: false
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 4a55f02c48207770273e0cf0ed5d06e85a9143e5
+          path: reviewed-yt471
+          submodules: false
+          persist-credentials: false
+      - name: Initialize only required native bbport GPU third-party submodules
+        shell: pwsh
+        run: |
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
+          if ($LASTEXITCODE -ne 0) { throw "Pinned native GPU submodule checkout failed" }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage source-exact native original guest Doll own event flags from upstream YT457
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_own_flag_v151.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'V151 native Doll unit test failed' }
+          python tools/poc/yharnam/yt130-reference/stage_doll_own_flag_v151.py --original pinned-upstream --reviewed reviewed-yt457
+          if ($LASTEXITCODE -ne 0) { throw 'V151 exact original/reviewed game source guard failed' }
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_second_levelup_v160.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'V160 source exact second Doll menu regression failed' }
+          python tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-upstream --reviewed reviewed-yt468
+          if ($LASTEXITCODE -ne 0) { throw 'V160 original reviewed native Doll source drift' }
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'V162 source-exact upstream Doll end repair regression failed' }
+          python tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --donor151 reviewed-yt457 --original pinned-upstream --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
+          if ($LASTEXITCODE -ne 0) { throw 'V162 reviewed original game source drift' }
+          git -C pinned-upstream diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'V151 staged original game source diff whitespace error' }
+          Write-Host 'SHYT_V151_YT130_ORIGINAL_WINDOWS_DOLL_OWN_FLAGS_STAGED'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - name: Install native Windows CLANG64 build dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed \
+            git patch \
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-ccache \
+            mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-cmake \
+            mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-pkgconf \
+            mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-vulkan-loader \
+            mingw-w64-clang-x86_64-vulkan-memory-allocator \
+            mingw-w64-clang-x86_64-glslang mingw-w64-clang-x86_64-sdl3 \
+            mingw-w64-clang-x86_64-fmt mingw-w64-clang-x86_64-boost \
+            mingw-w64-clang-x86_64-robin-map mingw-w64-clang-x86_64-xxhash \
+            mingw-w64-clang-x86_64-ffmpeg mingw-w64-clang-x86_64-zydis \
+            mingw-w64-clang-x86_64-spirv-tools mingw-w64-clang-x86_64-spirv-headers \
+            mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
+            mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
+            mingw-w64-clang-x86_64-nlohmann-json
+      - name: Compile original Windows native bloodborne_party.cpp AND bloodborne_travel.cpp
+        timeout-minutes: 22
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cd pinned-upstream/bbport
+          export CC=clang CXX=clang++
+          cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBB_PGO=off -DBB_LTO=OFF \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          ninja -C out/gpu -t targets all > out/v160-native-doll-targets.txt
+          grep -E 'bloodborne_(party|travel).cpp.obj' out/v160-native-doll-targets.txt
+          for unit in bloodborne_party.cpp.obj bloodborne_travel.cpp.obj; do
+            grep -F "$unit" out/v160-native-doll-targets.txt | cut -d: -f1 > out/v151-one-target.txt
+            test -s out/v151-one-target.txt
+            while IFS= read -r target; do
+              echo "SHYT_V151_COMPILING_ACTUAL_WINDOWS_GAME_SOURCE=$target"
+              timeout --signal=TERM --kill-after=10s 360s ninja -C out/gpu "$target"
+            done < out/v151-one-target.txt
+          done
+          echo SHYT_V162_ORIGINAL_WINDOWS_GAME_DOLL_TALK_BEGIN_END_CPP_PASS_NOT_PLAYTEST
+      - name: Upload native C++ build evidence even if compiler fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-v162-original-Windows-Doll-party-travel-CPP-INTERNAL
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            pinned-upstream/bbport/out/v160-native-doll-targets.txt
+            pinned-upstream/bbport/out/gpu/CMakeCache.txt
+            pinned-upstream/bbport/out/gpu/compile_commands.json
