@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch as mock_patch
 
 spec=importlib.util.spec_from_file_location("yt162",Path(__file__).with_name("stage_doll_talk_v162.py"))
 m=importlib.util.module_from_spec(spec)
@@ -120,6 +121,23 @@ class DollTalkV162(unittest.TestCase):
                             reviewed)
         with self.assertRaisesRegex(ValueError,"start marker drift"):
             m.verify_staged(m.CPP,"not a real native source",reviewed)
+
+    def test_full_original_worktree_must_equal_both_exact_reviewed_donors(self):
+        # Source-exact reconstruction is checked on *all* bytes before V162
+        # writes C++/headers/tests; a neighboring edit cannot slip through.
+        with mock_patch.object(m.donor151,"apply",
+                               side_effect=lambda p,base,donor:base+"[457]") as v151:
+            with mock_patch.object(m.donor160,"patch",
+                                   side_effect=lambda p,base,donor:base+"[468]") as v160:
+                m.check_original_stage(m.CPP,"original[457][468]",
+                                       "original","pinned457","pinned468")
+                v151.assert_called_once_with(m.ROOT+m.CPP,"original","pinned457")
+                v160.assert_called_once_with(m.ROOT+m.CPP,
+                                              "original[457]","pinned468")
+                with self.assertRaisesRegex(ValueError,
+                                            "full original working tree differs"):
+                    m.check_original_stage(m.CPP,"original[457][468]\n// stray change",
+                                           "original","pinned457","pinned468")
 
     def test_unrelated_path_refused(self):
         with self.assertRaisesRegex(ValueError,"not #468 whole source"):
