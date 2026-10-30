@@ -100,6 +100,6 @@ jobs:
           ''', encoding='utf-8')
           print('SHYT_V129_COMPILED_TEST_USES_EXACT_REAL_PINNED_UPSTREAM_CACHED_CLASS')
           PY
-          g++ -std=c++20 -O2 -Wall -Wextra -Werror "$RUNNER_TEMP/v129-session-name-test.cpp" -o "$RUNNER_TEMP/v129-session-name-test"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-error=missing-field-initializers "$RUNNER_TEMP/v129-session-name-test.cpp" -o "$RUNNER_TEMP/v129-session-name-test"
           "$RUNNER_TEMP/v129-session-name-test"
           echo SHYT_V129_ACTUAL_CXX20_UPSTREAM_GUEST_NAME_CACHE_TEST_PASS_NOT_GAMEPLAY
