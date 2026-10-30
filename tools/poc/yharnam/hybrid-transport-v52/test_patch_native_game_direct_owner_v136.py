@@ -53,7 +53,9 @@ class NativeOwnerTests(unittest.TestCase):
         self.assertIn("direct_egress.RevokeAll();",rewritten)
         self.assertIn("native_shy2_ingress.Revoke(0)",rewritten)
         self.assertIn("native_shy2_egress.Revoke(0)",rewritten)
-        self.assertEqual(rewritten.count("native_signed_route_v136={};"),3)
+        self.assertEqual(rewritten.count("native_signed_route_v136={};"),4)
+        self.assertIn("native_signed_generation_v136==shyt_link_generation_v87",rewritten)
+        self.assertIn("if(armed) native_signed_generation_v136=generation;",rewritten)
         self.assertEqual(rewritten.count("P2PAuthEpochMs()"),4)
         self.assertEqual(rewritten.count("SHYT_ENABLE_TEST_LOCAL_MTLS")>=5,True)
         # Unreliable-only Direct remains original V71; server Coop, RPC and
