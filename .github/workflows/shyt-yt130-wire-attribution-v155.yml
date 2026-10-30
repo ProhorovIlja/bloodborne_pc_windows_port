@@ -11,6 +11,8 @@ on:
       - tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py
       - tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py
       - tools/poc/yharnam/yt130-reference/test_stage_shard_wire_v155.py
+      - tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py
+      - tools/poc/yharnam/yt130-reference/test_stage_lobby_notice_v156.py
       - tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
       - tools/poc/yharnam/yt130-reference/test_stage_world_encode_once_v132.py
   workflow_dispatch:
@@ -34,6 +36,7 @@ jobs:
           python -m compileall -q tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_shard_five_v117.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_shard_wire_v155.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_lobby_notice_v156.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_five_player_bbload.py -v
           python -m compileall -q tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
       - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
@@ -110,6 +113,9 @@ jobs:
           python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py "$RUNNER_TEMP/yt-src"
+          grep -Fq 'team_name_absent' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"team_total_notices": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq 'YT130_WIRE_TRAFFIC kind=3' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq '"game_wire_in_packets": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq 'shlex.split(args.extra)' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
@@ -194,6 +200,10 @@ jobs:
                     "redirects",x.get("redirects"),
                     "p99_ms",x.get("redirect_ms_p99"),
                     "steady_pct",x.get("steady_delivered_pct"),
+                    "name_missing",x.get("team_name_absent"),
+                    "name_ambiguous",x.get("team_name_ambiguous"),
+                    "lookup_throttled",x.get("team_lookup_throttled"),
+                    "other_notice",x.get("team_other_notice"),
                     "shards",[(z.get("shard"),z.get("players_at_end"))
                               for z in x.get("per_shard",[])],flush=True)
           PY
