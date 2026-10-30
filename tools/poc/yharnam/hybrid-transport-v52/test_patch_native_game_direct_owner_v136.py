@@ -43,7 +43,7 @@ def original_composed_fixture():
 class NativeOwnerTests(unittest.TestCase):
     def test_original_game_stages_one_dev_only_encrypted_route(self):
         rewritten=mod.patch_game(original_composed_fixture())
-        self.assertEqual(rewritten.count(mod.MARKER),2)
+        self.assertEqual(rewritten.count(mod.MARKER),3)
         self.assertEqual(rewritten.count("SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto("),1)
         self.assertIn("SeamlessHunt::Hybrid::NativeGameSelfIdentityV87::Digest(",rewritten)
         self.assertIn("SecureOfferV84Detail::EqualDigest(",rewritten)
