@@ -85,8 +85,8 @@ class GlobalCohortV161(unittest.TestCase):
                 self.returncode=returncode
             def communicate(self):
                 return self.stdout,""
-        good=Child('{"games":5}\\n')
-        other=Child('{"games":5}\\n')
+        good=Child('{"games":5}\n')
+        other=Child('{"games":5}\n')
         def collect(children):
             ns={"loads":children,"json":json}
             exec(dedent(v.RESULTS_NEW),ns)
@@ -94,8 +94,8 @@ class GlobalCohortV161(unittest.TestCase):
         self.assertEqual(collect([good,other]),[{"games":5},{"games":5}])
         for children in (
                 [good,Child("")],                    # crashed/silent worker
-                [good,Child('{"games":5}\\n{"games":5}\\n')],
-                [good,Child('{"games":5}\\n',returncode=2)]):
+                [good,Child('{"games":5}\n{"games":5}\n')],
+                [good,Child('{"games":5}\n',returncode=2)]):
             with self.subTest(children=len(children)):
                 with self.assertRaisesRegex(RuntimeError,
                                             "expected exactly one successful"):
