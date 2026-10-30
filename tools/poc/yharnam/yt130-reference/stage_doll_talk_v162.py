@@ -72,7 +72,9 @@ def patch(name, staged, reviewed):
             "EndsDollBlessing" in staged):
         raise ValueError("V162 requires exact staged V151+V160 original Doll: " + name)
     old, new = PATCHES[name]
-    if reviewed.count(new) != 1 or old in reviewed or new in staged:
+    # Some upstream additions retain the original prefix (party/header/test);
+    # do not reject that exact retained context as if it were an old hunk.
+    if reviewed.count(new) != 1 or new in staged:
         raise ValueError("V162 pinned upstream #471 content drift: " + name)
     out = one(staged, old, new, name)
     if name == "src/core/bloodborne_travel.cpp":
