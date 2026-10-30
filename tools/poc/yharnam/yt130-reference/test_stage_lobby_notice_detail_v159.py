@@ -43,11 +43,9 @@ class OriginalTeamNoticeV159Tests(unittest.TestCase):
     def test_real_source_substring_anchored_and_can_only_stage_once(self):
         got=m.patch_load(source_fixture())
         self.assertIn(m.MARK,got)
-        self.assertEqual(got.count("team_unknown_other"),3) # source field, increment, output
+        self.assertEqual(got.count("team_unknown_other"),4) # field, increment, JSON key+value
         self.assertIn('++load.totals.team_other_notice',got)
-        self.assertIn('++load.totals.team_total_notices',source_fixture() if False else
-                      "++load.totals.team_total_notices") # unchanged original V156 code
-        self.assertEqual(got.count("team_no_code"),3)
+        self.assertEqual(got.count("team_no_code"),4)
         self.assertEqual(got.count('lobby.notice() == "no such invite"'),1)
         with self.assertRaisesRegex(ValueError,"drift"):
             m.patch_load(got)
