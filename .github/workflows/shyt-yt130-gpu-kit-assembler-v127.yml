@@ -1,0 +1,30 @@
+name: YT1.3 V127 safely assemble V126 native launcher plus compiled GPU EXEs
+on:
+  push:
+    branches: [feature/yt130-gpu-subresource-containment-v127-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-gpu-kit-assembler-v127.yml
+      - tools/poc/yharnam/yt130-reference/assemble_gpu_kit_v127.py
+      - tools/poc/yharnam/yt130-reference/test_assemble_gpu_kit_v127.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-yt130-v127-native-kit-assembler
+  cancel-in-progress: false
+jobs:
+  verify-safe-repacker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test exact three PE64 native game substitutions and preserve frozen launcher/licences
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_assemble_gpu_kit_v127.py -v
+          python -m py_compile tools/poc/yharnam/yt130-reference/assemble_gpu_kit_v127.py
+          grep -Fq 'd96c3a6884f12c2694544a6c814ce222e754f6b3da0d246037aaf65a0427c7dc' tools/poc/yharnam/yt130-reference/assemble_gpu_kit_v127.py
+          grep -Fq '"bbport-windows/BLauncher.exe"' tools/poc/yharnam/yt130-reference/assemble_gpu_kit_v127.py
+          echo SHYT_V127_GAME_PLUS_LAUNCHER_BYTE_PRESERVATION_UNIT_TEST_PASS_NOT_A_RELEASE
