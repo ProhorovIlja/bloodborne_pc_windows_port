@@ -81,9 +81,9 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
                 r.get("playing") == r.get("games") and
                 r.get("complete_teams") == r.get("games") // args.team_size and
                 isinstance(r.get("cohort_ready_us"), (int, float)) and
-                r["cohort_ready_us"] > 0 and
+                0 < r["cohort_ready_us"] < 2**53 and
                 isinstance(r.get("cohort_finish_us"), (int, float)) and
-                r["cohort_finish_us"] > r["cohort_ready_us"] and
+                r["cohort_ready_us"] < r["cohort_finish_us"] < 2**53 and
                 isinstance(r.get("cohort_epoch_entries"), list)
                 for r in results):
             tick = 1_000_000
@@ -109,7 +109,8 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
                         if (not isinstance(window, dict) or
                                 set(window) != {"start_us","sent_entries","received_entries"} or
                                 any(type(window.get(k)) not in (int,float)
-                                    or int(window[k]) != window[k] or window[k] < 0
+                                    or not (0 <= window[k] < 2**53)
+                                    or int(window[k]) != window[k]
                                     for k in ("start_us","sent_entries","received_entries"))):
                             valid = False
                             break
