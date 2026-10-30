@@ -28,8 +28,27 @@ RAMP_MS = 35
 TIMEOUT = 120
 LOAD_PROCESSES = (4, 8, 16)  # original Qt bbload process isolation A/B, same population
 
+def minimum_original_source_entries(owner_seats: int, seconds: int) -> int:
+    """Conservative >=80% offer floor for the pinned original real Qt bbload.
+
+    Game::SendGamePackets emits two 0x31 entries per owner frame,
+    one 0x06 entry per follower frame, to each of the other four seats.
+    Owner=30fps, follower=8fps from command(); extra owner 0x04/0x05/0x06
+    frames are deliberately NOT included, so this is a lower bound.
+    A generator unable to sustain even this traffic cannot prove server
+    capacity at 200 active hunters, regardless of 99% packet delivery.
+    """
+    if owner_seats not in OWNER_CASES or type(seconds) is not int or seconds < 0:
+        raise ValueError("Invalid source-verified five-seat load rate inputs")
+    teams=POPULATION//SIZE
+    per_team_per_second=(2*30*owner_seats+8*(SIZE-owner_seats))*(SIZE-1)
+    return per_team_per_second*teams*seconds*80//100
+
+
 def grade(item: dict, expected_shards: int, expected_workers: int = 4,
-          require_directed: bool = False) -> dict:
+          require_directed: bool = False, owner_seats: int = 1) -> dict:
+    if require_directed and owner_seats not in OWNER_CASES:
+        raise ValueError("Required original owner count must be 1, 3 or 5")
     if expected_workers not in LOAD_PROCESSES:
         raise ValueError("Only four, eight or sixteen original Qt workers")
     if type(item) is not dict:
@@ -224,12 +243,17 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
         quality = "QT_GAME_DATA_WIRE_SAMPLES_MISSING"
     elif has_directed and item["directed_quality"] != "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY":
         quality = "DIRECTED_GAME_COHORT_UNHEALTHY"
+    elif require_directed and item["cohort_packets_sent"] < minimum_original_source_entries(
+            owner_seats, item["cohort_seconds"]):
+        quality = "INSUFFICIENT_QT_ORIGINAL_GAME_OFFERED_RATE"
     else:
         quality = "FULL_GAMEPLAY_SYNTHETIC_ONLY"
     return {
         "quality": quality, "players": POPULATION, "shards": expected_shards,
         **({key: item[key] for key in cohort_fields} if has_cohort else {}),
         **({key: item[key] for key in directed_fields} if has_directed else {}),
+        **({"cohort_min_offered_entries": minimum_original_source_entries(
+            owner_seats, item["cohort_seconds"])} if require_directed else {}),
         "playing": playing, "game_receivers": receivers,
         "linking": item["linking"], "lobby": item["lobby"],
         "awaiting_welcome": item["awaiting_welcome"],
@@ -350,7 +374,8 @@ def run(args) -> int:
                     except json.JSONDecodeError:
                         continue
             result = (grade(values[0], shards, getattr(args, "load_processes", 4),
-                            getattr(args, "require_directed", False)) if len(values) == 1 else
+                            getattr(args, "require_directed", False),
+                            args.owners) if len(values) == 1 else
                       {"quality": "MISSING_OR_DUPLICATE_GENERATOR_REPORT", "shards": shards})
         result["scope"] = "DISPOSABLE_LOOPBACK_REDIRECT_NOT_REAL_WAN_OR_DIRECT_P2P"
         result["team_size"] = SIZE
