@@ -60,6 +60,14 @@ V148 adds a conservative early Windows batch preflight after saved launcher sett
 
 This guard is temporary and intentional, **not** a working YT backend. The correct follow-up is to bring the original YT Windows `run.py`, asset preparation, native network/auth module and a mutually exclusive backend selection into the final launcher, then replace the guard only after actual Protocol8 gameplay tests. Never fake compatibility by renaming `bb-play.exe` to `bbport.exe` or mixing save formats.
 
+## Stage 0d: original YT1.3 native Windows startup, V149
+
+The original source-pinned YT1.3 Windows launcher (Git commit `0645740a33ae21c56df3b4a0d9777086dbca6053`, `bbport/run.py` blob `1880007c0359de018bc61f46bc2a71902afe129b`) selects `bb-probe.exe` in its own `bin/` or `out/`, creates a linked boot image from your local `eboot.bin` and bundled system modules, and configures authenticated `BB_ONLINE` routing. It must **not** be confused with Visy standalone `run.bat` and its `bbport.exe`/direct `BB_PARTY` launcher.
+
+V149 CI checks out exactly this original source and on both Ubuntu and Windows invokes the **real original** `bbport/run.py` with an intentionally empty synthetic game directory. A fake, never-executed file only tests the binary-path selection. The actual code must fail early with a clear `No eboot.bin` diagnostic, before any game binary executes, user save directory is created or live online request is issued. The smoke tests verify source Git blob SHA1 and critical original paths. **This is a missing-game/entrypoint-failure smoke, not a native Bloodborne boot or online success.**
+
+The next meaningful packaging gate is to stage this original YT Windows `run.py`, its source-verified dependent `scripts/` and runtime redistributables alongside the exact V143-compiled YT `bb-probe.exe`. Only after that and asset-backed local tests can the client/launcher profile be safely switched to YT rather than the standalone Visy protocol. Source-only CI must never fetch or distribute the operator's 30+ GiB game copy.
+
 ## Migration gates (do them in this order)
 
 1. **Input contract:** Validate image fingerprint, region/version, `sce_module/libc.prx`, asset-tree layout, shader readiness and mod/patch precedence from the *locally reported inventory*. Keep unknown versions blocked until independently tested; do not assume a regional directory name proves the executable.
