@@ -138,6 +138,7 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                               "GLOBAL_GAME_COHORT_DELIVERY_DEGRADED"):
             directed_valid = True
             directed_loss = False
+            directed_underdriven = False
             # Minimum real generated follower workload: the pinned original
             # run_five_hunter_shards_v117.command fixes follower-fps=8 and
             # every follower sends one 0x06 entry per frame per other seat.
@@ -236,11 +237,12 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                 expected_seen = {(sec, route)
                                  for sec in range(cohort_start_us, cohort_end_us, 1_000_000)
                                  for route in expected_routes}
-                if seen != expected_seen or any(
-                        sent_by_route.get(route, 0) < min_route_entries
-                        for route in expected_routes):
+                if seen != expected_seen:
                     directed_valid = False
                     break
+                if any(sent_by_route.get(route, 0) < min_route_entries
+                       for route in expected_routes):
+                    directed_underdriven = True
                 # Cross-check all routed entries against the original V161
                 # per-worker buckets. Otherwise a fabricated pair census
                 # could score green without representing all source packets.
@@ -257,6 +259,8 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                     directed_received != cohort_received):
                 directed_quality = "INVALID_DIRECTED_GAME_COHORT"
                 directed_sent = directed_received = directed_routes = 0
+            elif directed_underdriven:
+                directed_quality = "DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN"
             elif directed_loss:
                 directed_quality = "DIRECTED_GAME_COHORT_DELIVERY_DEGRADED"
             else:
