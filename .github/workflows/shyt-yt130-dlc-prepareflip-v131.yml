@@ -1,0 +1,50 @@
+name: YT1.3 V131 source-exact upstream PR446 Old Hunters missing prepareFlip C++ regression
+on:
+  push:
+    branches: [feature/yt130-dlc-prepare-flip-v131-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-dlc-prepareflip-v131.yml
+      - tools/poc/yharnam/yt130-reference/stage_dlc_flip_guard_v131.py
+      - tools/poc/yharnam/yt130-reference/test_stage_dlc_flip_guard_v131.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-v131-old-hunters-missing-flip-cpp
+  cancel-in-progress: false
+jobs:
+  native-original-upstream-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fail-closed source anchor, invariant and duplicate staging regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_dlc_flip_guard_v131.py -v
+          python -m py_compile tools/poc/yharnam/yt130-reference/stage_dlc_flip_guard_v131.py
+      - name: Fetch exact official YT1.3 native game source and immutable merged upstream #446
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/original"
+          git -C "$RUNNER_TEMP/original" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/reviewed"
+          git -C "$RUNNER_TEMP/reviewed" checkout --detach 8d106f40c90ef681adbe025c47cc75d289e0ef7b
+          python tools/poc/yharnam/yt130-reference/stage_dlc_flip_guard_v131.py \
+            --pinned "$RUNNER_TEMP/original" --reviewed-pr446 "$RUNNER_TEMP/reviewed"
+          git -C "$RUNNER_TEMP/original" diff --check
+          grep -Fq 'if (!BbFlipMarker::HasPrepareFlip(cmdbuf, size_dw))' "$RUNNER_TEMP/original/bbport/gpu/shadps4/core/libraries/gnmdriver/gnmdriver.cpp"
+          grep -Fq 'VideoOut::sceVideoOutSubmitFlip(' "$RUNNER_TEMP/original/bbport/gpu/shadps4/core/libraries/gnmdriver/gnmdriver.cpp"
+          grep -Fq 'add_executable(flip-marker-test' "$RUNNER_TEMP/original/bbport/gpu/CMakeLists.txt"
+          echo SHYT_V131_ORIGINAL_YT130_GAME_GNM_DRIVER_EXACT_MERGED_UPSTREAM_446_GUARD_STAGED
+      - name: Compile and run ORIGINAL upstream C++ flip marker regression with actual header
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror \
+            -I"$RUNNER_TEMP/original/bbport/gpu/shim" \
+            "$RUNNER_TEMP/original/bbport/tests/test_flip_marker.cpp" \
+            -o "$RUNNER_TEMP/v131-flip-marker-test"
+          "$RUNNER_TEMP/v131-flip-marker-test"
+          echo SHYT_V131_ACTUAL_CPP20_UPSTREAM_446_MISSING_PREPAREFLIP_MARKER_TEST_PASS_NOT_GPU_RUN
