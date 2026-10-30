@@ -68,6 +68,25 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
         item["team_lookup_throttled"] + item["team_other_notice"] !=
         item["team_total_notices"]):
         return {"quality": "INCONSISTENT_REAL_LOBBY_REFUSAL_COUNTS"}
+    # V158/159: original Qt receive and game-data decoding observations.
+    # Never silently omit source counters from the durable diagnostic JSON.
+    recv_fields = ("udp_read_failed", "udp_read_short",
+                   "game_data_datagrams_received", "game_data_decode_failed",
+                   "game_frame_decode_failed", "game_frame_bad_header",
+                   "game_frame_short_entries", "game_frame_decoded")
+    detail_fields = ("team_no_invite", "team_no_code", "team_full",
+                     "team_already_joined", "team_create_first",
+                     "team_world_unavailable", "team_unknown_other")
+    for field in recv_fields + detail_fields:
+        if type(item.get(field)) is not int or item[field] < 0:
+            return {"quality": "MISSING_OR_INVALID_QT_CLIENT_RECEIVE_OR_JOIN_DETAILS",
+                    "field": field}
+    if (item["game_data_decode_failed"] + item["game_frame_decode_failed"] +
+            item["game_frame_bad_header"] + item["game_frame_decoded"] !=
+            item["game_data_datagrams_received"]):
+        return {"quality": "QT_CLIENT_GAME_DATA_FRAME_COUNTER_MISMATCH"}
+    if sum(item[field] for field in detail_fields) != item["team_other_notice"]:
+        return {"quality": "ORIGINAL_LOBBY_OTHER_NOTICE_DETAIL_MISMATCH"}
     for row in rows:
         cpu = row.get("link_thread_cpu_avg")
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
@@ -103,6 +122,11 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
         steady_quality = "STEADY_DELIVERY_PASS_SYNTHETIC_ONLY"
     if item["udp_write_failed"] or item["udp_write_short"]:
         quality = "GENERATOR_UDP_SOCKET_WRITE_FAILED"
+    elif item["udp_read_failed"] or item["udp_read_short"]:
+        quality = "GENERATOR_UDP_SOCKET_READ_FAILED"
+    elif (item["game_data_decode_failed"] or item["game_frame_decode_failed"] or
+          item["game_frame_bad_header"] or item["game_frame_short_entries"]):
+        quality = "GENERATOR_GAME_DATA_DECODE_REJECTED"
     elif playing != POPULATION:
         quality = "NOT_ALL_PLAYING"
     elif receivers != POPULATION:
@@ -145,6 +169,21 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
         "team_lookup_throttled": item["team_lookup_throttled"],
         "team_other_notice": item["team_other_notice"],
         "team_total_notices": item["team_total_notices"],
+        "udp_read_failed": item["udp_read_failed"],
+        "udp_read_short": item["udp_read_short"],
+        "game_data_datagrams_received": item["game_data_datagrams_received"],
+        "game_data_decode_failed": item["game_data_decode_failed"],
+        "game_frame_decode_failed": item["game_frame_decode_failed"],
+        "game_frame_bad_header": item["game_frame_bad_header"],
+        "game_frame_short_entries": item["game_frame_short_entries"],
+        "game_frame_decoded": item["game_frame_decoded"],
+        "team_no_invite": item["team_no_invite"],
+        "team_no_code": item["team_no_code"],
+        "team_full": item["team_full"],
+        "team_already_joined": item["team_already_joined"],
+        "team_create_first": item["team_create_first"],
+        "team_world_unavailable": item["team_world_unavailable"],
+        "team_unknown_other": item["team_unknown_other"],
         "notice_scope": "Refusal responses observed, not unique players",
         "wire_scope": "Qt LinkServer 5s samples over whole run; not steady client delivery",
         "complete_teams": item["complete_teams"], "packets_sent": sent,
