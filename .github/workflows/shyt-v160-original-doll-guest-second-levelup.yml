@@ -63,7 +63,7 @@ jobs:
           python3 tools/poc/yharnam/yt130-reference/stage_doll_own_flag_v151.py --original pinned-yt130 --reviewed reviewed-yt457
           python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-yt130 --reviewed reviewed-yt468
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
-          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-yt130 --middle reviewed-yt468latest --reviewed reviewed-yt471
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-yt130 --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
           git -C pinned-yt130 diff --check
           git -C pinned-yt130 diff --name-only > /tmp/v160-game-files.txt
           python3 - <<'PY'
@@ -96,7 +96,7 @@ jobs:
           helper=code[at:stop]
           assert helper.count("return party_configured && !others_talk && requested_flag == DollBlessingFlag;")==1
           Path("/tmp/yt160-real-doll-game.cpp").write_text(
-              "using s32=int;\nconstexpr s32 DollBlessingFlag=72100100;\n"+
+              "#include <optional>\nusing s32=int;\nconstexpr s32 DollBlessingFlag=72100100;\n"+
               helper+"""
           int main() {
               for (int v=0;v<16;++v) {
