@@ -23,7 +23,7 @@ jobs:
       - name: Real V132 source-exact protobuf fanout regression
         run: |
           set -euo pipefail
-          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_udp_send_probe_v130.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_world_encode_once_v132.py -v
           python -m compileall -q tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
       - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
         run: |
