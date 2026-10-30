@@ -29,7 +29,8 @@ class DollTalkV162(unittest.TestCase):
                 before,upstream=self.fixture(name)
                 after=m.patch(name,before,upstream)
                 self.assertIn(m.PATCHES[name][1],after)
-                self.assertNotIn(m.PATCHES[name][0],after)
+                if m.PATCHES[name][0] not in m.PATCHES[name][1]:
+                    self.assertNotIn(m.PATCHES[name][0],after)
                 if name=="src/core/bloodborne_travel.cpp":
                     self.assertIn("std::ranges::any_of(OtherPlayers()",after)
                     self.assertIn("doll_blessing_end_asked.store(true)",after)
