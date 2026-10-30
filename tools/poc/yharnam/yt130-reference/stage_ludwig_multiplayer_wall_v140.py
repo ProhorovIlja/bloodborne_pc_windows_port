@@ -79,7 +79,7 @@ def extract(src: str, begin: str, end: str) -> str:
 def replace_function(original: str, reviewed: str) -> str:
     old = extract(original, FUNCTION_START, FUNCTION_END)
     new = extract(reviewed, FUNCTION_START, FUNCTION_END)
-    if old != EXPECTED_OLD_FUNCTION + "\n" or new != EXPECTED_NEW_FUNCTION + "\n":
+    if old != EXPECTED_OLD_FUNCTION or new != EXPECTED_NEW_FUNCTION:
         raise ValueError("V140 upstream review or pinned native wall function drift")
     return original.replace(old, new, 1)
 
@@ -120,7 +120,7 @@ def stage(original: Path, reviewed: Path) -> None:
 
 def native_test_fragment(game: str) -> str:
     function = extract(game, FUNCTION_START, FUNCTION_END)
-    if function != EXPECTED_NEW_FUNCTION + "\n":
+    if function != EXPECTED_NEW_FUNCTION:
         raise ValueError("V140 C++ test requires exact staged original native function")
     return ("""#include <array>
 #include <cstdint>
