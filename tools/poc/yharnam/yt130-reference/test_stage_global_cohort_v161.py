@@ -144,6 +144,45 @@ class GlobalCohortV161(unittest.TestCase):
                 out=inspect([a,worker(12_000_000,42_000_000,intermittent)])
                 self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
 
+    def test_corrupt_epoch_numbers_never_crash_or_score_green(self):
+        base={sec:(500,499) for sec in range(10,36)}
+        good=worker(12_000_000,38_000_000,base)
+        for key,bad in (
+                ("start_us",float("nan")),
+                ("start_us",float("inf")),
+                ("start_us",float("-inf")),
+                ("start_us",float(2**53)),
+                ("start_us",False),
+                ("sent_entries",float("nan")),
+                ("sent_entries",float("inf")),
+                ("sent_entries",float("-inf")),
+                ("sent_entries",float(2**53)),
+                ("received_entries",float("nan")),
+                ("received_entries",float("inf")),
+                ("received_entries",float("-inf")),
+                ("received_entries",float(2**53)),
+                ("received_entries",True)):
+            with self.subTest(field=key,bad=repr(bad)):
+                broken=worker(12_000_000,38_000_000,base)
+                broken["cohort_epoch_entries"][7][key]=bad
+                self.assertEqual(
+                    inspect([good,broken])["cohort_quality"],
+                    "INVALID_GLOBAL_COHORT_BUCKETS")
+        for key,bad in (("cohort_ready_us",float("nan")),
+                        ("cohort_ready_us",float("inf")),
+                        ("cohort_ready_us",float("-inf")),
+                        ("cohort_ready_us",float(2**53)),
+                        ("cohort_finish_us",float("nan")),
+                        ("cohort_finish_us",float("inf")),
+                        ("cohort_finish_us",float("-inf")),
+                        ("cohort_finish_us",float(2**53))):
+            with self.subTest(timestamp=key,bad=repr(bad)):
+                broken=worker(12_000_000,38_000_000,base)
+                broken[key]=bad
+                self.assertEqual(
+                    inspect([good,broken])["cohort_quality"],
+                    "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+
     def test_malformed_duplicate_epoch_and_bad_received_counts(self):
         data={s:(500,499) for s in range(10,36)}
         a=worker(12_000_000,38_000_000,data)
