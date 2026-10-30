@@ -52,7 +52,7 @@ class ZipUpdateGuardTests(unittest.TestCase):
     def test_rejects_absolute_traversal_backslash_and_foreign_root(self):
         for path in ("bbport-windows/../escape.exe", "/bbport-windows/escape.exe",
                      "bbport-windows/other\\escape.exe", "other/BLauncher.exe",
-                     "bbport-windows/bin/CON.exe", "bbport-windows/file .exe",
+                     "bbport-windows/bin/CON.exe", "bbport-windows/file.exe ",
                      "bbport-windows/bin/name:stream.exe"):
             with self.subTest(path=path):
                 with archive(FILES + [path]) as z:

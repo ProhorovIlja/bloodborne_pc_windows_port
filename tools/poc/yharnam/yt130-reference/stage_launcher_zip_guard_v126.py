@@ -45,7 +45,7 @@ def validate_bbport_update_zip(package):
         parts = PurePosixPath(name).parts
         segments = name.rstrip('/').split('/')
         if (not name.startswith('bbport-windows/') or not name.isascii()
-                or name.startswith('/') or '\\\\' in name or ':' in name or '\\x00' in name
+                or name.startswith('/') or chr(92) in name or ':' in name or chr(0) in name
                 or any(not s or s in ('.', '..') or s[-1:] in (' ', '.') for s in segments)
                 or '..' in parts or any(s.split('.')[0].upper() in devices for s in segments)):
             raise ValueError('Invalid Windows update: unsafe or foreign archive path')
