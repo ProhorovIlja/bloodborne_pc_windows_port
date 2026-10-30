@@ -1,6 +1,7 @@
 """V161: all 5-hunter bbload workers use one sender timestamp cohort."""
 import importlib.util
 from pathlib import Path
+from textwrap import dedent
 from types import SimpleNamespace
 import unittest
 
@@ -27,7 +28,7 @@ def original_shard_fixture():
 
 def worker(ready,finish,counts,playing=5):
     return {
-        "games":5,"playing":playing,"complete_teams":playing,
+        "games":5,"playing":playing,"complete_teams":1 if playing==5 else 0,
         "cohort_ready_us":ready,"cohort_finish_us":finish,
         "cohort_epoch_entries":[{"start_us":second*1_000_000,
             "sent_entries":sent,"received_entries":recv}
@@ -35,8 +36,11 @@ def worker(ready,finish,counts,playing=5):
     }
 
 def inspect(results):
-    namespace={"results":results,"args":SimpleNamespace(team_size=5)}
-    exec(v.PATCH_AGG,namespace)
+    # The patch is inserted at 8-space indentation inside run_shards.py.
+    # Standalone exec must dedent it; shards=0 avoids a wire-log dependency
+    # while exercising the complete injected aggregation code.
+    namespace={"results":results,"args":SimpleNamespace(team_size=5,shards=0)}
+    exec(dedent(v.PATCH_AGG),namespace)
     return namespace
 
 class GlobalCohortV161(unittest.TestCase):
