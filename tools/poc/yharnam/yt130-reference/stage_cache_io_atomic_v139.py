@@ -26,7 +26,7 @@ CHANGES = (
 )
 
 def git_blob_sha(data: bytes) -> str:
-    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\\0" + data).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(data)).encode() + bytes([0]) + data).hexdigest()
 
 def rewrite(source: str) -> str:
     for before, after in CHANGES:
