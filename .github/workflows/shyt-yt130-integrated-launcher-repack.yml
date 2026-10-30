@@ -1,0 +1,146 @@
+name: SHYT YT1.3 original 107MiB kit integrated Windows BLauncher repack and actual EXE QA
+on:
+  push:
+    branches:
+      - feature/yt130-windows-zip-exe-smoke-20261030
+    paths:
+      - .github/workflows/shyt-yt130-integrated-launcher-repack.yml
+      - tools/poc/yharnam/yt130-reference/repack_frozen_launcher_v123.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: shyt-yt130-actual-integrated-launcher-repack
+  cancel-in-progress: false
+jobs:
+  rebuild-only-original-yt130-launcher:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          ref: df509976a3d013731b5377678d5bae4acfdf342c
+          path: launcher-integrators
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          ref: 334b4606411e2df13210386b62000c7abfd26e6e
+          path: kit-helpers
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - uses: actions/download-artifact@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          name: shyt-yt130-recovered-protocol8-WINDOWS-KIT-INTERNAL
+          run-id: 41019476068
+          github-token: ${{ github.token }}
+          path: kit-source
+      - name: Pin exact source ZIP and stage four already tested original YT launcher fixes
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git -C pinned-upstream rev-parse HEAD).Trim() -ne '0645740a33ae21c56df3b4a0d9777086dbca6053') { throw 'Wrong original YT1.3 source' }
+          python launcher-integrators/tools/poc/yharnam/launcher-integrated/stage.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'PR32 full source-verified original launcher integration drift' }
+          python -m compileall -q pinned-upstream/bbport/launcher
+          if ($LASTEXITCODE -ne 0) { throw 'Integrated original launcher failed to parse' }
+          @'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import hashlib
+          z = Path("kit-source/bbport-windows.zip")
+          assert hashlib.sha256(z.read_bytes()).hexdigest() == "ee077748b3762db928d06718eea701fb1b0d0cedb0a3eac112bb9040ff0081bc"
+          out = Path("pinned-upstream/bbport/out")
+          out.mkdir(parents=True, exist_ok=True)
+          with ZipFile(z) as archive:
+              for member, dest in [
+                  ("bbport-windows/Bloodborne.exe", "bb-play.exe"),
+                  ("bbport-windows/bin/bb-probe.exe", "bb-probe.exe"),
+                  ("bbport-windows/bin/bb-gpu-capabilities.exe", "bb-gpu-capabilities.exe"),
+              ]:
+                  (out / dest).write_bytes(archive.read(member))
+          print("SHYT_YT130_PINNED_REAL_GAME_EXES_REUSED_NO_GPU_REBUILD")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Real original game compiler artifact restoration failed' }
+      - name: Freeze patched original BLauncher using its own original PyInstaller command
+        shell: msys2 {0}
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          export MSYS2_ROOT=/.
+          export WINPYTHON="$(cygpath -u "$pythonLocation")/python.exe"
+          cd pinned-upstream/bbport
+          # Run exactly the original, PR429-patched official freeze prefix.
+          # Don't download or repackage GPU, game, PkgTool, ReShade, or XeSS.
+          grep -Fq -- '--hidden-import truststore' packaging/windows/package.sh
+          awk '/^pkgtool_zip=/ {exit} {print}' packaging/windows/package.sh > packaging/windows/ci-freeze-only.sh
+          ! grep -Fq 'pkgtool_zip=' packaging/windows/ci-freeze-only.sh
+          set +e
+          bash packaging/windows/ci-freeze-only.sh > out/shyt-integrated-launcher-freeze.log 2>&1
+          code=$?
+          set -e
+          tail -n 100 out/shyt-integrated-launcher-freeze.log || true
+          if [[ "$code" -ne 0 ]]; then exit "$code"; fi
+          test -s out/pyi-dist/BLauncher/BLauncher.exe
+          test -d out/pyi-dist/BLauncher/_internal
+          echo SHYT_YT130_FROZEN_REAL_INTEGRATED_PR32_BLAUNCHER_BUILT
+      - name: Repack ONLY BLauncher bundle and verify native game and licenses remain byte-identical
+        shell: pwsh
+        timeout-minutes: 9
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/yt130-reference/repack_frozen_launcher_v123.py --original kit-source/bbport-windows.zip --frozen pinned-upstream/bbport/out/pyi-dist/BLauncher --output kit-out/YT130-Integrated-Windows-Kit-INTERNAL.zip --meta kit-out/PROVENANCE.json
+          if ($LASTEXITCODE -ne 0) { throw 'Repack modified an unauthorized native game or license file' }
+      - name: Run actual frozen UTF8 Windows Cyrillic BLauncher.exe --script strict smoke
+        shell: pwsh
+        timeout-minutes: 6
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python kit-helpers/tools/poc/yharnam/package-v41/smoke_frozen_windows_launcher.py kit-out/YT130-Integrated-Windows-Kit-INTERNAL.zip --output kit-out/FROZEN-SMOKE.json
+          if ($LASTEXITCODE -ne 0) { throw 'Real PR32-patched frozen BLauncher still fails Cyrillic/UTF8 smoke' }
+          python -c "import json; x=json.load(open('kit-out/FROZEN-SMOKE.json',encoding='utf-8')); assert x['verified'] and x['stdio_utf8'] and x['script_from_cyrillic_path'] and not x['real_online_tested']"
+          if ($LASTEXITCODE -ne 0) { throw 'Misleading smoke report' }
+          Write-Host 'SHYT_YT130_REAL_INTEGRATED_BLAUNCHER_WINDOWS_CYRILLIC_EXECUTABLE_SMOKE_PASS'
+      - name: Preserve only INTERNAL integrated native Windows candidate after functional tests
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-PR32-integrated-protocol8-WINDOWS-KIT-INTERNAL
+          path: |
+            kit-out/YT130-Integrated-Windows-Kit-INTERNAL.zip
+            kit-out/YT130-Integrated-Windows-Kit-INTERNAL.zip.sha256
+            kit-out/PROVENANCE.json
+            kit-out/FROZEN-SMOKE.json
+          retention-days: 3
+          if-no-files-found: error
+      - name: Preserve diagnostics without leaking Windows source or game assets
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-PR32-integrated-BLauncher-build-EVIDENCE
+          path: |
+            pinned-upstream/bbport/out/shyt-integrated-launcher-freeze.log
+            kit-out/PROVENANCE.json
+            kit-out/FROZEN-SMOKE.json
+          retention-days: 3
+          if-no-files-found: warn

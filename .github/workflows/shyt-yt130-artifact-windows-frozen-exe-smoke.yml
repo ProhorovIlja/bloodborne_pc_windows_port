@@ -1,0 +1,85 @@
+name: SHYT original Protocol8 Windows ZIP real frozen launcher EXE smoke
+on:
+  push:
+    branches:
+      - feature/yt130-windows-zip-exe-smoke-20261030
+    paths:
+      - .github/workflows/shyt-yt130-artifact-windows-frozen-exe-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: shyt-yt130-original-frozen-zip-smoke
+  cancel-in-progress: false
+jobs:
+  smoke-real-windows-zip:
+    name: Original Protocol8 ZIP actual frozen BLauncher Unicode subprocess smoke
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          ref: 334b4606411e2df13210386b62000c7abfd26e6e
+          path: kit-helpers
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # Download only the finished 2026-10-30 original YT Protocol8 kit,
+      # not the failed old compiler artifacts or unrelated CLS/BBSC kits.
+      - uses: actions/download-artifact@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          name: shyt-yt130-recovered-protocol8-WINDOWS-KIT-INTERNAL
+          run-id: 41019476068
+          github-token: ${{ github.token }}
+          path: kit
+      - name: Validate real kit SHA256, size and immutable source provenance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'kit/bbport-windows.zip'
+          $sidecar = 'kit/bbport-windows.zip.sha256'
+          if (-not (Test-Path $path) -or -not (Test-Path $sidecar)) { throw 'Real pinned Protocol8 kit/sidecar not found' }
+          $sha = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant()
+          $expect = 'ee077748b3762db928d06718eea701fb1b0d0cedb0a3eac112bb9040ff0081bc'
+          if ($sha -ne $expect) { throw "Original Windows ZIP hash drift: $sha" }
+          $side = [IO.File]::ReadAllText((Resolve-Path $sidecar), [Text.Encoding]::ASCII)
+          if (-not $side.StartsWith("$expect  bbport-windows.zip")) { throw 'Original Windows ZIP sidecar mismatch' }
+          $size = (Get-Item $path).Length
+          if ($size -lt 50MB -or $size -gt 500MB) { throw "Unexpected original full kit size $size" }
+          Write-Host "SHYT_YT130_ORIGINAL_PROTOCOL8_ZIP_PIN_AND_SIZE_PASS $sha $size"
+      - name: Diagnose actual frozen BLauncher startup without hiding a timeout
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/yt130-reference/diagnose_frozen_launcher_v122.py kit/bbport-windows.zip --output kit/SHYT-YT130-LAUNCHER-STARTUP-DIAGNOSTIC.json
+          if ($LASTEXITCODE -ne 0) { throw 'Native launcher diagnostic crashed' }
+      - name: Actually execute original frozen BLauncher.exe in Cyrillic Windows path
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c "import json; j=json.load(open('kit/SHYT-YT130-LAUNCHER-STARTUP-DIAGNOSTIC.json',encoding='utf-8')); assert len(j['checks'])==5 and all(x['marker_written'] and x['exit_before_kill']==0 and not x['timed_out'] and x['stdout_contains_expected'] for x in j['checks']), 'Unicode installation path or script subprocess failed'"
+          if ($LASTEXITCODE -ne 0) { throw 'Real BLauncher failure: diagnosed Unicode installation path / subprocess; see JSON evidence' }
+          python kit-helpers/tools/poc/yharnam/package-v41/smoke_frozen_windows_launcher.py kit/bbport-windows.zip --output kit/SHYT-YT130-WINDOWS-FROZEN-SMOKE.json
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen real YT1.3 BLauncher Unicode executable smoke failed' }
+          python -c "import json; x=json.load(open('kit/SHYT-YT130-WINDOWS-FROZEN-SMOKE.json',encoding='utf-8')); assert x['verified'] and x['script_from_cyrillic_path'] and x['stdio_utf8'] and not x['game_assets_tested'] and not x['real_online_tested'] and not x['direct_p2p_tested']"
+          if ($LASTEXITCODE -ne 0) { throw 'False green launcher smoke report' }
+          Write-Host 'SHYT_YT130_REAL_FROZEN_LAUNCHER_WINDOWS_UNICODE_UTF8_EXECUTION_PASS'
+      - name: Publish only functional smoke evidence, not production release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-windows-frozen-launcher-SMOKE-EVIDENCE-INTERNAL
+          path: |
+            kit/SHYT-YT130-WINDOWS-FROZEN-SMOKE.json
+            kit/SHYT-YT130-LAUNCHER-STARTUP-DIAGNOSTIC.json
+          retention-days: 7
+          if-no-files-found: warn
