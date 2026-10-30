@@ -28,7 +28,8 @@ RAMP_MS = 35
 TIMEOUT = 120
 LOAD_PROCESSES = (4, 8, 16)  # original Qt bbload process isolation A/B, same population
 
-def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
+def grade(item: dict, expected_shards: int, expected_workers: int = 4,
+          require_directed: bool = False) -> dict:
     if expected_workers not in LOAD_PROCESSES:
         raise ValueError("Only four, eight or sixteen original Qt workers")
     if type(item) is not dict:
@@ -118,6 +119,46 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
                   item["cohort_packets_received"] * 100 <
                      item["cohort_packets_sent"] * 99))):
             return {"quality": "INVALID_GLOBAL_COHORT_EVIDENCE"}
+    # V169: directed sender->recipient synthetic telemetry must be complete
+    # when requested by the original 200-player CI. A 99% global average
+    # alone may conceal a nearly dead low-volume directed route.
+    directed_fields = ("directed_quality", "directed_packets_sent",
+                       "directed_packets_received", "directed_routes",
+                       "directed_scope")
+    has_directed = any(key in item for key in directed_fields)
+    if require_directed and not has_directed:
+        return {"quality": "MISSING_REQUIRED_DIRECTED_GAME_EVIDENCE"}
+    if has_directed:
+        if not has_cohort or any(key not in item for key in directed_fields):
+            return {"quality": "MISSING_OR_PARTIAL_DIRECTED_GAME_EVIDENCE"}
+        status = item["directed_quality"]
+        if (status not in ("NO_VERIFIED_DIRECTED_GAME_COHORT",
+                           "INVALID_DIRECTED_GAME_COHORT",
+                           "DIRECTED_GAME_COHORT_DELIVERY_DEGRADED",
+                           "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY") or
+                type(item["directed_scope"]) is not str or
+                "NOT a production QoS pass" not in item["directed_scope"] or
+                any(type(item[k]) is not int or item[k] < 0
+                    for k in directed_fields[1:4])):
+            return {"quality": "INVALID_DIRECTED_GAME_EVIDENCE"}
+        reliable = status in ("DIRECTED_GAME_COHORT_DELIVERY_DEGRADED",
+                              "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        if reliable and (
+                item["cohort_quality"] not in (
+                    "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY",
+                    "GLOBAL_GAME_COHORT_DELIVERY_DEGRADED") or
+                item["directed_packets_sent"] != item["cohort_packets_sent"] or
+                item["directed_packets_received"] != item["cohort_packets_received"] or
+                item["directed_routes"] != POPULATION*(SIZE-1) or
+                item["directed_packets_received"] > item["directed_packets_sent"]):
+            return {"quality": "INVALID_DIRECTED_GAME_EVIDENCE"}
+        if status == "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY" and (
+                item["cohort_quality"] != "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY" or
+                item["directed_packets_received"] * 100 <
+                    item["directed_packets_sent"] * 99):
+            return {"quality": "INVALID_DIRECTED_GAME_EVIDENCE"}
+        if not reliable and any(item[k] for k in directed_fields[1:4]):
+            return {"quality": "INVALID_DIRECTED_GAME_EVIDENCE"}
     for row in rows:
         cpu = row.get("link_thread_cpu_avg")
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
@@ -181,11 +222,14 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
         quality = "CROSS_SHARD_REDIRECT_FAILED"
     elif any(r["game_wire_sample_windows"] == 0 for r in rows):
         quality = "QT_GAME_DATA_WIRE_SAMPLES_MISSING"
+    elif has_directed and item["directed_quality"] != "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY":
+        quality = "DIRECTED_GAME_COHORT_UNHEALTHY"
     else:
         quality = "FULL_GAMEPLAY_SYNTHETIC_ONLY"
     return {
         "quality": quality, "players": POPULATION, "shards": expected_shards,
         **({key: item[key] for key in cohort_fields} if has_cohort else {}),
+        **({key: item[key] for key in directed_fields} if has_directed else {}),
         "playing": playing, "game_receivers": receivers,
         "linking": item["linking"], "lobby": item["lobby"],
         "awaiting_welcome": item["awaiting_welcome"],
@@ -305,7 +349,8 @@ def run(args) -> int:
                         values.append(json.loads(line))
                     except json.JSONDecodeError:
                         continue
-            result = (grade(values[0], shards, getattr(args, "load_processes", 4)) if len(values) == 1 else
+            result = (grade(values[0], shards, getattr(args, "load_processes", 4),
+                            getattr(args, "require_directed", False)) if len(values) == 1 else
                       {"quality": "MISSING_OR_DUPLICATE_GENERATOR_REPORT", "shards": shards})
         result["scope"] = "DISPOSABLE_LOOPBACK_REDIRECT_NOT_REAL_WAN_OR_DIRECT_P2P"
         result["team_size"] = SIZE
@@ -351,5 +396,7 @@ if __name__ == "__main__":
                    help="4/8/16 real Qt bbload child processes, keep 200 hunters fixed")
     p.add_argument("--owners", type=int, choices=OWNER_CASES, default=5,
                    help="how many of the five players independently own enemies (worst case 5)")
+    p.add_argument("--require-directed", action="store_true",
+                   help="fail closed without source-authenticated directed 5-seat flow QoS")
     p.add_argument("--require-healthy", action="store_true")
     raise SystemExit(run(p.parse_args()))
