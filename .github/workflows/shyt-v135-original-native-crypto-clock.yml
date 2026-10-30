@@ -72,6 +72,5 @@ jobs:
         with:
           name: shyt-v135-native-composer-source-provenance-INTERNAL
           retention-days: 3
-          if-no-files-found: ignore
-          path: |
-            __not_an_artifact_placeholder__
+          if-no-files-found: error
+          path: ${{ runner.temp }}/yt-v135-composed/SEAMLESS-HUNT-COMPOSE-MANIFEST.json
