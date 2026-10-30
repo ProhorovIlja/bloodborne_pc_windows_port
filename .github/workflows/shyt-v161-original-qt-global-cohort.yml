@@ -82,3 +82,41 @@ jobs:
           grep -Fq '"directed_quality": directed_quality' original-yt130/server/loadtest/run_shards.py
           grep -Fq 'if load.returncode != 0 or len(child_rows) != 1:' original-yt130/server/loadtest/run_shards.py
           echo SHYT_V161_PINNED_QT_SHARED_PACKET_TIMESTAMP_COHORT_SOURCE_PASS
+      - name: Compile and execute exact staged original Qt directed sequence replay guard
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "tools/poc/yharnam/yt130-reference")
+          from stage_directed_cohort_v169 import SEQ_HELPER
+          original=Path("original-yt130/server/loadtest/bbload.cpp").read_text()
+          assert original.count(SEQ_HELPER)==1
+          Path("/tmp/yt170-seq-guard.cpp").write_text(
+              "#include <cstdint>\n#include <utility>\n#include <cassert>\n"
+              "using u32=std::uint32_t; using u64=std::uint64_t;\n"
+              +SEQ_HELPER+"""
+          int main() {
+            std::pair<u32,u64> a{}, b{};
+            assert(!FreshDirectedSequence(0,a));
+            for(u32 n=1;n<=64;++n) assert(FreshDirectedSequence(n,a));
+            for(u32 n=1;n<=64;++n) assert(!FreshDirectedSequence(n,a));
+            assert(FreshDirectedSequence(66,a));
+            assert(FreshDirectedSequence(65,a)); // reordered in 64 window
+            assert(!FreshDirectedSequence(65,a)); // duplicate
+            assert(FreshDirectedSequence(130,a));
+            assert(!FreshDirectedSequence(65,a)); // too old
+            assert(FreshDirectedSequence(132,a));
+            assert(FreshDirectedSequence(131,a));
+            assert(!FreshDirectedSequence(131,a));
+            assert(FreshDirectedSequence(65,b)); // independently counted route
+            return 0;
+          }
+          """)
+          PY
+          for compiler in g++ clang++; do
+            "$compiler" -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+              /tmp/yt170-seq-guard.cpp -o /tmp/yt170-seq-guard
+            /tmp/yt170-seq-guard
+          done
+          echo SHYT_V170_ACTUAL_STAGED_ORIGINAL_CPP_UNIQUE_SEQUENCE_GUARD_PASS
