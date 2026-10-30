@@ -104,6 +104,26 @@ class GlobalCohortV161(unittest.TestCase):
                    worker(14_800_000,20_000_000,data)])
         self.assertEqual(o["cohort_seconds"],3)
         self.assertEqual(o["cohort_quality"],"NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+    def test_silent_worker_cannot_borrow_healthy_workers_global_qos(self):
+        # A worker with 5 games Playing but no actual packets must not
+        # disappear inside the sum of the other workers' healthy traffic.
+        data={sec:(400,400) for sec in range(10,40)}
+        healthy=worker(12_000_000,44_000_000,data)
+        silent=worker(12_000_000,44_000_000,{sec:(0,0) for sec in range(10,40)})
+        out=inspect([healthy,silent])
+        self.assertGreater(out["cohort_sent"],10_000)
+        self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
+        # Sending without receiving, or receiving without sending, also
+        # means at least one 5-seat worker has lost its game traffic.
+        for sent,recv in ((400,0),(0,400)):
+            with self.subTest(sent=sent,received=recv):
+                incomplete=worker(12_000_000,44_000_000,
+                                  {sec:(sent,recv) for sec in range(10,40)})
+                self.assertEqual(inspect([healthy,incomplete])["cohort_quality"],
+                                 "INVALID_GLOBAL_COHORT_BUCKETS")
+        self.assertEqual(inspect([healthy,healthy])["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+
     def test_malformed_duplicate_epoch_and_bad_received_counts(self):
         data={s:(500,499) for s in range(10,36)}
         a=worker(12_000_000,40_000_000,data)
