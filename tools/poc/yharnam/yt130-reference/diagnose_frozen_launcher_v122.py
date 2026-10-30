@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -27,12 +28,14 @@ SCRIPT = (
 )
 
 
-def probe(exe: Path, game: Path, root: Path, *, label: str) -> dict:
+def probe(exe: Path, game: Path, root: Path, *, label: str,
+          source: str = SCRIPT, marker_expected: str = "YT-EXEC-OK",
+          stdout_expected: bytes = b"YT-STDOUT-OK") -> dict:
     work = root / label
     work.mkdir(parents=True)
     script = work / "run.py"
     result_path = work / "marker.txt"
-    script.write_text(SCRIPT, encoding="utf-8")
+    script.write_text(source, encoding="utf-8")
     started = time.monotonic()
     command = [str(exe), "--script", str(script), str(result_path)]
     proc = subprocess.Popen(
@@ -62,7 +65,7 @@ def probe(exe: Path, game: Path, root: Path, *, label: str) -> dict:
                     pipe.close()
     marker = result_path.is_file() and result_path.read_text(
         encoding="utf-8", errors="replace"
-    ) == "YT-EXEC-OK"
+    ) == marker_expected
     # Only print bounded generic evidence. Never disclose runner environment.
     return {
         "label": label,
@@ -72,7 +75,7 @@ def probe(exe: Path, game: Path, root: Path, *, label: str) -> dict:
         "exit_before_kill": exit_before_kill,
         "timed_out": timed_out,
         "elapsed_s": round(time.monotonic() - started, 3),
-        "stdout_contains_expected": b"YT-STDOUT-OK" in out,
+        "stdout_contains_expected": stdout_expected in out,
         "stdout_bytes": len(out),
         "stderr_bytes": len(err),
     }
@@ -89,6 +92,13 @@ def main() -> None:
     h = hashlib.sha256(args.zip_file.read_bytes()).hexdigest()
     if h != EXPECTED_HASH:
         raise ValueError("Unexpected original Windows kit SHA256")
+    helper_path = Path("kit-helpers/tools/poc/yharnam/package-v41/smoke_frozen_windows_launcher.py")
+    helper_spec = importlib.util.spec_from_file_location("yt130_original_smoke", helper_path)
+    if helper_spec is None or helper_spec.loader is None:
+        raise ValueError("Original pinned frozen smoke helper missing")
+    helper = importlib.util.module_from_spec(helper_spec)
+    helper_spec.loader.exec_module(helper)
+    compile(helper.SCRIPT, "<original-yt-smoke>", "exec")  # valid under host Python
     with tempfile.TemporaryDirectory(prefix="shyt-yt130-v122-") as tmp:
         root = Path(tmp)
         target = root / "Installed"
@@ -107,6 +117,9 @@ def main() -> None:
             probe(exe, game, root, label="Проверка Ярнам"),
             probe(exe_unicode, game_unicode, root, label="UNICODE_INSTALL_ASCII_SCRIPT"),
             probe(exe_unicode, game_unicode, root, label="Установленный Ярнам - сценарий"),
+            probe(exe_unicode, game_unicode, root, label="Установленный Ярнам - точный original smoke",
+                  source=helper.SCRIPT, marker_expected=helper.EXPECTED_MARKER,
+                  stdout_expected=helper.EXPECTED_STDOUT.encode("utf-8")),
         ]
     report = {
         "original_pinned_game_client": True,
