@@ -87,6 +87,37 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
         return {"quality": "QT_CLIENT_GAME_DATA_FRAME_COUNTER_MISMATCH"}
     if sum(item[field] for field in detail_fields) != item["team_other_notice"]:
         return {"quality": "ORIGINAL_LOBBY_OTHER_NOTICE_DETAIL_MISMATCH"}
+    # V161: independent common send-time cohort. The source-only V155/159
+    # workflows still run without it. If any cohort field is supplied, all
+    # must be source-consistent or reject, never silently discard a bad score.
+    cohort_fields = ("cohort_quality", "cohort_start_us", "cohort_end_us",
+                     "cohort_seconds", "cohort_packets_sent",
+                     "cohort_packets_received", "cohort_scope")
+    has_cohort = any(key in item for key in cohort_fields)
+    if has_cohort:
+        if any(key not in item for key in cohort_fields):
+            return {"quality": "MISSING_OR_PARTIAL_GLOBAL_COHORT_EVIDENCE"}
+        if (item["cohort_quality"] not in (
+                "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT",
+                "INVALID_GLOBAL_COHORT_BUCKETS",
+                "INSUFFICIENT_OR_INVALID_GLOBAL_GAME_COHORT",
+                "GLOBAL_GAME_COHORT_DELIVERY_DEGRADED",
+                "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY") or
+                type(item["cohort_scope"]) is not str or
+                "NOT a production QoS pass" not in item["cohort_scope"] or
+                any(type(item[key]) is not int or item[key] < 0
+                    for key in cohort_fields[1:6])):
+            return {"quality": "INVALID_GLOBAL_COHORT_EVIDENCE"}
+        if (item["cohort_end_us"] < item["cohort_start_us"] or
+            item["cohort_end_us"] - item["cohort_start_us"] !=
+                item["cohort_seconds"] * 1_000_000 or
+            (item["cohort_quality"] == "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY"
+             and (item["cohort_seconds"] < 5 or
+                  item["cohort_packets_sent"] < 10000 or
+                  item["cohort_packets_received"] > item["cohort_packets_sent"] or
+                  item["cohort_packets_received"] * 100 <
+                     item["cohort_packets_sent"] * 99))):
+            return {"quality": "INVALID_GLOBAL_COHORT_EVIDENCE"}
     for row in rows:
         cpu = row.get("link_thread_cpu_avg")
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
@@ -154,6 +185,7 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
         quality = "FULL_GAMEPLAY_SYNTHETIC_ONLY"
     return {
         "quality": quality, "players": POPULATION, "shards": expected_shards,
+        **({key: item[key] for key in cohort_fields} if has_cohort else {}),
         "playing": playing, "game_receivers": receivers,
         "linking": item["linking"], "lobby": item["lobby"],
         "awaiting_welcome": item["awaiting_welcome"],
