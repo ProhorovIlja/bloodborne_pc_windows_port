@@ -34,6 +34,7 @@ def evaluate(workers,per=None):
                         for row in w['cohort_epoch_entries'])
     ns={'cohort_quality':'GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY',
         'cohort_start_us':10_000_000,'cohort_end_us':40_000_000,
+        'cohort_seconds':30,
         'cohort_sent':cohort_sent,'cohort_received':cohort_received,
         'results':workers,'args':SimpleNamespace(team_size=5),'per':per}
     exec(dedent(v.DIRECTED_AGG),ns)
@@ -83,32 +84,42 @@ class DirectedSource(unittest.TestCase):
         self.assertGreater(x['cohort_received']*100,x['cohort_sent']*99)
         self.assertEqual(x['directed_quality'],'DIRECTED_GAME_COHORT_DELIVERY_DEGRADED')
     def test_single_underdriven_route_cannot_hide_behind_799_healthy_routes(self):
-        # All packets delivered, entire global offer still healthy.
-        # With the actual fixed follower-fps=8, a directed route must
-        # offer at least ceil(8*30*.8)=192 entries in 30 whole seconds.
-        good=worker()
-        for entries, expected in (
+        # Full 200-player, 40-team, four-worker topology with 800 routes.
+        # All entries are delivered, yet one route only produces 1-6
+        # rather than 8 follower entries/sec. Global offer stays >99%.
+        one=worker()
+        for entries,expected in (
                 (7,"DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY"),
                 (6,"INVALID_DIRECTED_GAME_COHORT"),
                 (1,"INVALID_DIRECTED_GAME_COHORT")):
             with self.subTest(entries_each_second=entries):
-                weak=worker()
+                chunks=[]
+                for _ in range(4):
+                    rows=[dict(record,route=record["route"]+25*team)
+                          for team in range(10)
+                          for record in one["cohort_directed_entries"]]
+                    epochs=[dict(record,
+                                 sent_entries=record["sent_entries"]*10,
+                                 received_entries=record["received_entries"]*10)
+                            for record in one["cohort_epoch_entries"]]
+                    chunks.append({
+                        "cohort_directed_entries":rows,
+                        "cohort_unknown_senders":0,
+                        "cohort_nonunique_receipts":0,
+                        "cohort_bad_epoch_entries":[],
+                        "cohort_epoch_entries":epochs})
+                # First team's fourth directed route, one entry per second.
                 for second in range(30):
-                    item=weak["cohort_directed_entries"][second*20+3]
-                    self.assertEqual(item["sent_entries"],40)
-                    self.assertEqual(item["received_entries"],40)
-                    item["sent_entries"]=entries
-                    item["received_entries"]=entries
-                    weak["cohort_epoch_entries"][second]["sent_entries"]-=40-entries
-                    weak["cohort_epoch_entries"][second]["received_entries"]-=40-entries
-                report=evaluate([good,weak])
+                    route=chunks[0]["cohort_directed_entries"][second*20+3]
+                    route["sent_entries"]=entries
+                    route["received_entries"]=entries
+                    chunks[0]["cohort_epoch_entries"][second]["sent_entries"]-=40-entries
+                    chunks[0]["cohort_epoch_entries"][second]["received_entries"]-=40-entries
+                report=evaluate(chunks,per=[10]*4)
                 self.assertEqual(report["cohort_sent"],report["cohort_received"])
+                self.assertGreater(report["cohort_sent"],
+                                   4*10*30*20*40*99//100)
                 self.assertEqual(report["directed_quality"],expected)
-                if entries==1:
-                    # Dropping one of 800 routes to a trickle changes the
-                    # all-flow offer by < 1%, so a global gate misses it.
-                    self.assertGreater(report["cohort_sent"],
-                                       2*30*20*40*99//100)
 
     def test_real_200_hunter_40_team_800_flow_shape(self):
         # Four original Qt children, ten complete five-seat teams each,
