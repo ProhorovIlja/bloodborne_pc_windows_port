@@ -51,6 +51,6 @@ jobs:
           p=tools/poc/yharnam/hybrid-transport-v52
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
             -I "$p" "$p/test_signed_nat_route_v134.cpp" \
-            -lcrypto -o shyt-v134-direct.exe
+            -lcrypto -lbcrypt -o shyt-v134-direct.exe
           ./shyt-v134-direct.exe
           echo SHYT_V134_WINDOWS_TRUSTED_NAT_CRYPTO_DIRECT_SENDER_AND_RELAY_FALLBACK_CXX_PASS_DEV_ONLY
