@@ -1,0 +1,105 @@
+name: YT1.3 V129 actual native guest identity name-cache upstream PR442 source and C++ gate
+on:
+  push:
+    branches: [feature/yt130-guest-name-cache-v129-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-guest-name-cache-v129.yml
+      - tools/poc/yharnam/yt130-reference/stage_guest_name_cache_v129.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-v129-source-pinned-guest-name-cache
+  cancel-in-progress: false
+jobs:
+  original-yt130-actual-source-cache:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test actual original YT1.3 source and reviewed PR442 pin, no game assets
+        run: |
+          set -euo pipefail
+          python -m py_compile tools/poc/yharnam/yt130-reference/stage_guest_name_cache_v129.py
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt130-original"
+          git -C "$RUNNER_TEMP/yt130-original" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-pr442"
+          git -C "$RUNNER_TEMP/yt-pr442" checkout --detach 0a2434dcbf70d681943996c226f1c1bfdc163608
+          python tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py "$RUNNER_TEMP/yt130-original"
+          python tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py "$RUNNER_TEMP/yt130-original"
+          python tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py "$RUNNER_TEMP/yt130-original"
+          python tools/poc/yharnam/yt130-reference/stage_guest_name_cache_v129.py --pinned "$RUNNER_TEMP/yt130-original" --reviewed-pr442 "$RUNNER_TEMP/yt-pr442"
+          git -C "$RUNNER_TEMP/yt130-original" diff --check
+          grep -Fq 'static SessionNameCache cache;' "$RUNNER_TEMP/yt130-original/emulator/src/core/bloodborne_join.cpp"
+          grep -Fq 'TEST(SessionNameCache, AFoundMemberHasOnlyItsBlockReadAgain)' "$RUNNER_TEMP/yt130-original/emulator/tests/bloodborne/test_bloodborne_party_death.cpp"
+          grep -Fq 'SHYT-YT130-PR442-PARAM-SLOTS-V110' "$RUNNER_TEMP/yt130-original/emulator/src/core/bloodborne_party_rules.cpp"
+          echo SHYT_V129_SOURCE_EXACT_ORIGINAL_NATIVE_GUEST_NAME_CACHE_STAGED
+      - name: Compile original PR442 C++ SessionNameCache implementation and exercise hit/miss invalidation
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/yt130-original" "$RUNNER_TEMP/v129-session-name-test.cpp" <<'PY'
+          from pathlib import Path
+          import sys
+          root = Path(sys.argv[1])
+          h = (root / 'emulator/src/core/bloodborne_party.h').read_text()
+          c = (root / 'emulator/src/core/bloodborne_party.cpp').read_text()
+          def part(s, a, b):
+              assert s.count(a) == 1 and s.count(b) == 1
+              i, j = s.index(a), s.index(b)
+              assert i < j
+              return s[i:j]
+          declaration = part(h, 'class SessionNameCache {', 'std::string OnlineIdOfBoardMember(')
+          implementation = part(c, 'SessionNameCache::Look SessionNameCache::Lookup(', 'RecreatePlan PlanRecreate(')
+          # Other V109/110 methods preceding the old recreate function are
+          # harmless dependencies only if not included. Trim before actual
+          # original cache methods instead of reimplementing them.
+          assert 'void SessionNameCache::Keep(Entry entry)' in implementation
+          assert 'u64 ParamTableSize(' not in implementation
+          target = Path(sys.argv[2])
+          target.write_text('''
+          #include <algorithm>
+          #include <cassert>
+          #include <cstdint>
+          #include <optional>
+          #include <ranges>
+          #include <span>
+          #include <string>
+          #include <string_view>
+          #include <utility>
+          #include <vector>
+          using u64 = std::uint64_t;
+          using u8 = std::uint8_t;
+          using s64 = std::int64_t;
+          ''' + declaration + '\n' + implementation + '''
+          int main() {
+              SessionNameCache cache;
+              const std::vector<std::string> ids{"hunter", "host"};
+              assert(cache.Lookup(0x1234, ids, 0).plan == SessionNameCache::Plan::Scan);
+              cache.Found(0x1234, ids, {0x4567, 0x80});
+              auto hit = cache.Lookup(0x1234, ids, 15000);
+              assert(hit.plan == SessionNameCache::Plan::Recheck);
+              assert(hit.block.address == 0x4567 && hit.block.size == 0x80);
+              assert(cache.Lookup(0x1234, std::vector<std::string>{"another"}, 15000).plan ==
+                     SessionNameCache::Plan::Scan);
+              cache.Missed(0x5678, ids, 5000);
+              assert(cache.Lookup(0x5678, ids, 14999).plan ==
+                     SessionNameCache::Plan::StillMissing);
+              assert(cache.Lookup(0x5678, ids, 15000).plan ==
+                     SessionNameCache::Plan::Scan);
+              cache.Missed(0x5678, ids, 15000);
+              assert(cache.Lookup(0x5678, ids, 34999).plan ==
+                     SessionNameCache::Plan::StillMissing);
+              assert(cache.Lookup(0x5678, ids, 35000).plan ==
+                     SessionNameCache::Plan::Scan);
+              cache.Forget(0x1234);
+              assert(cache.Lookup(0x1234, ids, 0).plan == SessionNameCache::Plan::Scan);
+              return 0;
+          }
+          ''', encoding='utf-8')
+          print('SHYT_V129_COMPILED_TEST_USES_EXACT_REAL_PINNED_UPSTREAM_CACHED_CLASS')
+          PY
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-error=missing-field-initializers "$RUNNER_TEMP/v129-session-name-test.cpp" -o "$RUNNER_TEMP/v129-session-name-test"
+          "$RUNNER_TEMP/v129-session-name-test"
+          echo SHYT_V129_ACTUAL_CXX20_UPSTREAM_GUEST_NAME_CACHE_TEST_PASS_NOT_GAMEPLAY
