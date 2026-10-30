@@ -42,6 +42,13 @@ jobs:
           path: reviewed-yt468
           persist-credentials: false
           submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 4a55f02c48207770273e0cf0ed5d06e85a9143e5
+          path: reviewed-yt471
+          persist-credentials: false
+          submodules: false
       - name: Verify all original/reviewed Git SHA1 blobs and run exact original Doll regressions
         run: |
           set -euo pipefail
@@ -51,6 +58,8 @@ jobs:
             --original pinned-upstream --reviewed reviewed-yt457
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_second_levelup_v160.py -v
           python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-upstream --reviewed reviewed-yt468
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-upstream --reviewed reviewed-yt471
           git -C pinned-upstream diff --check
           git -C pinned-upstream diff --name-only > /tmp/v151-original-doll-files.txt
           python3 - <<'PY'
@@ -66,7 +75,9 @@ jobs:
           assert "Range(72100100, 72100102, FlagOwner::PerPlayer, 0," in p
           p=Path("pinned-upstream/emulator/src/core/bloodborne_travel.cpp").read_text()
           assert "ClearDollLevelUpFlagAfterHerMenu();" in p
-          print("SHYT_V151_YT130_EXACT_ORIGINAL_DOLL_SOURCE_TESTS_PASS")
+          assert "std::ranges::any_of(OtherPlayers()" in p
+          assert "doll_blessing_end_asked.store(true);" in p
+          print("SHYT_V162_YT130_EXACT_ORIGINAL_DOLL_BEGIN_END_SOURCE_TESTS_PASS")
           PY
       - name: Compile and run exact extracted original C++ menu-close predicate
         run: |
