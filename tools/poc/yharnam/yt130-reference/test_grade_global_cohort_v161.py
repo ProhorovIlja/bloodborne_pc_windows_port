@@ -66,6 +66,34 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
                 s[key]=value
                 self.assertEqual(grade.grade(s,1)["quality"],
                                  "INVALID_GLOBAL_COHORT_EVIDENCE")
+    def test_200_player_health_requires_all_800_anonymous_directed_routes(self):
+        sample=with_cohort(cases.sample(1))
+        self.assertEqual(grade.grade(sample,1,require_directed=True)["quality"],
+                         "MISSING_REQUIRED_DIRECTED_GAME_EVIDENCE")
+        sample.update(directed_quality="DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY",
+                      directed_packets_sent=20000,directed_packets_received=19820,
+                      directed_routes=800,
+                      directed_scope="anonymous synthetic seat pairs; NOT a production QoS pass")
+        good=grade.grade(sample,1,require_directed=True)
+        self.assertEqual(good["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
+        self.assertEqual(good["directed_routes"],800)
+        sample["directed_quality"]="DIRECTED_GAME_COHORT_DELIVERY_DEGRADED"
+        self.assertEqual(grade.grade(sample,1,require_directed=True)["quality"],
+                         "DIRECTED_GAME_COHORT_UNHEALTHY")
+        sample["directed_quality"]="DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY"
+        for key,value in (("directed_routes",799),
+                          ("directed_packets_received",19819),
+                          ("directed_scope","production pass")):
+            with self.subTest(field=key):
+                damaged=dict(sample)
+                damaged[key]=value
+                self.assertEqual(grade.grade(damaged,1,require_directed=True)["quality"],
+                                 "INVALID_DIRECTED_GAME_EVIDENCE")
+        missing=dict(sample)
+        missing.pop("directed_packets_received")
+        self.assertEqual(grade.grade(missing,1,require_directed=True)["quality"],
+                         "MISSING_OR_PARTIAL_DIRECTED_GAME_EVIDENCE")
+
     def test_valid_cohort_red_remains_red(self):
         s=with_cohort(cases.sample(1))
         s["cohort_quality"]="GLOBAL_GAME_COHORT_DELIVERY_DEGRADED"
