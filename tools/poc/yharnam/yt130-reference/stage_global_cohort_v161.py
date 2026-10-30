@@ -65,6 +65,26 @@ FINISH_NEW="""    const s64 cohort_finish_us = NowUs();
         {"cohort_finish_us", static_cast<double>(cohort_finish_us)},
         {"cohort_epoch_entries", cohort_json},
 """
+RESULTS_OLD="""        results = []
+        for load in loads:
+            out, _ = load.communicate()
+            results += [json.loads(line) for line in out.splitlines() if line.startswith("{")]
+"""
+# Each *subprocess* must produce exactly one summary; a missing worker
+# and an extra summary from another must not cancel each other out.
+# No online player IDs, IPs, game bytes or network secrets are exported.
+RESULTS_NEW="""        results = []
+        for worker_index, load in enumerate(loads):
+            out, _ = load.communicate()
+            child_rows = [json.loads(line) for line in out.splitlines()
+                          if line.startswith("{")]
+            if load.returncode != 0 or len(child_rows) != 1:
+                raise RuntimeError(
+                    f"bbload worker {worker_index}: expected exactly one "
+                    f"successful child JSON report, got {len(child_rows)} "
+                    f"(returncode={load.returncode})")
+            results.extend(child_rows)
+"""
 ANCHOR_AGG="""        per_shard = []
         for i in range(args.shards):
             wire_in, wire_out, wire_bytes_in, wire_bytes_out, wire_windows = data_wire(i)
@@ -213,6 +233,7 @@ def patch_shards(s:str)->str:
             '"game_frame_decoded": sum(' not in s or
             '"team_unknown_other": sum(' not in s):
         raise ValueError("V161 requires staged V155+V158+V159 original shard")
+    s=one(s,RESULTS_OLD,RESULTS_NEW,"one actual successful child summary per bbload process")
     s=one(s,ANCHOR_AGG,PATCH_AGG,"global cohort readiness and original child counters")
     s=one(s,SUMMARY_OLD,SUMMARY_NEW,"durable separate cohort scores")
     return s
