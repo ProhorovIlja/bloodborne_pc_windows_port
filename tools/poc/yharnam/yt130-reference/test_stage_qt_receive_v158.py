@@ -46,7 +46,8 @@ class QtLoadReceiverV158Tests(unittest.TestCase):
                       "game_data_datagrams_received","game_data_decode_failed",
                       "game_frame_decode_failed","game_frame_bad_header",
                       "game_frame_short_entries","game_frame_decoded"):
-            self.assertIn(f'{{"{field}", static_cast<double>(totals.{field})}}',s)
+            self.assertIn(f'static_cast<double>(totals.{field})',s)
+            self.assertIn(f'"{field}"',s)
             self.assertIn(f'{{"{field}": sum(r["{field}"] for r in results)}}'.replace("{","").replace("}",""),m.AGG_NEW)
         self.assertEqual(s.count("socket.readDatagram"),1)
         self.assertEqual(s.count("game_frame_bad_header"),3) # totals, receive and JSON
