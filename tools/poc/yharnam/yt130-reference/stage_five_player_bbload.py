@@ -175,9 +175,13 @@ SOCKET_STATE_DIAG_EDITS = (
      '    int lobby = 0;\n'
      '    int awaiting_welcome = 0;\n'),
     ('      playing += game->Playing();\n'
+     '      game_receivers += game->Playing() && game->SawGamePackets();\n'
+     '      complete_teams += game->CompleteTeam(settings.team_size);\n'
      '    }\n'
      '    const double seconds = (NowUs() - started_us) / 1e6;\n',
      '      playing += game->Playing();\n'
+     '      game_receivers += game->Playing() && game->SawGamePackets();\n'
+     '      complete_teams += game->CompleteTeam(settings.team_size);\n'
      '      lobby += game->InLobby();\n'
      '      awaiting_welcome += game->AwaitingWelcome();\n'
      '    }\n'
