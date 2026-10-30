@@ -76,7 +76,7 @@ class NativeInventoryV146Tests(unittest.TestCase):
     def test_skip_symlinks_and_notice_case_collisions(self):
         (self.root/"dvdroot_ps4"/"shader"/"Sample.dcx").write_bytes(b"B")
         result=mod.inventory(self.root)
-        self.assertEqual(result["case_insensitive_path_collisions"],1)
+        self.assertEqual(result["case_insensitive_path_collisions"],0 if os.name == "nt" else 1)
         other=Path(self.temp.name)/"PRIVATE_KEY.txt"
         other.write_text("DO_NOT_READ")
         link=self.root/"outside-link.txt"
@@ -86,7 +86,7 @@ class NativeInventoryV146Tests(unittest.TestCase):
             self.skipTest("symlink requires elevated Windows permission")
         result=mod.inventory(self.root,include_paths=True)
         self.assertEqual(result["symlinks_skipped"],1)
-        self.assertEqual(result["files"],6)
+        self.assertEqual(result["files"],5 if os.name == "nt" else 6)
         self.assertNotIn("outside-link.txt",[x["path"] for x in result["relative_file_entries"]])
         self.assertNotIn("DO_NOT_READ",json.dumps(result))
     def test_reject_accidental_drive_roots_and_limit(self):
