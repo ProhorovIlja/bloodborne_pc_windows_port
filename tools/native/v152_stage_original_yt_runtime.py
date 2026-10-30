@@ -144,7 +144,7 @@ def gather(original:Path,compiled:Path,dest:Path)->dict:
         for file in staged.rglob("*"):
             if file.is_symlink() or (file.is_file() and (
                     file.name.lower() in FORBIDDEN_NAMES or
-                    file.suffix.lower() not in ALLOWED_EXT)):
+                    (file.suffix.lower() not in ALLOWED_EXT and file.name!="LICENSE"))):
                 raise StageError("unsafe file introduced in staged kit")
         inventory={}
         for rel in sorted(copied):
@@ -207,8 +207,11 @@ def main(argv=None)->int:
         print("SHYT_V152_ORIGINAL_YT130_NATIVE_DEV_ONLY_INPUT_KIT_NO_GAME_ASSETS",
               len(result["files"]))
         return 0
-    except (StageError,OSError,subprocess.CalledProcessError):
-        print("V152 staging refused invalid sources, binaries or output",file=sys.stderr)
+    except StageError as exc:
+        print("V152 staging refused: "+str(exc),file=sys.stderr)
+        return 2
+    except (OSError,subprocess.CalledProcessError):
+        print("V152 staging refused invalid files or Git checkout",file=sys.stderr)
         return 2
 
 if __name__=="__main__":
