@@ -161,7 +161,7 @@ class GlobalCohortV161(unittest.TestCase):
         healthy=worker(12_000_000,42_000_000,data)
         silent=worker(12_000_000,42_000_000,{sec:(0,0) for sec in range(10,40)})
         out=inspect([healthy,silent])
-        self.assertGreater(out["cohort_sent"],10_000)
+        self.assertEqual(out["cohort_sent"],0)  # no partial totals may escape invalid cohort
         self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
         # Sending without receiving, or receiving without sending, also
         # means at least one 5-seat worker has lost its game traffic.
