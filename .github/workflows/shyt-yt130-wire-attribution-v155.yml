@@ -169,7 +169,7 @@ jobs:
               --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
               --bbload "$RUNNER_TEMP/yt-build/bbload" \
               --shard-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
-              --owners "$owners" --timeout 120 --require-healthy \
+              --owners "$owners" --timeout 120 --require-healthy --require-directed \
               --output "yt130-v155-five-seat-owners-${owners}.jsonl"
             rc=$?
             set -e
@@ -200,7 +200,7 @@ jobs:
               --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
               --bbload "$RUNNER_TEMP/yt-build/bbload" \
               --shard-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
-              --owners 1 --three-only --cross "$cross" --timeout 120 \
+              --owners 1 --three-only --cross "$cross" --timeout 120 --require-directed \
               --output "yt130-v155-cross-${cross}.jsonl"
             rc=$?
             set -e
