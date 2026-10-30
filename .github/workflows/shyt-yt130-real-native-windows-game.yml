@@ -18,6 +18,8 @@ on:
       - tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp
       - tools/poc/yharnam/yt130-reference/stage_windows_revision_v119.py
       - tools/poc/yharnam/yt130-reference/test_stage_windows_revision_v119.py
+      - tools/poc/yharnam/yt130-reference/stage_native_dialog_werror_v121.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_dialog_werror_v121.py
 permissions:
   contents: read
 concurrency:
@@ -80,7 +82,8 @@ jobs:
             'test_probe_native_param_cpp_v109.py',
             'test_stage_native_rx_queue_v115.py',
             'test_stage_native_p2p_log_v116.py',
-            'test_stage_windows_revision_v119.py')) {
+            'test_stage_windows_revision_v119.py',
+            'test_stage_native_dialog_werror_v121.py')) {
             python -m unittest discover -s tools/poc/yharnam/yt130-reference -p $test -v
             if ($LASTEXITCODE -ne 0) { throw "Native YT1.3 client source regression failed: $test" }
           }
@@ -108,6 +111,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Original Windows CMake revision target source drift' }
           if (-not (Select-String -Path 'pinned-upstream/bbport/gpu/bbcoop/revision.cmake' -SimpleMatch 'SHYT-V119-NATIVE-WINDOWS-REVISION-FASTPATH')) {
             throw 'Windows game revision fastpath missing'
+          }
+          python tools/poc/yharnam/yt130-reference/stage_native_dialog_werror_v121.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned native Windows common-dialog C compiler patch failed' }
+          if (-not (Select-String -Path 'pinned-upstream/bbport/src/runtime_services.c' -SimpleMatch 'SHYT-V121-PINNED-COMMON-DIALOG-CLANG64-WERROR')) {
+            throw 'V121 original Win64 common service Clang patch missing'
           }
           git -C pinned-upstream diff --check
           if ($LASTEXITCODE -ne 0) { throw 'Native YT1.3 original game whitespace or patch conflict' }
@@ -184,6 +192,12 @@ jobs:
             -o shyt-yt130-v116-udp-log-budget.exe
           ./shyt-yt130-v116-udp-log-budget.exe
           echo SHYT_YT130_NATIVE_WINDOWS_PACKET_LOG_BUDGET_COMPILER_PASS
+          # Execute the new ABI fixture with the actual Windows CLANG64
+          # compiler BEFORE spending time on 431 Ninja translation units.
+          winpy="$(cygpath -u "$pythonLocation")/python.exe"
+          "$winpy" -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_native_dialog_werror_v121.py -v
+          echo SHYT_YT130_NATIVE_WINDOWS_COMMON_DIALOG_WERROR_ABI_PASS
       - name: Restore bounded shared C++ object cache
         uses: actions/cache/restore@v4
         with:

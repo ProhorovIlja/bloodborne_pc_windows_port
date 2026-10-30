@@ -28,6 +28,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
       - tools/poc/yharnam/yt130-reference/stage_windows_revision_v119.py
       - tools/poc/yharnam/yt130-reference/test_stage_windows_revision_v119.py
+      - tools/poc/yharnam/yt130-reference/stage_native_dialog_werror_v121.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_dialog_werror_v121.py
       - .github/workflows/shyt-yt130-load-harness-fast.yml
   pull_request:
     branches: [master]
@@ -57,6 +59,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
       - tools/poc/yharnam/yt130-reference/stage_windows_revision_v119.py
       - tools/poc/yharnam/yt130-reference/test_stage_windows_revision_v119.py
+      - tools/poc/yharnam/yt130-reference/stage_native_dialog_werror_v121.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_dialog_werror_v121.py
       - .github/workflows/shyt-yt130-load-harness-fast.yml
   workflow_dispatch:
 permissions:
@@ -92,7 +96,9 @@ jobs:
             tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py \
             tools/poc/yharnam/yt130-reference/test_shard_five_v117.py \
             tools/poc/yharnam/yt130-reference/stage_windows_revision_v119.py \
-            tools/poc/yharnam/yt130-reference/test_stage_windows_revision_v119.py
+            tools/poc/yharnam/yt130-reference/test_stage_windows_revision_v119.py \
+            tools/poc/yharnam/yt130-reference/stage_native_dialog_werror_v121.py \
+            tools/poc/yharnam/yt130-reference/test_stage_native_dialog_werror_v121.py
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
             -p test_run_capacity_curve.py -v
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
@@ -123,6 +129,8 @@ jobs:
             -p test_shard_five_v117.py -v
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
             -p test_stage_windows_revision_v119.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_native_dialog_werror_v121.py -v
       - name: Do not confuse generator unit safety with native server capacity
         shell: bash
         run: |
