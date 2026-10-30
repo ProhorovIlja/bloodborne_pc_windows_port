@@ -16,7 +16,9 @@ class FivePlayerLoadgenTests(unittest.TestCase):
                 '\n'.join(old for old, _ in mod.OWNER_EDITS) + '\n' +
                 '\n'.join(old for old, _ in mod.RECEIVER_EDITS) + '\n' +
                 # Four V120 anchors predate all earlier source transforms.
-                '\n'.join(mod.STEADY_EDITS[i][0] for i in (0, 1, 2, 4))
+                '\n'.join(mod.STEADY_EDITS[i][0] for i in (0, 1, 2, 4)) +
+                '\n'.join(mod.SOCKET_STATE_DIAG_EDITS[i][0]
+                          for i in (0, 2, 3, 4, 5, 6))
                 + '\nafter')
 
     def test_exact_upstream_pr444_owner_changes_and_five_player_anchors(self):
@@ -59,6 +61,15 @@ class FivePlayerLoadgenTests(unittest.TestCase):
                       transformed)
         self.assertIn('Owner() ? load.settings.owner_fps', transformed)
         self.assertEqual(transformed.splitlines()[0], "before")
+        self.assertIn("const qint64 submitted = socket.writeDatagram(datagram, server, port);",
+                      transformed)
+        self.assertIn("++load.totals.udp_write_failed;", transformed)
+        self.assertIn("++load.totals.udp_write_short;", transformed)
+        self.assertIn('{"udp_write_failed", static_cast<double>(totals.udp_write_failed)}',
+                      transformed)
+        self.assertIn('{"linking", static_cast<int>(games.size()) - linked}', transformed)
+        self.assertIn('{"awaiting_welcome", awaiting_welcome}', transformed)
+        self.assertIn('{"lobby", lobby}', transformed)
 
     def test_missing_duplicate_and_second_stage_refused(self):
         original = self.pinned_anchor_fixture()
@@ -126,6 +137,19 @@ class FivePlayerLoadgenTests(unittest.TestCase):
             "  s64 steady_since_us = 0; // set once, after real full-team Playing\n",
             transformed,
         )
+
+    def test_socket_write_and_game_state_guards_fail_closed(self):
+        original=self.pinned_anchor_fixture()
+        # No unreviewed source changes may be silently accepted at any of
+        # the sendto or lifecycle audit points.
+        for old, _ in mod.SOCKET_STATE_DIAG_EDITS:
+            with self.subTest(anchor=old[:35]):
+                if old in original:
+                    broken=original.replace(old,"BROKEN",1)
+                    with self.assertRaises(ValueError): mod.rewrite(broken)
+        self.assertEqual(len(mod.SOCKET_STATE_DIAG_EDITS),7)
+        with self.assertRaises(ValueError):
+            mod.rewrite(mod.rewrite(original))
 
     def test_unpinned_source_refused(self):
         with self.assertRaisesRegex(ValueError, "exact official pinned"):
