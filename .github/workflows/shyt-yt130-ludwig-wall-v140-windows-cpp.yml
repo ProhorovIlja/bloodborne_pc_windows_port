@@ -1,0 +1,115 @@
+name: SHYT V140 real original YT1.3 native Windows Ludwig wall game C++ module
+on:
+  push:
+    branches: [feature/yt130-ludwig-wall-v140-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-ludwig-wall-v140-windows-cpp.yml
+      - tools/poc/yharnam/yt130-reference/stage_ludwig_multiplayer_wall_v140.py
+      - tools/poc/yharnam/yt130-reference/test_stage_ludwig_multiplayer_wall_v140.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-game-client:
+    runs-on: windows-2022
+    timeout-minutes: 50
+    env:
+      PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+      BB_LTO: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enable long Win32 Git paths before checking out nested shader submodules
+        shell: pwsh
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          submodules: false
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 3b0a0d8dc86d9ae726e2b0e836a46b4f46a346ed
+          path: reviewed-yt451
+          submodules: false
+          persist-credentials: false
+      - name: Initialize only required native bbport GPU third-party submodules
+        shell: pwsh
+        run: |
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
+          if ($LASTEXITCODE -ne 0) { throw "Pinned native GPU submodule checkout failed" }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage source-exact upstream YT451 original full gameplay module
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_ludwig_multiplayer_wall_v140.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'V140 original game source guard failed' }
+          python tools/poc/yharnam/yt130-reference/stage_ludwig_multiplayer_wall_v140.py --original pinned-upstream --reviewed reviewed-yt451 --native-test "$env:RUNNER_TEMP/native-ludwig-wall.cpp"
+          if ($LASTEXITCODE -ne 0) { throw 'Original V140 Ludwig native source changed' }
+          git -C pinned-upstream diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'V140 game source diff whitespace error' }
+          Write-Host 'SHYT_V140_ORIGINAL_NATIVE_WINDOWS_GAMEPLAY_SOURCE_EXACT_STAGED'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - name: Install native Windows CLANG64 build dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed \
+            git patch \
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-ccache \
+            mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-cmake \
+            mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-pkgconf \
+            mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-vulkan-loader \
+            mingw-w64-clang-x86_64-vulkan-memory-allocator \
+            mingw-w64-clang-x86_64-glslang mingw-w64-clang-x86_64-sdl3 \
+            mingw-w64-clang-x86_64-fmt mingw-w64-clang-x86_64-boost \
+            mingw-w64-clang-x86_64-robin-map mingw-w64-clang-x86_64-xxhash \
+            mingw-w64-clang-x86_64-ffmpeg mingw-w64-clang-x86_64-zydis \
+            mingw-w64-clang-x86_64-spirv-tools mingw-w64-clang-x86_64-spirv-headers \
+            mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
+            mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
+            mingw-w64-clang-x86_64-nlohmann-json
+      - name: Compile actual Windows native bloodborne_party.cpp, including Ludwig wall
+        timeout-minutes: 22
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cd pinned-upstream/bbport
+          export CC=clang CXX=clang++
+          cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBB_PGO=off -DBB_LTO=OFF \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          ninja -C out/gpu -t targets all > out/v140-native-party-targets.txt
+          grep -F 'bloodborne_party.cpp.obj' out/v140-native-party-targets.txt
+          grep -F 'bloodborne_party.cpp.obj' out/v140-native-party-targets.txt | cut -d: -f1 > out/v140-party-target-names.txt
+          test -s out/v140-party-target-names.txt
+          while IFS= read -r target; do
+            echo "SHYT_V140_COMPILING_ACTUAL_NATIVE_GAME_PARTY_CPP=$target"
+            timeout --signal=TERM --kill-after=10s 360s ninja -C out/gpu "$target"
+          done < out/v140-party-target-names.txt
+          echo SHYT_V140_ORIGINAL_WINDOWS_PARTY_CPP_COMPILER_PASS_NOT_FULL_GAMEPLAY
+      - name: Upload native C++ build evidence even if compiler fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-v140-original-Windows-Ludwig-party-CPP-compiler-INTERNAL
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            pinned-upstream/bbport/out/v140-native-party-targets.txt
+            pinned-upstream/bbport/out/gpu/CMakeCache.txt
+            pinned-upstream/bbport/out/gpu/compile_commands.json
