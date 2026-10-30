@@ -27,20 +27,23 @@ def original_shard_fixture():
         +v.RESULTS_OLD+v.ANCHOR_AGG+v.SUMMARY_OLD
     )
 
-def worker(ready,finish,counts,playing=5):
+def worker(ready,finish,counts,playing=None,games=5):
+    if playing is None:
+        playing=games
     return {
-        "games":5,"playing":playing,"complete_teams":1 if playing==5 else 0,
+        "games":games,"playing":playing,
+        "complete_teams":games//5 if playing==games else 0,
         "cohort_ready_us":ready,"cohort_finish_us":finish,
         "cohort_epoch_entries":[{"start_us":second*1_000_000,
             "sent_entries":sent,"received_entries":recv}
             for second,(sent,recv) in counts.items()],
     }
 
-def inspect(results):
-    # The patch is inserted at 8-space indentation inside run_shards.py.
-    # Standalone exec must dedent it; shards=0 avoids a wire-log dependency
-    # while exercising the complete injected aggregation code.
-    namespace={"results":results,"args":SimpleNamespace(team_size=5,shards=0,players=10,processes=2)}
+def inspect(results,players=10,processes=2):
+    # Injected fragment runs at 8-space indentation in run_shards.py;
+    # synthetic fixture explicitly declares the required 200-player shape.
+    namespace={"results":results,"args":SimpleNamespace(
+        team_size=5,shards=0,players=players,processes=processes)}
     exec(dedent(v.PATCH_AGG),namespace)
     return namespace
 
@@ -129,6 +132,30 @@ class GlobalCohortV161(unittest.TestCase):
                    worker(14_800_000,20_000_000,data)])
         self.assertEqual(o["cohort_seconds"],3)
         self.assertEqual(o["cohort_quality"],"NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+    def test_real_200_player_worker_topologies_reject_missing_population(self):
+        # The actual generator runs 40 teams of five across N workers;
+        # no one of 4, 8 or 16 worker topologies may silently lose one.
+        for processes in (4,8,16):
+            with self.subTest(processes=processes):
+                self.assertEqual(200 % processes,0)
+                n=200//processes
+                counts={sec:(500,500) for sec in range(10,40)}
+                rows=[worker(12_000_000,42_000_000,counts,games=n)
+                      for _ in range(processes)]
+                self.assertEqual(inspect(rows,players=200,processes=processes)["cohort_quality"],
+                                 "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+                self.assertEqual(inspect(rows[:-1],players=200,processes=processes)["cohort_quality"],
+                                 "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+                self.assertEqual(inspect(rows+[rows[0]],players=200,processes=processes)["cohort_quality"],
+                                 "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        # Original run_shards creates no empty child processes when
+        # requested process count exceeds 40 complete five-seat teams.
+        rows=[worker(12_000_000,42_000_000,
+                     {sec:(500,500) for sec in range(10,40)})
+              for _ in range(40)]
+        self.assertEqual(inspect(rows,players=200,processes=64)["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+
     def test_incomplete_or_duplicate_child_reports_never_form_a_green_cohort(self):
         healthy={sec:(400,400) for sec in range(10,40)}
         a=worker(12_000_000,42_000_000,healthy)
