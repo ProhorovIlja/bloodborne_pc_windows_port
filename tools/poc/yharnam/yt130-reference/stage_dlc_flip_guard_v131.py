@@ -57,7 +57,7 @@ def exactly(src: str,before: str,after: str,what: str) -> str:
 
 def change(base_driver: str,base_cmake: str,upstream_driver: str,
            upstream_header: str,upstream_test: str)->dict[str,str]:
-    if upstream_driver.count(BLOCK_START)!=1 or upstream_driver.count(BLOCK_END)!=1:
+    if upstream_driver.count(BLOCK_START)!=1 or upstream_driver.count(ORIGINAL_CALL)!=1:
         raise ValueError("Reviewed PR446 renderer guard has drifted")
     start=upstream_driver.index(BLOCK_START)
     stop=upstream_driver.index(BLOCK_END,start)
