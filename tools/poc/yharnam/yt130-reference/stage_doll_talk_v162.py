@@ -124,6 +124,26 @@ def patch(name,base,prior,reviewed,middle):
         return one(base,TEST_END,new+TEST_END,"real native game regression")
     raise ValueError("V162 unrelated native game source refused")
 
+def verify_staged(name,staged,reviewed):
+    """All transplanted native C++/gtest function regions match exact #471."""
+    pairs={
+        CPP:((CPP_START,CPP_END),),
+        HEADER:((HEADER_START,HEADER_END),),
+        TRAVEL:((HOOK_START,HOOK_END),
+                (TALK_START,TALK_END),
+                (TICK_START,TICK_END)),
+        TEST:((TEST_START,TEST_END),),
+    }
+    if name not in pairs:
+        raise ValueError("V162 unexpected verification path")
+    for start,end in pairs[name]:
+        actual=region(staged,start,end,"staged "+name)
+        expected=region(reviewed,start,end,"reviewed "+name)
+        if actual != expected:
+            raise ValueError("V162 assembled original native code differs from reviewed upstream #471: "+name)
+    if name==TRAVEL and (TICK_OLD in staged or TICK_NEW not in staged):
+        raise ValueError("V162 original game calls old Doll tick or omits begin/end consumption")
+
 def stage(original,prior,middle,reviewed):
     original,prior,middle,reviewed=(x.resolve(strict=True)
                                    for x in (original,prior,middle,reviewed))
@@ -147,7 +167,9 @@ def stage(original,prior,middle,reviewed):
         base=dst.read_bytes().replace(b"\r\n",b"\n").decode("utf-8")
         prior_text=(prior/file).read_text(encoding="utf-8")
         middle_text=(middle/file).read_text(encoding="utf-8")
-        new=patch(name,base,prior_text,reviewed_bytes.decode("utf-8"),middle_text)
+        reviewed_text=reviewed_bytes.decode("utf-8")
+        new=patch(name,base,prior_text,reviewed_text,middle_text)
+        verify_staged(name,new,reviewed_text)
         candidates.append((dst,new.encode("utf-8")))
     # Validate four independently pinned source/target files before any write.
     for dst,data in candidates:
