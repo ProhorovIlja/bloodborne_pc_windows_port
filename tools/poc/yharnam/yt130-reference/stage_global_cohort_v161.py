@@ -80,9 +80,9 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
         if results and all(
                 r.get("playing") == r.get("games") and
                 r.get("complete_teams") == r.get("games") // args.team_size and
-                isinstance(r.get("cohort_ready_us"), (int, float)) and
+                type(r.get("cohort_ready_us")) in (int, float) and
                 0 < r["cohort_ready_us"] < 2**53 and
-                isinstance(r.get("cohort_finish_us"), (int, float)) and
+                type(r.get("cohort_finish_us")) in (int, float) and
                 r["cohort_ready_us"] < r["cohort_finish_us"] < 2**53 and
                 isinstance(r.get("cohort_epoch_entries"), list)
                 for r in results):
