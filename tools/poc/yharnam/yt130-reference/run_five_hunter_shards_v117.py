@@ -22,6 +22,7 @@ SIZE = 5
 POPULATION = 200
 SHARD_COUNTS = (1, 3)
 OWNER_CASES = (1, 3, 5)  # 5-player team; per-actor enemy ownership in YT 1.3
+CROSS_MODES = ("mixed", "code", "invite")  # same original hosted bbload join policies
 RUN_SECONDS = 30
 RAMP_MS = 35
 TIMEOUT = 120
@@ -118,7 +119,7 @@ def command(args, shards: int, base_port: int) -> list[str]:
         "--players", str(POPULATION), "--team-size", str(SIZE),
         "--shards", str(shards), "--capacity", str(240 if shards == 1 else 80),
         "--seconds", str(RUN_SECONDS), "--ramp-ms", str(RAMP_MS),
-        "--processes", "4", "--cross", "mixed", "--port", str(base_port),
+        "--processes", "4", "--cross", getattr(args, "cross", "mixed"), "--port", str(base_port),
         "--cfg", "CheckServerBuild=false",
         "--extra", f"--build '{BUILD}' --owner-fps 30 --follower-fps 8 --owners {args.owners}",
     ]
@@ -151,7 +152,10 @@ def run(args) -> int:
     if args.owners not in OWNER_CASES:
         raise ValueError("Only source-tested 1/3/5-owner five-player cases allowed")
     results = []
-    for index, shards in enumerate(SHARD_COUNTS):
+    if getattr(args, "cross", "mixed") not in CROSS_MODES:
+        raise ValueError("Only original hosted code/invite/mixed join policies")
+    cases = (3,) if getattr(args, "three_only", False) else SHARD_COUNTS
+    for index, shards in enumerate(cases):
         rc, out = execute(command(args, shards, 39014 + index * 60), args.timeout)
         if rc == 124:
             result = {"quality": "ORIGINAL_SHARDS_TIMEOUT", "shards": shards}
@@ -171,6 +175,7 @@ def run(args) -> int:
         result["scope"] = "DISPOSABLE_LOOPBACK_REDIRECT_NOT_REAL_WAN_OR_DIRECT_P2P"
         result["team_size"] = SIZE
         result["enemy_owner_seats"] = args.owners
+        result["cross_join_mode"] = getattr(args, "cross", "mixed")
         results.append(result)
         print("YT130_V117_REAL_5P_SHARDS", shards, result["quality"],
               "PLAYING", result.get("playing", "?"), "GAME_RECEIVERS",
@@ -196,6 +201,9 @@ if __name__ == "__main__":
     for label in ("shadnet", "bbload", "shard-script", "output"):
         p.add_argument("--" + label, type=Path, required=True)
     p.add_argument("--timeout", type=int, default=TIMEOUT)
+    p.add_argument("--three-only", action="store_true",
+                   help="diagnostic only: compare cross-shard join modes without 1-shard baseline")
+    p.add_argument("--cross", choices=CROSS_MODES, default="mixed")
     p.add_argument("--owners", type=int, choices=OWNER_CASES, default=5,
                    help="how many of the five players independently own enemies (worst case 5)")
     p.add_argument("--require-healthy", action="store_true")
