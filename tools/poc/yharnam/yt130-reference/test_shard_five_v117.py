@@ -19,6 +19,8 @@ def sample(shards=3):
         players=200, shards=shards, playing=200, game_receivers=200,
         complete_teams=40, linking=0, lobby=0, awaiting_welcome=0,
         udp_write_failed=0, udp_write_short=0,
+        team_name_absent=0, team_name_ambiguous=0,
+        team_lookup_throttled=0, team_other_notice=0, team_total_notices=0,
         game_wire_in_packets=shards*1000,
         game_wire_out_packets=shards*3000,
         game_wire_in_bytes=shards*64000,
@@ -155,6 +157,40 @@ class OriginalShardsQoSTests(unittest.TestCase):
         s=sample(3)
         s["redirect_ms_p99"]=3000
         self.assertEqual(run.grade(s,3)["quality"],"CROSS_SHARD_REDIRECT_FAILED")
+    def test_v156_original_lobby_refusal_category_consistency(self):
+        for shards in (1,3):
+            data=sample(shards)
+            self.assertEqual(run.grade(data,shards)["quality"],
+                             "FULL_GAMEPLAY_SYNTHETIC_ONLY")
+            data.update(team_name_absent=11, team_name_ambiguous=2,
+                        team_lookup_throttled=3, team_other_notice=5,
+                        team_total_notices=21)
+            out=run.grade(data,shards)
+            self.assertEqual(out["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
+            self.assertEqual(out["team_name_absent"],11)
+            self.assertEqual(out["team_lookup_throttled"],3)
+            self.assertIn("not unique players",out["notice_scope"])
+            for key in ("team_name_absent","team_name_ambiguous",
+                        "team_lookup_throttled","team_other_notice",
+                        "team_total_notices"):
+                with self.subTest(shards=shards,field=key):
+                    bad=dict(data)
+                    bad[key]=-1
+                    self.assertEqual(run.grade(bad,shards)["quality"],
+                                     "MISSING_REAL_LOBBY_REFUSAL_COUNTS")
+                    bad=dict(data)
+                    bad[key]=True
+                    self.assertEqual(run.grade(bad,shards)["quality"],
+                                     "MISSING_REAL_LOBBY_REFUSAL_COUNTS")
+                    bad=dict(data)
+                    bad[key]+=1
+                    self.assertEqual(run.grade(bad,shards)["quality"],
+                                     "INCONSISTENT_REAL_LOBBY_REFUSAL_COUNTS")
+            bad=dict(data)
+            bad["packets_received"]=max(0,bad["packets_sent"]-10000)
+            self.assertEqual(run.grade(bad,shards)["quality"],
+                             "REAL_GAME_DELIVERY_DEGRADED")
+
     def test_v155_original_qt_wire_aggregate_verification(self):
         for shards in (1, 3):
             item=sample(shards)
