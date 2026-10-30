@@ -91,8 +91,8 @@ class GlobalCohortV161(unittest.TestCase):
         self.assertEqual(out["cohort_quality"],"GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
     def test_actual_global_loss_remains_red(self):
         gaps={s:(400,300) for s in range(20,44)}
-        o=inspect([worker(18_000_000,47_000_000,gaps),
-                   worker(19_000_000,47_000_000,gaps)])
+        o=inspect([worker(20_000_000,46_000_000,gaps),
+                   worker(20_000_000,46_000_000,gaps)])
         self.assertEqual(o["cohort_quality"],"GLOBAL_GAME_COHORT_DELIVERY_DEGRADED")
         self.assertEqual(o["cohort_sent"],24*2*400)
     def test_incomplete_team_or_insufficient_window_fails_closed(self):
@@ -108,8 +108,8 @@ class GlobalCohortV161(unittest.TestCase):
         # A worker with 5 games Playing but no actual packets must not
         # disappear inside the sum of the other workers' healthy traffic.
         data={sec:(400,400) for sec in range(10,40)}
-        healthy=worker(12_000_000,44_000_000,data)
-        silent=worker(12_000_000,44_000_000,{sec:(0,0) for sec in range(10,40)})
+        healthy=worker(12_000_000,42_000_000,data)
+        silent=worker(12_000_000,42_000_000,{sec:(0,0) for sec in range(10,40)})
         out=inspect([healthy,silent])
         self.assertGreater(out["cohort_sent"],10_000)
         self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
@@ -117,17 +117,37 @@ class GlobalCohortV161(unittest.TestCase):
         # means at least one 5-seat worker has lost its game traffic.
         for sent,recv in ((400,0),(0,400)):
             with self.subTest(sent=sent,received=recv):
-                incomplete=worker(12_000_000,44_000_000,
+                incomplete=worker(12_000_000,42_000_000,
                                   {sec:(sent,recv) for sec in range(10,40)})
                 self.assertEqual(inspect([healthy,incomplete])["cohort_quality"],
                                  "INVALID_GLOBAL_COHORT_BUCKETS")
         self.assertEqual(inspect([healthy,healthy])["cohort_quality"],
                          "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
 
+    def test_every_worker_must_have_game_packets_in_every_scored_second(self):
+        # The other worker's very large healthy sample must never hide
+        # a 5-seat worker that stops sending or receiving mid-measurement.
+        strong={sec:(10_000,10_000) for sec in range(10,40)}
+        weak={sec:(20,20) for sec in range(10,40)}
+        a=worker(12_000_000,42_000_000,strong)
+        b=worker(12_000_000,42_000_000,weak)
+        self.assertEqual(inspect([a,b])["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        missing=worker(12_000_000,42_000_000,
+                       {sec:pair for sec,pair in weak.items() if sec!=23})
+        self.assertEqual(inspect([a,missing])["cohort_quality"],
+                         "INVALID_GLOBAL_COHORT_BUCKETS")
+        for sent,recv in ((0,0),(20,0),(0,20)):
+            with self.subTest(sent=sent,received=recv):
+                intermittent=dict(weak)
+                intermittent[23]=(sent,recv)
+                out=inspect([a,worker(12_000_000,42_000_000,intermittent)])
+                self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
+
     def test_malformed_duplicate_epoch_and_bad_received_counts(self):
         data={s:(500,499) for s in range(10,36)}
-        a=worker(12_000_000,40_000_000,data)
-        b=worker(12_000_000,40_000_000,data)
+        a=worker(12_000_000,38_000_000,data)
+        b=worker(12_000_000,38_000_000,data)
         b["cohort_epoch_entries"].append(dict(b["cohort_epoch_entries"][0]))
         self.assertEqual(inspect([a,b])["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
         b["cohort_epoch_entries"].pop()
