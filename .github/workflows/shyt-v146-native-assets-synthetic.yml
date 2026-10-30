@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/shyt-v146-native-assets-synthetic.yml
       - tools/native/**
+      - run.bat
   workflow_dispatch:
 permissions:
   contents: read
