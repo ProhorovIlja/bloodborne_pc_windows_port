@@ -53,6 +53,18 @@ def grade(item: dict, expected_shards: int) -> dict:
             return {"quality": "INVALID_QT_SHARD_WIRE_COUNTERS", "field": key}
         if value != sum(row[key] for row in rows):
             return {"quality": "QT_WIRE_COUNTER_TOTAL_MISMATCH", "field": key}
+    # V156 server's own refusal reasons from observed LobbyState.notice.
+    # Reply counters can include repeat attempts: not distinct players.
+    notice_fields = ("team_name_absent", "team_name_ambiguous",
+                     "team_lookup_throttled", "team_other_notice",
+                     "team_total_notices")
+    for field in notice_fields:
+        if type(item.get(field)) is not int or item[field] < 0:
+            return {"quality": "MISSING_REAL_LOBBY_REFUSAL_COUNTS", "field": field}
+    if (item["team_name_absent"] + item["team_name_ambiguous"] +
+        item["team_lookup_throttled"] + item["team_other_notice"] !=
+        item["team_total_notices"]):
+        return {"quality": "INCONSISTENT_REAL_LOBBY_REFUSAL_COUNTS"}
     for row in rows:
         cpu = row.get("link_thread_cpu_avg")
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
@@ -125,6 +137,12 @@ def grade(item: dict, expected_shards: int) -> dict:
         "game_wire_in_bytes": item["game_wire_in_bytes"],
         "game_wire_out_bytes": item["game_wire_out_bytes"],
         "game_wire_sample_windows": item["game_wire_sample_windows"],
+        "team_name_absent": item["team_name_absent"],
+        "team_name_ambiguous": item["team_name_ambiguous"],
+        "team_lookup_throttled": item["team_lookup_throttled"],
+        "team_other_notice": item["team_other_notice"],
+        "team_total_notices": item["team_total_notices"],
+        "notice_scope": "Refusal responses observed, not unique players",
         "wire_scope": "Qt LinkServer 5s samples over whole run; not steady client delivery",
         "complete_teams": item["complete_teams"], "packets_sent": sent,
         "steady_quality": steady_quality,
