@@ -12,13 +12,19 @@ spec.loader.exec_module(mod)
 class FivePlayerLoadgenTests(unittest.TestCase):
     @staticmethod
     def pinned_anchor_fixture():
+        # One actual Finish(): V117's receiver stage already contains the
+        # lobby report and player loop. V141 must extend that same method,
+        # not accidentally create a duplicate in the synthetic fixture.
+        receiver=[old for old, _ in mod.RECEIVER_EDITS]
+        receiver[2]=("  void Finish() {\n" + receiver[2] +
+                     "\n    const double seconds = (NowUs() - started_us) / 1e6;\n")
         return ('before\n' + mod.OLD_HELP + '\n' + mod.OLD_CLAMP + '\n' +
                 '\n'.join(old for old, _ in mod.OWNER_EDITS) + '\n' +
-                '\n'.join(old for old, _ in mod.RECEIVER_EDITS) + '\n' +
+                '\n'.join(receiver) + '\n' +
                 # Four V120 anchors predate all earlier source transforms.
                 '\n'.join(mod.STEADY_EDITS[i][0] for i in (0, 1, 2, 4)) +
                 '\n'.join(mod.SOCKET_STATE_DIAG_EDITS[i][0]
-                          for i in (0, 2, 3, 4, 5, 6))
+                          for i in (0, 2, 5, 6))
                 + '\nafter')
 
     def test_exact_upstream_pr444_owner_changes_and_five_player_anchors(self):
@@ -148,6 +154,21 @@ class FivePlayerLoadgenTests(unittest.TestCase):
                     broken=original.replace(old,"BROKEN",1)
                     with self.assertRaises(ValueError): mod.rewrite(broken)
         self.assertEqual(len(mod.SOCKET_STATE_DIAG_EDITS),7)
+        # Check every post-V120 socket/state anchor after the original
+        # sequential V117 receiver + V118 team + V120 traffic stages.
+        prior=original.replace(mod.OLD_HELP,mod.NEW_HELP,1).replace(
+            mod.OLD_CLAMP,mod.NEW_CLAMP,1)
+        for old,new in mod.OWNER_EDITS:
+            prior=prior.replace(old,new,1)
+        for old,new in mod.RECEIVER_EDITS:
+            prior=prior.replace(old,new,1)
+        prior=mod.patch_steady_window(mod.patch_complete_teams(prior))
+        for old,_ in mod.SOCKET_STATE_DIAG_EDITS:
+            with self.subTest(post_stage_anchor=old[:38]):
+                self.assertEqual(prior.count(old),1)
+                with self.assertRaisesRegex(ValueError,
+                                            "UDP send/state diagnostic anchor drift"):
+                    mod.patch_socket_state_diagnostics(prior.replace(old,"BROKEN",1))
         with self.assertRaises(ValueError):
             mod.rewrite(mod.rewrite(original))
 
