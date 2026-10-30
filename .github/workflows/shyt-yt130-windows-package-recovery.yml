@@ -1,0 +1,98 @@
+name: SHYT Protocol 8 Windows launcher freeze recovery without recompiling game
+on:
+  push:
+    branches:
+      - feature/yt130-1000-2000-scale-ladder-20261028
+    paths:
+      - .github/workflows/shyt-yt130-windows-package-recovery.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: shyt-yt130-windows-package-recovery
+  cancel-in-progress: false
+jobs:
+  freeze-from-verified-game-exes:
+    name: Reuse real Protocol8 Windows EXEs, diagnose original frozen BLauncher
+    runs-on: windows-2022
+    timeout-minutes: 35
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      # The original 41016051881 game compiler already completed all three
+      # actual Protocol8 executables. Reuse them rather than spending another
+      # 2 hours on 431 native renderer translation units.
+      - uses: actions/download-artifact@v4
+        with:
+          name: shyt-yt130-protocol8-native-windows-compiler-EVIDENCE-INTERNAL
+          run-id: 41016051881
+          github-token: ${{ github.token }}
+          path: pinned-upstream/bbport/out
+      - name: Assert original game binaries and upstream packaging source pin
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git -C pinned-upstream rev-parse HEAD).Trim() -ne $env:YT_PIN) { throw 'Wrong official 1.3.0 source' }
+          foreach ($exe in @('bb-play.exe','bb-probe.exe','bb-gpu-capabilities.exe')) {
+            $path = "pinned-upstream/bbport/out/$exe"
+            if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) { throw "Missing real compiled game artifact: $exe" }
+            Write-Host "$exe $((Get-FileHash -Algorithm SHA256 $path).Hash)"
+          }
+          if (-not (Test-Path 'pinned-upstream/bbport/launcher/bbport_launcher_win.py')) { throw 'Original launcher missing' }
+          Write-Host 'SHYT_YT130_ORIGINAL_NATIVE_GAME_EXES_RECOVERED'
+      - name: Diagnose original PyInstaller freeze with verbose logs only
+        shell: msys2 {0}
+        timeout-minutes: 24
+        run: |
+          set -euo pipefail
+          export WINPYTHON="$(cygpath -u "$pythonLocation")/python.exe"
+          cd pinned-upstream/bbport
+          mkdir -p out
+          # Copy the exact original package.sh prefix up to external PkgTool.
+          # This leaves the real PyInstaller command and BLauncher code intact.
+          grep -Fq 'out/pyenv/Scripts/python.exe -m PyInstaller --noconfirm --clean --log-level WARN' packaging/windows/package.sh
+          awk '/^# PkgTool / {exit} {print}' packaging/windows/package.sh > packaging/windows/ci-freeze-only.sh
+          grep -Fq 'out/pyenv/Scripts/python.exe -m PyInstaller' packaging/windows/ci-freeze-only.sh
+          sed -i 's/--log-level WARN/--log-level DEBUG/' packaging/windows/ci-freeze-only.sh
+          set +e
+          bash packaging/windows/ci-freeze-only.sh > out/shyt-pyinstaller-verbose.log 2>&1
+          code=$?
+          set -e
+          echo "SHYT_PYINSTALLER_EXIT=$code"
+          tail -n 180 out/shyt-pyinstaller-verbose.log || true
+          if [[ "$code" -ne 0 ]]; then
+            find out/pyi-work -maxdepth 3 -type f -name 'warn-*.txt' -print -exec tail -n 80 {} \; 2>/dev/null || true
+            echo SHYT_YT130_PYINSTALLER_PACKAGING_DIAGNOSTIC_FAILURE
+            exit "$code"
+          fi
+          test -s out/pyi-dist/BLauncher/BLauncher.exe
+          echo SHYT_YT130_ORIGINAL_BLAUNCHER_FREEZE_PASS
+      - name: Preserve bounded packaging logs and frozen launcher
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-launcher-freeze-recovery-EVIDENCE-INTERNAL
+          path: |
+            pinned-upstream/bbport/out/shyt-pyinstaller-verbose.log
+            pinned-upstream/bbport/out/pyi-work/BLauncher/warn-BLauncher.txt
+            pinned-upstream/bbport/out/pyi-dist/BLauncher/BLauncher.exe
+          retention-days: 3
+          if-no-files-found: warn
