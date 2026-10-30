@@ -39,10 +39,20 @@ def rewrite(source: str) -> str:
         raise ValueError("V139 unexpected atomic counter")
     return source
 
+def canonical_source(raw: bytes) -> bytes:
+    # Git for Windows may check out text using CRLF, while the pinned Git
+    # *blob* is LF. Accept only byte-for-byte original after CRLF -> LF.
+    # Any actual source edit remains a hard failure, never fuzzy patching.
+    if b"\\r\\n" in raw:
+        raw = raw.replace(b"\\r\\n", b"\\n")
+    return raw
+
 def transform(raw: bytes) -> bytes:
-    if git_blob_sha(raw) != BLOB_PIN:
-        raise ValueError("V139 not exact pinned YT1.3 original GPU source")
-    return rewrite(raw.decode("utf-8")).encode("utf-8")
+    source = canonical_source(raw)
+    if git_blob_sha(source) != BLOB_PIN:
+        raise ValueError("V139 not exact pinned YT1.3 original GPU source: " +
+                         git_blob_sha(source))
+    return rewrite(source.decode("utf-8")).encode("utf-8")
 
 def stage(root: Path) -> None:
     target = root.resolve() / PATH
