@@ -1,0 +1,75 @@
+name: YT1.3 V140 original native Ludwig co-op multiplayer wall source and C++ guard
+on:
+  push:
+    branches: [feature/yt130-ludwig-wall-v140-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-ludwig-wall-v140.yml
+      - tools/poc/yharnam/yt130-reference/stage_ludwig_multiplayer_wall_v140.py
+      - tools/poc/yharnam/yt130-reference/test_stage_ludwig_multiplayer_wall_v140.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-native-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          persist-credentials: false
+          submodules: false
+          path: original-yt130
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 3b0a0d8dc86d9ae726e2b0e836a46b4f46a346ed
+          persist-credentials: false
+          submodules: false
+          path: reviewed-upstream-451
+      - name: Source-pin and regression-test the exact original Ludwig multiplayer wall
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_ludwig_multiplayer_wall_v140.py -v
+          python3 -m compileall -q tools/poc/yharnam/yt130-reference/stage_ludwig_multiplayer_wall_v140.py
+          python3 tools/poc/yharnam/yt130-reference/stage_ludwig_multiplayer_wall_v140.py \
+            --original original-yt130 \
+            --reviewed reviewed-upstream-451 \
+            --native-test "$RUNNER_TEMP/native-ludwig-wall.cpp"
+          git -C original-yt130 diff --check
+          git -C original-yt130 diff --name-only > "$RUNNER_TEMP/v140-files.txt"
+          python3 - <<'PY'
+          from pathlib import Path
+          actual=set(Path(__import__("os").environ["RUNNER_TEMP"]).joinpath("v140-files.txt").read_text().splitlines())
+          expected={"emulator/src/core/bloodborne_party.cpp",
+                    "emulator/tests/bloodborne/test_bloodborne_party_controller.cpp"}
+          assert actual==expected, (actual,expected)
+          PY
+          grep -F 'EXPECT_EQ(on(0x22000000), 1)' \
+            original-yt130/emulator/tests/bloodborne/test_bloodborne_party_controller.cpp >/dev/null
+          grep -F '3401801, 3501990,' \
+            original-yt130/emulator/src/core/bloodborne_party.cpp >/dev/null
+          echo SHYT_V140_LUDWIG_ORIGINAL_NATIVE_451_EXACT_SOURCE_AND_TEST_STAGED
+      - name: Compile and execute extracted actual native C++ method (not full game)
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            "$RUNNER_TEMP/native-ludwig-wall.cpp" -o "$RUNNER_TEMP/native-ludwig-wall"
+          "$RUNNER_TEMP/native-ludwig-wall"
+          echo SHYT_V140_ACTUAL_ORIGINAL_MULTIPLAYER_WALL_FUNCTION_CPP_COMPILED_AND_TESTED
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yt130-v140-Ludwig-upstream-451-exact-original-source-diff-NOT-GAMEPLAY
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/v140-files.txt
+            ${{ runner.temp }}/native-ludwig-wall.cpp
