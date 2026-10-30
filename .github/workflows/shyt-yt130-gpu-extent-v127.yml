@@ -40,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends g++ libfmt-dev
+          sudo apt-get install -y --no-install-recommends g++ libfmt-dev libspdlog-dev
           cat > "$RUNNER_TEMP/test_gpu_extent.cpp" <<'CPP'
           #include <cassert>
           #include "video_core/texture_cache/types.h"
