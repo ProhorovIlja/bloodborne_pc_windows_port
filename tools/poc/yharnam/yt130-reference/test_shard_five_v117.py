@@ -134,6 +134,25 @@ class OriginalShardsQoSTests(unittest.TestCase):
             with self.subTest(key=key,value=str(value)[:20]):
                 self.assertNotEqual(run.grade(s,3).get("quality"),
                                     "FULL_GAMEPLAY_SYNTHETIC_ONLY")
+    def test_five_hunter_enemy_owner_cases_use_verified_original_cli(self):
+        # Upstream YT #444 support already exists in the source-exact
+        # stage_five_player_bbload.py. Never pretend default --owners 1
+        # describes five hunters spread across the map.
+        from types import SimpleNamespace
+        args=SimpleNamespace(shadnet=Path("/tmp/shadnet"),
+                             bbload=Path("/tmp/bbload"),
+                             shard_script=Path("/tmp/run_shards.py"),
+                             owners=5)
+        for count in run.OWNER_CASES:
+            with self.subTest(owners=count):
+                args.owners=count
+                cmd=run.command(args,3,39014)
+                self.assertEqual(cmd[cmd.index("--team-size")+1],"5")
+                self.assertEqual(cmd[cmd.index("--players")+1],"200")
+                self.assertIn(f"--owners {count}",cmd[cmd.index("--extra")+1])
+                self.assertIn("--owner-fps 30",cmd[cmd.index("--extra")+1])
+        self.assertEqual(run.OWNER_CASES,(1,3,5))
+
     def test_five_seat_real_200_by_shard_not_two_or_four(self):
         self.assertEqual(run.SIZE,5)
         self.assertEqual(run.POPULATION,200)
