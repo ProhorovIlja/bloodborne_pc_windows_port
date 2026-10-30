@@ -53,7 +53,22 @@ class NativeOwnerTests(unittest.TestCase):
         self.assertIn("direct_egress.RevokeAll();",rewritten)
         self.assertIn("native_shy2_ingress.Revoke(0)",rewritten)
         self.assertIn("native_shy2_egress.Revoke(0)",rewritten)
-        self.assertEqual(rewritten.count("native_signed_route_v136={};"),4)
+        self.assertEqual(rewritten.count("native_signed_route_v136={};"),5)
+        # Reinstallation rekeys atomically under direct->grant->crypto: the
+        # old route and both old AEAD directions must be revoked BEFORE Install.
+        rekey=rewritten.index("// SHYT-V137-FAIL-CLOSED-REKEY")
+        install=rewritten.index("installed=SeamlessHunt::Hybrid::NativeShy2GrantCutoverV106::Install(")
+        self.assertLess(rekey,install)
+        for anchor in ("direct_egress.Revoke(0);",
+                       "native_signed_route_v136={};",
+                       "native_signed_generation_v136=0;",
+                       "native_shy2_ingress.Revoke(0);",
+                       "native_shy2_egress.Revoke(0);"):
+            with self.subTest(rekey_anchor=anchor):
+                self.assertIn(anchor,rewritten[rekey:install])
+        # Both directions are reset before even attempting to derive new
+        # session keys, so failed rekey cannot preserve an obsolete path.
+        self.assertLess(rewritten.index("native_shy2_egress.Revoke(0);",rekey),install)
         self.assertIn("native_signed_generation_v136==shyt_link_generation_v87",rewritten)
         self.assertIn("if(armed) native_signed_generation_v136=generation;",rewritten)
         self.assertEqual(rewritten.count("P2PAuthEpochMs()"),4)
