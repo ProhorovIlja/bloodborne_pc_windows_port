@@ -6,6 +6,7 @@ on:
       - .github/workflows/shyt-yt130-udp-send-probe-v130.yml
       - tools/poc/yharnam/yt130-reference/stage_udp_send_probe_v130.py
       - tools/poc/yharnam/yt130-reference/test_stage_udp_send_probe_v130.py
+      - tools/poc/yharnam/yt130-reference/measure_udp_send_probe_v130.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,10 +21,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Real V125 source-exact regressions
+      - name: Real V130 source-exact UDP send-probe regressions
         run: |
           set -euo pipefail
-          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_udp_fair_read_v125.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_udp_send_probe_v130.py -v
           python -m compileall -q tools/poc/yharnam/yt130-reference/stage_udp_send_probe_v130.py
       - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
         run: |
