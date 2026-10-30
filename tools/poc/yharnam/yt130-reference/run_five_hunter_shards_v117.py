@@ -261,7 +261,7 @@ def run(args) -> int:
             f.write(json.dumps(result, sort_keys=True) + "\n")
     if len(results) == len(cases) and all(
             r["quality"] == "FULL_GAMEPLAY_SYNTHETIC_ONLY" for r in results):
-        print("YT130_V117_BOTH_200_PLAYER_SHARD_RUNS_SYNTHETIC_HEALTH_PASS")
+        print("YT130_V157_REQUESTED_200_PLAYER_SHARD_CASES_SYNTHETIC_HEALTH_PASS")
         return 0
     print("YT130_V117_DIAGNOSTIC_NOT_200_PLAYER_PRODUCTION_CAPACITY")
     return int(args.require_healthy)
