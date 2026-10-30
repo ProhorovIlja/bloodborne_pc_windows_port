@@ -1,0 +1,213 @@
+name: YT1.3 V155 attribute Qt Data wire against strict 200-player five-seat QoS
+on:
+  push:
+    branches: [feature/yt130-server-wire-attribution-v155-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-wire-attribution-v155.yml
+      - tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
+      - tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
+      - tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py
+      - tools/poc/yharnam/yt130-reference/test_stage_five_player_bbload.py
+      - tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py
+      - tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py
+      - tools/poc/yharnam/yt130-reference/test_stage_shard_wire_v155.py
+      - tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
+      - tools/poc/yharnam/yt130-reference/test_stage_world_encode_once_v132.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-v155-wire-reconciled-real-five-owner-hosted-QT
+  cancel-in-progress: false
+jobs:
+  source-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Real V132 source-exact protobuf fanout regression
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_world_encode_once_v132.py -v
+          python -m compileall -q tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_shard_five_v117.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_shard_wire_v155.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_five_player_bbload.py -v
+          python -m compileall -q tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
+      - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" "$RUNNER_TEMP/yt-src"
+          for stage in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'void Service::SendEncodedTo(' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          grep -Fq 'SendEncodedTo(invader->second, envelope, encoded, now_ms)' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          grep -Fq 'std::span<const u8>' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.h"
+          echo SHYT_V132_ORIGINAL_WORLD_RELIABLE_FANOUT_BYTES_SOURCE_STAGED_NO_LOAD_CLAIM
+  real-qt-server:
+    needs: source-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: qt6-yt130-auth-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            qt6-yt130-auth-${{ runner.os }}-
+      - name: Install exact native server prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ ccache pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite redis-server python3-venv
+      - name: Clone source with original protobuf
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          git -C "$RUNNER_TEMP/yt-src" submodule update --init --recursive server/externals/protobuf
+      - name: Apply previously proven staged five-player Qt changes plus V125 only
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" "$RUNNER_TEMP/yt-src"
+          for stage in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          git -C "$RUNNER_TEMP/yt-src" diff -- server/src/bloodborne_world.cpp > "$RUNNER_TEMP/world-v155.diff"
+          grep -F '+void Service::SendEncodedTo(' "$RUNNER_TEMP/world-v155.diff" >/dev/null
+      - name: Actually compile modified original Qt LinkServer and core regressions
+        run: |
+          set -euo pipefail
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          ccache --max-size 1300M
+          cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0" "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache" "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target shadnet test_server_link test_bloodborne_world
+          ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(server_link|bloodborne_world)$'
+          ccache --show-stats
+          echo SHYT_V132_REAL_QT_WORLD_CTESTS_PASS_NOT_CAPACITY
+      - name: Stage authentic original bbload five-hunter game payload counters
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py "$RUNNER_TEMP/yt-src"
+          grep -Fq 'YT130_WIRE_TRAFFIC kind=3' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq '"game_wire_in_packets": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq 'shlex.split(args.extra)' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq 'settings.owners = std::clamp(' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq 'udp_write_failed' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"udp_write_failed": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq '"awaiting_welcome": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'game_receivers += game->Playing() && game->SawGamePackets();' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target bbload
+          test -x "$RUNNER_TEMP/yt-build/bbload"
+          echo SHYT_V132_ORIGINAL_BBLOAD_REAL_CPP_PLAYER_GENERATOR_BUILT
+      - name: Measure real hosted 200-player 5-seat original Qt/Redis, 1 then 5 enemy owners, 1 vs 3 shards
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/yt138-dir-venv"
+          "$RUNNER_TEMP/yt138-dir-venv/bin/pip" install -q --disable-pip-version-check \
+            -r "$RUNNER_TEMP/yt-src/server/directory/requirements.txt"
+          failures=0
+          for owners in 1 5; do
+            echo "SHYT_V155_FIVE_SEAT_REAL_HOSTED_BEGIN_ENEMY_OWNERS=$owners"
+            set +e
+            timeout 340s "$RUNNER_TEMP/yt138-dir-venv/bin/python" \
+              tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py \
+              --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+              --bbload "$RUNNER_TEMP/yt-build/bbload" \
+              --shard-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+              --owners "$owners" --timeout 120 --require-healthy \
+              --output "yt130-v155-five-seat-owners-${owners}.jsonl"
+            rc=$?
+            set -e
+            echo "SHYT_V155_HOSTED_200_OWNER_CASE_RESULT owners=$owners rc=$rc"
+            if [ "$rc" -ne 0 ]; then failures=1; fi
+          done
+          echo "SHYT_V155_SYNTHETIC_QOS_ALL_CASES_PASS_ONLY_IF_RETURN_0"
+          exit "$failures"
+      - name: Diagnose unfinished hosted teams by isolated code, invite and mixed redirect policy
+        if: always()
+        timeout-minutes: 9
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x "$RUNNER_TEMP/yt-build/shadnet" ] || \
+             [ ! -x "$RUNNER_TEMP/yt-build/bbload" ] || \
+             [ ! -x "$RUNNER_TEMP/yt138-dir-venv/bin/python" ] || \
+             [ ! -f "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" ]; then
+            echo SHYT_V155_DIAGNOSTIC_NO_REAL_ORIGINAL_BINARIES_DO_NOT_COUNT_AS_PASS
+            exit 1
+          fi
+          failed=0
+          for cross in code invite mixed; do
+            echo "SHYT_V155_REDIRECT_DIAG_START original_three_shards_join=$cross"
+            set +e
+            timeout 145s "$RUNNER_TEMP/yt138-dir-venv/bin/python" \
+              tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py \
+              --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+              --bbload "$RUNNER_TEMP/yt-build/bbload" \
+              --shard-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+              --owners 1 --three-only --cross "$cross" --timeout 120 \
+              --output "yt130-v155-cross-${cross}.jsonl"
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ]; then failed=1; fi
+            python3 - "$cross" <<'PY'
+          import json,sys
+          from pathlib import Path
+          name=sys.argv[1]
+          p=Path(f"yt130-v155-cross-{name}.jsonl")
+          if not p.exists():
+              print("SHYT_V155_REDIRECT_DIAG_MISSING", name)
+              sys.exit(1)
+          for line in p.read_text().splitlines():
+              x=json.loads(line)
+              print("SHYT_V155_REDIRECT_DIAG",name,
+                    "quality",x.get("quality"),
+                    "playing",x.get("playing"),
+                    "teams",x.get("complete_teams"),
+                    "redirects",x.get("redirects"),
+                    "p99_ms",x.get("redirect_ms_p99"),
+                    "steady_pct",x.get("steady_delivered_pct"),
+                    "shards",[(z.get("shard"),z.get("players_at_end"))
+                              for z in x.get("per_shard",[])],flush=True)
+          PY
+          done
+          echo SHYT_V155_THREE_SHARD_JOIN_MODE_DIAGNOSTIC_ONLY_NOT_SERVER_CAPACITY
+          exit "$failed"
+      - name: Preserve all strict game UDP QoS stages even if performance fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-V155-5-seat-200-player-owner-and-shard-evidence-NOT-RELEASE
+          path: |
+            yt130-v155-five-seat-owners-*.jsonl
+            yt130-v155-cross-*.jsonl
+          retention-days: 7
+          if-no-files-found: warn
+
