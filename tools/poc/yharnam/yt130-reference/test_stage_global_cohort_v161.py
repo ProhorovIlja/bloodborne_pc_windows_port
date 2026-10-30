@@ -137,11 +137,12 @@ class GlobalCohortV161(unittest.TestCase):
         # no one of 4, 8 or 16 worker topologies may silently lose one.
         for processes in (4,8,16):
             with self.subTest(processes=processes):
-                self.assertEqual(200 % processes,0)
-                n=200//processes
+                teams_per_worker=[40//processes+(1 if i<40%processes else 0)
+                                  for i in range(processes)]
+                self.assertEqual(sum(teams_per_worker),40)
                 counts={sec:(500,500) for sec in range(10,40)}
-                rows=[worker(12_000_000,42_000_000,counts,games=n)
-                      for _ in range(processes)]
+                rows=[worker(12_000_000,42_000_000,counts,games=teams*5)
+                      for teams in teams_per_worker]
                 self.assertEqual(inspect(rows,players=200,processes=processes)["cohort_quality"],
                                  "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
                 self.assertEqual(inspect(rows[:-1],players=200,processes=processes)["cohort_quality"],
