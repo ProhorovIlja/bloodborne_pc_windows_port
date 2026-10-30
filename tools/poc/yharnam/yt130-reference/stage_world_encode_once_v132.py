@@ -46,7 +46,7 @@ void Service::SendTo(Member& member, const bbcoop::Envelope& envelope, qint64 no
     SendEncodedTo(member, encoded, now_ms);
 }"""
 HEADER_SENDTO="    void SendTo(Member& member, const bbcoop::Envelope& envelope, qint64 now_ms);"
-HEADER_REPLACE="""    void SendEncodedTo(Member& member, std::span<const BloodborneCoop::u8> encoded,
+HEADER_REPLACE="""    void SendEncodedTo(Member& member, std::span<const u8> encoded,
                        qint64 now_ms);
     void SendTo(Member& member, const bbcoop::Envelope& envelope, qint64 now_ms);"""
 HEADER_INCLUDE="#include <optional>\n"
