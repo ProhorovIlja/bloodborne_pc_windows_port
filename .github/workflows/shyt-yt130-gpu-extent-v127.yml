@@ -1,0 +1,64 @@
+name: YT 1.3 original native GPU upstream #452 extent safety backport
+on:
+  push:
+    branches: [feature/yt130-gpu-subresource-containment-v127-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-gpu-extent-v127.yml
+      - tools/poc/yharnam/yt130-reference/stage_gpu_extent_v127.py
+      - tools/poc/yharnam/yt130-reference/test_stage_gpu_extent_v127.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-v127-native-gpu-extent
+  cancel-in-progress: false
+jobs:
+  exact-source-and-real-cpp-header:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Stage guard and drift tests without game assets
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_gpu_extent_v127.py -v
+          python -m py_compile tools/poc/yharnam/yt130-reference/stage_gpu_extent_v127.py
+      - name: Get exact original native YT 1.3 GPU source
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          python tools/poc/yharnam/yt130-reference/stage_gpu_extent_v127.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 2
+          grep -Fq 'bool Contains(const SubresourceExtent& other)' "$RUNNER_TEMP/yt-src/bbport/gpu/shadps4/video_core/texture_cache/types.h"
+          grep -Fq '!cache_image.info.resources.Contains(requested_info.resources)' "$RUNNER_TEMP/yt-src/bbport/gpu/shadps4/video_core/texture_cache/texture_cache.cpp"
+          grep -Fq '!cache_image.info.resources.Contains(image_info.resources)' "$RUNNER_TEMP/yt-src/bbport/gpu/shadps4/video_core/texture_cache/texture_cache.cpp"
+      - name: Compile and execute actual source header dimension test in native C++20
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++ libfmt-dev
+          cat > "$RUNNER_TEMP/test_gpu_extent.cpp" <<'CPP'
+          #include <cassert>
+          #include "video_core/texture_cache/types.h"
+          using VideoCore::SubresourceExtent;
+          int main() {
+              const SubresourceExtent full{.levels = 5, .layers = 6};
+              assert(full.Contains(SubresourceExtent{.levels = 5, .layers = 6}));
+              assert(full.Contains(SubresourceExtent{.levels = 4, .layers = 6}));
+              assert(full.Contains(SubresourceExtent{.levels = 5, .layers = 4}));
+              assert(!full.Contains(SubresourceExtent{.levels = 6, .layers = 1}));
+              assert(!full.Contains(SubresourceExtent{.levels = 1, .layers = 7}));
+              const SubresourceExtent short_layers{.levels = 7, .layers = 2};
+              assert(!short_layers.Contains(SubresourceExtent{.levels = 6, .layers = 3}));
+              const SubresourceExtent short_mips{.levels = 2, .layers = 8};
+              assert(!short_mips.Contains(SubresourceExtent{.levels = 3, .layers = 1}));
+              return 0;
+          }
+          CPP
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -I"$RUNNER_TEMP/yt-src/bbport/gpu/shadps4" -o "$RUNNER_TEMP/test_gpu_extent" "$RUNNER_TEMP/test_gpu_extent.cpp"
+          "$RUNNER_TEMP/test_gpu_extent"
+          echo SHYT_V127_ACTUAL_CPP20_ORIGINAL_GPU_HEADER_CONTAINMENT_TEST_PASS_NO_FULL_GAME_BUILD
