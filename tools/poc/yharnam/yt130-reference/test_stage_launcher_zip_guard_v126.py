@@ -35,6 +35,20 @@ def archive(names=FILES, link=None):
                 z.writestr(member, b"target")
             else:
                 z.writestr(name, b"valid-" + name.encode("ascii", errors="replace"))
+    # Python's ZipInfo normalizes backslashes to forward slashes when
+    # *creating* an archive on Windows. A received archive from an outside
+    # process can still have literal backslashes. Rewrite only ZIP metadata
+    # filename bytes (equal lengths; CRC covers file contents, not names).
+    if any(chr(92) in name for name in names):
+        raw = out.getvalue()
+        for name in names:
+            if chr(92) not in name:
+                continue
+            original = name.encode("ascii")
+            normalized = name.replace(chr(92), "/").encode("ascii")
+            if raw.count(original) == 0 and raw.count(normalized) == 2:
+                raw = raw.replace(normalized, original)
+        out = io.BytesIO(raw)
     out.seek(0)
     return zipfile.ZipFile(out)
 
