@@ -21,7 +21,9 @@ CLASS_NEW=CLASS_OLD+('  // '+MARK+': synthetic local seat-pair indices only.\n'
   '  quint64 cohort_unknown_senders = 0;\n'
   '  // One 64-sequence receipt bitmap per synthetic directed route.\n'
   '  std::map<u32, std::pair<u32, u64>> cohort_seen_sequences;\n'
-  '  quint64 cohort_nonunique_receipts = 0;\n')
+  '  quint64 cohort_nonunique_receipts = 0;\n'
+  '  // Source-send-time seconds for all-run errors, to isolate stable QoS.\n'
+  '  std::map<s64, std::pair<quint64, quint64>> cohort_bad_epochs;\n')
 GAME_SEAT_FIELD_OLD = '  int seat;\n'
 GAME_SEAT_FIELD_NEW = GAME_SEAT_FIELD_OLD+('  // Synthetic team names remain in this process, never exported.\n'
   '  std::vector<std::string> cohort_sender_names;\n')
@@ -76,8 +78,10 @@ RECEIVED_NEW=RECEIVED_OLD+'''    // The original frame's synthetic sender name s
         break;
       }
     }
+    const s64 sent_bucket = (static_cast<s64>(sent) / 1'000'000) * 1'000'000;
     if (sender_seat < 0) {
       ++load.cohort_unknown_senders;
+      ++load.cohort_bad_epochs[sent_bucket].first;
     } else {
       const u32 route = static_cast<u32>(
           (team * load.settings.team_size + sender_seat) * load.settings.team_size + seat);
@@ -87,6 +91,7 @@ RECEIVED_NEW=RECEIVED_OLD+'''    // The original frame's synthetic sender name s
       } else {
         // Duplicate or >64-packet reordering is not a second delivery.
         ++load.cohort_nonunique_receipts;
+        ++load.cohort_bad_epochs[sent_bucket].second;
       }
     }
 '''
@@ -101,12 +106,22 @@ FINISH_NEW='''    QJsonArray directed_json;
           {"sent_entries", static_cast<double>(counts.first)},
           {"received_entries", static_cast<double>(counts.second)}});
     }
+    // These errors are counted across ALL phases for diagnostics, but only
+    // their send-time overlap with the global steady cohort can fail QoS.
+    QJsonArray bad_epoch_json;
+    for (const auto& [stamp, counts] : cohort_bad_epochs) {
+      bad_epoch_json.append(QJsonObject{
+          {"start_us", static_cast<double>(stamp)},
+          {"unknown_senders", static_cast<double>(counts.first)},
+          {"nonunique_receipts", static_cast<double>(counts.second)}});
+    }
 '''+FINISH_OLD
 JSON_OLD='''        {"cohort_epoch_entries", cohort_json},
 '''
 JSON_NEW=JSON_OLD+'''        {"cohort_directed_entries", directed_json},
         {"cohort_unknown_senders", static_cast<double>(cohort_unknown_senders)},
         {"cohort_nonunique_receipts", static_cast<double>(cohort_nonunique_receipts)},
+        {"cohort_bad_epoch_entries", bad_epoch_json},
 '''
 RUN_ANCHOR='''        per_shard = []
         for i in range(args.shards):
@@ -132,10 +147,36 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                 rows = r.get("cohort_directed_entries")
                 unknown = r.get("cohort_unknown_senders")
                 nonunique = r.get("cohort_nonunique_receipts")
-                if (type(rows) is not list or
+                bad_rows = r.get("cohort_bad_epoch_entries")
+                if (type(rows) is not list or type(bad_rows) is not list or
                         any(type(v) not in (int, float) or
-                            not (0 <= v < 2**53) or int(v) != v or v != 0
+                            not (0 <= v < 2**53) or int(v) != v
                             for v in (unknown, nonunique)) or worker_teams <= 0):
+                    directed_valid = False
+                    break
+                bad_unknown = bad_nonunique = 0
+                bad_seen = set()
+                for bad in bad_rows:
+                    if (type(bad) is not dict or
+                            set(bad) != {"start_us", "unknown_senders", "nonunique_receipts"} or
+                            any(type(bad.get(k)) not in (int, float) or
+                                not (0 <= bad[k] < 2**53) or int(bad[k]) != bad[k]
+                                for k in ("start_us", "unknown_senders", "nonunique_receipts"))):
+                        directed_valid = False
+                        break
+                    bad_sec = int(bad["start_us"])
+                    if (bad_sec % 1_000_000 or bad_sec in bad_seen or
+                            int(bad["unknown_senders"]) + int(bad["nonunique_receipts"]) == 0):
+                        directed_valid = False
+                        break
+                    bad_seen.add(bad_sec)
+                    bad_unknown += int(bad["unknown_senders"])
+                    bad_nonunique += int(bad["nonunique_receipts"])
+                    if cohort_start_us <= bad_sec < cohort_end_us:
+                        directed_valid = False
+                        break
+                if (not directed_valid or bad_unknown != unknown or
+                        bad_nonunique != nonunique):
                     directed_valid = False
                     break
                 seen = set()
