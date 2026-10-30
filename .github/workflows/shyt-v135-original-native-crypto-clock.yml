@@ -1,0 +1,77 @@
+name: YT V135 actual composed native P2P auth clock and V134 signed route, DIRECT OFF
+on:
+  push:
+    branches: [feature/shyt-v135-native-p2p-utc-clock-20261030]
+    paths:
+      - .github/workflows/shyt-v135-original-native-crypto-clock.yml
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_clock_domain_v135.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_clock_domain_v135.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_signed_nat_route_v134.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt-v135-composed-native-clock
+  cancel-in-progress: false
+jobs:
+  original-original-native-game-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-original-game
+          persist-credentials: false
+      - name: Actual original P2P time-domain fail-closed Python regressions
+        run: |
+          python3 -m unittest discover \
+            -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p test_patch_native_clock_domain_v135.py -v
+      - name: Actually compose pinned native Windows/Linux game sources with V135
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-original-game --repo . --out "$RUNNER_TEMP/yt-v135-composed"
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"yt-v135-composed"
+          game="emulator/src/core/libraries/network/p2p_sockets.cpp"
+          header="emulator/src/core/libraries/network/sh_signed_nat_route_v134.hpp"
+          manifest=json.loads((root/"SEAMLESS-HUNT-COMPOSE-MANIFEST.json").read_text())
+          code=(root/game).read_text()
+          assert code.count("SHYT-V135-NATIVE-AUTH-UTC-CLOCK")==1
+          assert code.count("P2PAuthEpochMs()")==3
+          assert code.count("P2PNowMs() < link_cut_until_ms")>=1
+          assert code.count("std::chrono::system_clock::now()")>=1
+          assert code.count("std::chrono::steady_clock::now()")>=1
+          assert "native_shy2_ingress.Receive(" in code
+          assert "native_shy2_egress.Seal(" in code
+          assert "direct_egress.TrySend(" in code
+          assert "P2PAuthEpochMs()) ==" in code
+          assert code.count("direct_egress.Arm(")==0
+          assert code.count("native_shy2_ingress.Arm(")==0
+          assert code.count("SHYT-V92-ORIGINAL-SOCKET-SIGNED-PROBE")>=1
+          assert "SignedNatRouteLeaseV134" in (root/header).read_text()
+          for name in [game,header]:
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest()==manifest["sha256"][name]
+          assert any("V135 real native P2PTransport UTC" in entry for entry in manifest["applied"])
+          assert manifest.get("release_blockers"), "Original game hard release blockers must stay explicit"
+          print("SHYT_V135_ACTUAL_ORIGINAL_GAME_COMPOSE_SOURCE_AUTH_CLOCK_AND_DIRECT_OFF_PASS")
+          PY
+      - name: Preserve source provenance for audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-v135-native-composer-source-provenance-INTERNAL
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            __not_an_artifact_placeholder__
