@@ -22,7 +22,7 @@ READER_ANCHOR = """        per_shard = []
         for i in range(args.shards):
             steady = samples[i][len(samples[i]) // 3:] or samples[i]
 """
-READER_PATCH = """        # SHYT-V155-ORIGINAL-QT-ANONYMOUS-DATA-WIRE: only bounded
+READER_PATCH = r"""        # SHYT-V155-ORIGINAL-QT-ANONYMOUS-DATA-WIRE: only bounded
         # counters of the real LinkServer wire kind 3 (game Data) sampled
         # every 5s. No identifiers, payload, or IP addresses retained.
         wire_pattern = re.compile(
