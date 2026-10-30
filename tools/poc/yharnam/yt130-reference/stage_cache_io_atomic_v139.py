@@ -43,8 +43,8 @@ def canonical_source(raw: bytes) -> bytes:
     # Git for Windows may check out text using CRLF, while the pinned Git
     # *blob* is LF. Accept only byte-for-byte original after CRLF -> LF.
     # Any actual source edit remains a hard failure, never fuzzy patching.
-    if b"\\r\\n" in raw:
-        raw = raw.replace(b"\\r\\n", b"\\n")
+    if b"\r\n" in raw:
+        raw = raw.replace(b"\r\n", b"\n")
     return raw
 
 def transform(raw: bytes) -> bytes:
