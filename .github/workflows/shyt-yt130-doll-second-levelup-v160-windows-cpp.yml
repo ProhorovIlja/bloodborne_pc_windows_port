@@ -192,7 +192,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'V160 original reviewed native Doll source drift' }
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
           if ($LASTEXITCODE -ne 0) { throw 'V162 source-exact upstream Doll end repair regression failed' }
-          python tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-upstream --reviewed reviewed-yt471
+          python tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-upstream --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
           if ($LASTEXITCODE -ne 0) { throw 'V162 reviewed original game source drift' }
           git -C pinned-upstream diff --check
           if ($LASTEXITCODE -ne 0) { throw 'V151 staged original game source diff whitespace error' }
