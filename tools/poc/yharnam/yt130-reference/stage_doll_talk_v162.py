@@ -11,6 +11,8 @@ import subprocess
 
 ORIGINAL = "0645740a33ae21c56df3b4a0d9777086dbca6053"
 REVIEWED = "4a55f02c48207770273e0cf0ed5d06e85a9143e5"
+PREVIOUS = "b18c5f371a19ca9a605e8fc40f8a57876ed12aac"
+MIDDLE = "a64214d4875ff7cbe735b155e8b075261891e1cc"
 ROOT = "emulator/"
 FILES = {
     "src/core/bloodborne_party.cpp": ("5186b4ed9fa9387752f4dc21362950d70d062505", "b1b13cb0063188231b932e64bb66efa26644330d"),
@@ -90,10 +92,26 @@ def git(root, *args):
 def blob(data):
     return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\x00" + data).hexdigest()
 
-def stage(original, reviewed):
-    original, reviewed = original.resolve(strict=True), reviewed.resolve(strict=True)
-    if git(original, "rev-parse", "HEAD") != ORIGINAL or git(reviewed, "rev-parse", "HEAD") != REVIEWED:
-        raise ValueError("V162 original or upstream reviewed commit mismatch")
+def stage(original, middle, reviewed):
+    original, middle, reviewed = (p.resolve(strict=True) for p in (original, middle, reviewed))
+    if (git(original, "rev-parse", "HEAD") != ORIGINAL or
+            git(middle, "rev-parse", "HEAD") != MIDDLE or
+            git(reviewed, "rev-parse", "HEAD") != REVIEWED or
+            git(middle, "rev-parse", PREVIOUS) != PREVIOUS):
+        raise ValueError("V162 original or intermediate/upstream reviewed commit mismatch")
+    # Original V160 pins the FIRST #468 commit, which did not yet implement
+    # DollBlessingStepFor begin/end. Apply exactly the two later #468 commits
+    # before #471; using #471 by itself is a broken and unbuildable half-port.
+    paths = [ROOT + name for name in FILES]
+    delta = subprocess.check_output(
+        ["git", "-C", str(middle), "diff", "--no-ext-diff", "--binary",
+         PREVIOUS, MIDDLE, "--", *paths])
+    changed_paths = git(middle, "diff", "--name-only", PREVIOUS, MIDDLE, "--", *paths).splitlines()
+    if set(changed_paths) != set(paths) or not delta or b"Binary files" in delta:
+        raise ValueError("V162 intermediate #468 changed-file scope mismatch")
+    for args in (["--check", "-"], ["-"]):
+        subprocess.run(["git", "-C", str(original), "apply", *args],
+                       input=delta, check=True)
     changed = []
     for name, (original_blob, reviewed_blob) in FILES.items():
         path = ROOT + name
@@ -118,6 +136,7 @@ def stage(original, reviewed):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--original", type=Path, required=True)
+    parser.add_argument("--middle", type=Path, required=True)
     parser.add_argument("--reviewed", type=Path, required=True)
     a = parser.parse_args()
-    stage(a.original, a.reviewed)
+    stage(a.original, a.middle, a.reviewed)
