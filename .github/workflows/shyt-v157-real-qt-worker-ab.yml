@@ -4,6 +4,8 @@ on:
     branches: [feature/yt130-server-wire-attribution-v155-20261030]
     paths:
       - .github/workflows/shyt-v157-real-qt-worker-ab.yml
+      - tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py
+      - tools/poc/yharnam/yt130-reference/test_stage_qt_receive_v158.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,6 +28,7 @@ jobs:
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_shard_five_v117.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_shard_wire_v155.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_lobby_notice_v156.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_qt_receive_v158.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_five_player_bbload.py -v
           python -m compileall -q tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
       - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
@@ -103,7 +106,9 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py "$RUNNER_TEMP/yt-src"
           grep -Fq 'team_name_absent' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq 'game_frame_decoded' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
           grep -Fq '"team_total_notices": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq 'YT130_WIRE_TRAFFIC kind=3' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq '"game_wire_in_packets": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
@@ -170,8 +175,17 @@ jobs:
                   raise SystemExit("INVALID_A_B_FIXED_POPULATION_OR_WORKER_COUNT")
               if r.get("quality","").startswith(("INVALID_","MISSING_","WRONG_")):
                   raise SystemExit("MISSING_SOURCE_VERIFIED_MEASUREMENT")
-              if "game_wire_in_packets" not in r or "team_name_absent" not in r:
-                  raise SystemExit("MISSING_QT_WIRE_AND_ORIGINAL_LOBBY_REFUSALS")
+              if any(k not in r for k in (
+                  "game_wire_in_packets", "team_name_absent",
+                  "game_data_datagrams_received", "game_data_decode_failed",
+                  "game_frame_decode_failed", "game_frame_bad_header",
+                  "game_frame_short_entries", "game_frame_decoded",
+                  "udp_read_failed", "udp_read_short")):
+                  raise SystemExit("MISSING_QT_WIRE_OR_REAL_CLIENT_RECEIVE_DIAGNOSTICS")
+              if (r["game_frame_decoded"] + r["game_data_decode_failed"] +
+                  r["game_frame_decode_failed"] + r["game_frame_bad_header"]
+                  != r["game_data_datagrams_received"]):
+                  raise SystemExit("QT_DATA_FRAME_RECEIVE_COUNTS_INCONSISTENT")
               print("SHYT_V157_REAL_QT_RECEIVER_PROCESS_AB_DIAGNOSTIC_ONLY",
                   "shards",shard,"owners",owner,"load_processes",workers,
                   "quality",r.get("quality"),"playing",r.get("playing"),
@@ -183,7 +197,14 @@ jobs:
                   "qt_data_in",r.get("game_wire_in_packets"),
                   "qt_data_out",r.get("game_wire_out_packets"),
                   "name_missing",r.get("team_name_absent"),
-                  "lookup_throttled",r.get("team_lookup_throttled"))
+                  "lookup_throttled",r.get("team_lookup_throttled"),
+                  "qt_client_udp_read_failed",r.get("udp_read_failed"),
+                  "qt_client_udp_read_short",r.get("udp_read_short"),
+                  "qt_client_game_data_frames",r.get("game_data_datagrams_received"),
+                  "qt_client_game_frames_decoded",r.get("game_frame_decoded"),
+                  "qt_client_data_decode_failed",r.get("game_data_decode_failed"),
+                  "qt_client_frame_decode_failed",r.get("game_frame_decode_failed"),
+                  "qt_client_frame_short_entries",r.get("game_frame_short_entries"))
           print("SHYT_V157_AB_REPORTS_COMPLETE_THIS_DOES_NOT_PROVE_99PCT_NETWORK_QOS")
           PY
       - name: Preserve 4/8/16 worker real 200-player Qt results even if diagnostics fail
