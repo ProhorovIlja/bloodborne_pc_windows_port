@@ -12,6 +12,8 @@ import argparse
 import hashlib
 from pathlib import Path
 import subprocess
+import stage_doll_own_flag_v151 as donor151
+import stage_doll_second_levelup_v160 as donor160
 
 ORIGINAL="0645740a33ae21c56df3b4a0d9777086dbca6053"
 PREVIOUS="b18c5f371a19ca9a605e8fc40f8a57876ed12aac"
@@ -144,10 +146,19 @@ def verify_staged(name,staged,reviewed):
     if name==TRAVEL and (TICK_OLD in staged or TICK_NEW not in staged):
         raise ValueError("V162 original game calls old Doll tick or omits begin/end consumption")
 
-def stage(original,prior,middle,reviewed):
-    original,prior,middle,reviewed=(x.resolve(strict=True)
-                                   for x in (original,prior,middle,reviewed))
+def check_original_stage(name,actual,original,donor151_text,donor160_text):
+    """Fail closed if ANY byte outside the reviewed V151+V160 hunks drifted."""
+    full_path=ROOT+name
+    expected_151=donor151.apply(full_path,original,donor151_text)
+    expected_160=donor160.patch(full_path,expected_151,donor160_text)
+    if actual!=expected_160:
+        raise ValueError("V162 full original working tree differs from exact V151+V160 source: "+full_path)
+
+def stage(original,donor151_root,prior,middle,reviewed):
+    original,donor151_root,prior,middle,reviewed=(x.resolve(strict=True)
+                                    for x in (original,donor151_root,prior,middle,reviewed))
     if (git(original,"rev-parse","HEAD")!=ORIGINAL or
+            git(donor151_root,"rev-parse","HEAD")!=donor151.REVIEWED_PIN or
             git(prior,"rev-parse","HEAD")!=PREVIOUS or
             git(middle,"rev-parse","HEAD")!=MIDDLE or
             git(reviewed,"rev-parse","HEAD")!=REVIEWED):
@@ -164,8 +175,30 @@ def stage(original,prior,middle,reviewed):
         reviewed_bytes=src.read_bytes().replace(b"\r\n",b"\n")
         if blob(reviewed_bytes)!=reviewed_sha:
             raise ValueError("V162 reviewed file bytes differ from pinned Git blob: "+file)
+        # Verify the complete staged bytes, not just our four fragments.
+        # Original Git HEAD is pinned and must not be substituted with a
+        # modified index/worktree as the baseline for source correctness.
+        pristine=subprocess.check_output(
+            ["git","-C",str(original),"show","HEAD:"+file])
+        pristine=pristine.replace(b"\r\n",b"\n")
+        if blob(pristine)!=original_sha:
+            raise ValueError("V162 Git HEAD original native file bytes drift: "+file)
+        donor151_path=donor151_root/file
+        prior_path=prior/file
+        if (not donor151_path.is_file() or donor151_path.is_symlink() or
+                not prior_path.is_file() or prior_path.is_symlink() or
+                git(donor151_root,"rev-parse","HEAD:"+file)!=donor151.FILES[file][1] or
+                git(prior,"rev-parse","HEAD:"+file)!=donor160.FILES[file][1]):
+            raise ValueError("V162 previous donor Git blobs missing or changed: "+file)
+        donor151_bytes=donor151_path.read_bytes().replace(b"\r\n",b"\n")
+        prior_bytes=prior_path.read_bytes().replace(b"\r\n",b"\n")
+        if (blob(donor151_bytes)!=donor151.FILES[file][1] or
+                blob(prior_bytes)!=donor160.FILES[file][1]):
+            raise ValueError("V162 previous donor working tree bytes drift: "+file)
         base=dst.read_bytes().replace(b"\r\n",b"\n").decode("utf-8")
-        prior_text=(prior/file).read_text(encoding="utf-8")
+        prior_text=prior_bytes.decode("utf-8")
+        check_original_stage(name,base,pristine.decode("utf-8"),
+                             donor151_bytes.decode("utf-8"),prior_text)
         middle_text=(middle/file).read_text(encoding="utf-8")
         reviewed_text=reviewed_bytes.decode("utf-8")
         new=patch(name,base,prior_text,reviewed_text,middle_text)
@@ -179,7 +212,7 @@ def stage(original,prior,middle,reviewed):
 
 if __name__=="__main__":
     p=argparse.ArgumentParser()
-    for name in ("original","prior","middle","reviewed"):
+    for name in ("original","donor151","prior","middle","reviewed"):
         p.add_argument("--"+name,type=Path,required=True)
     a=p.parse_args()
-    stage(a.original,a.prior,a.middle,a.reviewed)
+    stage(a.original,a.donor151,a.prior,a.middle,a.reviewed)
