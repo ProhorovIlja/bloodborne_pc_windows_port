@@ -154,6 +154,7 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
         if (status not in ("NO_VERIFIED_DIRECTED_GAME_COHORT",
                            "INVALID_DIRECTED_GAME_COHORT",
                            "DIRECTED_GAME_COHORT_DELIVERY_DEGRADED",
+                           "DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN",
                            "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY") or
                 type(item["directed_scope"]) is not str or
                 "NOT a production QoS pass" not in item["directed_scope"] or
@@ -161,6 +162,7 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
                     for k in directed_fields[1:4])):
             return {"quality": "INVALID_DIRECTED_GAME_EVIDENCE"}
         reliable = status in ("DIRECTED_GAME_COHORT_DELIVERY_DEGRADED",
+                              "DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN",
                               "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
         if reliable and (
                 item["cohort_quality"] not in (
@@ -251,6 +253,8 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
         quality = "CROSS_SHARD_REDIRECT_FAILED"
     elif any(r["game_wire_sample_windows"] == 0 for r in rows):
         quality = "QT_GAME_DATA_WIRE_SAMPLES_MISSING"
+    elif has_directed and item["directed_quality"] == "DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN":
+        quality = "DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN"
     elif has_directed and item["directed_quality"] != "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY":
         quality = "DIRECTED_GAME_COHORT_UNHEALTHY"
     elif require_directed and item["cohort_packets_sent"] < minimum_original_source_entries(
