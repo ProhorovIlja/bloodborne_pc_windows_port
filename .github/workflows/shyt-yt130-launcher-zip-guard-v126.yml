@@ -70,6 +70,22 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'V126 patch failed source-exact integration' }
           python -m compileall -q pinned-upstream/bbport/launcher
           if ($LASTEXITCODE -ne 0) { throw 'Integrated original launcher failed to parse' }
+          # The guard must accept the REAL 1048-entry original YT1.3
+          # Windows portable release, not only tiny synthetic unit fixtures.
+          @'
+          from pathlib import Path
+          import hashlib
+          import sys
+          from zipfile import ZipFile
+          sys.path.insert(0, str(Path("pinned-upstream/bbport/launcher").resolve()))
+          import bbport_launcher_win
+          archive = Path("kit-source/bbport-windows.zip")
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == "ee077748b3762db928d06718eea701fb1b0d0cedb0a3eac112bb9040ff0081bc"
+          with ZipFile(archive) as z:
+              assert bbport_launcher_win.validate_bbport_update_zip(z)
+              print("SHYT_V126_REAL_1048_ENTRY_PINNED_WINDOWS_ZIP_GUARD_ACCEPTED", len(z.infolist()))
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'V126 rejected actual original YT1.3 Windows package' }
           @'
           from pathlib import Path
           from zipfile import ZipFile
