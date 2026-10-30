@@ -39,6 +39,20 @@ def grade(item: dict, expected_shards: int) -> dict:
         return {"quality": "INVALID_PER_SHARD_EVIDENCE"}
     if {r["shard"] for r in rows} != {f"lt-{i}" for i in range(expected_shards)}:
         return {"quality": "INVALID_PER_SHARD_EVIDENCE"}
+    # V155: real original Qt LinkServer traffic by source wire kind 3.
+    # These are 5-second samples of the entire run, NOT exact steady-state
+    # client delivery counts and not proof of successful remote receipt.
+    wire_fields = ("game_wire_in_packets", "game_wire_out_packets",
+                   "game_wire_in_bytes", "game_wire_out_bytes",
+                   "game_wire_sample_windows")
+    for key in wire_fields:
+        value = item.get(key)
+        if type(value) is not int or value < 0:
+            return {"quality": "MISSING_REAL_QT_WIRE_COUNTERS", "field": key}
+        if any(type(row.get(key)) is not int or row[key] < 0 for row in rows):
+            return {"quality": "INVALID_QT_SHARD_WIRE_COUNTERS", "field": key}
+        if value != sum(row[key] for row in rows):
+            return {"quality": "QT_WIRE_COUNTER_TOTAL_MISMATCH", "field": key}
     for row in rows:
         cpu = row.get("link_thread_cpu_avg")
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
@@ -95,6 +109,8 @@ def grade(item: dict, expected_shards: int) -> dict:
     elif (expected_shards > 1 and
           (item["redirects"] < 1 or item["redirect_ms_p99"] > 2000)):
         quality = "CROSS_SHARD_REDIRECT_FAILED"
+    elif any(r["game_wire_sample_windows"] == 0 for r in rows):
+        quality = "QT_GAME_DATA_WIRE_SAMPLES_MISSING"
     else:
         quality = "FULL_GAMEPLAY_SYNTHETIC_ONLY"
     return {
@@ -104,6 +120,12 @@ def grade(item: dict, expected_shards: int) -> dict:
         "awaiting_welcome": item["awaiting_welcome"],
         "udp_write_failed": item["udp_write_failed"],
         "udp_write_short": item["udp_write_short"],
+        "game_wire_in_packets": item["game_wire_in_packets"],
+        "game_wire_out_packets": item["game_wire_out_packets"],
+        "game_wire_in_bytes": item["game_wire_in_bytes"],
+        "game_wire_out_bytes": item["game_wire_out_bytes"],
+        "game_wire_sample_windows": item["game_wire_sample_windows"],
+        "wire_scope": "Qt LinkServer 5s samples over whole run; not steady client delivery",
         "complete_teams": item["complete_teams"], "packets_sent": sent,
         "steady_quality": steady_quality,
         "steady_workers": item["steady_workers"],
@@ -117,7 +139,12 @@ def grade(item: dict, expected_shards: int) -> dict:
         "udp_buffer_drops_host_wide": item["udp_buffer_drops"],
         "per_shard": [{
             "shard": r["shard"], "players_at_end": r.get("players_at_end"),
-            "link_thread_cpu_avg": r["link_thread_cpu_avg"]
+            "link_thread_cpu_avg": r["link_thread_cpu_avg"],
+            "game_wire_in_packets": r["game_wire_in_packets"],
+            "game_wire_out_packets": r["game_wire_out_packets"],
+            "game_wire_in_bytes": r["game_wire_in_bytes"],
+            "game_wire_out_bytes": r["game_wire_out_bytes"],
+            "game_wire_sample_windows": r["game_wire_sample_windows"]
         } for r in rows],
     }
 
