@@ -26,8 +26,8 @@ READER_PATCH = """        # SHYT-V155-ORIGINAL-QT-ANONYMOUS-DATA-WIRE: only boun
         # counters of the real LinkServer wire kind 3 (game Data) sampled
         # every 5s. No identifiers, payload, or IP addresses retained.
         wire_pattern = re.compile(
-            r'YT130_WIRE_TRAFFIC kind=3 in_packets=(\\d+) in_bytes=(\\d+) '
-            r'out_packets=(\\d+) out_bytes=(\\d+)(?!\\d)')
+            r'YT130_WIRE_TRAFFIC kind=3 in_packets=(\d+) in_bytes=(\d+) '
+            r'out_packets=(\d+) out_bytes=(\d+)(?!\d)')
         def data_wire(shard_index):
             packets_in = packets_out = bytes_in = bytes_out = windows = 0
             path = os.path.join(root, f"shard{shard_index}", "shadnet.log")
