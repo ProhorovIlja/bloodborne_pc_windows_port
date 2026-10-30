@@ -21,6 +21,13 @@ def sample(shards=3):
         udp_write_failed=0, udp_write_short=0,
         team_name_absent=0, team_name_ambiguous=0,
         team_lookup_throttled=0, team_other_notice=0, team_total_notices=0,
+        udp_read_failed=0, udp_read_short=0,
+        game_data_datagrams_received=9000, game_data_decode_failed=0,
+        game_frame_decode_failed=0, game_frame_bad_header=0,
+        game_frame_short_entries=0, game_frame_decoded=9000,
+        team_no_invite=0, team_no_code=0, team_full=0,
+        team_already_joined=0, team_create_first=0,
+        team_world_unavailable=0, team_unknown_other=0,
         game_wire_in_packets=shards*1000,
         game_wire_out_packets=shards*3000,
         game_wire_in_bytes=shards*64000,
@@ -157,6 +164,49 @@ class OriginalShardsQoSTests(unittest.TestCase):
         s=sample(3)
         s["redirect_ms_p99"]=3000
         self.assertEqual(run.grade(s,3)["quality"],"CROSS_SHARD_REDIRECT_FAILED")
+    def test_v158_v159_original_receive_counters_reconciled_in_durable_json(self):
+        for shards in (1,3):
+            data=sample(shards)
+            result=run.grade(data,shards)
+            self.assertEqual(result["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
+            self.assertEqual(result["game_frame_decoded"],9000)
+            self.assertEqual(result["game_data_datagrams_received"],9000)
+            data["team_other_notice"]=5
+            data["team_no_invite"]=2
+            data["team_already_joined"]=3
+            result=run.grade(data,shards)
+            self.assertEqual(result["team_no_invite"],2)
+            self.assertEqual(result["team_already_joined"],3)
+            self.assertEqual(result["team_other_notice"],5)
+            for field in ("udp_read_failed","udp_read_short",
+                          "game_data_datagrams_received","game_data_decode_failed",
+                          "game_frame_decode_failed","game_frame_bad_header",
+                          "game_frame_short_entries","game_frame_decoded",
+                          "team_no_invite","team_no_code","team_full",
+                          "team_already_joined","team_create_first",
+                          "team_world_unavailable","team_unknown_other"):
+                with self.subTest(shards=shards,field=field):
+                    broken=dict(data)
+                    broken.pop(field)
+                    self.assertEqual(run.grade(broken,shards)["quality"],
+                                     "MISSING_OR_INVALID_QT_CLIENT_RECEIVE_OR_JOIN_DETAILS")
+            data["game_data_datagrams_received"]+=1
+            self.assertEqual(run.grade(data,shards)["quality"],
+                             "QT_CLIENT_GAME_DATA_FRAME_COUNTER_MISMATCH")
+            data["game_data_datagrams_received"]-=1
+            data["team_unknown_other"]+=1
+            self.assertEqual(run.grade(data,shards)["quality"],
+                             "ORIGINAL_LOBBY_OTHER_NOTICE_DETAIL_MISMATCH")
+            data["team_unknown_other"]-=1
+            data["udp_read_failed"]=1
+            self.assertEqual(run.grade(data,shards)["quality"],
+                             "GENERATOR_UDP_SOCKET_READ_FAILED")
+            data["udp_read_failed"]=0
+            data["game_frame_bad_header"]=1
+            data["game_frame_decoded"]-=1
+            self.assertEqual(run.grade(data,shards)["quality"],
+                             "GENERATOR_GAME_DATA_DECODE_REJECTED")
+
     def test_v157_fixed_population_multiple_real_generator_processes(self):
         from argparse import Namespace
         for workers in (4, 8, 16):
