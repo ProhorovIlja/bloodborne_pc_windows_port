@@ -1,0 +1,35 @@
+name: SHYT V154 DS3 PC native engine reference, no game assets
+on:
+  push:
+    branches: [feature/yt130-ds3-pc-reference-v154-20261030]
+    paths:
+      - .github/workflows/shyt-v154-ds3-reference-metadata.yml
+      - tools/native/v154_ds3_reference_inventory.py
+      - tools/native/test_v154_ds3_reference_inventory.py
+      - tools/native/DS3_PC_ENGINE_REFERENCE_V154.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-reference:
+    name: DS3 and Bloodborne local-only inventory checks on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify synthetic inputs, no game files or user path disclosure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/native -p 'test_v154_ds3_reference_inventory.py' -v
+          python -m compileall -q tools/native/v154_ds3_reference_inventory.py
+          echo SHYT_V154_DS3_PC_REFERENCE_METADATA_SYNTHETIC_ONLY_PASS
