@@ -8,6 +8,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_doll_own_flag_v151.py
       - tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py
       - tools/poc/yharnam/yt130-reference/test_stage_doll_second_levelup_v160.py
+      - tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py
+      - tools/poc/yharnam/yt130-reference/test_stage_doll_talk_v162.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -134,6 +136,13 @@ jobs:
           path: reviewed-yt468
           submodules: false
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 4a55f02c48207770273e0cf0ed5d06e85a9143e5
+          path: reviewed-yt471
+          submodules: false
+          persist-credentials: false
       - name: Initialize only required native bbport GPU third-party submodules
         shell: pwsh
         run: |
@@ -154,6 +163,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'V160 source exact second Doll menu regression failed' }
           python tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-upstream --reviewed reviewed-yt468
           if ($LASTEXITCODE -ne 0) { throw 'V160 original reviewed native Doll source drift' }
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'V162 source-exact upstream Doll end repair regression failed' }
+          python tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-upstream --reviewed reviewed-yt471
+          if ($LASTEXITCODE -ne 0) { throw 'V162 reviewed original game source drift' }
           git -C pinned-upstream diff --check
           if ($LASTEXITCODE -ne 0) { throw 'V151 staged original game source diff whitespace error' }
           Write-Host 'SHYT_V151_YT130_ORIGINAL_WINDOWS_DOLL_OWN_FLAGS_STAGED'
@@ -204,12 +217,12 @@ jobs:
               timeout --signal=TERM --kill-after=10s 360s ninja -C out/gpu "$target"
             done < out/v151-one-target.txt
           done
-          echo SHYT_V160_ORIGINAL_WINDOWS_GAME_DOLL_SECOND_MENU_CPP_PASS_NOT_PLAYTEST
+          echo SHYT_V162_ORIGINAL_WINDOWS_GAME_DOLL_TALK_BEGIN_END_CPP_PASS_NOT_PLAYTEST
       - name: Upload native C++ build evidence even if compiler fails
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: yt130-v160-original-Windows-Doll-party-travel-CPP-INTERNAL
+          name: yt130-v162-original-Windows-Doll-party-travel-CPP-INTERNAL
           retention-days: 3
           if-no-files-found: ignore
           path: |
