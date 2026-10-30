@@ -3,6 +3,7 @@ if common packet timestamp cohort scores 99%. Fail closed on invalid evidence.
 """
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 
 HERE=Path(__file__).resolve().parent
@@ -112,6 +113,21 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
         missing.pop("directed_packets_received")
         self.assertEqual(grade.grade(missing,1,require_directed=True)["quality"],
                          "MISSING_OR_PARTIAL_DIRECTED_GAME_EVIDENCE")
+
+    def test_pinned_original_follower_fps_matches_800_route_minimum(self):
+        # This contract is required by V172 in stage_directed_cohort_v169:
+        # every source->destination directed flow offers at least 80% of
+        # the actual original bbload --follower-fps=8 each cohort second.
+        args=SimpleNamespace(shard_script=Path("run_shards.py"),
+                             shadnet=Path("shadnet"),bbload=Path("bbload"),
+                             owners=5,load_processes=4,cross="mixed")
+        cmd=grade.command(args,1,39014)
+        self.assertEqual(cmd[cmd.index("--players")+1],"200")
+        self.assertEqual(cmd[cmd.index("--team-size")+1],"5")
+        extra=cmd[cmd.index("--extra")+1]
+        self.assertIn("--owner-fps 30",extra)
+        self.assertIn("--follower-fps 8",extra)
+        self.assertIn("--owners 5",extra)
 
     def test_source_verified_200_player_send_rate_1_3_and_5_enemy_owners(self):
         # Original Game::SendGamePackets emits at LEAST 2 x 0x31/frame
