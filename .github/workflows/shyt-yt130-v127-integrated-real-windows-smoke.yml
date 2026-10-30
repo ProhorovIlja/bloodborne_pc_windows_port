@@ -42,7 +42,7 @@ jobs:
           repository: ProhorovIlja/bloodborne_pc_windows_port
           run-id: 41026006202
           name: shyt-yt130-PR32-V126-updater-safe-protocol8-WINDOWS-KIT-INTERNAL
-          github-token: __GITHUB_TOKEN__
+          github-token: ${{ github.token }}
           path: kit-v126
       - name: Real Windows source-exact artifact SHA and offline assembler regression
         shell: pwsh
