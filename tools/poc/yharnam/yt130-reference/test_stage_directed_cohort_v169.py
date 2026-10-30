@@ -22,7 +22,8 @@ def worker(n=5,seconds=range(10,40),entries=40):
         agg.append(dict(start_us=sec*1_000_000,
                         sent_entries=sent,received_entries=received))
     return {"cohort_directed_entries":rows,"cohort_unknown_senders":0,
-            "cohort_nonunique_receipts":0,"cohort_epoch_entries":agg}
+            "cohort_nonunique_receipts":0,"cohort_bad_epoch_entries":[],
+            "cohort_epoch_entries":agg}
 
 
 def evaluate(workers,per=None):
@@ -49,6 +50,8 @@ class DirectedSource(unittest.TestCase):
         self.assertIn(v.MARK,candidate)
         self.assertIn('bool FreshDirectedSequence(u32 seq',candidate)
         self.assertIn('cohort_nonunique_receipts',candidate)
+        self.assertIn('cohort_bad_epochs[sent_bucket]',candidate)
+        self.assertIn('cohort_bad_epoch_entries',candidate)
         self.assertIn('cohort_sender_names[candidate]',candidate)
         self.assertIn('cohort_sender_names.push_back(load.NameOf(team, sender_seat));',candidate)
         self.assertEqual(candidate.count('cohort_sender_names.push_back('),1)
@@ -94,6 +97,7 @@ class DirectedSource(unittest.TestCase):
             chunks.append({"cohort_directed_entries":rows,
                            "cohort_unknown_senders":0,
                            "cohort_nonunique_receipts":0,
+                           "cohort_bad_epoch_entries":[],
                            "cohort_epoch_entries":epochs})
         self.assertEqual(sum(len(x["cohort_directed_entries"]) for x in chunks),24000)
         result=evaluate(chunks,per=[10]*4)
@@ -103,6 +107,60 @@ class DirectedSource(unittest.TestCase):
         chunks[-1]["cohort_directed_entries"].pop()
         self.assertEqual(evaluate(chunks,per=[10]*4)["directed_quality"],
                          "INVALID_DIRECTED_GAME_COHORT")
+
+    def test_bad_receipts_outside_scored_seconds_do_not_poison_good_qos(self):
+        good=worker()
+        for sec in (9,40,55):
+            with self.subTest(send_second=sec):
+                damaged=worker()
+                damaged['cohort_nonunique_receipts']=1
+                damaged['cohort_bad_epoch_entries']=[
+                    {"start_us":sec*1_000_000,
+                     "unknown_senders":0,"nonunique_receipts":1}]
+                self.assertEqual(evaluate([good,damaged])['directed_quality'],
+                                 "DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        bad=worker()
+        bad['cohort_nonunique_receipts']=1
+        bad['cohort_bad_epoch_entries']=[
+            {"start_us":23_000_000,"unknown_senders":0,"nonunique_receipts":1}]
+        self.assertEqual(evaluate([good,bad])['directed_quality'],
+                         "INVALID_DIRECTED_GAME_COHORT")
+        bad=worker()
+        bad['cohort_unknown_senders']=1
+        bad['cohort_bad_epoch_entries']=[
+            {"start_us":23_000_000,"unknown_senders":1,"nonunique_receipts":0}]
+        self.assertEqual(evaluate([good,bad])['directed_quality'],
+                         "INVALID_DIRECTED_GAME_COHORT")
+
+    def test_bad_receipt_epoch_census_requires_exact_totals_and_unique_times(self):
+        base=worker()
+        cases=[]
+        a=worker()
+        a["cohort_bad_epoch_entries"]=[
+            {"start_us":9_000_000,"unknown_senders":1,"nonunique_receipts":0}]
+        cases.append(a) # scalar mismatch
+        a=worker()
+        a["cohort_unknown_senders"]=1
+        a["cohort_bad_epoch_entries"]=[
+            {"start_us":9_000_000,"unknown_senders":1,"nonunique_receipts":0}]*2
+        cases.append(a) # duplicated epoch
+        a=worker()
+        a["cohort_nonunique_receipts"]=1
+        a["cohort_bad_epoch_entries"]=[
+            {"start_us":9_000_001,"unknown_senders":0,"nonunique_receipts":1}]
+        cases.append(a) # fractional epoch
+        a=worker()
+        a["cohort_bad_epoch_entries"]=[
+            {"start_us":9_000_000,"unknown_senders":0,"nonunique_receipts":0}]
+        cases.append(a) # empty bucket
+        a=worker()
+        a["cohort_bad_epoch_entries"]=[
+            {"start_us":float('nan'),"unknown_senders":1,"nonunique_receipts":0}]
+        cases.append(a) # non-finite time
+        for idx,a in enumerate(cases):
+            with self.subTest(case=idx):
+                self.assertEqual(evaluate([base,a])['directed_quality'],
+                                 "INVALID_DIRECTED_GAME_COHORT")
 
     def test_missing_extra_and_invalid_routes_fail_closed(self):
         good=worker()
