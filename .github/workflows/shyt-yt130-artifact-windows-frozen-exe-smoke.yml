@@ -54,6 +54,13 @@ jobs:
           $size = (Get-Item $path).Length
           if ($size -lt 50MB -or $size -gt 500MB) { throw "Unexpected original full kit size $size" }
           Write-Host "SHYT_YT130_ORIGINAL_PROTOCOL8_ZIP_PIN_AND_SIZE_PASS $sha $size"
+      - name: Diagnose actual frozen BLauncher startup without hiding a timeout
+        shell: pwsh
+        timeout-minutes: 4
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/yt130-reference/diagnose_frozen_launcher_v122.py kit/bbport-windows.zip --output kit/SHYT-YT130-LAUNCHER-STARTUP-DIAGNOSTIC.json
+          if ($LASTEXITCODE -ne 0) { throw 'Native launcher diagnostic crashed' }
       - name: Actually execute original frozen BLauncher.exe in Cyrillic Windows path
         shell: pwsh
         timeout-minutes: 8
@@ -69,6 +76,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: shyt-yt130-windows-frozen-launcher-SMOKE-EVIDENCE-INTERNAL
-          path: kit/SHYT-YT130-WINDOWS-FROZEN-SMOKE.json
+          path: |
+            kit/SHYT-YT130-WINDOWS-FROZEN-SMOKE.json
+            kit/SHYT-YT130-LAUNCHER-STARTUP-DIAGNOSTIC.json
           retention-days: 7
           if-no-files-found: warn
