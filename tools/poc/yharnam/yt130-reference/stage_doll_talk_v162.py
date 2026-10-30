@@ -78,7 +78,8 @@ def patch(name,base,prior,reviewed,middle):
         if ("bool EndsDollBlessing(s32 talk_command)" not in new or
                 "return talk_command == 71;" not in new or
                 "std::optional<bool> DollBlessingStepFor(" not in new or
-                len(new)>1000 or CPP_START in middle):
+                len(new)>1000 or CPP_START not in middle or
+                "bool EndsDollBlessing(" in middle):
             raise ValueError("V162 helper dependency/source review drift")
         return one(base,CPP_END,"\n"+new+CPP_END,"full Doll helper trio")
     if name==HEADER:
