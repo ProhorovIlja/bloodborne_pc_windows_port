@@ -89,6 +89,9 @@ SEND_OTHERS_NEW="""void Service::SendToOthers(PartyWorld& world, const Member& f
         }
     }
 }"""
+# Match only the cooperator fanout section. The V108 3-invader patch adds
+# an important privacy-filtered hostile-only board AFTER this section.
+# It must stay verbatim, not be replaced by a broadcast of cooperator HP.
 BOARDS_OLD="""    for (const bbcoop::Envelope& board : boards) {
         if (only != nullptr) {
             SendTo(*only, board, now_ms);
@@ -98,9 +101,7 @@ BOARDS_OLD="""    for (const bbcoop::Envelope& board : boards) {
             if (member.party == world.name) {
                 SendTo(member, board, now_ms);
             }
-        }
-    }
-}"""
+        }"""
 BOARDS_NEW="""    for (const bbcoop::Envelope& board : boards) {
         if (only != nullptr) {
             SendTo(*only, board, now_ms);
@@ -111,9 +112,9 @@ BOARDS_NEW="""    for (const bbcoop::Envelope& board : boards) {
             if (member.party == world.name) {
                 SendEncodedTo(member, board, encoded, now_ms);
             }
-        }
-    }
-}"""
+        }"""
+# V108 changes invader ownership fanout from one hostile to up to three.
+# Patch the cooperator loop separately and its original hostile loop intact.
 OWNERS_OLD="""    if (only != nullptr) {
         SendTo(*only, envelope, now_ms);
         return;
@@ -122,15 +123,7 @@ OWNERS_OLD="""    if (only != nullptr) {
         if (member.party == world.name) {
             SendTo(member, envelope, now_ms);
         }
-    }
-    // Invasions: the invader follows the owners too (it travels and sees the enemies by them).
-    if (const auto invasion = invasions.find(world.name);
-        invasion != invasions.end() && invasion->second.joined) {
-        if (const auto invader = members.find(invasion->second.invader); invader != members.end()) {
-            SendTo(invader->second, envelope, now_ms);
-        }
-    }
-}"""
+    }"""
 OWNERS_NEW="""    if (only != nullptr) {
         SendTo(*only, envelope, now_ms);
         return;
@@ -140,22 +133,25 @@ OWNERS_NEW="""    if (only != nullptr) {
         if (member.party == world.name) {
             SendEncodedTo(member, envelope, encoded, now_ms);
         }
-    }
-    // Invasions: the invader follows the owners too (it travels and sees the enemies by them).
-    if (const auto invasion = invasions.find(world.name);
-        invasion != invasions.end() && invasion->second.joined) {
-        if (const auto invader = members.find(invasion->second.invader); invader != members.end()) {
-            SendEncodedTo(invader->second, envelope, encoded, now_ms);
+    }"""
+HOSTILE_OWNERS_OLD="""    // SHYT-V108-MULTI-INVADER: every active hostile needs the owners for the map it visits.
+    if (const auto bucket = invasions.find(world.name); bucket != invasions.end()) {
+        for (const auto& [id, invasion] : bucket->second) {
+            if (!invasion.joined) continue;
+            if (const auto invader = members.find(invasion.invader);
+                invader != members.end()) SendTo(invader->second, envelope, now_ms);
         }
-    }
-}"""
-
+    }"""
+HOSTILE_OWNERS_NEW=HOSTILE_OWNERS_OLD.replace(
+    "SendTo(invader->second, envelope, now_ms)",
+    "SendEncodedTo(invader->second, envelope, encoded, now_ms)")
 PATCHES=(
     ("SendTo preserved reliable flush",SENDTO_OLD,SENDTO_NEW),
     ("WorldLog Entries broadcast",SEND_ENTRIES_OLD,SEND_ENTRIES_NEW),
     ("ToOthers broadcast",SEND_OTHERS_OLD,SEND_OTHERS_NEW),
     ("World Boards broadcast",BOARDS_OLD,BOARDS_NEW),
-    ("Enemy owners + invader broadcast",OWNERS_OLD,OWNERS_NEW),
+    ("Enemy owners cooperator fanout",OWNERS_OLD,OWNERS_NEW),
+    ("V108 three invader owner fanout",HOSTILE_OWNERS_OLD,HOSTILE_OWNERS_NEW),
 )
 
 
@@ -176,6 +172,8 @@ def rewrite(cpp:str,header:str)->tuple[str,str]:
         raise ValueError("Missing single shared byte router")
     if cpp.count("member.stream.Send(encoded, now_ms);")!=1 or cpp.count("++m_diagEnvelopes[static_cast<int>(envelope.body_case())];")!=1:
         raise ValueError("Changed reliable stream per-recipient semantics")
+    if "SHYT-V108-ALLIED-HOSTILE-VITALS" not in cpp or "SendTo(visitor->second, safe, now_ms)" not in cpp:
+        raise ValueError("Lost privacy-filtered V108 hostile ONLY vitals")
     if "SendEncodedTo(invader->second, envelope, encoded, now_ms)" not in cpp:
         raise ValueError("Lost invader enemy-owner broadcast")
     if "SendTo(*only, board, now_ms);" not in cpp:
@@ -195,6 +193,8 @@ def apply(root:Path)->None:
         if git(root,"rev-parse","HEAD:"+file)!=blob:
             raise ValueError("Original World source blob changed: "+file)
     cpp,h=root/CPP,root/HEADER
+    if "SHYT-V108-ALLIED-HOSTILE-VITALS" not in cpp.read_text(encoding="utf-8"):
+        raise ValueError("Apply V108 three-invader privacy staging BEFORE V132")
     cp,hd=rewrite(cpp.read_text(encoding="utf-8"),h.read_text(encoding="utf-8"))
     cpp.write_bytes(cp.encode("utf-8"))
     h.write_bytes(hd.encode("utf-8"))
