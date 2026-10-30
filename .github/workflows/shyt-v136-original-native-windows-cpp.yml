@@ -1,0 +1,138 @@
+name: SHYT V136 original native Windows CLANG64 P2PTransport TU with dev Direct
+on:
+  push:
+    branches: [feature/shyt-v136-native-direct-owner-20261030]
+    paths:
+      - .github/workflows/shyt-v136-original-native-windows-cpp.yml
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_game_direct_owner_v136.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_signed_nat_route_v134.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-game-client:
+    runs-on: windows-2022
+    timeout-minutes: 50
+    env:
+      PIN: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+      BB_LTO: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enable long Win32 Git paths before checking out nested shader submodules
+        shell: pwsh
+        run: git config --global core.longpaths true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-upstream
+          submodules: false
+          persist-credentials: false
+      - name: Initialize only required native bbport GPU third-party submodules
+        shell: pwsh
+        run: |
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
+          if ($LASTEXITCODE -ne 0) { throw "Pinned native GPU submodule checkout failed" }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify exact AMD FSR 1.1.4 host sources and fix ALL 30 MSVC-only array lengths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_fsr_countof_clang64.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Source-pinned FSR host array tests failed' }
+          python tools/poc/yharnam/package-v41/patch_pinned_fsr_countof_clang64.py --upstream pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned FSR host source drift or incomplete _countof migration' }
+          Write-Host 'PINNED_FSR_HOST_ALL_30_COUNT_OF_CALLS_PORTABLE'
+      - name: Fix pinned native shader assembler std::abort header for CLANG64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/package-v41 -p test_patch_pinned_sirit_windows.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned original Sirit source tests failed' }
+          python tools/poc/yharnam/package-v41/patch_pinned_sirit_windows.py --upstream pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned original Sirit source drift' }
+          Write-Host 'SHYT_PINNED_SIRIT_CLANG64_CSTDLIB_SOURCE_PASS'
+      - name: Compose all native source overlays against immutable upstream
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git -C pinned-upstream rev-parse HEAD).Trim() -ne $env:PIN) {
+            throw 'Wrong pinned source SHA'
+          }
+          $out = Join-Path $env:RUNNER_TEMP 'shyt-v36-overlay'
+          python tools/poc/yharnam/unified-v9/compose_sources.py --upstream pinned-upstream --repo . --out "$out"
+          if ($LASTEXITCODE -ne 0) { throw 'Native composition failed' }
+          $meta = Get-Content "$out/SEAMLESS-HUNT-COMPOSE-MANIFEST.json" -Raw | ConvertFrom-Json
+          if ($meta.upstream_pin -ne $env:PIN -or $meta.public_release_ready -ne $false) {
+            throw 'Unsafe patch manifest'
+          }
+          Copy-Item -Path "$out/*" -Destination pinned-upstream -Recurse -Force
+          $ui = Get-Content pinned-upstream/bbport/gpu/shim/bbport_overlay.cpp -Raw
+          if ($ui -notmatch 'sh-quit-desktop' -or $ui -notmatch 'SH-HUNTER-TOOLS-V21') {
+            throw 'Native game UI patch missing'
+          }
+          Write-Host 'COMPOSED_NATIVE_SOURCE_PASS'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - name: Install native Windows CLANG64 build dependencies
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed \
+            git patch \
+            mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld mingw-w64-clang-x86_64-ccache \
+            mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-cmake \
+            mingw-w64-clang-x86_64-ninja mingw-w64-clang-x86_64-pkgconf \
+            mingw-w64-clang-x86_64-vulkan-headers mingw-w64-clang-x86_64-vulkan-loader \
+            mingw-w64-clang-x86_64-vulkan-memory-allocator \
+            mingw-w64-clang-x86_64-glslang mingw-w64-clang-x86_64-sdl3 \
+            mingw-w64-clang-x86_64-fmt mingw-w64-clang-x86_64-boost \
+            mingw-w64-clang-x86_64-robin-map mingw-w64-clang-x86_64-xxhash \
+            mingw-w64-clang-x86_64-ffmpeg mingw-w64-clang-x86_64-zydis \
+            mingw-w64-clang-x86_64-spirv-tools mingw-w64-clang-x86_64-spirv-headers \
+            mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
+            mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
+            mingw-w64-clang-x86_64-nlohmann-json
+      - name: Compile only actual original native Windows P2PTransport unit, with test Direct enabled
+        timeout-minutes: 18
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cd pinned-upstream/bbport
+          export CC=clang CXX=clang++
+          cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBB_PGO=off -DBB_LTO=OFF \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_FLAGS="-DSHYT_ENABLE_TEST_LOCAL_MTLS" \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          ninja -C out/gpu -t targets all > out/v136-real-p2p-targets.txt
+          grep -F 'p2p_sockets.cpp.obj' out/v136-real-p2p-targets.txt
+          grep -F 'SHYT_ENABLE_TEST_LOCAL_MTLS' out/gpu/compile_commands.json
+          mapfile -t targets < <(grep -F 'p2p_sockets.cpp.obj' out/v136-real-p2p-targets.txt | cut -d: -f1)
+          test "${#targets[@]}" -gt 0
+          for target in "${targets[@]}"; do
+            echo "SHYT_V136_COMPILING_NATIVE_REAL_CPP_OBJECT=$target"
+            timeout --signal=TERM --kill-after=10s 180s ninja -C out/gpu "$target"
+          done
+          echo SHYT_V136_REAL_WINDOWS_ORIGINAL_P2PTRANSPORT_CPP_NATIVE_COMPILER_PASS_DEBUG_ONLY
+      - name: Upload native C++ build evidence even if compiler fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-v136-actual-original-Windows-P2P-CPP-compiler-INTERNAL
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            pinned-upstream/bbport/out/v136-real-p2p-targets.txt
+            pinned-upstream/bbport/out/gpu/CMakeCache.txt
+            pinned-upstream/bbport/out/gpu/compile_commands.json
