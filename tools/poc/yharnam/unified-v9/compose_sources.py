@@ -941,6 +941,14 @@ def run(checkout:Path, repo:Path, out:Path):
     files[shy2.CUTOVER_HEADER]=(metrics_dir/"sh_native_shy2_grant_cutover_v106.hpp").read_bytes()
     files["emulator/src/core/libraries/network/sh_pair_aead_keys.hpp"]=(
         metrics_dir/"sh_pair_aead_keys.hpp").read_bytes()
+    # V136 actual native CLANG64 p2p_sockets.cpp includes SHG2 via its
+    # own source tree: sh_secure_grant_v84.hpp imports sh_direct_crypto.hpp.
+    # V75 previously staged this header ONLY in server/src, so native
+    # game compilation failed despite earlier standalone crypto C++ PASS.
+    # Stage the IDENTICAL pinned source in the game tree, never a copy of
+    # transient CMake include directories or a generated fake header.
+    files["emulator/src/core/libraries/network/sh_direct_crypto.hpp"]=(
+        metrics_dir/"sh_direct_crypto.hpp").read_bytes()
     # V135: read the REAL composed original game, not a duplicate shim.
     # SHG2 grants and SHY2 AEAD expire on Unix epoch time; original P2PNowMs
     # is steady_clock for ping/silence timers and must stay monotonic.
