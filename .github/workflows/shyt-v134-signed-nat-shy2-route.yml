@@ -1,0 +1,56 @@
+name: YT native Direct V134 signed mTLS NAT to encrypted game-route bridge, DEV ONLY
+on:
+  push:
+    branches: [feature/shyt-hybrid-p2p-v52]
+    paths:
+      - .github/workflows/shyt-v134-signed-nat-shy2-route.yml
+      - tools/poc/yharnam/hybrid-transport-v52/sh_signed_nat_route_v134.hpp
+      - tools/poc/yharnam/hybrid-transport-v52/test_signed_nat_route_v134.cpp
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt-native-V134-signed-nat-aead-direct-failback-tests
+  cancel-in-progress: false
+jobs:
+  exact-crypto-and-original-pair-loopback:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        with:
+          msystem: CLANG64
+          update: false
+          install: >-
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-openssl
+      - name: Actual Linux OpenSSL signed V84 mTLS grant, five-step V91 NAT, V106 AEAD and V134 encrypted DirectSender test
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=tools/poc/yharnam/hybrid-transport-v52
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I "$p" "$p/test_signed_nat_route_v134.cpp" \
+            -lcrypto -o "$RUNNER_TEMP/yt-v134-signed-nat-direct"
+          timeout 25s "$RUNNER_TEMP/yt-v134-signed-nat-direct"
+          echo SHYT_V134_OPENSSL_TRUSTED_NAT_CRYPTO_REAL_DIRECT_SENDER_AND_RELAY_FALLBACK_CXX_PASS_DEV_ONLY
+      - name: Actual native Windows CLANG64 OpenSSL signed NAT and AES256 game route test
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          p=tools/poc/yharnam/hybrid-transport-v52
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -I "$p" "$p/test_signed_nat_route_v134.cpp" \
+            -lcrypto -o shyt-v134-direct.exe
+          ./shyt-v134-direct.exe
+          echo SHYT_V134_WINDOWS_TRUSTED_NAT_CRYPTO_DIRECT_SENDER_AND_RELAY_FALLBACK_CXX_PASS_DEV_ONLY
