@@ -101,6 +101,26 @@ class DollTalkV162(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.patch(m.TRAVEL,result,prior_hook+m.HOOK_END,reviewed,"")
 
+    def test_staged_full_upstream_helper_is_exact_and_mutations_fail(self):
+        helper=(m.CPP_START+"    return level_up_on;\n}\n\n"
+                "bool EndsDollBlessing(s32 talk_command) {\n"
+                "    return talk_command == 71;\n}\n\n"
+                "std::optional<bool> DollBlessingStepFor(bool guest,bool begin,bool end,bool step) {\n"
+                "    return std::nullopt;\n}\n")
+        middle=helper.replace("bool EndsDollBlessing(s32 talk_command) {\n"
+                              "    return talk_command == 71;\n}\n\n","")
+        base="ClearsDollLevelUpFlagOnHerBlessing\n"+m.CPP_END
+        reviewed=helper+m.CPP_END
+        staged=m.patch(m.CPP,base,"",reviewed,middle)
+        m.verify_staged(m.CPP,staged,reviewed)
+        with self.assertRaisesRegex(ValueError,"differs from reviewed"):
+            m.verify_staged(m.CPP,
+                            staged.replace("return talk_command == 71;",
+                                           "return talk_command == 72;"),
+                            reviewed)
+        with self.assertRaisesRegex(ValueError,"start marker drift"):
+            m.verify_staged(m.CPP,"not a real native source",reviewed)
+
     def test_unrelated_path_refused(self):
         with self.assertRaisesRegex(ValueError,"not #468 whole source"):
             m.patch("server/coop.cpp","ClearsDollLevelUpFlagOnHerBlessing","","","")
