@@ -77,7 +77,24 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
         cohort_quality = "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT"
         cohort_start_us = cohort_end_us = cohort_sent = cohort_received = 0
         cohort_seconds = 0
-        if results and all(
+        # Original run_shards.py starts one bbload process for every
+        # nonempty partition of (players // team_size) complete teams.
+        # A child may crash/emit no JSON, or one may emit duplicate JSON.
+        # Either case MUST NOT let the surviving workers form a green cohort.
+        requested_teams = max(1, args.players // args.team_size)
+        requested_processes = args.processes or max(
+            1, (requested_teams * args.team_size + 299) // 300)
+        expected_workers = min(requested_teams, requested_processes)
+        expected_games = requested_teams * args.team_size
+        complete_population = (
+            len(results) == expected_workers and
+            all(type(r) is dict and type(r.get("games")) is int and
+                r["games"] > 0 and r["games"] % args.team_size == 0
+                for r in results) and
+            sum(r["games"] for r in results) == expected_games and
+            sum(r.get("playing", 0) for r in results) == expected_games and
+            sum(r.get("complete_teams", 0) for r in results) == requested_teams)
+        if complete_population and all(
                 r.get("playing") == r.get("games") and
                 r.get("complete_teams") == r.get("games") // args.team_size and
                 type(r.get("cohort_ready_us")) in (int, float) and
