@@ -134,7 +134,7 @@ OWNERS_NEW="""    if (only != nullptr) {
             SendEncodedTo(member, envelope, encoded, now_ms);
         }
     }"""
-HOSTILE_OWNERS_OLD="""    // SHYT-V108-MULTI-INVADER: every active hostile needs the owners for the map it visits.
+HOSTILE_OWNERS_OLD="""    // SHYT-V108-MULTI-INVADER-ORIGINAL-SERVER: every active hostile needs the owners for the map it visits.
     if (const auto bucket = invasions.find(world.name); bucket != invasions.end()) {
         for (const auto& [id, invasion] : bucket->second) {
             if (!invasion.joined) continue;
