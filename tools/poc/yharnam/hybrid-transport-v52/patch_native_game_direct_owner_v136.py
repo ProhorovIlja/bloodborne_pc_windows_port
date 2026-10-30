@@ -123,9 +123,18 @@ METHOD_NEW = """    // SHYT-V136-NATIVE-SIGNED-DIRECT-OWNER: only from the trust
                 return false;
             }
         }
+        // SHYT-V137-FAIL-CLOSED-REKEY: a renewed signed NAT grant can
+        // replace an already active pair. Never leave the old Direct router
+        // armed while its RX/TX AEAD slots are replaced (or when rekey fails).
+        // Direct -> grant are already held; take crypto mutex last.
+        direct_egress.Revoke(0);
+        native_signed_route_v136={};
+        native_signed_generation_v136=0;
         bool installed=false;
         {
             std::lock_guard crypto_lock(native_shy2_mutex);
+            native_shy2_ingress.Revoke(0);
+            native_shy2_egress.Revoke(0);
             installed=SeamlessHunt::Hybrid::NativeShy2GrantCutoverV106::Install(
                 native_grant_inbox_v84,*nat_probe_v92,0,
                 native_shy2_ingress,native_shy2_egress,
