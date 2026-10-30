@@ -93,6 +93,9 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
                 self.assertEqual(
                     grade.grade(inconsistent,1,require_directed=True)["quality"],
                     "DIRECTED_COHORT_EXCEEDS_ORIGINAL_QT_TOTALS")
+        sample["directed_quality"]="DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN"
+        self.assertEqual(grade.grade(sample,1,require_directed=True)["quality"],
+                         "DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN")
         sample["directed_quality"]="DIRECTED_GAME_COHORT_DELIVERY_DEGRADED"
         self.assertEqual(grade.grade(sample,1,require_directed=True)["quality"],
                          "DIRECTED_GAME_COHORT_UNHEALTHY")
