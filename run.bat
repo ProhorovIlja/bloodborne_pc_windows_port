@@ -76,6 +76,13 @@ REM SHYT-V148 native Windows backend guard. This Windows bbport run.bat does NOT
 REM wire Yharnam Together's authenticated Protocol8 BB_ONLINE backend yet. The
 REM standalone BB_PARTY mode is a different network protocol and save format.
 REM Check after launcher_settings.json is applied, before touching user/ or out/.
+REM The launcher may write BB_PARTY after the early command-line normalization.
+set "native_party_check=%BB_PARTY: =%"
+if "%native_party_check%"=="" set "BB_PARTY="
+for %%v in (0 off false no) do if /i "%native_party_check%"=="%%v" set "BB_PARTY="
+if defined BB_PARTY (
+    if /i not "%BB_PARTY%"=="host" if /i not "%BB_PARTY%"=="join" goto native_backend_conflict
+)
 set "native_online_check=%BB_ONLINE: =%"
 for %%v in (0 off false no) do if /i "%native_online_check%"=="%%v" set "native_online_check="
 if not "%native_online_check%"=="" goto native_backend_not_ready
@@ -95,11 +102,12 @@ goto native_backend_not_ready
 echo Native Windows backend conflicts with BB_PARTY setting.
 exit /b 22
 :native_backend_not_ready
-echo Authenticated Yharnam Together online mode is not wired into this Windows bbport build.
+echo Native Windows backend Yharnam Together Protocol8 is not wired into this bbport build.
 echo No game or save data has been opened. Use offline or the separate BB_PARTY mode.
 exit /b 22
 :native_backend_ok
 set "native_online_check="
+set "native_party_check="
 set "native_backend_check="
 
 REM Writable directory for generated files (out/), saves (user/) and bbport.ini
