@@ -82,7 +82,7 @@ jobs:
           p=Path("pinned-upstream/emulator/src/core/bloodborne_flags.h").read_text()
           assert "Range(72100100, 72100102, FlagOwner::PerPlayer, 0," in p
           p=Path("pinned-upstream/emulator/src/core/bloodborne_travel.cpp").read_text()
-          assert "ClearDollLevelUpFlagAfterHerMenu();" in p
+          assert "ClearDollLevelUpFlagAfterHerMenu(blessing_begun);" in p
           assert "std::ranges::any_of(OtherPlayers()" in p
           assert "doll_blessing_end_asked.store(true);" in p
           print("SHYT_V162_YT130_EXACT_ORIGINAL_DOLL_BEGIN_END_SOURCE_TESTS_PASS")
