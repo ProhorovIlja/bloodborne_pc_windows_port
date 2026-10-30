@@ -28,6 +28,7 @@ MEMBER_NEW = MEMBER_OLD + """
 #ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
     // Member lifetime == original native UDP transport, not a worker stack.
     SeamlessHunt::Hybrid::SignedNatRouteLeaseV134 native_signed_route_v136{};
+    std::uint64_t native_signed_generation_v136=0;
 #endif"""
 SEND_OLD = """                submitted_direct = direct_egress.TrySend(
                     {dest_addr_nbo,dest_port_nbo},framed,P2PAuthEpochMs()) ==
@@ -38,6 +39,20 @@ SEND_NEW = """#ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
                 // an optional whose storage can be replaced by another TLS
                 // session; never dereference a stale address after reset.
                 std::lock_guard grant_lock(native_grant_mutex);
+                // Account/link can change before the old grant is reset.
+                // Revoke it BEFORE even one stale encrypted outgoing frame.
+                bool current_link_v136=false;
+                {
+                    std::lock_guard link_lock(link_mutex);
+                    current_link_v136=native_signed_generation_v136 &&
+                        native_signed_generation_v136==shyt_link_generation_v87 &&
+                        link_welcomed && link_server.addr_nbo && link_server.port_nbo;
+                }
+                if(native_signed_generation_v136 && !current_link_v136) {
+                    direct_egress.RevokeAll();
+                    native_signed_route_v136={};
+                    native_signed_generation_v136=0;
+                }
                 if (!nat_probe_v92) {
                     direct_egress.RevokeAll();
                     native_signed_route_v136.signed_nat_proof=nullptr;
@@ -134,11 +149,13 @@ METHOD_NEW = """    // SHYT-V136-NATIVE-SIGNED-DIRECT-OWNER: only from the trust
                 welcomed_digest,TransmitVerifiedShy2,this,
                 static_cast<std::int64_t>(now_ms));
         SeamlessHunt::Hybrid::CryptoDetail::Erase(welcomed_digest);
+        if(armed) native_signed_generation_v136=generation;
         if(!armed) {
             std::lock_guard crypto_lock(native_shy2_mutex);
             native_shy2_ingress.Revoke(0);
             native_shy2_egress.Revoke(0);
             native_signed_route_v136={};
+            native_signed_generation_v136=0;
         }
         return armed;
     }
@@ -151,6 +168,7 @@ REVOKE_OLD = """            direct_egress.RevokeAll();
 REVOKE_NEW = """            direct_egress.RevokeAll();
 #ifdef SHYT_ENABLE_TEST_LOCAL_MTLS
             native_signed_route_v136={}; // clear signed-in ID and proof refs
+            native_signed_generation_v136=0; // zero old link generation
 #endif
         }
 """
