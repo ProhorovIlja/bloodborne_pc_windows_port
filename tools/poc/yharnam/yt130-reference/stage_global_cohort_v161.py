@@ -98,10 +98,12 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
             if cohort_seconds >= 5:
                 counts = {}
                 valid = True
+                expected_buckets = set(range(cohort_start_us, cohort_end_us, tick))
                 for r in results:
                     # Fail closed: a silent/stalled worker must not borrow
                     # another process's healthy UDP traffic to score green.
                     seen = set()
+                    worker_scored_buckets = set()
                     worker_sent = worker_received = 0
                     for window in r["cohort_epoch_entries"]:
                         if (not isinstance(window, dict) or
@@ -117,12 +119,21 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
                             break
                         seen.add(bucket)
                         if cohort_start_us <= bucket < cohort_end_us:
+                            # Every Playing 5-seat worker must continuously
+                            # participate in EVERY fully scored second; one
+                            # healthy worker must not mask another stalled one.
+                            if (int(window["sent_entries"]) == 0 or
+                                    int(window["received_entries"]) == 0):
+                                valid = False
+                                break
+                            worker_scored_buckets.add(bucket)
                             out, inc = counts.get(bucket, (0, 0))
                             counts[bucket] = (out + int(window["sent_entries"]),
                                               inc + int(window["received_entries"]))
                             worker_sent += int(window["sent_entries"])
                             worker_received += int(window["received_entries"])
-                    if worker_sent == 0 or worker_received == 0:
+                    if (worker_sent == 0 or worker_received == 0 or
+                            worker_scored_buckets != expected_buckets):
                         valid = False
                 if valid:
                     cohort_sent = sum(x[0] for x in counts.values())
