@@ -28,7 +28,7 @@ jobs:
       - name: Test that local dump inspection never exports game data
         shell: bash
         run: |
-          python -m unittest discover -s tools/native -p 'test_v146_game_inventory.py' -v
+          python -m unittest discover -s tools/native -p 'test_v*_*.py' -v
           python -m compileall -q tools/native
       - name: Explicit synthetic dummy manifest, never proprietary bytes
         shell: bash
