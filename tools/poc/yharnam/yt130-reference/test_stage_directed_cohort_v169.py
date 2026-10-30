@@ -22,7 +22,7 @@ def worker(n=5,seconds=range(10,40),entries=40):
         agg.append(dict(start_us=sec*1_000_000,
                         sent_entries=sent,received_entries=received))
     return {"cohort_directed_entries":rows,"cohort_unknown_senders":0,
-            "cohort_epoch_entries":agg}
+            "cohort_nonunique_receipts":0,"cohort_epoch_entries":agg}
 
 
 def evaluate(workers,per=None):
@@ -43,9 +43,11 @@ class DirectedSource(unittest.TestCase):
     def test_cpp_source_exact_and_no_identity_output(self):
         src=('SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS\n'
              'SHYT_V158_NATIVE_QT_RECEIVE_DIAGNOSTICS\n'+
-             v.CLASS_OLD+v.SEND_OLD+v.RECEIVED_OLD+v.FINISH_OLD+v.JSON_OLD)
+             v.CLASS_OLD+v.SEQ_ANCHOR+v.SEND_OLD+v.RECEIVED_OLD+v.FINISH_OLD+v.JSON_OLD)
         candidate=v.patch_cpp(src)
         self.assertIn(v.MARK,candidate)
+        self.assertIn('bool FreshDirectedSequence(u32 seq',candidate)
+        self.assertIn('cohort_nonunique_receipts',candidate)
         self.assertIn('load.NameOf(team, candidate)',candidate)
         self.assertIn('"route", static_cast<double>(key.second)',candidate)
         self.assertNotIn('"online_id"',candidate)
@@ -88,6 +90,7 @@ class DirectedSource(unittest.TestCase):
                     for entry in one["cohort_epoch_entries"]]
             chunks.append({"cohort_directed_entries":rows,
                            "cohort_unknown_senders":0,
+                           "cohort_nonunique_receipts":0,
                            "cohort_epoch_entries":epochs})
         self.assertEqual(sum(len(x["cohort_directed_entries"]) for x in chunks),24000)
         result=evaluate(chunks,per=[10]*4)
@@ -106,6 +109,10 @@ class DirectedSource(unittest.TestCase):
         a=worker();a['cohort_directed_entries'][0]['route']=0;cases.append(a)
         a=worker();a['cohort_directed_entries'][0]['received_entries']=9999;cases.append(a)
         a=worker();a['cohort_unknown_senders']=1;cases.append(a)
+        a=worker();a['cohort_nonunique_receipts']=1;cases.append(a)
+        a=worker();a['cohort_nonunique_receipts']=True;cases.append(a)
+        a=worker();a['cohort_nonunique_receipts']=float('nan');cases.append(a)
+        a=worker();a.pop('cohort_nonunique_receipts');cases.append(a)
         a=worker();a['cohort_directed_entries'][0]['start_us']=float('nan');cases.append(a)
         for n,a in enumerate(cases):
             with self.subTest(case=n):
