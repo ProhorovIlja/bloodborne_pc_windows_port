@@ -94,7 +94,7 @@ def stage(root:Path)->None:
     code=root/PATH
     gen=root/"server/loadtest/run_shards.py"
     if (git(root,"rev-parse","HEAD")!=PIN or
-        git(root,"rev-parse","HEAD:"+PATH)!=BLOB or
+        git(root,"rev-parse","HEAD:"+PATH.as_posix())!=BLOB or
         not code.is_file() or code.is_symlink() or
         not gen.is_file() or gen.is_symlink()):
         raise ValueError("V156 requires exact pristine commit, prior staging and regular files")
