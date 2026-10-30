@@ -13,6 +13,15 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_shard_wire_v155.py
       - tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py
       - tools/poc/yharnam/yt130-reference/test_stage_lobby_notice_v156.py
+      - tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py
+      - tools/poc/yharnam/yt130-reference/test_stage_qt_receive_v158.py
+      - tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py
+      - tools/poc/yharnam/yt130-reference/test_stage_lobby_notice_detail_v159.py
+      - tools/poc/yharnam/yt130-reference/stage_global_cohort_v161.py
+      - tools/poc/yharnam/yt130-reference/test_stage_global_cohort_v161.py
+      - tools/poc/yharnam/yt130-reference/test_grade_global_cohort_v161.py
+      - tools/poc/yharnam/yt130-reference/stage_directed_cohort_v169.py
+      - tools/poc/yharnam/yt130-reference/test_stage_directed_cohort_v169.py
       - tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
       - tools/poc/yharnam/yt130-reference/test_stage_world_encode_once_v132.py
   workflow_dispatch:
@@ -37,6 +46,11 @@ jobs:
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_shard_five_v117.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_shard_wire_v155.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_lobby_notice_v156.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_qt_receive_v158.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_lobby_notice_detail_v159.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_global_cohort_v161.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_grade_global_cohort_v161.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_directed_cohort_v169.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_five_player_bbload.py -v
           python -m compileall -q tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
       - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
@@ -114,6 +128,11 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_global_cohort_v161.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_directed_cohort_v169.py "$RUNNER_TEMP/yt-src"
+          python -m compileall -q "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq 'team_name_absent' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
           grep -Fq '"team_total_notices": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq 'YT130_WIRE_TRAFFIC kind=3' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
@@ -123,6 +142,9 @@ jobs:
           grep -Fq 'udp_write_failed' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
           grep -Fq '"udp_write_failed": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq '"awaiting_welcome": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq 'SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"directed_quality": directed_quality' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq 'if load.returncode != 0 or len(child_rows) != 1:' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           grep -Fq 'game_receivers += game->Playing() && game->SawGamePackets();' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
           grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
