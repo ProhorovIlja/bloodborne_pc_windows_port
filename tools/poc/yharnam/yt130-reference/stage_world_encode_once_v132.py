@@ -5,7 +5,7 @@ V130 real Qt metrics: server 200 simulated peers, 265581 CoopStream datagrams,
 22,785 reliable resends, 24,519 VitalsBoard and 14,846 LobbyState sends.
 Original Service::SendTo serialized identical protobuf messages separately
 for every recipient (SendBoards, SendEntries, SendOwners, SendToOthers).
-This avoids per-recipient serialization while preserving exact original
+This stages AFTER existing PR37 CoopStream diagnostics to retain per-recipient\nmessage counters. It avoids repeated encoding while preserving exact original
 EncodeEnvelope bytes, per-recipient reliable CoopStream::Send, flush ordering,
 authorization/world names, invader visibility and all 5-player rules.
 No P2P, no packet drops, no reliability/class changes, no production install.
@@ -25,6 +25,8 @@ BLOBS={
     HEADER:"dfdbd49a30427b71c95e520dbc77498b521bce93",
 }
 SENDTO_OLD="""void Service::SendTo(Member& member, const bbcoop::Envelope& envelope, qint64 now_ms) {
+    // Diagnostic: one count per original reliable *message*, before chunking.
+    ++m_diagEnvelopes[static_cast<int>(envelope.body_case())];
     member.stream.Send(EncodeEnvelope(envelope), now_ms);
     if (!member.to_flush) {
         member.to_flush = true;
@@ -33,7 +35,10 @@ SENDTO_OLD="""void Service::SendTo(Member& member, const bbcoop::Envelope& envel
 }"""
 SENDTO_NEW="""// V132: the already encoded bytes may be shared by recipients because
 // CoopStream::Send copies them into each recipient's own reliable chunks.
-void Service::SendEncodedTo(Member& member, std::span<const u8> encoded, qint64 now_ms) {
+void Service::SendEncodedTo(Member& member, const bbcoop::Envelope& envelope,
+                            std::span<const u8> encoded, qint64 now_ms) {
+    // Preserve existing read-only per-recipient envelope telemetry.
+    ++m_diagEnvelopes[static_cast<int>(envelope.body_case())];
     member.stream.Send(encoded, now_ms);
     if (!member.to_flush) {
         member.to_flush = true;
@@ -43,10 +48,11 @@ void Service::SendEncodedTo(Member& member, std::span<const u8> encoded, qint64 
 
 void Service::SendTo(Member& member, const bbcoop::Envelope& envelope, qint64 now_ms) {
     const auto encoded = EncodeEnvelope(envelope);
-    SendEncodedTo(member, encoded, now_ms);
+    SendEncodedTo(member, envelope, encoded, now_ms);
 }"""
 HEADER_SENDTO="    void SendTo(Member& member, const bbcoop::Envelope& envelope, qint64 now_ms);"
-HEADER_REPLACE="""    void SendEncodedTo(Member& member, std::span<const u8> encoded,
+HEADER_REPLACE="""    void SendEncodedTo(Member& member, const bbcoop::Envelope& envelope,
+                       std::span<const u8> encoded,
                        qint64 now_ms);
     void SendTo(Member& member, const bbcoop::Envelope& envelope, qint64 now_ms);"""
 HEADER_INCLUDE="#include <optional>\n"
@@ -62,7 +68,7 @@ SEND_ENTRIES_NEW="""    *envelope.mutable_entries() = ToMessage(world.host.Epoch
     const auto encoded = EncodeEnvelope(envelope);
     for (auto& [key, member] : members) {
         if (member.party == world.name) {
-            SendEncodedTo(member, encoded, now_ms);
+            SendEncodedTo(member, envelope, encoded, now_ms);
         }
     }
     world.heartbeat_ms = now_ms;"""
@@ -79,7 +85,7 @@ SEND_OTHERS_NEW="""void Service::SendToOthers(PartyWorld& world, const Member& f
     const auto encoded = EncodeEnvelope(envelope);
     for (auto& [key, member] : members) {
         if (member.party == world.name && &member != &from) {
-            SendEncodedTo(member, encoded, now_ms);
+            SendEncodedTo(member, envelope, encoded, now_ms);
         }
     }
 }"""
@@ -103,7 +109,7 @@ BOARDS_NEW="""    for (const bbcoop::Envelope& board : boards) {
         const auto encoded = EncodeEnvelope(board);
         for (auto& [key, member] : members) {
             if (member.party == world.name) {
-                SendEncodedTo(member, encoded, now_ms);
+                SendEncodedTo(member, board, encoded, now_ms);
             }
         }
     }
@@ -132,14 +138,14 @@ OWNERS_NEW="""    if (only != nullptr) {
     const auto encoded = EncodeEnvelope(envelope);
     for (auto& [key, member] : members) {
         if (member.party == world.name) {
-            SendEncodedTo(member, encoded, now_ms);
+            SendEncodedTo(member, envelope, encoded, now_ms);
         }
     }
     // Invasions: the invader follows the owners too (it travels and sees the enemies by them).
     if (const auto invasion = invasions.find(world.name);
         invasion != invasions.end() && invasion->second.joined) {
         if (const auto invader = members.find(invasion->second.invader); invader != members.end()) {
-            SendEncodedTo(invader->second, encoded, now_ms);
+            SendEncodedTo(invader->second, envelope, encoded, now_ms);
         }
     }
 }"""
@@ -168,9 +174,9 @@ def rewrite(cpp:str,header:str)->tuple[str,str]:
     header=exact_replace(header,HEADER_INCLUDE,HEADER_INCLUDE_NEW,"explicit span include")
     if cpp.count("void Service::SendEncodedTo(")!=1:
         raise ValueError("Missing single shared byte router")
-    if cpp.count("member.stream.Send(encoded, now_ms);")!=1:
+    if cpp.count("member.stream.Send(encoded, now_ms);")!=1 or cpp.count("++m_diagEnvelopes[static_cast<int>(envelope.body_case())];")!=1:
         raise ValueError("Changed reliable stream per-recipient semantics")
-    if "SendEncodedTo(invader->second, encoded, now_ms)" not in cpp:
+    if "SendEncodedTo(invader->second, envelope, encoded, now_ms)" not in cpp:
         raise ValueError("Lost invader enemy-owner broadcast")
     if "SendTo(*only, board, now_ms);" not in cpp:
         raise ValueError("Lost individual board delivery")
