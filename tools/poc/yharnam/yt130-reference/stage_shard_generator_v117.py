@@ -24,6 +24,13 @@ COUNTERS_NEW = """            # SHYT-V117-TRUE-FIVE-HUNTER-SHARD-GAME-RECEIVERS:
             # No client may be called PLAYING/healthy without game receipt.
             "game_receivers": sum(r["game_receivers"] for r in results),
             "complete_teams": sum(r["complete_teams"] for r in results),
+            # V141: actual source-verified generator socket/party lifecycle
+            # evidence, never infer a server drop from a local send error.
+            "udp_write_failed": sum(r["udp_write_failed"] for r in results),
+            "udp_write_short": sum(r["udp_write_short"] for r in results),
+            "linking": sum(r["linking"] for r in results),
+            "lobby": sum(r["lobby"] for r in results),
+            "awaiting_welcome": sum(r["awaiting_welcome"] for r in results),
             # V120: separate the after-complete-party stable transport period
             # from startup/redirect. Individual source frame timestamps arm it.
             "steady_packets_sent": sum(r["steady_packets_sent"] for r in results),

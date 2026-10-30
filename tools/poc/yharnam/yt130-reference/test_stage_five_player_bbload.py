@@ -12,11 +12,19 @@ spec.loader.exec_module(mod)
 class FivePlayerLoadgenTests(unittest.TestCase):
     @staticmethod
     def pinned_anchor_fixture():
+        # One actual Finish(): V117's receiver stage already contains the
+        # lobby report and player loop. V141 must extend that same method,
+        # not accidentally create a duplicate in the synthetic fixture.
+        receiver=[old for old, _ in mod.RECEIVER_EDITS]
+        receiver[2]=("  void Finish() {\n" + receiver[2] +
+                     "\n    const double seconds = (NowUs() - started_us) / 1e6;\n")
         return ('before\n' + mod.OLD_HELP + '\n' + mod.OLD_CLAMP + '\n' +
                 '\n'.join(old for old, _ in mod.OWNER_EDITS) + '\n' +
-                '\n'.join(old for old, _ in mod.RECEIVER_EDITS) + '\n' +
+                '\n'.join(receiver) + '\n' +
                 # Four V120 anchors predate all earlier source transforms.
-                '\n'.join(mod.STEADY_EDITS[i][0] for i in (0, 1, 2, 4))
+                '\n'.join(mod.STEADY_EDITS[i][0] for i in (0, 1, 2, 4)) +
+                '\n'.join(mod.SOCKET_STATE_DIAG_EDITS[i][0]
+                          for i in (0, 2, 5, 6))
                 + '\nafter')
 
     def test_exact_upstream_pr444_owner_changes_and_five_player_anchors(self):
@@ -29,13 +37,19 @@ class FivePlayerLoadgenTests(unittest.TestCase):
         self.assertEqual(len(mod.OWNER_EDITS), 7)
         self.assertEqual(len(mod.RECEIVER_EDITS), 5)
         for before, after in mod.RECEIVER_EDITS:
-            # V118 deliberately extends several V117 receiver edit results;
-            # validate their final composed form, not obsolete intermediates.
+            # V118/V120/V141 extend the earlier stage. The Finish() loop
+            # gains both lobby counters inside that same source block, so
+            # compare its individual invariants rather than stale adjacency.
+            if "    Report(NowUs());" in before:
+                self.assertIn("    int game_receivers = 0;", transformed)
+                self.assertIn("    int complete_teams = 0;", transformed)
+                self.assertIn("      lobby += game->InLobby();", transformed)
+                self.assertIn("      awaiting_welcome += game->AwaitingWelcome();",
+                              transformed)
+                continue
             final = after
-            for old, replacement in mod.FULL_TEAM_EDITS:
-                if old in final:
-                    final = final.replace(old, replacement, 1)
-            for old, replacement in mod.STEADY_EDITS:
+            for old, replacement in (*mod.FULL_TEAM_EDITS, *mod.STEADY_EDITS,
+                                     *mod.SOCKET_STATE_DIAG_EDITS):
                 if old in final:
                     final = final.replace(old, replacement, 1)
             self.assertIn(final, transformed)
@@ -59,6 +73,15 @@ class FivePlayerLoadgenTests(unittest.TestCase):
                       transformed)
         self.assertIn('Owner() ? load.settings.owner_fps', transformed)
         self.assertEqual(transformed.splitlines()[0], "before")
+        self.assertIn("const qint64 submitted = socket.writeDatagram(datagram, server, port);",
+                      transformed)
+        self.assertIn("++load.totals.udp_write_failed;", transformed)
+        self.assertIn("++load.totals.udp_write_short;", transformed)
+        self.assertIn('{"udp_write_failed", static_cast<double>(totals.udp_write_failed)}',
+                      transformed)
+        self.assertIn('{"linking", static_cast<int>(games.size()) - linked}', transformed)
+        self.assertIn('{"awaiting_welcome", awaiting_welcome}', transformed)
+        self.assertIn('{"lobby", lobby}', transformed)
 
     def test_missing_duplicate_and_second_stage_refused(self):
         original = self.pinned_anchor_fixture()
@@ -126,6 +149,34 @@ class FivePlayerLoadgenTests(unittest.TestCase):
             "  s64 steady_since_us = 0; // set once, after real full-team Playing\n",
             transformed,
         )
+
+    def test_socket_write_and_game_state_guards_fail_closed(self):
+        original=self.pinned_anchor_fixture()
+        # No unreviewed source changes may be silently accepted at any of
+        # the sendto or lifecycle audit points.
+        for old, _ in mod.SOCKET_STATE_DIAG_EDITS:
+            with self.subTest(anchor=old[:35]):
+                if old in original:
+                    broken=original.replace(old,"BROKEN",1)
+                    with self.assertRaises(ValueError): mod.rewrite(broken)
+        self.assertEqual(len(mod.SOCKET_STATE_DIAG_EDITS),7)
+        # Check every post-V120 socket/state anchor after the original
+        # sequential V117 receiver + V118 team + V120 traffic stages.
+        prior=original.replace(mod.OLD_HELP,mod.NEW_HELP,1).replace(
+            mod.OLD_CLAMP,mod.NEW_CLAMP,1)
+        for old,new in mod.OWNER_EDITS:
+            prior=prior.replace(old,new,1)
+        for old,new in mod.RECEIVER_EDITS:
+            prior=prior.replace(old,new,1)
+        prior=mod.patch_steady_window(mod.patch_complete_teams(prior))
+        for old,_ in mod.SOCKET_STATE_DIAG_EDITS:
+            with self.subTest(post_stage_anchor=old[:38]):
+                self.assertEqual(prior.count(old),1)
+                with self.assertRaisesRegex(ValueError,
+                                            "UDP send/state diagnostic anchor drift"):
+                    mod.patch_socket_state_diagnostics(prior.replace(old,"BROKEN",1))
+        with self.assertRaises(ValueError):
+            mod.rewrite(mod.rewrite(original))
 
     def test_unpinned_source_refused(self):
         with self.assertRaisesRegex(ValueError, "exact official pinned"):

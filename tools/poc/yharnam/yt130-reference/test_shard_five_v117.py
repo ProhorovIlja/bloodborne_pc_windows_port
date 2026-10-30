@@ -17,7 +17,8 @@ run=load("yt117_run","run_five_hunter_shards_v117.py")
 def sample(shards=3):
     return dict(
         players=200, shards=shards, playing=200, game_receivers=200,
-        complete_teams=40, steady_packets_sent=15000,
+        complete_teams=40, linking=0, lobby=0, awaiting_welcome=0,
+        udp_write_failed=0, udp_write_short=0, steady_packets_sent=15000,
         steady_packets_received=15000, steady_workers=4,
         steady_window_ms_min=15000,
         packets_sent=16000, packets_received=16000, packets_lost=0,
@@ -41,6 +42,9 @@ class OriginalShardSourceTests(unittest.TestCase):
         self.assertIn('sum(r["steady_packets_received"] for r in results)',s)
         self.assertIn('min(r["steady_window_ms"] for r in results)',s)
         self.assertIn('sum(r["packets_sent"] for r in results)',s)
+        for key in ("udp_write_failed", "udp_write_short", "linking", "lobby",
+                    "awaiting_welcome"):
+            self.assertIn(f'sum(r["{key}"] for r in results)',s)
         self.assertIn('sum(r["packets_received"] for r in results)',s)
         self.assertEqual(patch.PIN, "0645740a33ae21c56df3b4a0d9777086dbca6053")
         self.assertEqual(patch.BLOB, "9a8e6a1dd866f9ef996ed544e3b781953e154230")
@@ -93,12 +97,39 @@ class OriginalShardsQoSTests(unittest.TestCase):
                                  "HOST_KERNEL_UDP_DROPS")
                 s=sample(shards)
                 s["playing"]=199
+                s["lobby"]=1
                 self.assertEqual(run.grade(s,shards)["quality"],
                                  "NOT_ALL_PLAYING")
+                s=sample(shards)
+                s["udp_write_failed"]=1
+                self.assertEqual(run.grade(s,shards)["quality"],
+                                 "GENERATOR_UDP_SOCKET_WRITE_FAILED")
+                s=sample(shards)
+                s["udp_write_short"]=1
+                self.assertEqual(run.grade(s,shards)["quality"],
+                                 "GENERATOR_UDP_SOCKET_WRITE_FAILED")
                 s=sample(shards)
                 s["per_shard"][0]["link_thread_cpu_avg"]=90
                 self.assertEqual(run.grade(s,shards)["quality"],
                                  "SHARD_CPU_SATURATED")
+    def test_socket_diagnostics_and_200_original_player_states_sum_correctly(self):
+        s=sample(3)
+        s["playing"]=190
+        s["lobby"]=7
+        s["awaiting_welcome"]=3
+        report=run.grade(s,3)
+        self.assertEqual(report["quality"],"NOT_ALL_PLAYING")
+        self.assertEqual((report["linking"], report["lobby"],
+                          report["awaiting_welcome"]), (0,7,3))
+        s["linking"]=1
+        self.assertEqual(run.grade(s,3)["quality"],
+                         "INVALID_ORIGINAL_GAME_LIFECYCLE_SUM")
+        s=sample(3)
+        s["udp_write_failed"]=2
+        report=run.grade(s,3)
+        self.assertEqual(report["quality"],"GENERATOR_UDP_SOCKET_WRITE_FAILED")
+        self.assertEqual(report["udp_write_failed"],2)
+
     def test_startup_losses_are_never_mislabeled_as_healthy_200(self):
         report=sample(3)
         report["packets_received"]=14500
@@ -119,6 +150,8 @@ class OriginalShardsQoSTests(unittest.TestCase):
         for key,value in [
             ("shards",1),("players",199),("playing","200"),("game_receivers",None),
             ("packets_lost",-1),("packets_sent",float("nan")),
+            ("linking",-1),("lobby","0"),("awaiting_welcome",None),
+            ("udp_write_failed",-1),("udp_write_short",float("nan")),
             ("complete_teams",None),("complete_teams",False),
             ("steady_packets_sent",None),("steady_workers",True),
             ("steady_window_ms_min",float("nan")),
@@ -134,6 +167,30 @@ class OriginalShardsQoSTests(unittest.TestCase):
             with self.subTest(key=key,value=str(value)[:20]):
                 self.assertNotEqual(run.grade(s,3).get("quality"),
                                     "FULL_GAMEPLAY_SYNTHETIC_ONLY")
+    def test_five_hunter_enemy_owner_cases_use_verified_original_cli(self):
+        # Upstream YT #444 support already exists in the source-exact
+        # stage_five_player_bbload.py. Never pretend default --owners 1
+        # describes five hunters spread across the map.
+        from types import SimpleNamespace
+        args=SimpleNamespace(shadnet=Path("/tmp/shadnet"),
+                             bbload=Path("/tmp/bbload"),
+                             shard_script=Path("/tmp/run_shards.py"),
+                             owners=5)
+        for count in run.OWNER_CASES:
+            with self.subTest(owners=count):
+                args.owners=count
+                cmd=run.command(args,3,39014)
+                self.assertEqual(cmd[cmd.index("--team-size")+1],"5")
+                self.assertEqual(cmd[cmd.index("--players")+1],"200")
+                self.assertIn(f"--owners {count}",cmd[cmd.index("--extra")+1])
+                self.assertIn("--owner-fps 30",cmd[cmd.index("--extra")+1])
+        self.assertEqual(run.OWNER_CASES,(1,3,5))
+        self.assertEqual(run.CROSS_MODES,("mixed","code","invite"))
+        for mode in run.CROSS_MODES:
+            args.cross=mode
+            cmd=run.command(args,3,39014)
+            self.assertEqual(cmd[cmd.index("--cross")+1],mode)
+
     def test_five_seat_real_200_by_shard_not_two_or_four(self):
         self.assertEqual(run.SIZE,5)
         self.assertEqual(run.POPULATION,200)

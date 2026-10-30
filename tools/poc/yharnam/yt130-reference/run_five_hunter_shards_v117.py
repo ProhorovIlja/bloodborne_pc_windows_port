@@ -21,6 +21,8 @@ from run_capacity_curve import BUILD
 SIZE = 5
 POPULATION = 200
 SHARD_COUNTS = (1, 3)
+OWNER_CASES = (1, 3, 5)  # 5-player team; per-actor enemy ownership in YT 1.3
+CROSS_MODES = ("mixed", "code", "invite")  # same original hosted bbload join policies
 RUN_SECONDS = 30
 RAMP_MS = 35
 TIMEOUT = 120
@@ -42,6 +44,8 @@ def grade(item: dict, expected_shards: int) -> dict:
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
             return {"quality": "INVALID_PER_SHARD_CPU"}
     for key in ("playing", "game_receivers", "complete_teams",
+                "linking", "lobby", "awaiting_welcome",
+                "udp_write_failed", "udp_write_short",
                 "steady_workers", "steady_packets_sent", "steady_packets_received",
                 "packets_sent", "packets_received",
                 "packets_lost", "refused", "udp_buffer_drops"):
@@ -54,6 +58,9 @@ def grade(item: dict, expected_shards: int) -> dict:
         if type(val) not in (int, float) or not math.isfinite(val) or val < 0:
             return {"quality": "INVALID_TIMING_OR_REDIRECT", "field": key}
     playing, receivers = item["playing"], item["game_receivers"]
+    if (item["linking"] + item["lobby"] + item["awaiting_welcome"] +
+            playing != POPULATION):
+        return {"quality": "INVALID_ORIGINAL_GAME_LIFECYCLE_SUM"}
     sent, received = item["packets_sent"], item["packets_received"]
     steady_sent = item["steady_packets_sent"]
     steady_received = item["steady_packets_received"]
@@ -65,7 +72,9 @@ def grade(item: dict, expected_shards: int) -> dict:
         steady_quality = "STEADY_DELIVERY_DEGRADED"
     else:
         steady_quality = "STEADY_DELIVERY_PASS_SYNTHETIC_ONLY"
-    if playing != POPULATION:
+    if item["udp_write_failed"] or item["udp_write_short"]:
+        quality = "GENERATOR_UDP_SOCKET_WRITE_FAILED"
+    elif playing != POPULATION:
         quality = "NOT_ALL_PLAYING"
     elif receivers != POPULATION:
         quality = "GAME_RECEIVERS_MISSING"
@@ -91,6 +100,10 @@ def grade(item: dict, expected_shards: int) -> dict:
     return {
         "quality": quality, "players": POPULATION, "shards": expected_shards,
         "playing": playing, "game_receivers": receivers,
+        "linking": item["linking"], "lobby": item["lobby"],
+        "awaiting_welcome": item["awaiting_welcome"],
+        "udp_write_failed": item["udp_write_failed"],
+        "udp_write_short": item["udp_write_short"],
         "complete_teams": item["complete_teams"], "packets_sent": sent,
         "steady_quality": steady_quality,
         "steady_workers": item["steady_workers"],
@@ -117,9 +130,9 @@ def command(args, shards: int, base_port: int) -> list[str]:
         "--players", str(POPULATION), "--team-size", str(SIZE),
         "--shards", str(shards), "--capacity", str(240 if shards == 1 else 80),
         "--seconds", str(RUN_SECONDS), "--ramp-ms", str(RAMP_MS),
-        "--processes", "4", "--cross", "mixed", "--port", str(base_port),
+        "--processes", "4", "--cross", getattr(args, "cross", "mixed"), "--port", str(base_port),
         "--cfg", "CheckServerBuild=false",
-        "--extra", f"--build '{BUILD}' --owner-fps 30 --follower-fps 8",
+        "--extra", f"--build '{BUILD}' --owner-fps 30 --follower-fps 8 --owners {args.owners}",
     ]
 
 def execute(cmd: list[str], timeout_s: int) -> tuple[int, str]:
@@ -147,8 +160,13 @@ def run(args) -> int:
         raise ValueError("Original source and real compiled Qt binaries are required")
     if not 60 <= args.timeout <= TIMEOUT:
         raise ValueError("Timeout outside finite guarded process-group cleanup")
+    if args.owners not in OWNER_CASES:
+        raise ValueError("Only source-tested 1/3/5-owner five-player cases allowed")
     results = []
-    for index, shards in enumerate(SHARD_COUNTS):
+    if getattr(args, "cross", "mixed") not in CROSS_MODES:
+        raise ValueError("Only original hosted code/invite/mixed join policies")
+    cases = (3,) if getattr(args, "three_only", False) else SHARD_COUNTS
+    for index, shards in enumerate(cases):
         rc, out = execute(command(args, shards, 39014 + index * 60), args.timeout)
         if rc == 124:
             result = {"quality": "ORIGINAL_SHARDS_TIMEOUT", "shards": shards}
@@ -167,13 +185,20 @@ def run(args) -> int:
                       {"quality": "MISSING_OR_DUPLICATE_GENERATOR_REPORT", "shards": shards})
         result["scope"] = "DISPOSABLE_LOOPBACK_REDIRECT_NOT_REAL_WAN_OR_DIRECT_P2P"
         result["team_size"] = SIZE
+        result["enemy_owner_seats"] = args.owners
+        result["cross_join_mode"] = getattr(args, "cross", "mixed")
         results.append(result)
         print("YT130_V117_REAL_5P_SHARDS", shards, result["quality"],
               "PLAYING", result.get("playing", "?"), "GAME_RECEIVERS",
               result.get("game_receivers", "?"), "COMPLETE_FIVE_TEAMS",
               result.get("complete_teams", "?"), "STEADY",
               result.get("steady_quality", "?"), "STEADY_PCT",
-              result.get("steady_delivered_pct", "?"), flush=True)
+              result.get("steady_delivered_pct", "?"), "LINKING",
+              result.get("linking", "?"), "LOBBY",
+              result.get("lobby", "?"), "AWAIT_WELCOME",
+              result.get("awaiting_welcome", "?"), "UDP_WRITE_FAILED",
+              result.get("udp_write_failed", "?"), "UDP_WRITE_SHORT",
+              result.get("udp_write_short", "?"), flush=True)
         if rc == 124:
             break
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -192,5 +217,10 @@ if __name__ == "__main__":
     for label in ("shadnet", "bbload", "shard-script", "output"):
         p.add_argument("--" + label, type=Path, required=True)
     p.add_argument("--timeout", type=int, default=TIMEOUT)
+    p.add_argument("--three-only", action="store_true",
+                   help="diagnostic only: compare cross-shard join modes without 1-shard baseline")
+    p.add_argument("--cross", choices=CROSS_MODES, default="mixed")
+    p.add_argument("--owners", type=int, choices=OWNER_CASES, default=5,
+                   help="how many of the five players independently own enemies (worst case 5)")
     p.add_argument("--require-healthy", action="store_true")
     raise SystemExit(run(p.parse_args()))
