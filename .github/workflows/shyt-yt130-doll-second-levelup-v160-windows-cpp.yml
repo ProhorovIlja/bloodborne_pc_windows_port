@@ -67,7 +67,7 @@ jobs:
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_second_levelup_v160.py -v
           python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-upstream --reviewed reviewed-yt468
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
-          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-upstream --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --donor151 reviewed-yt457 --original pinned-upstream --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
           git -C pinned-upstream diff --check
           git -C pinned-upstream diff --name-only > /tmp/v151-original-doll-files.txt
           python3 - <<'PY'
@@ -202,7 +202,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'V160 original reviewed native Doll source drift' }
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
           if ($LASTEXITCODE -ne 0) { throw 'V162 source-exact upstream Doll end repair regression failed' }
-          python tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-upstream --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
+          python tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --donor151 reviewed-yt457 --original pinned-upstream --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
           if ($LASTEXITCODE -ne 0) { throw 'V162 reviewed original game source drift' }
           git -C pinned-upstream diff --check
           if ($LASTEXITCODE -ne 0) { throw 'V151 staged original game source diff whitespace error' }
