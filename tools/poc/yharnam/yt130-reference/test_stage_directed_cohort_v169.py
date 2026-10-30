@@ -90,8 +90,8 @@ class DirectedSource(unittest.TestCase):
         one=worker()
         for entries,expected in (
                 (7,"DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY"),
-                (6,"INVALID_DIRECTED_GAME_COHORT"),
-                (1,"INVALID_DIRECTED_GAME_COHORT")):
+                (6,"DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN"),
+                (1,"DIRECTED_GAME_COHORT_OFFER_UNDERDRIVEN")):
             with self.subTest(entries_each_second=entries):
                 chunks=[]
                 for _ in range(4):
