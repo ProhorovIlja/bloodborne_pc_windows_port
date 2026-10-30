@@ -18,14 +18,23 @@ def sample(shards=3):
     return dict(
         players=200, shards=shards, playing=200, game_receivers=200,
         complete_teams=40, linking=0, lobby=0, awaiting_welcome=0,
-        udp_write_failed=0, udp_write_short=0, steady_packets_sent=15000,
+        udp_write_failed=0, udp_write_short=0,
+        game_wire_in_packets=shards*1000,
+        game_wire_out_packets=shards*3000,
+        game_wire_in_bytes=shards*64000,
+        game_wire_out_bytes=shards*192000,
+        game_wire_sample_windows=shards*5,
+        steady_packets_sent=15000,
         steady_packets_received=15000, steady_workers=4,
         steady_window_ms_min=15000,
         packets_sent=16000, packets_received=16000, packets_lost=0,
         refused=0, udp_buffer_drops=0, relay_ms_p99=11.5,
         redirects=50 if shards==3 else 0, redirect_ms_p99=450 if shards==3 else 0,
         per_shard=[dict(shard=f"lt-{i}", link_thread_cpu_avg=12.5,
-                        players_at_end=200//shards) for i in range(shards)]
+                        players_at_end=200//shards, game_wire_in_packets=1000,
+                        game_wire_out_packets=3000, game_wire_in_bytes=64000,
+                        game_wire_out_bytes=192000, game_wire_sample_windows=5)
+                   for i in range(shards)]
     )
 
 class OriginalShardSourceTests(unittest.TestCase):
@@ -146,6 +155,46 @@ class OriginalShardsQoSTests(unittest.TestCase):
         s=sample(3)
         s["redirect_ms_p99"]=3000
         self.assertEqual(run.grade(s,3)["quality"],"CROSS_SHARD_REDIRECT_FAILED")
+    def test_v155_original_qt_wire_aggregate_verification(self):
+        for shards in (1, 3):
+            item=sample(shards)
+            report=run.grade(item, shards)
+            self.assertEqual(report["quality"], "FULL_GAMEPLAY_SYNTHETIC_ONLY")
+            self.assertEqual(report["game_wire_in_packets"], shards*1000)
+            self.assertEqual(report["game_wire_out_packets"], shards*3000)
+            self.assertEqual(report["game_wire_sample_windows"], shards*5)
+            self.assertIn("whole run", report["wire_scope"])
+            for field in ("game_wire_in_packets","game_wire_out_packets",
+                          "game_wire_in_bytes","game_wire_out_bytes",
+                          "game_wire_sample_windows"):
+                with self.subTest(shards=shards, field=field):
+                    broken=sample(shards)
+                    broken.pop(field)
+                    self.assertEqual(run.grade(broken,shards)["quality"],
+                                     "MISSING_REAL_QT_WIRE_COUNTERS")
+                    broken=sample(shards)
+                    broken[field]+=1
+                    self.assertEqual(run.grade(broken,shards)["quality"],
+                                     "QT_WIRE_COUNTER_TOTAL_MISMATCH")
+                    broken=sample(shards)
+                    broken["per_shard"][0][field]=None
+                    self.assertEqual(run.grade(broken,shards)["quality"],
+                                     "INVALID_QT_SHARD_WIRE_COUNTERS")
+            no_sample=sample(shards)
+            no_sample["game_wire_sample_windows"]-=5
+            no_sample["per_shard"][0]["game_wire_sample_windows"]=0
+            self.assertEqual(run.grade(no_sample,shards)["quality"],
+                             "QT_GAME_DATA_WIRE_SAMPLES_MISSING")
+            actual_loss=sample(shards)
+            actual_loss["steady_packets_received"]=10000
+            self.assertEqual(run.grade(actual_loss,shards)["quality"],
+                             "STEADY_DELIVERY_DEGRADED")
+            actual_loss["per_shard"][0]["game_wire_sample_windows"]=0
+            actual_loss["game_wire_sample_windows"]-=5
+            # Existing strict QoS verdict must never be hidden by diagnostics.
+            self.assertEqual(run.grade(actual_loss,shards)["quality"],
+                             "STEADY_DELIVERY_DEGRADED")
+
     def test_unknown_bad_or_fake_values_must_fail_closed(self):
         for key,value in [
             ("shards",1),("players",199),("playing","200"),("game_receivers",None),
