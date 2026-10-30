@@ -16,7 +16,7 @@ jobs:
   freeze-from-verified-game-exes:
     name: Reuse real Protocol8 Windows EXEs, diagnose original frozen BLauncher
     runs-on: windows-2022
-    timeout-minutes: 35
+    timeout-minutes: 65
     env:
       YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
     steps:
@@ -87,6 +87,101 @@ jobs:
           fi
           test -s out/pyi-dist/BLauncher/BLauncher.exe
           echo SHYT_YT130_ORIGINAL_BLAUNCHER_FREEZE_PASS
+      - name: Restore exact licensed upstream submodule sources for packaging
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
+          if ($LASTEXITCODE -ne 0) { throw 'Original game vendor source/attribution retrieval failed' }
+          foreach ($license in @(
+            'pinned-upstream/bbport/gpu/third_party/fsr-vulkan/LICENSE.txt',
+            'pinned-upstream/bbport/gpu/third_party/wepoll/LICENSE',
+            'pinned-upstream/bbport/gpu/third_party/httplib/LICENSE')) {
+            if (-not (Test-Path $license)) { throw "Missing pinned upstream license: $license" }
+          }
+      - name: Install required CLANG64 runtime and packaging tools
+        shell: msys2 {0}
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed \
+            git unzip mingw-w64-clang-x86_64-llvm \
+            mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-sdl3 \
+            mingw-w64-clang-x86_64-ffmpeg \
+            mingw-w64-clang-x86_64-vulkan-loader \
+            mingw-w64-clang-x86_64-protobuf \
+            mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib
+          command -v llvm-strip
+          command -v ldd
+          command -v curl
+          command -v unzip
+      - name: Assemble real original YT1.3 Windows portable package without rebuilding GPU
+        shell: msys2 {0}
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          export WINPYTHON="$(cygpath -u "$pythonLocation")/python.exe"
+          cd pinned-upstream/bbport
+          # This is the EXACT upstream pinned packager: no new renderer build.
+          # It validates and downloads pinned, licensed PkgTool, ReShade and
+          # XeSS resources before creating an archive for private CI.
+          set +e
+          bash packaging/windows/package.sh > out/shyt-original-package.log 2>&1
+          status=$?
+          set -e
+          tail -n 150 out/shyt-original-package.log || true
+          if [[ "$status" != 0 ]]; then
+            echo SHYT_YT130_ORIGINAL_WINDOWS_PACKAGE_FAILED
+            exit "$status"
+          fi
+          test -s dist/bbport-windows.zip
+          echo SHYT_YT130_REAL_ORIGINAL_WINDOWS_PORTABLE_ZIP_CREATED_INTERNAL_ONLY
+      - name: Verify native Protocol8 kit includes executable, BLauncher and required licenses
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = 'pinned-upstream/bbport/dist/bbport-windows.zip'
+          @'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import hashlib
+          archive = Path("pinned-upstream/bbport/dist/bbport-windows.zip")
+          required = {
+              "bbport-windows/BLauncher.exe",
+              "bbport-windows/Bloodborne.exe",
+              "bbport-windows/bin/bb-probe.exe",
+              "bbport-windows/bin/bb-gpu-capabilities.exe",
+              "bbport-windows/licenses/PkgTool-LICENSE.txt",
+              "bbport-windows/licenses/Intel-XeSS-LICENSE.txt",
+              "bbport-windows/licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+          }
+          with ZipFile(archive) as z:
+              names = set(z.namelist())
+              missing = required - names
+              assert not missing, f"Missing files from real original package: {sorted(missing)}"
+              assert all(not n.startswith("/") and ".." not in Path(n).parts for n in names)
+              assert z.testzip() is None, "Damaged ZIP entry"
+              print("Native Windows original kit entries:", len(names))
+          sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+          archive.with_suffix(".zip.sha256").write_text(sha + "  bbport-windows.zip\n", encoding="ascii")
+          print("SHYT_YT130_REAL_NATIVE_PORTABLE_ZIP_VERIFIED_INTERNAL_ONLY", sha)
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Original real ZIP structure/CRC failed' }
+      - name: Preserve only private complete Windows kit candidate
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-recovered-protocol8-WINDOWS-KIT-INTERNAL
+          path: |
+            pinned-upstream/bbport/dist/bbport-windows.zip
+            pinned-upstream/bbport/dist/bbport-windows.zip.sha256
+          retention-days: 3
+          if-no-files-found: error
       - name: Preserve bounded packaging logs and frozen launcher
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,6 +189,7 @@ jobs:
           name: shyt-yt130-launcher-freeze-recovery-EVIDENCE-INTERNAL
           path: |
             pinned-upstream/bbport/out/shyt-pyinstaller-verbose.log
+            pinned-upstream/bbport/out/shyt-original-package.log
             pinned-upstream/bbport/out/pyi-work/BLauncher/warn-BLauncher.txt
             pinned-upstream/bbport/out/pyi-dist/BLauncher/BLauncher.exe
           retention-days: 3
