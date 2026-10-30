@@ -215,7 +215,10 @@ def run(args) -> int:
     results = []
     if getattr(args, "cross", "mixed") not in CROSS_MODES:
         raise ValueError("Only original hosted code/invite/mixed join policies")
-    cases = (3,) if getattr(args, "three_only", False) else SHARD_COUNTS
+    if getattr(args, "one_only", False) and getattr(args, "three_only", False):
+        raise ValueError("one-only and three-only are mutually exclusive")
+    cases = ((1,) if getattr(args, "one_only", False) else
+             (3,) if getattr(args, "three_only", False) else SHARD_COUNTS)
     for index, shards in enumerate(cases):
         rc, out = execute(command(args, shards, 39014 + index * 60), args.timeout)
         if rc == 124:
@@ -256,7 +259,7 @@ def run(args) -> int:
     with args.output.open("w", encoding="utf-8") as f:
         for result in results:
             f.write(json.dumps(result, sort_keys=True) + "\n")
-    if len(results) == 2 and all(
+    if len(results) == len(cases) and all(
             r["quality"] == "FULL_GAMEPLAY_SYNTHETIC_ONLY" for r in results):
         print("YT130_V117_BOTH_200_PLAYER_SHARD_RUNS_SYNTHETIC_HEALTH_PASS")
         return 0
@@ -268,6 +271,8 @@ if __name__ == "__main__":
     for label in ("shadnet", "bbload", "shard-script", "output"):
         p.add_argument("--" + label, type=Path, required=True)
     p.add_argument("--timeout", type=int, default=TIMEOUT)
+    p.add_argument("--one-only", action="store_true",
+                   help="diagnostic only: run the single-shard case, 200 players")
     p.add_argument("--three-only", action="store_true",
                    help="diagnostic only: compare cross-shard join modes without 1-shard baseline")
     p.add_argument("--cross", choices=CROSS_MODES, default="mixed")
