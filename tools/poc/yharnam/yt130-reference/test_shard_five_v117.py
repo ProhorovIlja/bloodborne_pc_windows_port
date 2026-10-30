@@ -157,6 +157,40 @@ class OriginalShardsQoSTests(unittest.TestCase):
         s=sample(3)
         s["redirect_ms_p99"]=3000
         self.assertEqual(run.grade(s,3)["quality"],"CROSS_SHARD_REDIRECT_FAILED")
+    def test_v157_fixed_population_multiple_real_generator_processes(self):
+        from argparse import Namespace
+        for workers in (4, 8, 16):
+            for shards in (1, 3):
+                with self.subTest(workers=workers,shards=shards):
+                    args=Namespace(shadnet=Path("/unused/source-verified/shadnet"),
+                                   bbload=Path("/unused/source-verified/bbload"),
+                                   shard_script=Path("/unused/source-verified/run_shards.py"),
+                                   cross="mixed",owners=5,load_processes=workers)
+                    cmd=run.command(args,shards,39014)
+                    self.assertEqual(cmd[cmd.index("--players")+1],"200")
+                    self.assertEqual(cmd[cmd.index("--team-size")+1],"5")
+                    self.assertEqual(cmd[cmd.index("--processes")+1],str(workers))
+                    self.assertEqual(cmd[cmd.index("--seconds")+1],str(run.RUN_SECONDS))
+                    good=sample(shards)
+                    good["steady_workers"]=workers
+                    self.assertEqual(run.grade(good,shards,workers)["quality"],
+                                     "FULL_GAMEPLAY_SYNTHETIC_ONLY")
+                    for wrong in (4,8,16):
+                        if wrong!=workers:
+                            self.assertEqual(
+                                run.grade(good,shards,wrong)["quality"],
+                                "NO_FIVE_HUNTER_STEADY_WINDOW")
+                    poor=sample(shards)
+                    poor["steady_workers"]=workers
+                    poor["steady_packets_received"]=10000
+                    self.assertEqual(run.grade(poor,shards,workers)["quality"],
+                                     "STEADY_DELIVERY_DEGRADED")
+                    poor["packets_lost"]=10
+                    self.assertEqual(run.grade(poor,shards,workers)["quality"],
+                                     "REAL_GAME_DELIVERY_DEGRADED")
+        with self.assertRaises(ValueError):
+            run.grade(sample(1),1,5)
+
     def test_v156_original_lobby_refusal_category_consistency(self):
         for shards in (1,3):
             data=sample(shards)
