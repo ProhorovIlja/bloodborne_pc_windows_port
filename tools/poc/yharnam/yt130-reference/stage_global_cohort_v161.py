@@ -100,11 +100,13 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
             if cohort_seconds >= 5:
                 counts = {}
                 valid = True
-                worker_loss_detected = False
                 expected_buckets = set(range(cohort_start_us, cohort_end_us, tick))
                 for r in results:
                     # Fail closed: a silent/stalled worker must not borrow
                     # another process's healthy UDP traffic to score green.
+                    # Nonzero per-second bidirectional *liveness* is valid;
+                    # per-worker sent/received ratios are NOT loss metrics
+                    # because owner and follower frame rates are asymmetric.
                     seen = set()
                     worker_scored_buckets = set()
                     worker_sent = worker_received = 0
@@ -139,17 +141,15 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
                     if (worker_sent == 0 or worker_received == 0 or
                             worker_scored_buckets != expected_buckets):
                         valid = False
-                    elif 100 * worker_received < 99 * worker_sent:
-                        # Aggregate delivery alone could hide one badly
-                        # degraded five-seat worker among busy healthy peers.
-                        worker_loss_detected = True
                 if valid:
                     cohort_sent = sum(x[0] for x in counts.values())
                     cohort_received = sum(x[1] for x in counts.values())
                     if cohort_sent < 10_000 or cohort_received > cohort_sent:
                         cohort_quality = "INSUFFICIENT_OR_INVALID_GLOBAL_GAME_COHORT"
-                    elif (worker_loss_detected or
-                          100 * cohort_received < 99 * cohort_sent):
+                    elif 100 * cohort_received < 99 * cohort_sent:
+                        # Compare globally aligned sender and receiver entry
+                        # totals, NOT one worker's sent versus its received:
+                        # the enemy owner sends more entries than followers.
                         cohort_quality = "GLOBAL_GAME_COHORT_DELIVERY_DEGRADED"
                     else:
                         cohort_quality = "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY"
