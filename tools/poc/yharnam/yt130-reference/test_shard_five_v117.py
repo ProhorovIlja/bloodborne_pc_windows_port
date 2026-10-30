@@ -172,6 +172,7 @@ class OriginalShardsQoSTests(unittest.TestCase):
             self.assertEqual(result["game_frame_decoded"],9000)
             self.assertEqual(result["game_data_datagrams_received"],9000)
             data["team_other_notice"]=5
+            data["team_total_notices"]=5
             data["team_no_invite"]=2
             data["team_already_joined"]=3
             result=run.grade(data,shards)
