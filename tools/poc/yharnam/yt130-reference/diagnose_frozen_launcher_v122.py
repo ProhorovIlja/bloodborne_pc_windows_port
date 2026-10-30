@@ -65,7 +65,9 @@ def probe(exe: Path, game: Path, root: Path, *, label: str) -> dict:
     ) == "YT-EXEC-OK"
     # Only print bounded generic evidence. Never disclose runner environment.
     return {
-        "label": "cyrillic" if "Ярнам" in label else "ascii",
+        "label": label,
+        "installation_has_cyrillic": "Ярнам" in str(game),
+        "script_has_cyrillic": "Ярнам" in label,
         "marker_written": bool(marker),
         "exit_before_kill": exit_before_kill,
         "timed_out": timed_out,
@@ -90,15 +92,21 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="shyt-yt130-v122-") as tmp:
         root = Path(tmp)
         target = root / "Installed"
+        unicode_target = root / "Установленный Ярнам"
         with ZipFile(args.zip_file) as z:
             z.extractall(target)
+            z.extractall(unicode_target)
         game = target / "bbport-windows"
         exe = game / "BLauncher.exe"
-        if not exe.is_file():
+        game_unicode = unicode_target / "bbport-windows"
+        exe_unicode = game_unicode / "BLauncher.exe"
+        if not exe.is_file() or not exe_unicode.is_file():
             raise ValueError("Real frozen BLauncher.exe absent")
         checks = [
             probe(exe, game, root, label="ASCII"),
             probe(exe, game, root, label="Проверка Ярнам"),
+            probe(exe_unicode, game_unicode, root, label="UNICODE_INSTALL_ASCII_SCRIPT"),
+            probe(exe_unicode, game_unicode, root, label="Установленный Ярнам - сценарий"),
         ]
     report = {
         "original_pinned_game_client": True,

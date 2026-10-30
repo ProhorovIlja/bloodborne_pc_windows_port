@@ -66,6 +66,8 @@ jobs:
         timeout-minutes: 8
         run: |
           $ErrorActionPreference = 'Stop'
+          python -c "import json; j=json.load(open('kit/SHYT-YT130-LAUNCHER-STARTUP-DIAGNOSTIC.json',encoding='utf-8')); assert len(j['checks'])==4 and all(x['marker_written'] and x['exit_before_kill']==0 and not x['timed_out'] and x['stdout_contains_expected'] for x in j['checks']), 'Unicode installation path or script subprocess failed'"
+          if ($LASTEXITCODE -ne 0) { throw 'Real BLauncher failure: diagnosed Unicode installation path / subprocess; see JSON evidence' }
           python kit-helpers/tools/poc/yharnam/package-v41/smoke_frozen_windows_launcher.py kit/bbport-windows.zip --output kit/SHYT-YT130-WINDOWS-FROZEN-SMOKE.json
           if ($LASTEXITCODE -ne 0) { throw 'Frozen real YT1.3 BLauncher Unicode executable smoke failed' }
           python -c "import json; x=json.load(open('kit/SHYT-YT130-WINDOWS-FROZEN-SMOKE.json',encoding='utf-8')); assert x['verified'] and x['script_from_cyrillic_path'] and x['stdio_utf8'] and not x['game_assets_tested'] and not x['real_online_tested'] and not x['direct_p2p_tested']"
