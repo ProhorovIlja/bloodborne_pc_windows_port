@@ -74,12 +74,12 @@ jobs:
           seen=set(Path("/tmp/v160-game-files.txt").read_text().splitlines())
           assert seen==set(FILES), (seen,set(FILES))
           code=Path("pinned-yt130/emulator/src/core/bloodborne_travel.cpp").read_text()
-          assert "doll_blessing_asked.store(true)" in code
+          assert "BeginsDollBlessing(" in code
           assert "doll_blessing_asked.exchange(false)" in code
           assert "std::ranges::any_of(OtherPlayers()" in code
           assert "doll_blessing_end_asked.store(true);" in code
           assert "asked || EventFlagOn(DollBlessingFlag)" in code
-          assert "ClearDollLevelUpFlagAfterHerMenu();" in code
+          assert "ClearDollLevelUpFlagAfterHerMenu(blessing_begun);" in code
           rules=Path("pinned-yt130/emulator/src/core/bloodborne_flags.h").read_text()
           assert "Range(72100100, 72100102, FlagOwner::PerPlayer, 0," in rules
           print("SHYT_V162_PINNED_ORIGINAL_GUEST_DOLL_TALK_BEGIN_END_SOURCE_PASS")
