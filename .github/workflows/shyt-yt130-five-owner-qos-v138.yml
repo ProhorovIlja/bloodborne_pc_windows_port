@@ -86,7 +86,8 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          git -C "$RUNNER_TEMP/yt-src" diff -- server/src/bloodborne_world.cpp | grep -Fq '+void Service::SendEncodedTo('
+          git -C "$RUNNER_TEMP/yt-src" diff -- server/src/bloodborne_world.cpp > "$RUNNER_TEMP/world-v138.diff"
+          grep -F '+void Service::SendEncodedTo(' "$RUNNER_TEMP/world-v138.diff" >/dev/null
       - name: Actually compile modified original Qt LinkServer and core regressions
         run: |
           set -euo pipefail
