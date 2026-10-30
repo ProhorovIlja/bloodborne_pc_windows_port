@@ -12,6 +12,7 @@ import argparse
 from collections import Counter
 import json
 import os
+import struct
 from pathlib import Path
 import sys
 
@@ -127,7 +128,8 @@ def inventory(root: Path, *, include_paths: bool = False,
         try:
             info = sfo((root / "sce_sys/param.sfo").read_bytes())
             image = game_check.image_sha256(root)
-        except (OSError, ValueError, IndexError, KeyError, StopIteration) as exc:
+        except (OSError, ValueError, IndexError, KeyError, StopIteration,
+                struct.error, UnicodeError, TypeError, OverflowError):
             raise InventoryError("native game metadata/executable verification failed") from None
         title_id = info.get("TITLE_ID")
         version = info.get("APP_VER") or info.get("VERSION")
