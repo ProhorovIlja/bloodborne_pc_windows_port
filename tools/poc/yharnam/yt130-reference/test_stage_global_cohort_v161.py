@@ -39,7 +39,7 @@ def inspect(results):
     # The patch is inserted at 8-space indentation inside run_shards.py.
     # Standalone exec must dedent it; shards=0 avoids a wire-log dependency
     # while exercising the complete injected aggregation code.
-    namespace={"results":results,"args":SimpleNamespace(team_size=5,shards=0)}
+    namespace={"results":results,"args":SimpleNamespace(team_size=5,shards=0,players=10,processes=2)}
     exec(dedent(v.PATCH_AGG),namespace)
     return namespace
 
@@ -104,6 +104,31 @@ class GlobalCohortV161(unittest.TestCase):
                    worker(14_800_000,20_000_000,data)])
         self.assertEqual(o["cohort_seconds"],3)
         self.assertEqual(o["cohort_quality"],"NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+    def test_incomplete_or_duplicate_child_reports_never_form_a_green_cohort(self):
+        healthy={sec:(400,400) for sec in range(10,40)}
+        a=worker(12_000_000,42_000_000,healthy)
+        b=worker(12_000_000,42_000_000,healthy)
+        self.assertEqual(inspect([a,b])["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        self.assertEqual(inspect([a])["cohort_quality"],
+                         "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        self.assertEqual(inspect([a,b,a])["cohort_quality"],
+                         "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        bad=worker(12_000_000,42_000_000,healthy)
+        bad["games"]=1
+        self.assertEqual(inspect([a,bad])["cohort_quality"],
+                         "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        bad=worker(12_000_000,42_000_000,healthy)
+        bad["complete_teams"]=0
+        self.assertEqual(inspect([a,bad])["cohort_quality"],
+                         "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        for bad_value in (True,False,2.5,"5",None):
+            with self.subTest(games=bad_value):
+                damaged=dict(b)
+                damaged["games"]=bad_value
+                self.assertEqual(inspect([a,damaged])["cohort_quality"],
+                                 "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+
     def test_silent_worker_cannot_borrow_healthy_workers_global_qos(self):
         # A worker with 5 games Playing but no actual packets must not
         # disappear inside the sum of the other workers' healthy traffic.
