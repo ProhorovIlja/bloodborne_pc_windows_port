@@ -1,0 +1,89 @@
+name: YT1.3 V125 bounded Qt UDP receive and explicit no-drop re-drain
+on:
+  push:
+    branches: [feature/yt130-udp-fairness-v125-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-udp-fair-v125.yml
+      - tools/poc/yharnam/yt130-reference/stage_udp_fair_read_v125.py
+      - tools/poc/yharnam/yt130-reference/test_stage_udp_fair_read_v125.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-v125-disposable-qt
+  cancel-in-progress: false
+jobs:
+  source-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Real V125 source-exact regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_udp_fair_read_v125.py -v
+          python -m compileall -q tools/poc/yharnam/yt130-reference/stage_udp_fair_read_v125.py
+      - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" "$RUNNER_TEMP/yt-src"
+          for stage in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          python tools/poc/yharnam/yt130-reference/stage_udp_fair_read_v125.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'SHYT-V125-UDP-FAIR-NO-DROP' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -Fq 'm_udpFairContinuationPending' "$RUNNER_TEMP/yt-src/server/src/link_server.h"
+          echo SHYT_V125_PINNED_QT_EVENTLOOP_FAIR_SOURCE_STAGED_NO_LOAD_PASS
+  real-qt-server:
+    needs: source-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: qt6-yt130-auth-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            qt6-yt130-auth-${{ runner.os }}-
+      - name: Install exact native server prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ ccache pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite
+      - name: Clone source with original protobuf
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          git -C "$RUNNER_TEMP/yt-src" submodule update --init --recursive server/externals/protobuf
+      - name: Apply previously proven staged five-player Qt changes plus V125 only
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" "$RUNNER_TEMP/yt-src"
+          for stage in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_udp_fair_read_v125.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 16
+      - name: Actually compile modified original Qt LinkServer and core regressions
+        run: |
+          set -euo pipefail
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          ccache --max-size 1300M
+          cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0" "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache" "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target shadnet test_server_link test_bloodborne_world
+          ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(server_link|bloodborne_world)$'
+          ccache --show-stats
+          echo SHYT_V125_ACTUAL_QT_LINK_AND_WORLD_CPP_TESTS_PASS_NOT_200_PLAYER_CAPACITY
