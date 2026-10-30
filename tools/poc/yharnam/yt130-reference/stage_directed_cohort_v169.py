@@ -22,6 +22,17 @@ CLASS_NEW=CLASS_OLD+('  // '+MARK+': synthetic local seat-pair indices only.\n'
   '  // One 64-sequence receipt bitmap per synthetic directed route.\n'
   '  std::map<u32, std::pair<u32, u64>> cohort_seen_sequences;\n'
   '  quint64 cohort_nonunique_receipts = 0;\n')
+GAME_SEAT_FIELD_OLD = '  int seat;\n'
+GAME_SEAT_FIELD_NEW = GAME_SEAT_FIELD_OLD+('  // Synthetic team names remain in this process, never exported.\n'
+  '  std::vector<std::string> cohort_sender_names;\n')
+GAME_CTOR_OLD = '''  QObject::connect(&socket, &QUdpSocket::readyRead, [this] { OnReadyRead(); });
+'''
+GAME_CTOR_NEW = '''  // Cache stable synthetic team names once, not four string allocations per
+  // decoded game packet at 200-player worst-case owner traffic.
+  cohort_sender_names.reserve(load.settings.team_size);
+  for (int sender_seat = 0; sender_seat < load.settings.team_size; ++sender_seat)
+    cohort_sender_names.push_back(load.NameOf(team, sender_seat));
+'''+GAME_CTOR_OLD
 SEQ_HELPER = '''// Source-locked V170: O(1) bounded exact-duplicate receipt tracking.
 // The original bbload sequence is independent per sender->destination.
 bool FreshDirectedSequence(u32 seq, std::pair<u32, u64>& window) {
@@ -60,7 +71,7 @@ RECEIVED_NEW=RECEIVED_OLD+'''    // The original frame's synthetic sender name s
     // Export ONLY its bounded integer seat-pair index, never the name.
     int sender_seat = -1;
     for (int candidate = 0; candidate < load.settings.team_size; ++candidate) {
-      if (candidate != seat && game_frame->sender == load.NameOf(team, candidate)) {
+      if (candidate != seat && game_frame->sender == cohort_sender_names[candidate]) {
         sender_seat = candidate;
         break;
       }
@@ -221,6 +232,8 @@ def patch_cpp(s):
     s=exactly(s,SEQ_ANCHOR,SEQ_HELPER+SEQ_ANCHOR,
               'original Qt 64-sequence fixed-bitmap de-duplication')
     for before,after,label in (
+            (GAME_SEAT_FIELD_OLD,GAME_SEAT_FIELD_NEW,'source-exact Game synthetic name cache'),
+            (GAME_CTOR_OLD,GAME_CTOR_NEW,'only once at Game construction'),
             (CLASS_OLD,CLASS_NEW,'synthetic seat-pair ledger'),
             (SEND_OLD,SEND_NEW,'original Game::SendGamePackets exact frame entries'),
             (RECEIVED_OLD,RECEIVED_NEW,'original decoded Game::TakeData sender'),
