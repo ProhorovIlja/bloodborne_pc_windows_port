@@ -139,12 +139,64 @@ jobs:
           done
           echo "SHYT_V138_SYNTHETIC_QOS_ALL_CASES_PASS_ONLY_IF_RETURN_0"
           exit "$failures"
+      - name: Diagnose unfinished hosted teams by isolated code, invite and mixed redirect policy
+        if: always()
+        timeout-minutes: 9
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -x "$RUNNER_TEMP/yt-build/shadnet" ] || \
+             [ ! -x "$RUNNER_TEMP/yt-build/bbload" ] || \
+             [ ! -x "$RUNNER_TEMP/yt138-dir-venv/bin/python" ] || \
+             [ ! -f "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" ]; then
+            echo SHYT_V138_DIAGNOSTIC_NO_REAL_ORIGINAL_BINARIES_DO_NOT_COUNT_AS_PASS
+            exit 1
+          fi
+          failed=0
+          for cross in code invite mixed; do
+            echo "SHYT_V138_REDIRECT_DIAG_START original_three_shards_join=$cross"
+            set +e
+            timeout 145s "$RUNNER_TEMP/yt138-dir-venv/bin/python" \
+              tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py \
+              --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+              --bbload "$RUNNER_TEMP/yt-build/bbload" \
+              --shard-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+              --owners 1 --three-only --cross "$cross" --timeout 120 \
+              --output "yt130-v138-cross-${cross}.jsonl"
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ]; then failed=1; fi
+            python3 - "$cross" <<'PY'
+          import json,sys
+          from pathlib import Path
+          name=sys.argv[1]
+          p=Path(f"yt130-v138-cross-{name}.jsonl")
+          if not p.exists():
+              print("SHYT_V138_REDIRECT_DIAG_MISSING", name)
+              sys.exit(1)
+          for line in p.read_text().splitlines():
+              x=json.loads(line)
+              print("SHYT_V138_REDIRECT_DIAG",name,
+                    "quality",x.get("quality"),
+                    "playing",x.get("playing"),
+                    "teams",x.get("complete_teams"),
+                    "redirects",x.get("redirects"),
+                    "p99_ms",x.get("redirect_ms_p99"),
+                    "steady_pct",x.get("steady_delivered_pct"),
+                    "shards",[(z.get("shard"),z.get("players_at_end"))
+                              for z in x.get("per_shard",[])],flush=True)
+          PY
+          done
+          echo SHYT_V138_THREE_SHARD_JOIN_MODE_DIAGNOSTIC_ONLY_NOT_SERVER_CAPACITY
+          exit "$failed"
       - name: Preserve all strict game UDP QoS stages even if performance fails
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: yt130-V138-5-seat-200-player-owner-and-shard-evidence-NOT-RELEASE
-          path: yt130-v138-five-seat-owners-*.jsonl
+          path: |
+            yt130-v138-five-seat-owners-*.jsonl
+            yt130-v138-cross-*.jsonl
           retention-days: 7
           if-no-files-found: warn
 
