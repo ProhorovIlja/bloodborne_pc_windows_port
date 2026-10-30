@@ -249,7 +249,7 @@ class OriginalShardsQoSTests(unittest.TestCase):
                              "FULL_GAMEPLAY_SYNTHETIC_ONLY")
             data.update(team_name_absent=11, team_name_ambiguous=2,
                         team_lookup_throttled=3, team_other_notice=5,
-                        team_total_notices=21)
+                        team_unknown_other=5, team_total_notices=21)
             out=run.grade(data,shards)
             self.assertEqual(out["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
             self.assertEqual(out["team_name_absent"],11)
