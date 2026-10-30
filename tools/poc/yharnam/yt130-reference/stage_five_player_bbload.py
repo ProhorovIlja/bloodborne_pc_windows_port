@@ -138,6 +138,71 @@ STEADY_EDITS = (
 )
 
 
+
+# V141 DIAGNOSTIC ONLY. Original Qt loadgen increments "datagrams_sent"
+# unconditionally after writeDatagram(), without checking whether the
+# simulated player's UDP socket accepted the frame at all. Distinguish
+# local socket failure from server relay loss, and report which stage the
+# 200 participants reached. No production game/server modification.
+SOCKET_STATE_DIAG_EDITS = (
+    ('  quint64 datagrams_sent = 0;\n',
+     '  quint64 datagrams_sent = 0;\n'
+     '  quint64 udp_write_failed = 0;\n'
+     '  quint64 udp_write_short = 0;\n'),
+    ('  bool Linked() const { return state != State::Linking; }\n'
+     '  bool SawGamePackets() const { return received_game_packets != 0; }\n',
+     '  bool Linked() const { return state != State::Linking; }\n'
+     '  bool InLobby() const { return state == State::Lobby; }\n'
+     '  bool AwaitingWelcome() const { return state == State::Started; }\n'
+     '  bool SawGamePackets() const { return received_game_packets != 0; }\n'),
+    ('  socket.writeDatagram(datagram, server, port);\n'
+     '  ++load.totals.datagrams_sent;\n',
+     '  const qint64 submitted = socket.writeDatagram(datagram, server, port);\n'
+     '  if (submitted < 0) {\n'
+     '    ++load.totals.udp_write_failed;\n'
+     '  } else if (submitted != datagram.size()) {\n'
+     '    ++load.totals.udp_write_short;\n'
+     '  }\n'
+     '  ++load.totals.datagrams_sent;\n'),
+    ('  void Finish() {\n'
+     '    Report(NowUs());\n'
+     '    int linked = 0;\n'
+     '    int playing = 0;\n',
+     '  void Finish() {\n'
+     '    Report(NowUs());\n'
+     '    int linked = 0;\n'
+     '    int playing = 0;\n'
+     '    int lobby = 0;\n'
+     '    int awaiting_welcome = 0;\n'),
+    ('      playing += game->Playing();\n'
+     '    }\n'
+     '    const double seconds = (NowUs() - started_us) / 1e6;\n',
+     '      playing += game->Playing();\n'
+     '      lobby += game->InLobby();\n'
+     '      awaiting_welcome += game->AwaitingWelcome();\n'
+     '    }\n'
+     '    const double seconds = (NowUs() - started_us) / 1e6;\n'),
+    ('        {"linked", linked},\n'
+     '        {"playing", playing},\n',
+     '        {"linked", linked},\n'
+     '        {"linking", static_cast<int>(games.size()) - linked},\n'
+     '        {"lobby", lobby},\n'
+     '        {"awaiting_welcome", awaiting_welcome},\n'
+     '        {"playing", playing},\n'),
+    ('        {"datagrams_sent", static_cast<double>(totals.datagrams_sent)},\n',
+     '        {"datagrams_sent", static_cast<double>(totals.datagrams_sent)},\n'
+     '        {"udp_write_failed", static_cast<double>(totals.udp_write_failed)},\n'
+     '        {"udp_write_short", static_cast<double>(totals.udp_write_short)},\n'),
+)
+
+def patch_socket_state_diagnostics(text: str) -> str:
+    for old, replacement in SOCKET_STATE_DIAG_EDITS:
+        if text.count(old) != 1:
+            raise ValueError("Pinned original bbload UDP send/state diagnostic anchor drift")
+        text = text.replace(old, replacement, 1)
+    return text
+
+
 def patch_steady_window(text: str) -> str:
     for old, replacement in STEADY_EDITS:
         if text.count(old) != 1:
@@ -166,7 +231,7 @@ def rewrite(text: str) -> str:
         if text.count(old) != 1:
             raise ValueError("Pinned game-receiver bbload anchor drift")
         text = text.replace(old, replacement, 1)
-    return patch_steady_window(patch_complete_teams(text))
+    return patch_socket_state_diagnostics(patch_steady_window(patch_complete_teams(text)))
 
 
 def transform(raw: bytes) -> bytes:
