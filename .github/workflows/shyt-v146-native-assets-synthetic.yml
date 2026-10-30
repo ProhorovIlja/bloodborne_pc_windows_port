@@ -1,0 +1,54 @@
+name: SHYT V146 native Windows asset manifest no game files
+on:
+  push:
+    branches: [feature/yt130-native-assets-inventory-v146-20261030]
+    paths:
+      - .github/workflows/shyt-v146-native-assets-synthetic.yml
+      - tools/native/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  metadata-only:
+    name: Native dump inventory synthetic privacy checks on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test that local dump inspection never exports game data
+        shell: bash
+        run: |
+          python -m unittest discover -s tools/native -p 'test_v146_game_inventory.py' -v
+          python -m compileall -q tools/native
+      - name: Explicit synthetic dummy manifest, never proprietary bytes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          import json, subprocess, sys
+          with TemporaryDirectory() as temp:
+              root=Path(temp)/'GAME_TEST_ONLY'
+              root.mkdir()
+              (root/'eboot.bin').write_bytes(b'FAKE')
+              (root/'sce_module').mkdir()
+              (root/'sce_module'/'libc.prx').write_bytes(b'NO_GAMEDATA')
+              p=subprocess.run([sys.executable,'tools/native/v146_game_inventory.py',str(root)],
+                               capture_output=True,text=True,check=True)
+              report=json.loads(p.stdout)
+              assert report['required']['eboot.bin']
+              assert not report['privacy']['game_bytes_uploaded']
+              assert 'FAKE' not in p.stdout and 'NO_GAMEDATA' not in p.stdout
+              assert 'GAME_TEST_ONLY' not in p.stdout and str(root) not in p.stdout
+              print('SHYT_V146_NATIVE_SYNTHETIC_INPUT_PRIVACY_PASS_NOT_REAL_GAME')
+          PY
