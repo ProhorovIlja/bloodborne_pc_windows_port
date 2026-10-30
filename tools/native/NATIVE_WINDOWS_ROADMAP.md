@@ -38,6 +38,20 @@ The `--verify-image` option loads original scripts `prepare.py` and `game_check.
 - Never store private download URLs, passwords, session cookies, PSN data, decryption keys, account tokens or save files in logs, manifests, PRs or workflow configuration.
 - Retain original game binaries locally. Use source diffs, metadata, synthetic fixtures and aggregate test results to collaborate. For game-specific runtime debugging, request only a *minimal* permitted diagnostic artefact, never an indiscriminate 30+ GiB upload.
 
+## Stage 0b: source-exact native PS4 ABI import coverage, no game bytes
+
+The existing original `scripts/prepare.py` (on **your local machine only**) produces `out/analysis.json`, and `scripts/link_modules.py` produces `out/link.json`. Both files may include game metadata, symbol NIDs, and private file names. **Do not upload the originals** to GitHub or Drive. The scripts may also produce large linked game binaries, so never run them directly in CI with proprietary files.
+
+Once a copy of Bloodborne has been legitimately prepared **locally** and those JSON files exist, run:
+
+```powershell
+py -3 tools/native/v147_abi_report.py --analysis out/analysis.json --link out/link.json --output native-abi-summary.json
+```
+
+The V147 converter **reads existing JSON only**, without opening `eboot.bin` or `dvdroot_ps4`. It emits only counts: original imported symbols, required module count, linked import slots, native module bindings, and unresolved imports grouped into broad host-library classes. It intentionally redacts all raw NIDs, module names, memory addresses, game titles, hashes and local absolute paths. It refuses to overwrite existing files. The missing `--link` option results in `linked_import_census=not_provided`, not a fake success.
+
+**Do not mistake unresolved linker imports for unsupported Windows functions:** many unresolved-by-native-module imports are validly implemented by our runtime shims. A later runtime resolver/instrumentation stage must classify genuinely unimplemented imports without overstating native coverage. V147 is a safe baseline for incremental import replacement and detecting unexpected dependency changes, not a functional PS4 service or game launch test.
+
 ## Migration gates (do them in this order)
 
 1. **Input contract:** Validate image fingerprint, region/version, `sce_module/libc.prx`, asset-tree layout, shader readiness and mod/patch precedence from the *locally reported inventory*. Keep unknown versions blocked until independently tested; do not assume a regional directory name proves the executable.
