@@ -67,7 +67,7 @@ jobs:
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_second_levelup_v160.py -v
           python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-upstream --reviewed reviewed-yt468
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
-          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-upstream --middle reviewed-yt468latest --reviewed reviewed-yt471
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-upstream --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
           git -C pinned-upstream diff --check
           git -C pinned-upstream diff --name-only > /tmp/v151-original-doll-files.txt
           python3 - <<'PY'
@@ -99,7 +99,7 @@ jobs:
           helper=region(src,HELPER_START,HELPER_END,"staged native helper")
           assert "return party_configured && level_up_on && blessing_on;" in helper
           Path("/tmp/v151-doll-real-helper.cpp").write_text(
-              "using s32=int; constexpr s32 DollBlessingFlag=72100100;\n"+helper+"""
+              "#include <optional>\nusing s32=int; constexpr s32 DollBlessingFlag=72100100;\n"+helper+"""
           int main() {
               for (int m=0;m<8;++m) {
                   bool party=(m&4)!=0, level=(m&2)!=0, blessing=(m&1)!=0;
