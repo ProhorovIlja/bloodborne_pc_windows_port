@@ -87,7 +87,7 @@ jobs:
           ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(server_link|bloodborne_world)$'
           ccache --show-stats
           echo SHYT_V125_ACTUAL_QT_LINK_AND_WORLD_CPP_TESTS_PASS_NOT_200_PLAYER_CAPACITY
-- name: Stage authentic original bbload five-hunter game payload counters
+      - name: Stage authentic original bbload five-hunter game payload counters
         run: |
           set -euo pipefail
           python tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py "$RUNNER_TEMP/yt-src"
