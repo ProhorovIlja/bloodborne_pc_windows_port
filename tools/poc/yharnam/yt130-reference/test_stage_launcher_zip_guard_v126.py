@@ -55,7 +55,7 @@ def archive(names=FILES, link=None):
                 continue
             original = name.encode("ascii")
             normalized = name.replace(chr(92), "/").encode("ascii")
-            if raw.count(original) == 0 and raw.count(normalized) == 2:
+            if raw.count(normalized) == 2:
                 raw = raw.replace(normalized, original)
         out = io.BytesIO(raw)
     out.seek(0)
