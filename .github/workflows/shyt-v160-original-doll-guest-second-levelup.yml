@@ -1,0 +1,93 @@
+name: SHYT V160 original Bloodborne guest Doll second level-up source-exact regression
+on:
+  push:
+    branches: [feature/yt130-doll-levelup-v151-20261030]
+    paths:
+      - .github/workflows/shyt-v160-original-doll-guest-second-levelup.yml
+      - tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py
+      - tools/poc/yharnam/yt130-reference/test_stage_doll_second_levelup_v160.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-YT-gameplay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-yt130
+          submodules: false
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 3ce88c205648616b52b729fc2764b6fe27f7af83
+          path: reviewed-yt457
+          submodules: false
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: b18c5f371a19ca9a605e8fc40f8a57876ed12aac
+          path: reviewed-yt468
+          submodules: false
+          persist-credentials: false
+      - name: Test source exact guest own talk predicate and stage both reviewed upstream patches
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_own_flag_v151.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_second_levelup_v160.py -v
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_own_flag_v151.py --original pinned-yt130 --reviewed reviewed-yt457
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-yt130 --reviewed reviewed-yt468
+          git -C pinned-yt130 diff --check
+          git -C pinned-yt130 diff --name-only > /tmp/v160-game-files.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0,"tools/poc/yharnam/yt130-reference")
+          from stage_doll_own_flag_v151 import FILES
+          seen=set(Path("/tmp/v160-game-files.txt").read_text().splitlines())
+          assert seen==set(FILES), (seen,set(FILES))
+          code=Path("pinned-yt130/emulator/src/core/bloodborne_travel.cpp").read_text()
+          assert "doll_blessing_asked.store(true)" in code
+          assert "doll_blessing_asked.exchange(false)" in code
+          assert "asked || EventFlagOn(DollBlessingFlag)" in code
+          assert "ClearDollLevelUpFlagAfterHerMenu();" in code
+          rules=Path("pinned-yt130/emulator/src/core/bloodborne_flags.h").read_text()
+          assert "Range(72100100, 72100102, FlagOwner::PerPlayer, 0," in rules
+          print("SHYT_V160_PINNED_ORIGINAL_GUEST_DOLL_OWN_TALK_ATOMIC_TICK_SOURCE_PASS")
+          PY
+      - name: Compile and run actual staged original Bloodborne own-talk flag C++ helper truth table
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path("pinned-yt130/emulator/src/core/bloodborne_party.cpp").read_text()
+          start="bool ClearsDollLevelUpFlagOnHerBlessing(bool party_configured, bool others_talk,"
+          at=code.index(start)
+          stop=code.index("\nstd::vector<s32> LightRequestsToClear(",at)
+          helper=code[at:stop]
+          assert helper.count("return party_configured && !others_talk && requested_flag == DollBlessingFlag;")==1
+          Path("/tmp/yt160-real-doll-game.cpp").write_text(
+              "using s32=int;\nconstexpr s32 DollBlessingFlag=72100100;\n"+
+              helper+"""
+          int main() {
+              for (int v=0;v<16;++v) {
+                  bool active=(v&4)!=0, other=(v&2)!=0;
+                  s32 flag=(v&1)?DollBlessingFlag:DollBlessingFlag+1;
+                  bool expected=active && !other && flag==DollBlessingFlag;
+                  if (ClearsDollLevelUpFlagOnHerBlessing(active,other,flag)!=expected) return 1;
+              }
+              return 0;
+          }
+          """)
+          PY
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror /tmp/yt160-real-doll-game.cpp -o /tmp/yt160-real-doll-game
+          /tmp/yt160-real-doll-game
+          echo SHYT_V160_ACTUAL_UPSTREAM_ORIGINAL_BLOODBORNE_GAME_CPP_OWN_TALK_PREDICATE_PASS
