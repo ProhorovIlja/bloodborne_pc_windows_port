@@ -54,7 +54,7 @@ jobs:
           assert "levels >= other.levels && layers >= other.layers" in snippet
           Path(sys.argv[2]).write_text(
               "#pragma once\n#include <cstdint>\n#include <compare>\n"
-              "using u16 = std::uint16_t;\n" + snippet + "\n", encoding="utf-8")
+              "using u16 = std::uint16_t;\nnamespace VideoCore {\n" + snippet + "\n}\n", encoding="utf-8")
           print("SHYT_V127_COMPILE_FROM_BYTE_EXACT_PINNED_SOURCE_STRUCT")
           PY
           cat > "$RUNNER_TEMP/test_gpu_extent.cpp" <<'CPP'
