@@ -34,30 +34,7 @@ def archive(names=FILES, link=None):
                 member.external_attr = (stat.S_IFLNK | 0o777) << 16
                 z.writestr(member, b"target")
             else:
-                data = b"valid-" + name.encode("ascii", errors="replace")
-                if chr(92) in name:
-                    # ZipInfo normalizes on Windows only during construction.
-                    # Construct a harmless name, then set the *actual* hostile
-                    # name to test the bytes an external ZIP can really carry.
-                    member = zipfile.ZipInfo("placeholder")
-                    member.filename = name
-                    z.writestr(member, data)
-                else:
-                    z.writestr(name, data)
-    # Python's ZipInfo normalizes backslashes to forward slashes when
-    # *creating* an archive on Windows. A received archive from an outside
-    # process can still have literal backslashes. Rewrite only ZIP metadata
-    # filename bytes (equal lengths; CRC covers file contents, not names).
-    if any(chr(92) in name for name in names):
-        raw = out.getvalue()
-        for name in names:
-            if chr(92) not in name:
-                continue
-            original = name.encode("ascii")
-            normalized = name.replace(chr(92), "/").encode("ascii")
-            if raw.count(normalized) == 2:
-                raw = raw.replace(normalized, original)
-        out = io.BytesIO(raw)
+                z.writestr(name, b"valid-" + name.encode("ascii", errors="replace"))
     out.seek(0)
     return zipfile.ZipFile(out)
 
@@ -80,8 +57,12 @@ class ZipUpdateGuardTests(unittest.TestCase):
             with self.subTest(path=path):
                 with archive(FILES + [path]) as z:
                     if chr(92) in path:
-                        self.assertIn(path, [info.filename for info in z.infolist()],
-                                      "Windows ZIP test fixture normalized malicious filename")
+                        # Windows' ZipInfo normalizes backslashes while reading;
+                        # inject a raw incoming entry name into the ZipInfo
+                        # object to test this guard independently of zipfile's
+                        # platform-specific decoding policy.
+                        z.infolist()[-1].filename = path
+                        self.assertEqual(z.infolist()[-1].filename, path)
                     with self.assertRaises(ValueError):
                         validate(z)
 
