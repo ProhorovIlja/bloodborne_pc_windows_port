@@ -172,10 +172,14 @@ class GlobalCohortV161(unittest.TestCase):
                         ("cohort_ready_us",float("inf")),
                         ("cohort_ready_us",float("-inf")),
                         ("cohort_ready_us",float(2**53)),
+                        ("cohort_ready_us",True),
+                        ("cohort_ready_us",False),
                         ("cohort_finish_us",float("nan")),
                         ("cohort_finish_us",float("inf")),
                         ("cohort_finish_us",float("-inf")),
-                        ("cohort_finish_us",float(2**53))):
+                        ("cohort_finish_us",float(2**53)),
+                        ("cohort_finish_us",True),
+                        ("cohort_finish_us",False)):
             with self.subTest(timestamp=key,bad=repr(bad)):
                 broken=worker(12_000_000,38_000_000,base)
                 broken[key]=bad
