@@ -18,7 +18,34 @@ MARK='SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT'
 CLASS_OLD='  std::map<s64, std::pair<quint64, quint64>> cohort_epoch_entries;\n'
 CLASS_NEW=CLASS_OLD+('  // '+MARK+': synthetic local seat-pair indices only.\n'
   '  std::map<std::pair<s64, u32>, std::pair<quint64, quint64>> cohort_pair_entries;\n'
-  '  quint64 cohort_unknown_senders = 0;\n')
+  '  quint64 cohort_unknown_senders = 0;\n'
+  '  // One 64-sequence receipt bitmap per synthetic directed route.\n'
+  '  std::map<u32, std::pair<u32, u64>> cohort_seen_sequences;\n'
+  '  quint64 cohort_nonunique_receipts = 0;\n')
+SEQ_HELPER = '''// Source-locked V170: O(1) bounded exact-duplicate receipt tracking.
+// The original bbload sequence is independent per sender->destination.
+bool FreshDirectedSequence(u32 seq, std::pair<u32, u64>& window) {
+  if (seq == 0) return false;
+  if (window.first == 0) {
+    window = {seq, 1};
+    return true;
+  }
+  if (seq > window.first) {
+    const u32 shift = seq - window.first;
+    window.second = shift >= 64 ? 1 : (window.second << shift) | 1;
+    window.first = seq;
+    return true;
+  }
+  const u32 lag = window.first - seq;
+  if (lag >= 64) return false;
+  const u64 bit = u64{1} << lag;
+  if (window.second & bit) return false;
+  window.second |= bit;
+  return true;
+}
+
+'''
+SEQ_ANCHOR = 'void Game::SendGamePackets(s64 now_us) {\n'
 SEND_OLD='''    load.cohort_epoch_entries[(now_us / 1'000'000) * 1'000'000].first +=
         static_cast<quint64>(frame.entries.size());
 '''
@@ -43,8 +70,13 @@ RECEIVED_NEW=RECEIVED_OLD+'''    // The original frame's synthetic sender name s
     } else {
       const u32 route = static_cast<u32>(
           (team * load.settings.team_size + sender_seat) * load.settings.team_size + seat);
-      load.cohort_pair_entries[{(static_cast<s64>(sent) / 1'000'000) * 1'000'000,
-                                route}].second++;
+      if (FreshDirectedSequence(seq, load.cohort_seen_sequences[route])) {
+        load.cohort_pair_entries[{(static_cast<s64>(sent) / 1'000'000) * 1'000'000,
+                                  route}].second++;
+      } else {
+        // Duplicate or >64-packet reordering is not a second delivery.
+        ++load.cohort_nonunique_receipts;
+      }
     }
 '''
 FINISH_OLD='''    const double seconds = (NowUs() - started_us) / 1e6;
@@ -63,6 +95,7 @@ JSON_OLD='''        {"cohort_epoch_entries", cohort_json},
 '''
 JSON_NEW=JSON_OLD+'''        {"cohort_directed_entries", directed_json},
         {"cohort_unknown_senders", static_cast<double>(cohort_unknown_senders)},
+        {"cohort_nonunique_receipts", static_cast<double>(cohort_nonunique_receipts)},
 '''
 RUN_ANCHOR='''        per_shard = []
         for i in range(args.shards):
@@ -87,9 +120,11 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                 worker_teams = per[worker_index]
                 rows = r.get("cohort_directed_entries")
                 unknown = r.get("cohort_unknown_senders")
-                if (type(rows) is not list or type(unknown) not in (int, float) or
-                        not (0 <= unknown < 2**53) or int(unknown) != unknown or
-                        unknown != 0 or worker_teams <= 0):
+                nonunique = r.get("cohort_nonunique_receipts")
+                if (type(rows) is not list or
+                        any(type(v) not in (int, float) or
+                            not (0 <= v < 2**53) or int(v) != v or v != 0
+                            for v in (unknown, nonunique)) or worker_teams <= 0):
                     directed_valid = False
                     break
                 seen = set()
@@ -183,6 +218,8 @@ def patch_cpp(s):
     if ('SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS' not in s or
             'SHYT_V158_NATIVE_QT_RECEIVE_DIAGNOSTICS' not in s):
         raise ValueError('V169 requires already staged original Qt V161')
+    s=exactly(s,SEQ_ANCHOR,SEQ_HELPER+SEQ_ANCHOR,
+              'original Qt 64-sequence fixed-bitmap de-duplication')
     for before,after,label in (
             (CLASS_OLD,CLASS_NEW,'synthetic seat-pair ledger'),
             (SEND_OLD,SEND_NEW,'original Game::SendGamePackets exact frame entries'),
