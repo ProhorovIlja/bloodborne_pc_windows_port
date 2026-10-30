@@ -26,8 +26,11 @@ CROSS_MODES = ("mixed", "code", "invite")  # same original hosted bbload join po
 RUN_SECONDS = 30
 RAMP_MS = 35
 TIMEOUT = 120
+LOAD_PROCESSES = (4, 8, 16)  # original Qt bbload process isolation A/B, same population
 
-def grade(item: dict, expected_shards: int) -> dict:
+def grade(item: dict, expected_shards: int, expected_workers: int = 4) -> dict:
+    if expected_workers not in LOAD_PROCESSES:
+        raise ValueError("Only four, eight or sixteen original Qt workers")
     if type(item) is not dict:
         return {"quality": "INVALID_ORIGINAL_REPORT"}
     if (item.get("players") != POPULATION or item.get("shards") != expected_shards):
@@ -90,7 +93,7 @@ def grade(item: dict, expected_shards: int) -> dict:
     sent, received = item["packets_sent"], item["packets_received"]
     steady_sent = item["steady_packets_sent"]
     steady_received = item["steady_packets_received"]
-    if item["steady_workers"] != 4 or item["steady_window_ms_min"] < 5000:
+    if item["steady_workers"] != expected_workers or item["steady_window_ms_min"] < 5000:
         steady_quality = "NO_FIVE_HUNTER_STEADY_WINDOW"
     elif steady_sent < 10000 or steady_received > steady_sent:
         steady_quality = "INSUFFICIENT_OR_INVALID_STEADY_TRAFFIC"
@@ -175,7 +178,7 @@ def command(args, shards: int, base_port: int) -> list[str]:
         "--players", str(POPULATION), "--team-size", str(SIZE),
         "--shards", str(shards), "--capacity", str(240 if shards == 1 else 80),
         "--seconds", str(RUN_SECONDS), "--ramp-ms", str(RAMP_MS),
-        "--processes", "4", "--cross", getattr(args, "cross", "mixed"), "--port", str(base_port),
+        "--processes", str(getattr(args, "load_processes", 4)), "--cross", getattr(args, "cross", "mixed"), "--port", str(base_port),
         "--cfg", "CheckServerBuild=false",
         "--extra", f"--build '{BUILD}' --owner-fps 30 --follower-fps 8 --owners {args.owners}",
     ]
@@ -205,6 +208,8 @@ def run(args) -> int:
         raise ValueError("Original source and real compiled Qt binaries are required")
     if not 60 <= args.timeout <= TIMEOUT:
         raise ValueError("Timeout outside finite guarded process-group cleanup")
+    if getattr(args, "load_processes", 4) not in LOAD_PROCESSES:
+        raise ValueError("Only 4, 8 or 16 original Qt load-generator processes")
     if args.owners not in OWNER_CASES:
         raise ValueError("Only source-tested 1/3/5-owner five-player cases allowed")
     results = []
@@ -226,10 +231,11 @@ def run(args) -> int:
                         values.append(json.loads(line))
                     except json.JSONDecodeError:
                         continue
-            result = (grade(values[0], shards) if len(values) == 1 else
+            result = (grade(values[0], shards, getattr(args, "load_processes", 4)) if len(values) == 1 else
                       {"quality": "MISSING_OR_DUPLICATE_GENERATOR_REPORT", "shards": shards})
         result["scope"] = "DISPOSABLE_LOOPBACK_REDIRECT_NOT_REAL_WAN_OR_DIRECT_P2P"
         result["team_size"] = SIZE
+        result["load_processes"] = getattr(args, "load_processes", 4)
         result["enemy_owner_seats"] = args.owners
         result["cross_join_mode"] = getattr(args, "cross", "mixed")
         results.append(result)
@@ -265,6 +271,8 @@ if __name__ == "__main__":
     p.add_argument("--three-only", action="store_true",
                    help="diagnostic only: compare cross-shard join modes without 1-shard baseline")
     p.add_argument("--cross", choices=CROSS_MODES, default="mixed")
+    p.add_argument("--load-processes", type=int, choices=LOAD_PROCESSES, default=4,
+                   help="4/8/16 real Qt bbload child processes, keep 200 hunters fixed")
     p.add_argument("--owners", type=int, choices=OWNER_CASES, default=5,
                    help="how many of the five players independently own enemies (worst case 5)")
     p.add_argument("--require-healthy", action="store_true")
