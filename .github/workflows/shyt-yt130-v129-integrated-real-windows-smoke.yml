@@ -1,0 +1,126 @@
+name: YT1.3 V129 guest name cache + GPU V127 + frozen BLauncher V126 real Windows smoke
+on:
+  push:
+    branches: [feature/yt130-guest-name-cache-v129-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-v129-integrated-real-windows-smoke.yml
+      - tools/poc/yharnam/yt130-reference/assemble_gpu_kit_v127.py
+      - tools/poc/yharnam/yt130-reference/test_assemble_gpu_kit_v127.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: yt130-v129-v127-v126-real-native-Windows-kit-smoke
+  cancel-in-progress: false
+jobs:
+  native-kit-and-frozen-launcher:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          ref: 334b4606411e2df13210386b62000c7abfd26e6e
+          path: kit-helpers
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          run-id: 41031256956
+          name: shyt-yt130-V129-GUEST-NAME-CACHE-GPU-FULL-PROTOCOL8-EXES-INTERNAL
+          github-token: ${{ github.token }}
+          path: kit-gpu
+      - uses: actions/download-artifact@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          run-id: 41026006202
+          name: shyt-yt130-PR32-V126-updater-safe-protocol8-WINDOWS-KIT-INTERNAL
+          github-token: ${{ github.token }}
+          path: kit-v126
+      - name: Real Windows source-exact artifact SHA and offline assembler regression
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_assemble_gpu_kit_v127.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Original repacker regression failed' }
+          @'
+          from pathlib import Path
+          from hashlib import sha256
+          from zipfile import ZipFile
+          import json
+          def digest(path): return sha256(Path(path).read_bytes()).hexdigest()
+          original=Path('kit-v126/YT130-Integrated-Windows-Kit-INTERNAL.zip')
+          assert digest(original)=='d96c3a6884f12c2694544a6c814ce222e754f6b3da0d246037aaf65a0427c7dc'
+          actual={
+              'bb-play.exe':'bb1f3eb05e599a78c1d4c5c67e9e067370558fa6e847b4569f57cded9637f7c8',
+              'bb-probe.exe':'89d9fc63506daaf95869a28d4d09bf172ce84015385e89f3920f48fa78372297',
+              'bb-gpu-capabilities.exe':'880f792f1cde6cdd9d73a80b2afbe1275c3afbc6adf2ff33194a3dbb3a98aff3',
+          }
+          for exe, expected in actual.items():
+              assert digest(Path('kit-gpu')/exe)==expected, 'Native GPU compiler artifact drift: '+exe
+          provenance=json.loads(Path('kit-v126/PROVENANCE.json').read_text(encoding='utf-8'))
+          assert provenance['new_kit_sha256']==digest(original)
+          with ZipFile(original) as archive:
+              assert archive.testzip() is None and len(archive.infolist())==1048
+          print('SHYT_YT130_NATIVE_CACHE_GPU_V129_AND_FROZEN_V126_SOURCE_SHA256_PASS')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Actual Windows native GPU or BLauncher SHA does not match proven CI' }
+      - name: Assemble three actual PE64 game EXEs and retain all original DLLs/licenses/launcher
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python tools/poc/yharnam/yt130-reference/assemble_gpu_kit_v127.py --v126-kit kit-v126/YT130-Integrated-Windows-Kit-INTERNAL.zip --compiled-gpu-exes kit-gpu --output kit-out/YT130-V129-GuestNameCache-GPU-V127-Launcher-V126-INTERNAL.zip --report kit-out/PROVENANCE-V129.json
+          if ($LASTEXITCODE -ne 0) { throw 'Actual GPU + frozen BLauncher archive failed byte preservation gate' }
+          @'
+          from zipfile import ZipFile
+          from pathlib import Path
+          import json
+          p=json.loads(Path('kit-out/PROVENANCE-V129.json').read_text())
+          assert len(p['changed_files'])==3 and p['all_other_file_bytes_verified_unchanged']
+          assert not p['production_ready'] and not p['gameplay_in_game_tested'] and not p['direct_p2p_verified']
+          with ZipFile('kit-out/YT130-V129-GuestNameCache-GPU-V127-Launcher-V126-INTERNAL.zip') as z:
+              assert len(z.infolist())==1048 and z.testzip() is None
+          print('SHYT_YT130_V129_REAL_3_WIN_EXES_AND_1045_UNCHANGED_ENTRIES_PASS')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid actual internal package provenance' }
+      - name: Execute actual frozen Windows Cyrillic UTF8 BLauncher in merged V127 native game kit
+        shell: pwsh
+        timeout-minutes: 7
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python kit-helpers/tools/poc/yharnam/package-v41/smoke_frozen_windows_launcher.py kit-out/YT130-V129-GuestNameCache-GPU-V127-Launcher-V126-INTERNAL.zip --output kit-out/FROZEN-WINDOWS-SMOKE.json
+          if ($LASTEXITCODE -ne 0) { throw 'Merged original native game and actual Windows BLauncher Unicode smoke FAILED' }
+          python -c "import json; x=json.load(open('kit-out/FROZEN-WINDOWS-SMOKE.json',encoding='utf-8')); assert x['verified'] and x['stdio_utf8'] and x['script_from_cyrillic_path'] and not x['real_online_tested']"
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen native executable smoke output invalid' }
+          Write-Host 'SHYT_V129_FULL_NATIVE_WIN_GAME_CACHE_GPU_V127_V126_FROZEN_BLAUNCHER_ACTUAL_EXE_SMOKE_PASS'
+      - name: Upload only INTERNAL Protocol8 native Windows candidate
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-YT130-V129-GuestNameCache-GPU-V127-Launcher-V126-real-native-INTERNAL
+          path: |
+            kit-out/YT130-V129-GuestNameCache-GPU-V127-Launcher-V126-INTERNAL.zip
+            kit-out/YT130-V129-GuestNameCache-GPU-V127-Launcher-V126-INTERNAL.zip.sha256
+            kit-out/PROVENANCE-V129.json
+            kit-out/FROZEN-WINDOWS-SMOKE.json
+          retention-days: 3
+          if-no-files-found: error
+      - name: Keep only bounded failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: YT130-V129-integrated-windows-smoke-failure-EVIDENCE
+          path: |
+            kit-out/PROVENANCE-V129.json
+            kit-out/FROZEN-WINDOWS-SMOKE.json
+          retention-days: 3
+          if-no-files-found: ignore
