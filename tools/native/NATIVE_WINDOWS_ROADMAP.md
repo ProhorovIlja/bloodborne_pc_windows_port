@@ -52,6 +52,14 @@ The V147 converter **reads existing JSON only**, without opening `eboot.bin` or 
 
 **Do not mistake unresolved linker imports for unsupported Windows functions:** many unresolved-by-native-module imports are validly implemented by our runtime shims. A later runtime resolver/instrumentation stage must classify genuinely unimplemented imports without overstating native coverage. V147 is a safe baseline for incremental import replacement and detecting unexpected dependency changes, not a functional PS4 service or game launch test.
 
+## Stage 0c: native Windows launcher backend isolation, V148
+
+The real YT1.3 Windows source uses `bbport/run.py` with `bb-probe.exe`, `boot-linked.bin` and authenticated `BB_ONLINE=1`; the current Visy-derived `run.bat` is a **different native launcher** expecting `out/bbport.exe` and its standalone `BB_PARTY=host|join` implementation. The V143 native C++ build created original YT `bb-play.exe`, `bb-probe.exe`, `bb-gpu-capabilities.exe`, **not** a matching portable, game-data-backed YT package.
+
+V148 adds a conservative early Windows batch preflight after saved launcher settings but **before any user/out/save directory is created**. Existing standalone offline and `BB_PARTY=host|join` modes still run through the same boot path. It normalizes `BB_PARTY=off/0/false/no` even when set by launcher settings, and exits code 22 rather than silently misrouting when `BB_ONLINE` is enabled, `BB_NATIVE_BACKEND=yt` is requested, `BB_NATIVE_BACKEND=offline` conflicts with `BB_PARTY`, or an unknown party mode is provided. Windows CI invokes the **real batch file** in unsupported configurations without any game assets and proves the early stop; Linux CI checks source ordering.
+
+This guard is temporary and intentional, **not** a working YT backend. The correct follow-up is to bring the original YT Windows `run.py`, asset preparation, native network/auth module and a mutually exclusive backend selection into the final launcher, then replace the guard only after actual Protocol8 gameplay tests. Never fake compatibility by renaming `bb-play.exe` to `bbport.exe` or mixing save formats.
+
 ## Migration gates (do them in this order)
 
 1. **Input contract:** Validate image fingerprint, region/version, `sce_module/libc.prx`, asset-tree layout, shader readiness and mod/patch precedence from the *locally reported inventory*. Keep unknown versions blocked until independently tested; do not assume a regional directory name proves the executable.
