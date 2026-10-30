@@ -1,0 +1,40 @@
+name: SHYT V149 original YT1.3 native Windows run.py smoke WITHOUT game assets
+on:
+  push:
+    branches: [feature/yt130-native-assets-inventory-v146-20261030]
+    paths:
+      - .github/workflows/shyt-v149-original-yt-native-entrypoint.yml
+      - tools/native/test_v149_original_yt_native_entrypoint.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-native-entrypoint:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: original-yt130
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pin original source and exercise real Windows native launch failure path without game
+        shell: bash
+        env:
+          SHYT_V149_ORIGINAL_BBPORT: ${{ github.workspace }}/original-yt130/bbport
+        run: |
+          python -m unittest discover -s tools/native \
+            -p test_v149_original_yt_native_entrypoint.py -v
+          echo SHYT_V149_PINNED_ORIGINAL_YT130_REAL_NATIVE_WINDOWS_ENTRYPOINT_NO_GAME_PASS
