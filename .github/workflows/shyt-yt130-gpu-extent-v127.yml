@@ -36,14 +36,30 @@ jobs:
           grep -Fq 'bool Contains(const SubresourceExtent& other)' "$RUNNER_TEMP/yt-src/bbport/gpu/shadps4/video_core/texture_cache/types.h"
           grep -Fq '!cache_image.info.resources.Contains(requested_info.resources)' "$RUNNER_TEMP/yt-src/bbport/gpu/shadps4/video_core/texture_cache/texture_cache.cpp"
           grep -Fq '!cache_image.info.resources.Contains(image_info.resources)' "$RUNNER_TEMP/yt-src/bbport/gpu/shadps4/video_core/texture_cache/texture_cache.cpp"
-      - name: Compile and execute actual source header dimension test in native C++20
+      - name: Compile and execute exactly extracted native GPU struct from pinned original header
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends g++ libfmt-dev libspdlog-dev
+          # Upstream GPU common/logging headers expect a newer bundled spdlog
+          # than Ubuntu's system version. Compile the *exact real source struct*
+          # extracted from the patched original header, not an invented copy.
+          python3 - "$RUNNER_TEMP/yt-src/bbport/gpu/shadps4/video_core/texture_cache/types.h" "$RUNNER_TEMP/yt_extent_under_test.h" <<'PY'
+          from pathlib import Path
+          import sys
+          src = Path(sys.argv[1]).read_text(encoding="utf-8")
+          marker = "struct SubresourceExtent {"
+          assert src.count(marker) == 1
+          start = src.index(marker)
+          stop = src.index("\n};", start) + len("\n};")
+          snippet = src[start:stop]
+          assert "levels >= other.levels && layers >= other.layers" in snippet
+          Path(sys.argv[2]).write_text(
+              "#pragma once\n#include <cstdint>\n#include <compare>\n"
+              "using u16 = std::uint16_t;\n" + snippet + "\n", encoding="utf-8")
+          print("SHYT_V127_COMPILE_FROM_BYTE_EXACT_PINNED_SOURCE_STRUCT")
+          PY
           cat > "$RUNNER_TEMP/test_gpu_extent.cpp" <<'CPP'
           #include <cassert>
-          #include "video_core/texture_cache/types.h"
+          #include "yt_extent_under_test.h"
           using VideoCore::SubresourceExtent;
           int main() {
               const SubresourceExtent full{.levels = 5, .layers = 6};
@@ -59,6 +75,6 @@ jobs:
               return 0;
           }
           CPP
-          g++ -std=c++20 -O2 -Wall -Wextra -Werror -I"$RUNNER_TEMP/yt-src/bbport/gpu/shadps4" -o "$RUNNER_TEMP/test_gpu_extent" "$RUNNER_TEMP/test_gpu_extent.cpp"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -I"$RUNNER_TEMP" -o "$RUNNER_TEMP/test_gpu_extent" "$RUNNER_TEMP/test_gpu_extent.cpp"
           "$RUNNER_TEMP/test_gpu_extent"
           echo SHYT_V127_ACTUAL_CPP20_ORIGINAL_GPU_HEADER_CONTAINMENT_TEST_PASS_NO_FULL_GAME_BUILD
