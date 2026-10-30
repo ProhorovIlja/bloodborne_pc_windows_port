@@ -7,6 +7,8 @@ on:
       - tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
       - tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
       - tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py
+      - tools/poc/yharnam/yt130-reference/test_stage_five_player_bbload.py
+      - tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py
       - tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
       - tools/poc/yharnam/yt130-reference/test_stage_world_encode_once_v132.py
   workflow_dispatch:
@@ -106,6 +108,9 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py "$RUNNER_TEMP/yt-src"
           grep -Fq 'shlex.split(args.extra)' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq 'settings.owners = std::clamp(' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq 'udp_write_failed' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"udp_write_failed": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq '"awaiting_welcome": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           grep -Fq 'game_receivers += game->Playing() && game->SawGamePackets();' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
           grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
