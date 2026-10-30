@@ -1,0 +1,43 @@
+name: SHYT V139 original YT1.3 GPU pipeline cache thread safety source verification
+on:
+  push:
+    branches: [feature/yt130-cache-io-atomic-v139-20261030]
+    paths:
+      - .github/workflows/shyt-v139-gpu-cache-atomic-source.yml
+      - tools/poc/yharnam/yt130-reference/stage_cache_io_atomic_v139.py
+      - tools/poc/yharnam/yt130-reference/test_stage_cache_io_atomic_v139.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-exact:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Guard original source SHA and reject stale/duplicate changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_cache_io_atomic_v139.py -v
+          python3 -m compileall -q tools/poc/yharnam/yt130-reference/stage_cache_io_atomic_v139.py
+          python3 tools/poc/yharnam/yt130-reference/stage_cache_io_atomic_v139.py pinned-upstream
+          git -C pinned-upstream diff --check
+          grep -F 'std::atomic<u32> num_requests{};' \
+            pinned-upstream/bbport/gpu/shadps4/video_core/cache_storage.cpp >/dev/null
+          grep -F 'num_requests.load(std::memory_order_acquire) != 0' \
+            pinned-upstream/bbport/gpu/shadps4/video_core/cache_storage.cpp >/dev/null
+          git -C pinned-upstream diff -- \
+            bbport/gpu/shadps4/video_core/cache_storage.cpp > /tmp/v139-source.patch
+          test -s /tmp/v139-source.patch
+          echo SHYT_V139_ORIGINAL_GPU_SOURCE_EXACT_ATOMICITY_PASS_NOT_FULL_WINDOWS_COMPILATION
