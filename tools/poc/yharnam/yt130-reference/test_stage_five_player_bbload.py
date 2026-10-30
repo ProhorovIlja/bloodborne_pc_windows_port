@@ -37,13 +37,19 @@ class FivePlayerLoadgenTests(unittest.TestCase):
         self.assertEqual(len(mod.OWNER_EDITS), 7)
         self.assertEqual(len(mod.RECEIVER_EDITS), 5)
         for before, after in mod.RECEIVER_EDITS:
-            # V118 deliberately extends several V117 receiver edit results;
-            # validate their final composed form, not obsolete intermediates.
+            # V118/V120/V141 extend the earlier stage. The Finish() loop
+            # gains both lobby counters inside that same source block, so
+            # compare its individual invariants rather than stale adjacency.
+            if "    Report(NowUs());" in before:
+                self.assertIn("    int game_receivers = 0;", transformed)
+                self.assertIn("    int complete_teams = 0;", transformed)
+                self.assertIn("      lobby += game->InLobby();", transformed)
+                self.assertIn("      awaiting_welcome += game->AwaitingWelcome();",
+                              transformed)
+                continue
             final = after
-            for old, replacement in mod.FULL_TEAM_EDITS:
-                if old in final:
-                    final = final.replace(old, replacement, 1)
-            for old, replacement in mod.STEADY_EDITS:
+            for old, replacement in (*mod.FULL_TEAM_EDITS, *mod.STEADY_EDITS,
+                                     *mod.SOCKET_STATE_DIAG_EDITS):
                 if old in final:
                     final = final.replace(old, replacement, 1)
             self.assertIn(final, transformed)
