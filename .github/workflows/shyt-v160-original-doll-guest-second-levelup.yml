@@ -43,6 +43,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: lKaniel/bloodborne-server
+          ref: a64214d4875ff7cbe735b155e8b075261891e1cc
+          path: reviewed-yt468latest
+          fetch-depth: 3
+          submodules: false
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
           ref: 4a55f02c48207770273e0cf0ed5d06e85a9143e5
           path: reviewed-yt471
           submodules: false
@@ -55,7 +63,7 @@ jobs:
           python3 tools/poc/yharnam/yt130-reference/stage_doll_own_flag_v151.py --original pinned-yt130 --reviewed reviewed-yt457
           python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-yt130 --reviewed reviewed-yt468
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
-          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-yt130 --reviewed reviewed-yt471
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-yt130 --middle reviewed-yt468latest --reviewed reviewed-yt471
           git -C pinned-yt130 diff --check
           git -C pinned-yt130 diff --name-only > /tmp/v160-game-files.txt
           python3 - <<'PY'
