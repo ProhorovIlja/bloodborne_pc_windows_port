@@ -12,6 +12,7 @@
 // a failed encrypted direct callback returns RelayRequired to the ORIGINAL route.
 #include "sh_native_shy2_grant_cutover_v106.hpp"
 #include "sh_native_direct_tx.hpp"
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <string_view>
@@ -23,6 +24,9 @@ struct SignedNatRouteLeaseV134 final {
     const NatProbeProofV91* signed_nat_proof=nullptr;
     CurrentWorld refresh_world=nullptr;
     void* world_ctx=nullptr;
+    // Full SHA-256 account digest observed from the ORIGINAL welcomed server
+    // game identity, not from the peer UDP packet or caller-local settings.
+    std::array<std::uint8_t,32> expected_signed_in_account{};
 
     // NativeDirectSender invokes this EVERY candidate SEND, not once during
     // install. The original game owns the inbox and proof, and must guard
@@ -48,6 +52,8 @@ struct SignedNatRouteLeaseV134 final {
                offer->recipient_account.data()) ||
            ticket.local_receiver!=AeadDetail::Load64(
                offer->sender_account.data()) ||
+           !SecureOfferV84Detail::EqualDigest(
+               offer->recipient_account,self->expected_signed_in_account) ||
            physical.addr_nbo!=offer->peer_ipv4_nbo ||
            physical.port_nbo!=offer->peer_port_nbo ||
            virtual_peer.addr_nbo!=offer->peer_virtual_ipv4_nbo ||
@@ -71,6 +77,7 @@ struct SignedNatRouteLeaseV134 final {
         NativeDirectSender& router, std::size_t slot,
         SignedNatRouteLeaseV134& stable_lease,
         std::string_view server_verified_native_sender,
+        const std::array<std::uint8_t,32>& live_server_welcomed_account,
         AuthenticatedDirectTransmit send_encrypted_shy2,
         void* actual_game_socket,
         std::int64_t now_ms) noexcept {
@@ -79,11 +86,17 @@ struct SignedNatRouteLeaseV134 final {
            server_verified_native_sender.empty() ||
            !stable_lease.verified_inbox || !stable_lease.signed_nat_proof ||
            !stable_lease.refresh_world || !stable_lease.world_ctx ||
+           !AeadDetail::Nonzero(live_server_welcomed_account) ||
+           !SecureOfferV84Detail::EqualDigest(
+               live_server_welcomed_account,
+               stable_lease.expected_signed_in_account) ||
            now_ms<=0)
             return false;
         const auto* offer=stable_lease.verified_inbox->PendingForNat(
             static_cast<std::uint64_t>(now_ms));
-        if(!offer || !stable_lease.signed_nat_proof->VerifiedFor(
+        if(!offer || !SecureOfferV84Detail::EqualDigest(
+               offer->recipient_account,live_server_welcomed_account) ||
+           !stable_lease.signed_nat_proof->VerifiedFor(
                *offer,static_cast<std::uint64_t>(now_ms)) ||
            offer->expires_ms>static_cast<std::uint64_t>(
                std::numeric_limits<std::int64_t>::max()))
