@@ -99,7 +99,10 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
                 counts = {}
                 valid = True
                 for r in results:
+                    # Fail closed: a silent/stalled worker must not borrow
+                    # another process's healthy UDP traffic to score green.
                     seen = set()
+                    worker_sent = worker_received = 0
                     for window in r["cohort_epoch_entries"]:
                         if (not isinstance(window, dict) or
                                 set(window) != {"start_us","sent_entries","received_entries"} or
@@ -117,6 +120,10 @@ PATCH_AGG="""        # SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS: original 
                             out, inc = counts.get(bucket, (0, 0))
                             counts[bucket] = (out + int(window["sent_entries"]),
                                               inc + int(window["received_entries"]))
+                            worker_sent += int(window["sent_entries"])
+                            worker_received += int(window["received_entries"])
+                    if worker_sent == 0 or worker_received == 0:
+                        valid = False
                 if valid:
                     cohort_sent = sum(x[0] for x in counts.values())
                     cohort_received = sum(x[1] for x in counts.values())
