@@ -203,6 +203,16 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
     sent, received = item["packets_sent"], item["packets_received"]
     steady_sent = item["steady_packets_sent"]
     steady_received = item["steady_packets_received"]
+    if require_directed and (
+            item["cohort_packets_sent"] > sent or
+            item["cohort_packets_received"] > received or
+            item["cohort_packets_sent"] > steady_sent or
+            item["cohort_packets_received"] > steady_received):
+        # The shared sender-clock interval is a subset of the original
+        # real Qt worker's full-run AND post-Playing steady counters.
+        # Never accept a fabricated 800-route healthy cohort larger than
+        # the traffic actually generated/decoded by the entire worker run.
+        return {"quality": "DIRECTED_COHORT_EXCEEDS_ORIGINAL_QT_TOTALS"}
     if item["steady_workers"] != expected_workers or item["steady_window_ms_min"] < 5000:
         steady_quality = "NO_FIVE_HUNTER_STEADY_WINDOW"
     elif steady_sent < 10000 or steady_received > steady_sent:
