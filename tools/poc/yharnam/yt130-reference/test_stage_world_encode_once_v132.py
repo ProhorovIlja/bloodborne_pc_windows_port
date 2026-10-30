@@ -13,7 +13,7 @@ sp.loader.exec_module(v)
 
 class WorldBroadcastTests(unittest.TestCase):
     def setUp(self):
-        self.cpp="\n".join([p[1] for p in v.PATCHES])
+        self.cpp="\n".join([p[1] for p in v.PATCHES]) + "\n// SHYT-V108-ALLIED-HOSTILE-VITALS\nSendTo(visitor->second, safe, now_ms);"
         self.header=v.HEADER_INCLUDE+v.HEADER_SENDTO
 
     def test_all_fanout_serialized_once_without_touching_reliable_chunks(self):
@@ -35,8 +35,10 @@ class WorldBroadcastTests(unittest.TestCase):
         cpp,_=v.rewrite(self.cpp,self.header)
         self.assertIn("member.party == world.name && &member != &from",cpp)
         self.assertIn("if (member.party == world.name)",cpp)
-        self.assertIn("invasion->second.joined",cpp)
-        self.assertIn("const auto invader = members.find(invasion->second.invader)",cpp)
+        self.assertIn("if (!invasion.joined) continue;",cpp)
+        self.assertIn("const auto invader = members.find(invasion.invader)",cpp)
+        self.assertIn("SendTo(visitor->second, safe, now_ms);",cpp)
+        self.assertNotIn("SendEncodedTo(visitor->second, board, encoded",cpp)
         self.assertIn("member.stream.Send(encoded, now_ms);",cpp)
         for phrase in ("Drop(", "PacketClass::Unreliable", "Skip(","DirectP2P"):
             self.assertNotIn(phrase,cpp)
