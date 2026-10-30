@@ -69,8 +69,10 @@ jobs:
           # Copy the exact original package.sh prefix up to external PkgTool.
           # This leaves the real PyInstaller command and BLauncher code intact.
           grep -Fq 'out/pyenv/Scripts/python.exe -m PyInstaller --noconfirm --clean --log-level WARN' packaging/windows/package.sh
-          awk '/^# PkgTool / {exit} {print}' packaging/windows/package.sh > packaging/windows/ci-freeze-only.sh
+          awk '/^pkgtool_zip=/ {exit} {print}' packaging/windows/package.sh > packaging/windows/ci-freeze-only.sh
           grep -Fq 'out/pyenv/Scripts/python.exe -m PyInstaller' packaging/windows/ci-freeze-only.sh
+          ! grep -Fq 'pkgtool_zip=' packaging/windows/ci-freeze-only.sh
+          test "$(wc -l < packaging/windows/ci-freeze-only.sh)" -gt 30
           sed -i 's/--log-level WARN/--log-level DEBUG/' packaging/windows/ci-freeze-only.sh
           set +e
           bash packaging/windows/ci-freeze-only.sh > out/shyt-pyinstaller-verbose.log 2>&1
