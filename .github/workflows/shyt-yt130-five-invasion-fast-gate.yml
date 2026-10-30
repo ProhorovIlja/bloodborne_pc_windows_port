@@ -1,0 +1,164 @@
+name: SHYT five-hunter invasion race original Qt functional gate
+on:
+  push:
+    branches: [feature/yt130-1000-2000-scale-ladder-20261028]
+    paths:
+      - tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py
+      - tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py
+      - tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py
+      - tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py
+      - tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_param_slots_v110.py
+      - tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py
+      - tools/poc/yharnam/yt130-reference/test_guard_native_protocol8_v111.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_param_memory_v109.py
+      - tools/poc/yharnam/yt130-reference/probe_native_param_cpp_v109.py
+      - tools/poc/yharnam/yt130-reference/test_probe_native_param_cpp_v109.py
+      - tools/poc/yharnam/yt130-reference/test_stage_five_hunter_invasion_guard.py
+      - tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py
+      - tools/poc/yharnam/yt130-reference/stage_nonhosted_roster_cache_v112.py
+      - tools/poc/yharnam/yt130-reference/test_stage_nonhosted_roster_cache_v112.py
+      - tools/poc/yharnam/yt130-reference/stage_hosted_lobby_index_v113.py
+      - tools/poc/yharnam/yt130-reference/test_stage_hosted_lobby_index_v113.py
+      - tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py
+      - tools/poc/yharnam/yt130-reference/test_stage_native_relay_pair_log_v114.py
+      - tools/poc/yharnam/yt130-reference/patch_five_hunter_team.py
+      - .github/workflows/shyt-yt130-five-invasion-fast-gate.yml
+permissions:
+  contents: read
+jobs:
+  authentic-qt-five-hunter-pvp-race:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run all source-exact Python guards, including three invasion races
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-auth-stage -p 'test_stage_auth.py' -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p 'test_*.py' -v
+      - name: Install real Qt6, SQLite, Ninja and original protobuf dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config qt6-base-dev \
+            qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite ccache
+      - name: Fetch pinned actual upstream and protobuf original C++ source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach "$YT_PIN"
+          git -C "$RUNNER_TEMP/yt-src" submodule update --init --recursive \
+            server/externals/protobuf
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = "$YT_PIN"
+      - name: Compose EXACT same Qt world as full 1000-player scale pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-auth-stage/stage_auth.py \
+            "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" \
+            "$RUNNER_TEMP/yt-src"
+          for stage in \
+            stage_lobby_dedupe.py \
+            stage_wire_traffic.py \
+            stage_coop_reliability.py \
+            stage_lobby_coalesce.py \
+            stage_lobby_coalesce_cpp_test.py \
+            stage_eventloop_timing.py \
+            stage_five_hunter_server.py \
+            stage_five_hunter_invasion_guard.py \
+            stage_multi_invader_server_v108.py \
+            stage_nonhosted_roster_cache_v112.py \
+            stage_hosted_lobby_index_v113.py \
+            stage_native_relay_pair_log_v114.py; do
+            python3 "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          # Original native GAME, not just the Qt server: apply the per-ID
+          # three-hostile ledger to the same newer pinned YT1.3 commit.
+          python3 tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py \
+            "$RUNNER_TEMP/yt-src"
+          # Official YT PR442: 21k redundant guest PARAM memory checks;
+          # this exact original native client is pinned to Protocol 8.
+          python3 tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py \
+            "$RUNNER_TEMP/yt-src"
+          # Official PR442 second fix: previous PARAM repository slot is
+          # always revalidated before avoiding a 1024-slot full scan.
+          python3 tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py \
+            "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          test "$(git -C "$RUNNER_TEMP/yt-src" diff --name-only | wc -l)" -eq 25
+          grep -Fq 'Net no_pair_debug(3000, 60000, 10000, 0);' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_server_link.cpp"
+          grep -Fq 'LoadedParamMemory, RejectsTruncatedAndOverflowingEntries' \
+            "$RUNNER_TEMP/yt-src/emulator/tests/bloodborne/test_bloodborne_harder_enemies.cpp"
+          grep -Fq 'const u64 size = ParamTableSize(' \
+            "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party_rules.cpp"
+          grep -Fq 'LoadedParamSlots, RememberEachTypeAndUpdateAfterReload' \
+            "$RUNNER_TEMP/yt-src/emulator/tests/bloodborne/test_bloodborne_harder_enemies.cpp"
+          grep -Fq 'remembered = slots.Slot(type)' \
+            "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party_rules.cpp"
+          grep -Fq 'MaxConcurrentHostiles = 3' \
+            "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_invasion.h"
+          grep -Fq 'ThreeConcurrentHostilesIndependentIdsAndEnds' \
+            "$RUNNER_TEMP/yt-src/emulator/tests/bloodborne/test_bloodborne_invasion.cpp"
+          grep -Fq 'std::map<QString, std::map<quint64, Invasion>> invasions' \
+            "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.h"
+          grep -Fq 'ThreeInvadersShareTwoCooperatorsAndCleanupIndependently' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          grep -Fq 'ImplementedInvadersPerWorld = 3' \
+            "$RUNNER_TEMP/yt-src/server/coop/invasions.h"
+          grep -Fq 'nonhosted_roster_valid = false;' \
+            "$RUNNER_TEMP/yt-src/server/coop/team_lobby.h"
+          grep -Fq 'NonHostedRosterCacheRefreshesAndKeepsOriginalPerRecipientSemantics' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
+          grep -Fq 'HostedLargeTeamsKeepRosterBoundedThroughChanges' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_team_lobby.cpp"
+          grep -Fq 'constexpr size_t InvasionMaxPlayers = 5;' \
+            "$RUNNER_TEMP/yt-src/server/coop/invasions.h"
+          grep -Fq 'AJoinedFiveHunterTeamRejectsAnAlreadyNotifiedInvader' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          grep -Fq 'AJoiningFifthHunterRevokesAlreadyJoinedInvader' \
+            "$RUNNER_TEMP/yt-src/server/tests/test_bloodborne_world.cpp"
+          echo SHYT_ACTUAL_FIVE_HUNTER_QT_INVASION_SOURCE_RACES_STAGED
+      - name: Refuse Protocol 7 or mismatched native client and Qt world server
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py \
+            --client-root "$RUNNER_TEMP/yt-src" \
+            --server-root "$RUNNER_TEMP/yt-src"
+          echo SHYT_REAL_CLIENT_AND_SERVER_PROTOCOL8_PAIR_CHECK_PASS
+      - name: Compile and execute actual original YT1.3 PR442 C++ PARAM helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/probe_native_param_cpp_v109.py \
+            --source "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party.cpp" \
+            --header "$RUNNER_TEMP/yt-src/emulator/src/core/bloodborne_party.h"
+          echo SHYT_YT130_NATIVE_GAME_PARAM_CPP_BOUNDS_AND_OVERFLOW_PASS
+      - name: Configure original Qt6 server and build native game-world tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" \
+            -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON \
+            "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" \
+            "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target \
+            test_bloodborne_world test_team_lobby test_invasions test_server_link
+      - name: Execute REAL Qt C++ five-member and three invasion-race cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure \
+            --timeout 120 -j 2 -R '^(bloodborne_world|team_lobby|invasions|server_link)$'
+          echo SHYT_FIVE_HUNTER_INVASION_V114_ACTUAL_QT_CPP_4_TEST_BINARIES_PASS

@@ -1,0 +1,210 @@
+name: SHYT Protocol 8 Windows launcher freeze recovery without recompiling game
+on:
+  push:
+    branches:
+      - feature/yt130-1000-2000-scale-ladder-20261028
+    paths:
+      - .github/workflows/shyt-yt130-windows-package-recovery.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: shyt-yt130-windows-package-recovery
+  cancel-in-progress: false
+jobs:
+  freeze-from-verified-game-exes:
+    name: Reuse real Protocol8 Windows EXEs, diagnose original frozen BLauncher
+    runs-on: windows-2022
+    timeout-minutes: 65
+    env:
+      YT_PIN: 0645740a33ae21c56df3b4a0d9777086dbca6053
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      # The original 41016051881 game compiler already completed all three
+      # actual Protocol8 executables. Reuse them rather than spending another
+      # 2 hours on 431 native renderer translation units.
+      - uses: actions/download-artifact@v4
+        with:
+          name: shyt-yt130-protocol8-native-windows-compiler-EVIDENCE-INTERNAL
+          run-id: 41016051881
+          github-token: ${{ github.token }}
+          path: pinned-upstream/bbport/out
+      - name: Assert original game binaries and upstream packaging source pin
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git -C pinned-upstream rev-parse HEAD).Trim() -ne $env:YT_PIN) { throw 'Wrong official 1.3.0 source' }
+          foreach ($exe in @('bb-play.exe','bb-probe.exe','bb-gpu-capabilities.exe')) {
+            $path = "pinned-upstream/bbport/out/$exe"
+            if (-not (Test-Path $path) -or (Get-Item $path).Length -le 0) { throw "Missing real compiled game artifact: $exe" }
+            Write-Host "$exe $((Get-FileHash -Algorithm SHA256 $path).Hash)"
+          }
+          if (-not (Test-Path 'pinned-upstream/bbport/launcher/bbport_launcher_win.py')) { throw 'Original launcher missing' }
+          Write-Host 'SHYT_YT130_ORIGINAL_NATIVE_GAME_EXES_RECOVERED'
+      - name: Diagnose original PyInstaller freeze with verbose logs only
+        shell: msys2 {0}
+        timeout-minutes: 24
+        run: |
+          set -euo pipefail
+          export WINPYTHON="$(cygpath -u "$pythonLocation")/python.exe"
+          cd pinned-upstream/bbport
+          mkdir -p out
+          # Copy the exact original package.sh prefix up to external PkgTool.
+          # This leaves the real PyInstaller command and BLauncher code intact.
+          grep -Fq 'out/pyenv/Scripts/python.exe -m PyInstaller --noconfirm --clean --log-level WARN' packaging/windows/package.sh
+          awk '/^pkgtool_zip=/ {exit} {print}' packaging/windows/package.sh > packaging/windows/ci-freeze-only.sh
+          grep -Fq 'out/pyenv/Scripts/python.exe -m PyInstaller' packaging/windows/ci-freeze-only.sh
+          ! grep -Fq 'pkgtool_zip=' packaging/windows/ci-freeze-only.sh
+          test "$(wc -l < packaging/windows/ci-freeze-only.sh)" -gt 30
+          sed -i 's/--log-level WARN/--log-level DEBUG/' packaging/windows/ci-freeze-only.sh
+          set +e
+          bash packaging/windows/ci-freeze-only.sh > out/shyt-pyinstaller-verbose.log 2>&1
+          code=$?
+          set -e
+          echo "SHYT_PYINSTALLER_EXIT=$code"
+          tail -n 180 out/shyt-pyinstaller-verbose.log || true
+          if [[ "$code" -ne 0 ]]; then
+            find out/pyi-work -maxdepth 3 -type f -name 'warn-*.txt' -print -exec tail -n 80 {} \; 2>/dev/null || true
+            echo SHYT_YT130_PYINSTALLER_PACKAGING_DIAGNOSTIC_FAILURE
+            exit "$code"
+          fi
+          test -s out/pyi-dist/BLauncher/BLauncher.exe
+          echo SHYT_YT130_ORIGINAL_BLAUNCHER_FREEZE_PASS
+      - name: Restore exact licensed upstream submodule sources for packaging
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git -C pinned-upstream -c core.longpaths=true submodule update --init --recursive -- bbport/gpu/third_party bbport/third_party/LibAtrac9
+          if ($LASTEXITCODE -ne 0) { throw 'Original game vendor source/attribution retrieval failed' }
+          foreach ($license in @(
+            'pinned-upstream/bbport/gpu/third_party/fsr-vulkan/LICENSE.txt',
+            'pinned-upstream/bbport/gpu/third_party/wepoll/LICENSE',
+            'pinned-upstream/bbport/gpu/third_party/httplib/LICENSE')) {
+            if (-not (Test-Path $license)) { throw "Missing pinned upstream license: $license" }
+          }
+      - name: Install required CLANG64 runtime and packaging tools
+        shell: msys2 {0}
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          printf 'Server = https://repo.msys2.org/mingw/$repo/\nServer = https://mirror.msys2.org/mingw/$repo/\n' > /etc/pacman.d/mirrorlist.mingw
+          printf 'Server = https://repo.msys2.org/msys/$arch/\nServer = https://mirror.msys2.org/msys/$arch/\n' > /etc/pacman.d/mirrorlist.msys
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed \
+            git unzip mingw-w64-clang-x86_64-llvm \
+            mingw-w64-clang-x86_64-libc++ mingw-w64-clang-x86_64-sdl3 \
+            mingw-w64-clang-x86_64-ffmpeg \
+            mingw-w64-clang-x86_64-vulkan-loader \
+            mingw-w64-clang-x86_64-protobuf \
+            mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib
+          command -v llvm-strip
+          command -v ldd
+          command -v curl
+          command -v unzip
+      - name: Assemble real original YT1.3 Windows portable package without rebuilding GPU
+        shell: msys2 {0}
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          export WINPYTHON="$(cygpath -u "$pythonLocation")/python.exe"
+          cd pinned-upstream/bbport
+          # This is the EXACT upstream pinned packager: no new renderer build.
+          # It validates and downloads pinned, licensed PkgTool, ReShade and
+          # XeSS resources before creating an archive for private CI.
+          set +e
+          # The original msys2-env.sh defaults to C:/msys64. On Actions
+          # msys2/setup-msys2 installs a DIFFERENT CLANG64 root; sourcing
+          # the default silently mixes two copies of bash/cp and makes
+          # "/clang64/share/licenses/protobuf/LICENSE" disappear.
+          # "/." is the canonical current MSYS2 mount root without an
+          # ambiguous double-leading-slash UNC path.
+          export MSYS2_ROOT=/.
+          test -d "$MSYS2_ROOT/clang64/bin"
+          test -d "$MSYS2_ROOT/usr/bin"
+          test -s /clang64/share/licenses/protobuf/LICENSE
+          src_native="$(cygpath -w /clang64/share/licenses/protobuf/LICENSE)"
+          "$WINPYTHON" -c 'import os,sys; assert os.path.isfile(sys.argv[1]), sys.argv[1]' "$src_native"
+          echo SHYT_YT130_SAME_MSYS2_CLANG64_LICENSE_ROOT_PROVEN
+          # Do not patch the pinned upstream package script or vendor licenses.
+          bash packaging/windows/package.sh > out/shyt-original-package.log 2>&1
+          status=$?
+          set -e
+          tail -n 150 out/shyt-original-package.log || true
+          if [[ "$status" != 0 ]]; then
+            echo SHYT_YT130_ORIGINAL_WINDOWS_PACKAGE_FAILED
+            exit "$status"
+          fi
+          test -s dist/bbport-windows.zip
+          echo SHYT_YT130_REAL_ORIGINAL_WINDOWS_PORTABLE_ZIP_CREATED_INTERNAL_ONLY
+      - name: Verify native Protocol8 kit includes executable, BLauncher and required licenses
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = 'pinned-upstream/bbport/dist/bbport-windows.zip'
+          @'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import hashlib
+          archive = Path("pinned-upstream/bbport/dist/bbport-windows.zip")
+          required = {
+              "bbport-windows/BLauncher.exe",
+              "bbport-windows/Bloodborne.exe",
+              "bbport-windows/bin/bb-probe.exe",
+              "bbport-windows/bin/bb-gpu-capabilities.exe",
+              "bbport-windows/licenses/PkgTool-LICENSE.txt",
+              "bbport-windows/licenses/Intel-XeSS-LICENSE.txt",
+              "bbport-windows/licenses/FireBurn-FSR-Vulkan-LICENSE.txt",
+          }
+          with ZipFile(archive) as z:
+              names = set(z.namelist())
+              missing = required - names
+              assert not missing, f"Missing files from real original package: {sorted(missing)}"
+              assert all(not n.startswith("/") and ".." not in Path(n).parts for n in names)
+              assert z.testzip() is None, "Damaged ZIP entry"
+              print("Native Windows original kit entries:", len(names))
+          sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+          archive.with_suffix(".zip.sha256").write_text(sha + "  bbport-windows.zip\n", encoding="ascii")
+          print("SHYT_YT130_REAL_NATIVE_PORTABLE_ZIP_VERIFIED_INTERNAL_ONLY", sha)
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Original real ZIP structure/CRC failed' }
+      - name: Preserve only private complete Windows kit candidate
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-recovered-protocol8-WINDOWS-KIT-INTERNAL
+          path: |
+            pinned-upstream/bbport/dist/bbport-windows.zip
+            pinned-upstream/bbport/dist/bbport-windows.zip.sha256
+          retention-days: 3
+          if-no-files-found: error
+      - name: Preserve bounded packaging logs and frozen launcher
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shyt-yt130-launcher-freeze-recovery-EVIDENCE-INTERNAL
+          path: |
+            pinned-upstream/bbport/out/shyt-pyinstaller-verbose.log
+            pinned-upstream/bbport/out/shyt-original-package.log
+            pinned-upstream/bbport/out/pyi-work/BLauncher/warn-BLauncher.txt
+            pinned-upstream/bbport/out/pyi-dist/BLauncher/BLauncher.exe
+          retention-days: 3
+          if-no-files-found: warn
