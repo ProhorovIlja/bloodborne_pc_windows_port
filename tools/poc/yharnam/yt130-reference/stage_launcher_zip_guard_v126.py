@@ -23,13 +23,9 @@ MAX_BBPORT_UPDATE_ENTRIES = 18000
 
 
 def validate_bbport_update_zip(package):
-    \\"\\"\\"Validate one official portable update before extraction or executing it.
-
-    No error path ever executes a file from the downloaded archive. Reject
-    ambiguous Windows path aliases, symlinks, encrypted/overlarge members,
-    damaged CRC, foreign archive layouts and missing native game binaries.
-    This does not replace release signing or TLS certificate verification.
-    \\"\\"\\"
+    # Fail closed before extraction or execution of any downloaded file.
+    # Reject ambiguous Windows names, invalid/oversized ZIP members, foreign
+    # archive roots, duplicate paths, symlinks, encryption and CRC failures.
     import stat
     from pathlib import PurePosixPath
     infos = package.infolist()
