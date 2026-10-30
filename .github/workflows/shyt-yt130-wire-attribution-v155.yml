@@ -24,6 +24,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_directed_cohort_v169.py
       - tools/poc/yharnam/yt130-reference/stage_policy_route_attribution_v173.py
       - tools/poc/yharnam/yt130-reference/test_stage_policy_route_attribution_v173.py
+      - tools/poc/yharnam/yt130-reference/stage_policy_route_report_v174.py
+      - tools/poc/yharnam/yt130-reference/test_stage_policy_route_report_v174.py
       - tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
       - tools/poc/yharnam/yt130-reference/test_stage_world_encode_once_v132.py
   workflow_dispatch:
@@ -54,6 +56,7 @@ jobs:
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_grade_global_cohort_v161.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_directed_cohort_v169.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_policy_route_attribution_v173.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_policy_route_report_v174.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_five_player_bbload.py -v
           python -m compileall -q tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
       - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
@@ -156,6 +159,8 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_global_cohort_v161.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_directed_cohort_v169.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_policy_route_report_v174.py "$RUNNER_TEMP/yt-src"
+          grep -Fq 'SHYT_V174_ORIGINAL_QT_POLICY_FILTER_JSON' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           python -m compileall -q "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq 'team_name_absent' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
           grep -Fq '"team_total_notices": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
