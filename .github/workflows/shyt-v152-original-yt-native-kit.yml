@@ -1,0 +1,98 @@
+name: SHYT V152 original YT native Windows input kit without game data
+on:
+  push:
+    branches: [feature/yt130-native-runtime-kit-v152-20261030]
+    paths:
+      - .github/workflows/shyt-v152-original-yt-native-kit.yml
+      - tools/native/v152_stage_original_yt_runtime.py
+      - tools/native/test_v152_stage_original_yt_runtime.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  source-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/native -p test_v152_stage_original_yt_runtime.py -v
+          python3 -m compileall -q tools/native/v152_stage_original_yt_runtime.py
+  real-compiled-Windows-kit:
+    needs: source-tests
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: original-yt130
+          persist-credentials: false
+          submodules: false
+      - name: Verify actual previous original Protocol8 Windows build SHA
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run=await github.rest.actions.getWorkflowRun({
+              owner:context.repo.owner,repo:context.repo.repo,run_id:41051781140
+            });
+            if (run.data.status!=='completed' || run.data.conclusion!=='success'
+                || run.data.head_sha!=='ebcda70997b483f1a9144c8c92d0fc6339a5eab5') {
+              core.setFailed('Pinned original native Windows Protocol8 build not verified');
+            } else {
+              core.info('SHYT_V152_REAL_NATIVE_WINDOWS_COMPILER_PROVENANCE_PASS');
+            }
+      - uses: actions/download-artifact@v4
+        with:
+          name: shyt-yt130-V143-GPU-SAFETY-V142-V139-FULL-PROTOCOL8-EXES-INTERNAL
+          path: ${{ runner.temp }}/original-v143-exe
+          run-id: 41051781140
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assemble no-game original YT1.3 Windows developer input kit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/native -p test_v152_stage_original_yt_runtime.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'V152 synthetic safety unit tests failed' }
+          python tools/native/v152_stage_original_yt_runtime.py --original original-yt130 --compiled "$env:RUNNER_TEMP/original-v143-exe" --stage "$env:RUNNER_TEMP/v152-stage" --zip "$env:RUNNER_TEMP/v152-dev-kit.zip"
+          if ($LASTEXITCODE -ne 0) { throw 'V152 original source package staging failed' }
+          $m = Get-Content "$env:RUNNER_TEMP/v152-stage/YT-native-dev-kit/MANIFEST.json" -Raw | ConvertFrom-Json
+          if ($m.game_files_included -or $m.runtime_dlls_included -or $m.validated_game_boot -or $m.validated_multiplayer) { throw 'V152 dev-only provenance guard failed' }
+          if ($m.files.PSObject.Properties.Name -notcontains "bin/bb-probe.exe") { throw 'Original compiled native PE absent' }
+          Write-Host 'SHYT_V152_REAL_ORIGINAL_NATIVE_WINDOWS_DEV_SOURCE_STAGE_NO_GAME'
+      - name: Check real original run.py fails safely with intentionally missing game
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:BB_GAME_DIR = "$env:RUNNER_TEMP/V152_INTENTIONALLY_MISSING_GAME"
+          $env:BB_DATA_DIR = "$env:RUNNER_TEMP/V152_SCRATCH"
+          $env:BB_ONLINE = "0"
+          $env:BB_PARTY = ""
+          $p = Start-Process python -ArgumentList @("run.py") -WorkingDirectory "$env:RUNNER_TEMP/v152-stage/YT-native-dev-kit" -RedirectStandardOutput "$env:RUNNER_TEMP/v152-smoke.out" -RedirectStandardError "$env:RUNNER_TEMP/v152-smoke.err" -NoNewWindow -Wait -PassThru
+          if ($p.ExitCode -eq 0) { throw 'No-game original YT native loader must fail closed' }
+          $err = Get-Content "$env:RUNNER_TEMP/v152-smoke.err" -Raw
+          if ($err -notmatch "No eboot.bin") { throw 'Missing-game native loader path did not run' }
+          if (Test-Path "$env:RUNNER_TEMP/V152_SCRATCH/user") { throw 'Unexpected user save directory' }
+          Write-Host 'SHYT_V152_ORIGINAL_WINDOWS_RUNPY_AND_NATIVE_EXE_EARLY_SMOKE_PASS'
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: yt130-v152-native-windows-input-kit-DEV-ONLY-NOT-PLAYABLE
+          path: ${{ runner.temp }}/v152-dev-kit.zip
+          retention-days: 3
+          if-no-files-found: error
