@@ -87,3 +87,34 @@ jobs:
           ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(server_link|bloodborne_world)$'
           ccache --show-stats
           echo SHYT_V125_ACTUAL_QT_LINK_AND_WORLD_CPP_TESTS_PASS_NOT_200_PLAYER_CAPACITY
+- name: Stage authentic original bbload five-hunter game payload counters
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'game_receivers += game->Playing() && game->SawGamePackets();' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target bbload
+          test -x "$RUNNER_TEMP/yt-build/bbload"
+          echo SHYT_V125_ORIGINAL_BBLOAD_REAL_CPP_PLAYER_GENERATOR_BUILT
+      - name: Measure actual 4 to 200 player UDP QoS and FAIL if 99 percent gate fails
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/run_capacity_curve.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --report "$GITHUB_WORKSPACE/yt130-v125-actual-qos.jsonl" --profile baseline
+          echo SHYT_V125_REAL_QT_200_PLAYER_QOS_PASS_ONLY_IF_ALL_6_STAGES_ARE_HEALTHY
+      - name: Preserve measured strict QoS stages even if candidate fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-V125-original-bbload-4-200-REAL-QOS-EVIDENCE-NOT-RELEASE
+          path: yt130-v125-actual-qos.jsonl
+          retention-days: 7
+          if-no-files-found: warn
+
