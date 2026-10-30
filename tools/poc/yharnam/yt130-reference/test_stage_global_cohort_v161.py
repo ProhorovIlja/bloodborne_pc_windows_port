@@ -144,6 +144,24 @@ class GlobalCohortV161(unittest.TestCase):
                 out=inspect([a,worker(12_000_000,42_000_000,intermittent)])
                 self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
 
+    def test_one_lossy_five_seat_worker_not_hidden_by_large_healthy_peer(self):
+        # Global packets: 301000 sent, 300700 received (>99%).
+        # But worker B receives 10/20 each second (<99%).
+        huge={sec:(10000,10000) for sec in range(10,40)}
+        weak={sec:(20,10) for sec in range(10,40)}
+        fast=worker(12_000_000,42_000_000,huge)
+        lossy=worker(12_000_000,42_000_000,weak)
+        report=inspect([fast,lossy])
+        self.assertGreater(report["cohort_received"] * 100,
+                           report["cohort_sent"] * 99)
+        self.assertEqual(report["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_DELIVERY_DEGRADED")
+        # Individual 99% delivery can still pass in an aligned full cohort.
+        healthy={sec:(100,99) for sec in range(10,40)}
+        report=inspect([fast,worker(12_000_000,42_000_000,healthy)])
+        self.assertEqual(report["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+
     def test_corrupt_epoch_numbers_never_crash_or_score_green(self):
         base={sec:(500,499) for sec in range(10,36)}
         good=worker(12_000_000,38_000_000,base)
@@ -174,12 +192,14 @@ class GlobalCohortV161(unittest.TestCase):
                         ("cohort_ready_us",float(2**53)),
                         ("cohort_ready_us",True),
                         ("cohort_ready_us",False),
+                        ("cohort_ready_us",12_000_000.5),
                         ("cohort_finish_us",float("nan")),
                         ("cohort_finish_us",float("inf")),
                         ("cohort_finish_us",float("-inf")),
                         ("cohort_finish_us",float(2**53)),
                         ("cohort_finish_us",True),
-                        ("cohort_finish_us",False)):
+                        ("cohort_finish_us",False),
+                        ("cohort_finish_us",38_000_000.5)):
             with self.subTest(timestamp=key,bad=repr(bad)):
                 broken=worker(12_000_000,38_000_000,base)
                 broken[key]=bad
