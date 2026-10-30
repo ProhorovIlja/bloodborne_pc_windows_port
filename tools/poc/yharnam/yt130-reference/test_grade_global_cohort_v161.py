@@ -70,19 +70,22 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
         sample=with_cohort(cases.sample(1))
         self.assertEqual(grade.grade(sample,1,require_directed=True)["quality"],
                          "MISSING_REQUIRED_DIRECTED_GAME_EVIDENCE")
-        sample.update(directed_quality="DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY",
-                      directed_packets_sent=20000,directed_packets_received=19820,
+        sample.update(cohort_packets_sent=160000,
+                      cohort_packets_received=158600,
+                      directed_quality="DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY",
+                      directed_packets_sent=160000,directed_packets_received=158600,
                       directed_routes=800,
                       directed_scope="anonymous synthetic seat pairs; NOT a production QoS pass")
         good=grade.grade(sample,1,require_directed=True)
         self.assertEqual(good["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
         self.assertEqual(good["directed_routes"],800)
+        self.assertEqual(good["cohort_min_offered_entries"],117760)
         sample["directed_quality"]="DIRECTED_GAME_COHORT_DELIVERY_DEGRADED"
         self.assertEqual(grade.grade(sample,1,require_directed=True)["quality"],
                          "DIRECTED_GAME_COHORT_UNHEALTHY")
         sample["directed_quality"]="DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY"
         for key,value in (("directed_routes",799),
-                          ("directed_packets_received",19819),
+                          ("directed_packets_received",158599),
                           ("directed_scope","production pass")):
             with self.subTest(field=key):
                 damaged=dict(sample)
@@ -93,6 +96,43 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
         missing.pop("directed_packets_received")
         self.assertEqual(grade.grade(missing,1,require_directed=True)["quality"],
                          "MISSING_OR_PARTIAL_DIRECTED_GAME_EVIDENCE")
+
+    def test_source_verified_200_player_send_rate_1_3_and_5_enemy_owners(self):
+        # Original Game::SendGamePackets emits at LEAST 2 x 0x31/frame
+        # for each owner, one 0x06/frame for each follower, to four peers.
+        # 30 owner frames/sec, 8 follower frames/sec, 40 five-seat teams.
+        expected={1:117760, 3:250880, 5:384000}
+        for owners,minimum in expected.items():
+            with self.subTest(owners=owners):
+                self.assertEqual(
+                    grade.minimum_original_source_entries(owners,10),minimum)
+                self.assertEqual(grade.minimum_original_source_entries(owners,30),
+                                 minimum*3)
+                item=with_cohort(cases.sample(1))
+                item.update(
+                    cohort_packets_sent=minimum,
+                    cohort_packets_received=minimum,
+                    directed_quality="DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY",
+                    directed_packets_sent=minimum,
+                    directed_packets_received=minimum,
+                    directed_routes=800,
+                    directed_scope="anonymous synthetic routes; NOT a production QoS pass")
+                good=grade.grade(item,1,require_directed=True,owner_seats=owners)
+                self.assertEqual(good["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
+                self.assertEqual(good["cohort_min_offered_entries"],minimum)
+                # The 200 hunters may all reach Playing and deliver 100%,
+                # yet a throttled bbload cannot certify server capacity.
+                item["cohort_packets_sent"]-=1
+                item["cohort_packets_received"]-=1
+                item["directed_packets_sent"]-=1
+                item["directed_packets_received"]-=1
+                low=grade.grade(item,1,require_directed=True,owner_seats=owners)
+                self.assertEqual(low["quality"],
+                                 "INSUFFICIENT_QT_ORIGINAL_GAME_OFFERED_RATE")
+        for owners in (0,2,4,6):
+            with self.assertRaisesRegex(ValueError,"owner count"):
+                grade.grade(with_cohort(cases.sample(1)),1,
+                            require_directed=True,owner_seats=owners)
 
     def test_valid_cohort_red_remains_red(self):
         s=with_cohort(cases.sample(1))
