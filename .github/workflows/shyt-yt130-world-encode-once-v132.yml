@@ -37,7 +37,7 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           grep -Fq 'void Service::SendEncodedTo(' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
-          grep -Fq 'SendEncodedTo(invader->second, encoded, now_ms)' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          grep -Fq 'SendEncodedTo(invader->second, envelope, encoded, now_ms)' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
           grep -Fq 'std::span<const u8>' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.h"
           echo SHYT_V132_ORIGINAL_WORLD_RELIABLE_FANOUT_BYTES_SOURCE_STAGED_NO_LOAD_CLAIM
   real-qt-server:
