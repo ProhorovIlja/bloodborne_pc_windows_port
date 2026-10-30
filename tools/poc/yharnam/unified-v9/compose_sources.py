@@ -941,6 +941,20 @@ def run(checkout:Path, repo:Path, out:Path):
     files[shy2.CUTOVER_HEADER]=(metrics_dir/"sh_native_shy2_grant_cutover_v106.hpp").read_bytes()
     files["emulator/src/core/libraries/network/sh_pair_aead_keys.hpp"]=(
         metrics_dir/"sh_pair_aead_keys.hpp").read_bytes()
+    # V135: read the REAL composed original game, not a duplicate shim.
+    # SHG2 grants and SHY2 AEAD expire on Unix epoch time; original P2PNowMs
+    # is steady_clock for ping/silence timers and must stay monotonic.
+    clock_py=metrics_dir/"patch_native_clock_domain_v135.py"
+    clock=types.ModuleType("shyt_native_auth_clock_v135")
+    clock.__file__=str(clock_py)
+    exec(compile(clock_py.read_text("utf-8"),str(clock_py),"exec"),clock.__dict__)
+    files[NETWORK]=clock.patch_game(files[NETWORK].decode("utf-8")).encode("utf-8")
+    # V134 proof-to-router bridge is a validated dev-only library. Simply
+    # stage the header for follow-up original lifecycle integration; do not
+    # claim a live Direct arm or auto-authorize UDP on launch.
+    files["emulator/src/core/libraries/network/sh_signed_nat_route_v134.hpp"]=(
+        metrics_dir/"sh_signed_nat_route_v134.hpp").read_bytes()
+    meta["applied"].append("V135 real native P2PTransport UTC crypto ticket expiry while local timers stay monotonic; V134 dev-only verified signed NAT router library, no live game Direct Arm")
     meta["applied"].append("Native SHY2 AES-256-GCM original recvfrom ingress and SendFrame writer callback: server-scoped physical/virtual/world/ACK gates; zero installed peers, relay unchanged")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.
