@@ -1,5 +1,6 @@
 """V161: all 5-hunter bbload workers use one sender timestamp cohort."""
 import importlib.util
+import json
 from pathlib import Path
 from textwrap import dedent
 from types import SimpleNamespace
@@ -23,7 +24,7 @@ def original_shard_fixture():
         "# SHYT-V155-ORIGINAL-QT-ANONYMOUS-DATA-WIRE\n"
         '"game_frame_decoded": sum(r["game_frame_decoded"] for r in results),\n'
         '"team_unknown_other": sum(r["team_unknown_other"] for r in results),\n'
-        +v.ANCHOR_AGG+v.SUMMARY_OLD
+        +v.RESULTS_OLD+v.ANCHOR_AGG+v.SUMMARY_OLD
     )
 
 def worker(ready,finish,counts,playing=5):
@@ -72,10 +73,34 @@ class GlobalCohortV161(unittest.TestCase):
         s=v.patch_shards(original_shard_fixture())
         self.assertIn('"cohort_packets_received": cohort_received',s)
         self.assertIn('"per_shard": per_shard',s)
+        self.assertIn("if load.returncode != 0 or len(child_rows) != 1:",s)
         self.assertNotIn("packets_lost",v.PATCH_AGG)
         self.assertNotIn("steady_packets_received",v.PATCH_AGG)
         with self.assertRaises(ValueError):
             v.patch_shards(s)
+    def test_actual_child_stdout_must_be_unique_successful_summary(self):
+        class Child:
+            def __init__(self,stdout,returncode=0):
+                self.stdout=stdout
+                self.returncode=returncode
+            def communicate(self):
+                return self.stdout,""
+        good=Child('{"games":5}\\n')
+        other=Child('{"games":5}\\n')
+        def collect(children):
+            ns={"loads":children,"json":json}
+            exec(dedent(v.RESULTS_NEW),ns)
+            return ns["results"]
+        self.assertEqual(collect([good,other]),[{"games":5},{"games":5}])
+        for children in (
+                [good,Child("")],                    # crashed/silent worker
+                [good,Child('{"games":5}\\n{"games":5}\\n')],
+                [good,Child('{"games":5}\\n',returncode=2)]):
+            with self.subTest(children=len(children)):
+                with self.assertRaisesRegex(RuntimeError,
+                                            "expected exactly one successful"):
+                    collect(children)
+
     def test_different_worker_readiness_never_creates_false_loss(self):
         # 1st worker arms 5 seconds earlier; mismatched V120 would count
         # early sent entries while the receiver has not yet armed.
