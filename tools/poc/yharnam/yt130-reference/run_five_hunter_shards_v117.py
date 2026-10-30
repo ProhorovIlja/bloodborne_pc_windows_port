@@ -21,6 +21,7 @@ from run_capacity_curve import BUILD
 SIZE = 5
 POPULATION = 200
 SHARD_COUNTS = (1, 3)
+OWNER_CASES = (1, 3, 5)  # 5-player team; per-actor enemy ownership in YT 1.3
 RUN_SECONDS = 30
 RAMP_MS = 35
 TIMEOUT = 120
@@ -119,7 +120,7 @@ def command(args, shards: int, base_port: int) -> list[str]:
         "--seconds", str(RUN_SECONDS), "--ramp-ms", str(RAMP_MS),
         "--processes", "4", "--cross", "mixed", "--port", str(base_port),
         "--cfg", "CheckServerBuild=false",
-        "--extra", f"--build '{BUILD}' --owner-fps 30 --follower-fps 8",
+        "--extra", f"--build '{BUILD}' --owner-fps 30 --follower-fps 8 --owners {args.owners}",
     ]
 
 def execute(cmd: list[str], timeout_s: int) -> tuple[int, str]:
@@ -147,6 +148,8 @@ def run(args) -> int:
         raise ValueError("Original source and real compiled Qt binaries are required")
     if not 60 <= args.timeout <= TIMEOUT:
         raise ValueError("Timeout outside finite guarded process-group cleanup")
+    if args.owners not in OWNER_CASES:
+        raise ValueError("Only source-tested 1/3/5-owner five-player cases allowed")
     results = []
     for index, shards in enumerate(SHARD_COUNTS):
         rc, out = execute(command(args, shards, 39014 + index * 60), args.timeout)
@@ -167,6 +170,7 @@ def run(args) -> int:
                       {"quality": "MISSING_OR_DUPLICATE_GENERATOR_REPORT", "shards": shards})
         result["scope"] = "DISPOSABLE_LOOPBACK_REDIRECT_NOT_REAL_WAN_OR_DIRECT_P2P"
         result["team_size"] = SIZE
+        result["enemy_owner_seats"] = args.owners
         results.append(result)
         print("YT130_V117_REAL_5P_SHARDS", shards, result["quality"],
               "PLAYING", result.get("playing", "?"), "GAME_RECEIVERS",
@@ -192,5 +196,7 @@ if __name__ == "__main__":
     for label in ("shadnet", "bbload", "shard-script", "output"):
         p.add_argument("--" + label, type=Path, required=True)
     p.add_argument("--timeout", type=int, default=TIMEOUT)
+    p.add_argument("--owners", type=int, choices=OWNER_CASES, default=5,
+                   help="how many of the five players independently own enemies (worst case 5)")
     p.add_argument("--require-healthy", action="store_true")
     raise SystemExit(run(p.parse_args()))
