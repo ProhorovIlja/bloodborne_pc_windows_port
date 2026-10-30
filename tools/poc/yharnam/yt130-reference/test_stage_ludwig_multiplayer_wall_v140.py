@@ -52,7 +52,7 @@ class NativeLudwigWallV140Tests(unittest.TestCase):
         self.assertEqual(m.replace_test(base, reviewed), reviewed)
         self.assertIn("on(0x22000000)", reviewed)
         for bad in (reviewed.replace("m34_00", "m34_01"),
-                    reviewed + "unreviewed change",
+                    reviewed.replace("const auto walls", "const auto fake"),
                     reviewed.replace("19u", "20u")):
             with self.subTest(bad=bad[-35:]):
                 with self.assertRaises(ValueError): m.replace_test(base, bad)
