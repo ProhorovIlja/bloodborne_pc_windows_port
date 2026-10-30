@@ -72,6 +72,8 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
                          "MISSING_REQUIRED_DIRECTED_GAME_EVIDENCE")
         sample.update(cohort_packets_sent=160000,
                       cohort_packets_received=158600,
+                      packets_sent=170000,packets_received=168600,
+                      steady_packets_sent=165000,steady_packets_received=163600,
                       directed_quality="DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY",
                       directed_packets_sent=160000,directed_packets_received=158600,
                       directed_routes=800,
@@ -80,6 +82,17 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
         self.assertEqual(good["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
         self.assertEqual(good["directed_routes"],800)
         self.assertEqual(good["cohort_min_offered_entries"],117760)
+        for counter,less_than in (
+                ("packets_sent",160000),
+                ("packets_received",158600),
+                ("steady_packets_sent",160000),
+                ("steady_packets_received",158600)):
+            with self.subTest(impossible_counter=counter):
+                inconsistent=dict(sample)
+                inconsistent[counter]=less_than-1
+                self.assertEqual(
+                    grade.grade(inconsistent,1,require_directed=True)["quality"],
+                    "DIRECTED_COHORT_EXCEEDS_ORIGINAL_QT_TOTALS")
         sample["directed_quality"]="DIRECTED_GAME_COHORT_DELIVERY_DEGRADED"
         self.assertEqual(grade.grade(sample,1,require_directed=True)["quality"],
                          "DIRECTED_GAME_COHORT_UNHEALTHY")
@@ -112,6 +125,10 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
                 item.update(
                     cohort_packets_sent=minimum,
                     cohort_packets_received=minimum,
+                    packets_sent=minimum+10000,
+                    packets_received=minimum+10000,
+                    steady_packets_sent=minimum+5000,
+                    steady_packets_received=minimum+5000,
                     directed_quality="DIRECTED_GAME_COHORT_PASS_DIAGNOSTIC_ONLY",
                     directed_packets_sent=minimum,
                     directed_packets_received=minimum,
