@@ -63,7 +63,7 @@ jobs:
           python3 tools/poc/yharnam/yt130-reference/stage_doll_own_flag_v151.py --original pinned-yt130 --reviewed reviewed-yt457
           python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-yt130 --reviewed reviewed-yt468
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
-          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-yt130 --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --donor151 reviewed-yt457 --original pinned-yt130 --prior reviewed-yt468 --middle reviewed-yt468latest --reviewed reviewed-yt471
           git -C pinned-yt130 diff --check
           git -C pinned-yt130 diff --name-only > /tmp/v160-game-files.txt
           python3 - <<'PY'
