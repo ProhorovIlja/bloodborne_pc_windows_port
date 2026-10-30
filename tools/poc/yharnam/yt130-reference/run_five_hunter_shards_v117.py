@@ -44,6 +44,8 @@ def grade(item: dict, expected_shards: int) -> dict:
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
             return {"quality": "INVALID_PER_SHARD_CPU"}
     for key in ("playing", "game_receivers", "complete_teams",
+                "linking", "lobby", "awaiting_welcome",
+                "udp_write_failed", "udp_write_short",
                 "steady_workers", "steady_packets_sent", "steady_packets_received",
                 "packets_sent", "packets_received",
                 "packets_lost", "refused", "udp_buffer_drops"):
@@ -56,6 +58,9 @@ def grade(item: dict, expected_shards: int) -> dict:
         if type(val) not in (int, float) or not math.isfinite(val) or val < 0:
             return {"quality": "INVALID_TIMING_OR_REDIRECT", "field": key}
     playing, receivers = item["playing"], item["game_receivers"]
+    if (item["linking"] + item["lobby"] + item["awaiting_welcome"] +
+            playing != POPULATION):
+        return {"quality": "INVALID_ORIGINAL_GAME_LIFECYCLE_SUM"}
     sent, received = item["packets_sent"], item["packets_received"]
     steady_sent = item["steady_packets_sent"]
     steady_received = item["steady_packets_received"]
@@ -67,7 +72,9 @@ def grade(item: dict, expected_shards: int) -> dict:
         steady_quality = "STEADY_DELIVERY_DEGRADED"
     else:
         steady_quality = "STEADY_DELIVERY_PASS_SYNTHETIC_ONLY"
-    if playing != POPULATION:
+    if item["udp_write_failed"] or item["udp_write_short"]:
+        quality = "GENERATOR_UDP_SOCKET_WRITE_FAILED"
+    elif playing != POPULATION:
         quality = "NOT_ALL_PLAYING"
     elif receivers != POPULATION:
         quality = "GAME_RECEIVERS_MISSING"
@@ -93,6 +100,10 @@ def grade(item: dict, expected_shards: int) -> dict:
     return {
         "quality": quality, "players": POPULATION, "shards": expected_shards,
         "playing": playing, "game_receivers": receivers,
+        "linking": item["linking"], "lobby": item["lobby"],
+        "awaiting_welcome": item["awaiting_welcome"],
+        "udp_write_failed": item["udp_write_failed"],
+        "udp_write_short": item["udp_write_short"],
         "complete_teams": item["complete_teams"], "packets_sent": sent,
         "steady_quality": steady_quality,
         "steady_workers": item["steady_workers"],
@@ -182,7 +193,12 @@ def run(args) -> int:
               result.get("game_receivers", "?"), "COMPLETE_FIVE_TEAMS",
               result.get("complete_teams", "?"), "STEADY",
               result.get("steady_quality", "?"), "STEADY_PCT",
-              result.get("steady_delivered_pct", "?"), flush=True)
+              result.get("steady_delivered_pct", "?"), "LINKING",
+              result.get("linking", "?"), "LOBBY",
+              result.get("lobby", "?"), "AWAIT_WELCOME",
+              result.get("awaiting_welcome", "?"), "UDP_WRITE_FAILED",
+              result.get("udp_write_failed", "?"), "UDP_WRITE_SHORT",
+              result.get("udp_write_short", "?"), flush=True)
         if rc == 124:
             break
     args.output.parent.mkdir(parents=True, exist_ok=True)
