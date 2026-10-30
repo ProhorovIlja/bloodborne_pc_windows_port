@@ -138,7 +138,14 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                               "GLOBAL_GAME_COHORT_DELIVERY_DEGRADED"):
             directed_valid = True
             directed_loss = False
-            directed_expected = {}
+            # Minimum real generated follower workload: the pinned original
+            # run_five_hunter_shards_v117.command fixes follower-fps=8 and
+            # every follower sends one 0x06 entry per frame per other seat.
+            # Even the LOWEST-volume seat-to-seat route must sustain 80%
+            # of those 8 entries/s over the synchronized full seconds.
+            # Global 80% offered packets can otherwise hide one stalled
+            # sender among hundreds of healthy directed routes.
+            min_route_entries = (8 * cohort_seconds * 80 + 99) // 100
             for worker_index, r in enumerate(results):
                 n = args.team_size
                 # Original run_shards assigns complete synthetic teams to
@@ -182,6 +189,7 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                 seen = set()
                 sent_by_second = {}
                 received_by_second = {}
+                sent_by_route = {}
                 for item in rows:
                     if (type(item) is not dict or
                             set(item) != {"start_us", "route", "sent_entries", "received_entries"} or
@@ -212,6 +220,7 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                         break
                     directed_sent += sent
                     directed_received += received
+                    sent_by_route[route] = sent_by_route.get(route, 0) + sent
                     if received * 100 < sent * 99:
                         directed_loss = True
                     sent_by_second[sec] = sent_by_second.get(sec, 0) + sent
@@ -227,7 +236,9 @@ DIRECTED_AGG='''        # SHYT_V169_SYNTHETIC_DIRECTED_GAME_COHORT (synthetic in
                 expected_seen = {(sec, route)
                                  for sec in range(cohort_start_us, cohort_end_us, 1_000_000)
                                  for route in expected_routes}
-                if seen != expected_seen:
+                if seen != expected_seen or any(
+                        sent_by_route.get(route, 0) < min_route_entries
+                        for route in expected_routes):
                     directed_valid = False
                     break
                 # Cross-check all routed entries against the original V161
