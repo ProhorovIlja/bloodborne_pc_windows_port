@@ -28,12 +28,12 @@ class CacheAtomicTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "source drift"):
                     m.rewrite(src + "\n" + before)
     def test_windows_crlf_canonicalization_only(self):
-        raw = b"first\\nsecond\\n"
-        windows = b"first\\r\\nsecond\\r\\n"
+        raw = b"first\nsecond\n"
+        windows = b"first\r\nsecond\r\n"
         self.assertEqual(m.canonical_source(windows), raw)
         self.assertEqual(m.git_blob_sha(m.canonical_source(windows)),
                          m.git_blob_sha(raw))
-        self.assertNotEqual(m.canonical_source(b"first edited\\r\\n"),
+        self.assertNotEqual(m.canonical_source(b"first edited\r\n"),
                             raw)
         with self.assertRaisesRegex(ValueError, "not exact pinned"):
             m.transform(windows)
