@@ -196,22 +196,28 @@ int main() {
     // reciprocal signed mTLS/NAT grants to native DirectSender. It is
     // strictly dev-only, and these are mock native socket callbacks.
     SignedNatRouteLeaseV134 lease_a{
-        &inbox_a,&proof_a,CurrentWorldAuthority,&world_a};
+        &inbox_a,&proof_a,CurrentWorldAuthority,&world_a,id_a};
     SignedNatRouteLeaseV134 lease_b{
-        &inbox_b,&proof_b,CurrentWorldAuthority,&world_b};
+        &inbox_b,&proof_b,CurrentWorldAuthority,&world_b,id_b};
     NativeDirectSender direct_a,direct_b;
     RealShy2SenderV134 a_socket{&tx_a},b_socket{&tx_b};
     const auto direct_a_frame=Frame('A');
     assert(direct_a.TrySend(virtual_b,direct_a_frame,1107) ==
            NativeTxStatus::RelayRequired);
     assert(!SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto(
-        direct_a,4,lease_a,"A",TransmitVerifiedShy2V134,&a_socket,1107));
+        direct_a,4,lease_a,"A",id_a,TransmitVerifiedShy2V134,&a_socket,1107));
     assert(!SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto(
-        direct_a,0,lease_b,"A",TransmitVerifiedShy2V134,&a_socket,1107));
+        direct_a,0,lease_b,"A",id_a,TransmitVerifiedShy2V134,&a_socket,1107));
     assert(SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto(
-        direct_a,0,lease_a,"A",TransmitVerifiedShy2V134,&a_socket,1107));
+        direct_a,0,lease_a,"A",id_a,TransmitVerifiedShy2V134,&a_socket,1107));
     assert(SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto(
-        direct_b,0,lease_b,"B",TransmitVerifiedShy2V134,&b_socket,1107));
+        direct_b,0,lease_b,"B",id_b,TransmitVerifiedShy2V134,&b_socket,1107));
+    // A malicious/cross-account grant from B is NOT an A's trusted offer.
+    assert(!SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto(
+        direct_a,0,lease_b,"A",id_a,TransmitVerifiedShy2V134,&a_socket,1108));
+    auto wrong_identity=id_a;wrong_identity[23]^=0x40;
+    assert(!SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto(
+        direct_a,0,lease_a,"A",wrong_identity,TransmitVerifiedShy2V134,&a_socket,1108));
     assert(direct_a.TrySend(virtual_b,direct_a_frame,1108) ==
            NativeTxStatus::DirectSubmitted);
     assert(a_socket.calls==1 && IsSHY2(a_socket.sealed));
@@ -248,7 +254,7 @@ int main() {
     assert(direct_a.TrySend(virtual_b,direct_a_frame,4001)==
            NativeTxStatus::RelayRequired);
     assert(!SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto(
-        direct_a,0,lease_a,"A",TransmitVerifiedShy2V134,&a_socket,4001));
+        direct_a,0,lease_a,"A",id_a,TransmitVerifiedShy2V134,&a_socket,4001));
     direct_a.RevokeAll();direct_b.RevokeAll();
     // No duplicate installation, shared nonce or fifth remote peer.
     assert(!NativeShy2GrantCutoverV106::Install(
