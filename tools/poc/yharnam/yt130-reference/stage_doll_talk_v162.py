@@ -102,8 +102,8 @@ def patch(name,base,prior,reviewed,middle):
             raise ValueError("V162 guest own-talk hook semantic drift")
         base=one(base,old,new,"guest vs others own talk")
         new=region(reviewed,TALK_START,TALK_END,"talk-command 71 hook")
-        if "EndsDollBlessing(" not in new or
-                "doll_blessing_end_asked.store(true)" not in new or len(new)>550:
+        if ("EndsDollBlessing(" not in new or
+                "doll_blessing_end_asked.store(true)" not in new or len(new)>550):
             raise ValueError("V162 game talk end hook drift")
         base=one(base,TALK_START,new,"Doll talk command end")
         old=region(base,TICK_START,TICK_END,"staged V160 next tick")
