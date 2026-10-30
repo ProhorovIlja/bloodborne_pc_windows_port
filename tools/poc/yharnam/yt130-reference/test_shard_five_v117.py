@@ -152,6 +152,11 @@ class OriginalShardsQoSTests(unittest.TestCase):
                 self.assertIn(f"--owners {count}",cmd[cmd.index("--extra")+1])
                 self.assertIn("--owner-fps 30",cmd[cmd.index("--extra")+1])
         self.assertEqual(run.OWNER_CASES,(1,3,5))
+        self.assertEqual(run.CROSS_MODES,("mixed","code","invite"))
+        for mode in run.CROSS_MODES:
+            args.cross=mode
+            cmd=run.command(args,3,39014)
+            self.assertEqual(cmd[cmd.index("--cross")+1],mode)
 
     def test_five_seat_real_200_by_shard_not_two_or_four(self):
         self.assertEqual(run.SIZE,5)
