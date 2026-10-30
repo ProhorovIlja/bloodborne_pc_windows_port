@@ -1,0 +1,100 @@
+name: SHYT V153 pinned original native Windows Win32 precise system clock ABI
+on:
+  push:
+    branches: [feature/yt130-native-win32-clock-v153-20261030]
+    paths:
+      - .github/workflows/shyt-v153-original-win32-clock.yml
+      - tools/native/stage_native_win32_clock_v153.py
+      - tools/native/test_stage_native_win32_clock_v153.py
+      - tools/native/test_v153_windows_clock.c
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Original YT1.3 Git blob and native source-only staging
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/native -p test_stage_native_win32_clock_v153.py -v
+          python3 tools/native/stage_native_win32_clock_v153.py pinned-upstream
+          git -C pinned-upstream diff --check
+          git -C pinned-upstream diff --name-only > /tmp/changed.txt
+          test "$(cat /tmp/changed.txt)" = 'bbport/src/runtime_time.c'
+          grep -F 'GetSystemTimePreciseAsFileTime(&ft);' pinned-upstream/bbport/src/runtime_time.c >/dev/null
+          echo SHYT_V153_EXACT_ORIGINAL_YT130_NATIVE_WIN32_TIME_SOURCE_PASS
+  native-Windows-C-ABI:
+    needs: original-source
+    runs-on: windows-2022
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Exact original source tests and native Win32 staging
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tools/native -p test_stage_native_win32_clock_v153.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'V153 source/ABI contract failed' }
+          python tools/native/stage_native_win32_clock_v153.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'V153 original YT1.3 source pin drift' }
+          git -C pinned-upstream diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'V153 source diff invalid' }
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - name: Install Windows Clang, not a PS4 emulator
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed \
+            mingw-w64-clang-x86_64-clang \
+            mingw-w64-clang-x86_64-libc++
+      - name: Compile actual original Windows game runtime time C translation unit and run Win32 live-clock test
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          mkdir -p out/v153
+          clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -I pinned-upstream/bbport/src \
+            -c pinned-upstream/bbport/src/runtime_time.c \
+            -o out/v153/original-runtime-time.obj
+          clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -I pinned-upstream/bbport/src \
+            tools/native/test_v153_windows_clock.c \
+            -o out/v153/win32-native-clock-test.exe
+          out/v153/win32-native-clock-test.exe
+          echo SHYT_V153_REAL_WINDOWS_NATIVE_WIN32_CLOCK_COMPILER_AND_EXECUTION_PASS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: yt130-v153-original-Windows-runtime-time-C-and-live-ABI-test-INTERNAL
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            out/v153/original-runtime-time.obj
+            out/v153/win32-native-clock-test.exe
