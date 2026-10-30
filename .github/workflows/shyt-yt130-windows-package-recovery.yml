@@ -130,6 +130,29 @@ jobs:
           # It validates and downloads pinned, licensed PkgTool, ReShade and
           # XeSS resources before creating an archive for private CI.
           set +e
+          # YT 1.3.0 package.sh copies optional MSYS2 licenses via cp.
+          # On current CLANG64 runner: cp cannot stat protobuf/LICENSE
+          # even though the script's -f guard reached that call. Copy through
+          # pinned Windows Python instead, preserving exact installed bytes
+          # and preserving fail-closed errors when a listed license is present.
+          "$WINPYTHON" - <<'PY'
+          from pathlib import Path
+          p = Path("packaging/windows/package.sh")
+          s = p.read_text(encoding="utf-8")
+          old = '    if [[ -f $license ]]; then cp "$license" "$dest/licenses/$package-LICENSE.txt"; fi'
+          new = (
+              '    if [[ -f "$license" ]]; then\n'
+              '        src="$(cygpath -w "$license")"\n'
+              '        dst="$(cygpath -w "$dest/licenses/$package-LICENSE.txt")"\n'
+              '        "$WINPYTHON" -c '
+              "'import shutil,sys; shutil.copyfile(sys.argv[1], sys.argv[2])' "
+              '"$src" "$dst"\n'
+              '        test -s "$dest/licenses/$package-LICENSE.txt"\n'
+              '    fi'
+          )
+          assert s.count(old) == 1, "Pinned official package license block changed"
+          p.write_text(s.replace(old, new, 1), encoding="utf-8", newline="\n")
+          PY
           bash packaging/windows/package.sh > out/shyt-original-package.log 2>&1
           status=$?
           set -e
