@@ -47,7 +47,10 @@ class NativeWindowsCommonDialog(unittest.TestCase):
                            "\nint main(void) {return exports[0].callback();}\n",
                            encoding="utf-8")
             p=subprocess.run([clang,"-std=c11","-Wall","-Wextra","-Werror",
-                              "-Wunused-but-set-global","-fsyntax-only",str(src)],
+                              # Linux runner Clang predates the Windows
+                              # Clang23 '-Wunused-but-set-global' diagnostic:
+                              # keep all portable warnings as hard errors.
+                              "-Wunused-variable","-fsyntax-only",str(src)],
                              capture_output=True,text=True,timeout=12)
             self.assertEqual(p.returncode,0,p.stdout+p.stderr)
 
