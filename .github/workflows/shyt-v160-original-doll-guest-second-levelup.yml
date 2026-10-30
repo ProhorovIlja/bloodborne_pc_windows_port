@@ -6,6 +6,8 @@ on:
       - .github/workflows/shyt-v160-original-doll-guest-second-levelup.yml
       - tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py
       - tools/poc/yharnam/yt130-reference/test_stage_doll_second_levelup_v160.py
+      - tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py
+      - tools/poc/yharnam/yt130-reference/test_stage_doll_talk_v162.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,6 +40,13 @@ jobs:
           path: reviewed-yt468
           submodules: false
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 4a55f02c48207770273e0cf0ed5d06e85a9143e5
+          path: reviewed-yt471
+          submodules: false
+          persist-credentials: false
       - name: Test source exact guest own talk predicate and stage both reviewed upstream patches
         run: |
           set -euo pipefail
@@ -45,6 +54,8 @@ jobs:
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_second_levelup_v160.py -v
           python3 tools/poc/yharnam/yt130-reference/stage_doll_own_flag_v151.py --original pinned-yt130 --reviewed reviewed-yt457
           python3 tools/poc/yharnam/yt130-reference/stage_doll_second_levelup_v160.py --original pinned-yt130 --reviewed reviewed-yt468
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_doll_talk_v162.py -v
+          python3 tools/poc/yharnam/yt130-reference/stage_doll_talk_v162.py --original pinned-yt130 --reviewed reviewed-yt471
           git -C pinned-yt130 diff --check
           git -C pinned-yt130 diff --name-only > /tmp/v160-game-files.txt
           python3 - <<'PY'
@@ -57,11 +68,13 @@ jobs:
           code=Path("pinned-yt130/emulator/src/core/bloodborne_travel.cpp").read_text()
           assert "doll_blessing_asked.store(true)" in code
           assert "doll_blessing_asked.exchange(false)" in code
+          assert "std::ranges::any_of(OtherPlayers()" in code
+          assert "doll_blessing_end_asked.store(true);" in code
           assert "asked || EventFlagOn(DollBlessingFlag)" in code
           assert "ClearDollLevelUpFlagAfterHerMenu();" in code
           rules=Path("pinned-yt130/emulator/src/core/bloodborne_flags.h").read_text()
           assert "Range(72100100, 72100102, FlagOwner::PerPlayer, 0," in rules
-          print("SHYT_V160_PINNED_ORIGINAL_GUEST_DOLL_OWN_TALK_ATOMIC_TICK_SOURCE_PASS")
+          print("SHYT_V162_PINNED_ORIGINAL_GUEST_DOLL_TALK_BEGIN_END_SOURCE_PASS")
           PY
       - name: Compile and run actual staged original Bloodborne own-talk flag C++ helper truth table
         run: |
@@ -83,6 +96,7 @@ jobs:
                   s32 flag=(v&1)?DollBlessingFlag:DollBlessingFlag+1;
                   bool expected=active && !other && flag==DollBlessingFlag;
                   if (ClearsDollLevelUpFlagOnHerBlessing(active,other,flag)!=expected) return 1;
+              if (EndsDollBlessing(71)!=true || EndsDollBlessing(68) || EndsDollBlessing(31)) return 2;
               }
               return 0;
           }
