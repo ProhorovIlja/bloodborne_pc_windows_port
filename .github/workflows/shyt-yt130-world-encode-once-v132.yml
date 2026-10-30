@@ -1,0 +1,121 @@
+name: YT1.3 V132 single-encode world fanout real native Qt C++ and strict game UDP QoS
+on:
+  push:
+    branches: [feature/yt130-world-encode-once-v132-20261030]
+    paths:
+      - .github/workflows/shyt-yt130-world-encode-once-v132.yml
+      - tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
+      - tools/poc/yharnam/yt130-reference/test_stage_world_encode_once_v132.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: yt130-v132-real-QT-world-encoded-once
+  cancel-in-progress: false
+jobs:
+  source-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Real V132 source-exact protobuf fanout regression
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_udp_send_probe_v130.py -v
+          python -m compileall -q tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
+      - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" "$RUNNER_TEMP/yt-src"
+          for stage in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'void Service::SendEncodedTo(' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          grep -Fq 'SendEncodedTo(invader->second, encoded, now_ms)' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          grep -Fq 'std::span<const u8>' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.h"
+          echo SHYT_V132_ORIGINAL_WORLD_RELIABLE_FANOUT_BYTES_SOURCE_STAGED_NO_LOAD_CLAIM
+  real-qt-server:
+    needs: source-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: qt6-yt130-auth-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            qt6-yt130-auth-${{ runner.os }}-
+      - name: Install exact native server prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ ccache pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite
+      - name: Clone source with original protobuf
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          git -C "$RUNNER_TEMP/yt-src" submodule update --init --recursive server/externals/protobuf
+      - name: Apply previously proven staged five-player Qt changes plus V125 only
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" "$RUNNER_TEMP/yt-src"
+          for stage in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          git -C "$RUNNER_TEMP/yt-src" diff -- server/src/bloodborne_world.cpp | grep -Fq '+void Service::SendEncodedTo('
+      - name: Actually compile modified original Qt LinkServer and core regressions
+        run: |
+          set -euo pipefail
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          ccache --max-size 1300M
+          cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0" "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache" "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target shadnet test_server_link test_bloodborne_world
+          ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(server_link|bloodborne_world)$'
+          ccache --show-stats
+          echo SHYT_V132_REAL_QT_WORLD_CTESTS_PASS_NOT_CAPACITY
+      - name: Stage authentic original bbload five-hunter game payload counters
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'game_receivers += game->Playing() && game->SawGamePackets();' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target bbload
+          test -x "$RUNNER_TEMP/yt-build/bbload"
+          echo SHYT_V132_ORIGINAL_BBLOAD_REAL_CPP_PLAYER_GENERATOR_BUILT
+      - name: Actually measure strict original five-hunter-capable Qt game UDP 4/16/32/64/100/200
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/run_capacity_curve.py \
+            --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+            --bbload "$RUNNER_TEMP/yt-build/bbload" \
+            --load-script "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py" \
+            --report yt130-v132-actual-qos.jsonl --profile baseline
+          echo SHYT_V132_ORIGINAL_REAL_BBLOAD_UP_TO_200_QOS_PASS_ONLY_IF_ALL_STAGES_HEALTHY
+      - name: Preserve all strict game UDP QoS stages even if performance fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-V132-encode-once-actual-4-200-QOS-EVIDENCE-NOT-RELEASE
+          path: yt130-v132-actual-qos.jsonl
+          retention-days: 7
+          if-no-files-found: warn
+
