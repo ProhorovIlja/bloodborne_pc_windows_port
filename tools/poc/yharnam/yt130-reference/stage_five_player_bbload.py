@@ -103,8 +103,8 @@ STEADY_EDITS = (
      '  quint64 packets_lost = 0; // gaps in the sequence numbers\n'
      '  quint64 steady_packets_sent = 0;\n'
      '  quint64 steady_packets_received = 0;\n'),
-    ('  s64 started_us = 0;\n',
-     '  s64 started_us = 0;\n'
+    ('  Totals totals;\n  s64 started_us = 0;\n',
+     '  Totals totals;\n  s64 started_us = 0;\n'
      '  s64 steady_since_us = 0; // set once, after real full-team Playing\n'),
     ('    const double seconds = (now_us - last_report_us) / 1e6;\n',
      '    // V120: only real original whole-five team Playing can arm.\n'

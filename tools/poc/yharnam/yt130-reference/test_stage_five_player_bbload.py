@@ -114,6 +114,19 @@ class FivePlayerLoadgenTests(unittest.TestCase):
         self.assertIn("steady_packets_received",
                       mod.patch_steady_window(prior))
 
+    def test_duplicate_game_start_is_not_modified_by_load_steady_patch(self):
+        # Exact upstream bbload has started_us in BOTH Game and Load.
+        game_decl = "struct Game {\n  s64 started_us = 0;\n};\n"
+        original = game_decl + self.pinned_anchor_fixture()
+        self.assertEqual(original.count("  s64 started_us = 0;\n"), 2)
+        transformed = mod.rewrite(original)
+        self.assertIn(game_decl, transformed)
+        self.assertIn(
+            "  Totals totals;\n  s64 started_us = 0;\n"
+            "  s64 steady_since_us = 0; // set once, after real full-team Playing\n",
+            transformed,
+        )
+
     def test_unpinned_source_refused(self):
         with self.assertRaisesRegex(ValueError, "exact official pinned"):
             mod.transform((mod.OLD_HELP + mod.OLD_CLAMP).encode())
