@@ -4,6 +4,8 @@ on:
     branches: [feature/yt130-server-wire-attribution-v155-20261030]
     paths:
       - .github/workflows/shyt-v157-real-qt-worker-ab.yml
+      - tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
+      - tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
       - tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py
       - tools/poc/yharnam/yt130-reference/test_stage_qt_receive_v158.py
       - tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py
