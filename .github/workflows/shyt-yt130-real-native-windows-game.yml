@@ -16,6 +16,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_native_p2p_log_v116.py
       - tools/poc/yharnam/yt130-reference/native/net_p2p_log_budget_v116.h
       - tools/poc/yharnam/yt130-reference/native/test_net_p2p_log_budget_v116.cpp
+      - tools/poc/yharnam/yt130-reference/stage_windows_revision_v119.py
+      - tools/poc/yharnam/yt130-reference/test_stage_windows_revision_v119.py
 permissions:
   contents: read
 concurrency:
@@ -77,7 +79,8 @@ jobs:
             'test_guard_native_protocol8_v111.py',
             'test_probe_native_param_cpp_v109.py',
             'test_stage_native_rx_queue_v115.py',
-            'test_stage_native_p2p_log_v116.py')) {
+            'test_stage_native_p2p_log_v116.py',
+            'test_stage_windows_revision_v119.py')) {
             python -m unittest discover -s tools/poc/yharnam/yt130-reference -p $test -v
             if ($LASTEXITCODE -ne 0) { throw "Native YT1.3 client source regression failed: $test" }
           }
@@ -99,6 +102,13 @@ jobs:
           }
           python tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py --client-root pinned-upstream --server-root pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Incompatible native Protocol8 game/Qt server code' }
+          # V119: fix verified repeated Windows Ninja stall on [120/431].
+          # Immutable SHA and '-dirty' accurately describe our staged game.
+          python tools/poc/yharnam/yt130-reference/stage_windows_revision_v119.py pinned-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Original Windows CMake revision target source drift' }
+          if (-not (Select-String -Path 'pinned-upstream/bbport/gpu/bbcoop/revision.cmake' -SimpleMatch 'SHYT-V119-NATIVE-WINDOWS-REVISION-FASTPATH')) {
+            throw 'Windows game revision fastpath missing'
+          }
           git -C pinned-upstream diff --check
           if ($LASTEXITCODE -ne 0) { throw 'Native YT1.3 original game whitespace or patch conflict' }
           Write-Host 'SHYT_YT130_REAL_NATIVE_CLIENT_PROTOCOL8_SOURCE_STAGED'
@@ -137,6 +147,27 @@ jobs:
             mingw-w64-clang-x86_64-spirv-cross mingw-w64-clang-x86_64-protobuf \
             mingw-w64-clang-x86_64-openssl mingw-w64-clang-x86_64-zlib \
             mingw-w64-clang-x86_64-nlohmann-json
+      - name: Prove pinned Windows bbcoop revision command completes before Ninja
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          script="pinned-upstream/bbport/gpu/bbcoop/revision.cmake"
+          header="pinned-upstream/bbport/out/v119-source-revision-preflight.h"
+          mkdir -p "$(dirname "$header")"
+          revision_script="$(cygpath -m "$PWD/$script")"
+          revision_header="$(cygpath -m "$PWD/$header")"
+          revision_source="$(cygpath -m "$PWD/pinned-upstream/bbport/gpu")"
+          # Original generator previously held the GPU Ninja task >130 min.
+          timeout 12s cmake "-DOUT=$revision_header" "-DSOURCE=$revision_source" \
+            -P "$revision_script"
+          grep -Fq "BB_SCM_REV" "$header"
+          grep -Fq "$YT_PIN-dirty" "$header"
+          sha_before="$(sha256sum "$header" | cut -d' ' -f1)"
+          timeout 12s cmake "-DOUT=$revision_header" "-DSOURCE=$revision_source" \
+            -P "$revision_script"
+          sha_after="$(sha256sum "$header" | cut -d' ' -f1)"
+          test "$sha_before" = "$sha_after"
+          echo SHYT_YT130_WINDOWS_ORIGINAL_BBCOOP_NINJA_120_HANG_GUARD_PASS
       - name: Compile real native game queue budget under CLANG64 before full renderer
         shell: msys2 {0}
         run: |
