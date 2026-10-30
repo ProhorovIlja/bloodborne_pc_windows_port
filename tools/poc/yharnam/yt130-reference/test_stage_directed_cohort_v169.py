@@ -43,12 +43,15 @@ class DirectedSource(unittest.TestCase):
     def test_cpp_source_exact_and_no_identity_output(self):
         src=('SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS\n'
              'SHYT_V158_NATIVE_QT_RECEIVE_DIAGNOSTICS\n'+
-             v.CLASS_OLD+v.SEQ_ANCHOR+v.SEND_OLD+v.RECEIVED_OLD+v.FINISH_OLD+v.JSON_OLD)
+             v.GAME_SEAT_FIELD_OLD+v.GAME_CTOR_OLD+v.CLASS_OLD+v.SEQ_ANCHOR+
+             v.SEND_OLD+v.RECEIVED_OLD+v.FINISH_OLD+v.JSON_OLD)
         candidate=v.patch_cpp(src)
         self.assertIn(v.MARK,candidate)
         self.assertIn('bool FreshDirectedSequence(u32 seq',candidate)
         self.assertIn('cohort_nonunique_receipts',candidate)
-        self.assertIn('load.NameOf(team, candidate)',candidate)
+        self.assertIn('cohort_sender_names[candidate]',candidate)
+        self.assertIn('cohort_sender_names.push_back(load.NameOf(team, sender_seat));',candidate)
+        self.assertEqual(candidate.count('cohort_sender_names.push_back('),1)
         self.assertIn('"route", static_cast<double>(key.second)',candidate)
         self.assertNotIn('"online_id"',candidate)
         self.assertNotIn('"sender_name"',candidate)
