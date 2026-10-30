@@ -941,6 +941,14 @@ def run(checkout:Path, repo:Path, out:Path):
     files[shy2.CUTOVER_HEADER]=(metrics_dir/"sh_native_shy2_grant_cutover_v106.hpp").read_bytes()
     files["emulator/src/core/libraries/network/sh_pair_aead_keys.hpp"]=(
         metrics_dir/"sh_pair_aead_keys.hpp").read_bytes()
+    # V136 actual native CLANG64 p2p_sockets.cpp includes SHG2 via its
+    # own source tree: sh_secure_grant_v84.hpp imports sh_direct_crypto.hpp.
+    # V75 previously staged this header ONLY in server/src, so native
+    # game compilation failed despite earlier standalone crypto C++ PASS.
+    # Stage the IDENTICAL pinned source in the game tree, never a copy of
+    # transient CMake include directories or a generated fake header.
+    files["emulator/src/core/libraries/network/sh_direct_crypto.hpp"]=(
+        metrics_dir/"sh_direct_crypto.hpp").read_bytes()
     # V135: read the REAL composed original game, not a duplicate shim.
     # SHG2 grants and SHY2 AEAD expire on Unix epoch time; original P2PNowMs
     # is steady_clock for ping/silence timers and must stay monotonic.
@@ -955,6 +963,16 @@ def run(checkout:Path, repo:Path, out:Path):
     files["emulator/src/core/libraries/network/sh_signed_nat_route_v134.hpp"]=(
         metrics_dir/"sh_signed_nat_route_v134.hpp").read_bytes()
     meta["applied"].append("V135 real native P2PTransport UTC crypto ticket expiry while local timers stay monotonic; V134 dev-only verified signed NAT router library, no live game Direct Arm")
+    # V136: ACTUAL native game developer-only route owns a verified original
+    # TLS+NAT/SHY2 cutover. Real SendFrame holds the same grant lock that
+    # protects the std::optional NAT proof from disappearing mid-use.
+    # Default builds and all game/world reliability remain original relay.
+    v136_file=metrics_dir/"patch_native_game_direct_owner_v136.py"
+    v136=types.ModuleType("shyt_native_game_direct_owner_v136")
+    v136.__file__=str(v136_file)
+    exec(compile(v136_file.read_text("utf-8"),str(v136_file),"exec"),v136.__dict__)
+    files[NETWORK]=v136.patch_game(files[NETWORK].decode("utf-8")).encode("utf-8")
+    meta["applied"].append("V136 actual native P2PTransport dev-only V134 authenticated signed NAT+SHY2 route installer with stable game owner, serialized grant/proof lifetime, four-slot-compatible router, explicit shutdown revocation; NO auto-Arm in production")
     meta["applied"].append("Native SHY2 AES-256-GCM original recvfrom ingress and SendFrame writer callback: server-scoped physical/virtual/world/ACK gates; zero installed peers, relay unchanged")
     meta["sha256"]={k:sha(v) for k,v in sorted(files.items())}
     # All source anchors and input hashes are checked before writing anything.

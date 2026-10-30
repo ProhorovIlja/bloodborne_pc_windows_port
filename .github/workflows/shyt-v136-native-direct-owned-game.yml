@@ -1,0 +1,79 @@
+name: SHYT V136 original native game owner of signed Direct, DEBUG ONLY
+on:
+  push:
+    branches: [feature/shyt-v136-native-direct-owner-20261030]
+    paths:
+      - .github/workflows/shyt-v136-native-direct-owned-game.yml
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_game_direct_owner_v136.py
+      - tools/poc/yharnam/hybrid-transport-v52/test_patch_native_game_direct_owner_v136.py
+      - tools/poc/yharnam/hybrid-transport-v52/patch_native_clock_domain_v135.py
+      - tools/poc/yharnam/hybrid-transport-v52/sh_signed_nat_route_v134.hpp
+      - tools/poc/yharnam/unified-v9/compose_sources.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-v136-real-game-direct-owner-stage
+  cancel-in-progress: false
+jobs:
+  native-game-source-exact:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 77e350743a7cb4524cfcc1782fb6e3af64e25b15
+          path: pinned-original-game
+          persist-credentials: false
+      - name: Reject unsafe original-game Direct lifecycle source drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p test_patch_native_clock_domain_v135.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/hybrid-transport-v52 \
+            -p test_patch_native_game_direct_owner_v136.py -v
+      - name: Source-compose original YT native game, real test-gated route, unchanged production
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/unified-v9/compose_sources.py \
+            --upstream pinned-original-game --repo . --out "$RUNNER_TEMP/yt-v136-composed"
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"yt-v136-composed"
+          game="emulator/src/core/libraries/network/p2p_sockets.cpp"
+          manifest=json.loads((root/"SEAMLESS-HUNT-COMPOSE-MANIFEST.json").read_text())
+          code=(root/game).read_text(encoding="utf-8")
+          print("YT136 real composed game owner mark count",code.count("SHYT-V136-NATIVE-SIGNED-DIRECT-OWNER"))
+          assert code.count("SHYT-V136-NATIVE-SIGNED-DIRECT-OWNER")>=3
+          assert "SignedNatRouteLeaseV134::ArmAfterVerifiedCrypto(" in code
+          assert "NativeGameSelfIdentityV87::Digest(" in code
+          assert code.count("P2PAuthEpochMs()")==4
+          assert "std::lock_guard direct_lock(direct_egress_mutex);" in code
+          assert "std::lock_guard grant_lock(native_grant_mutex);" in code
+          assert "native_signed_route_v136.signed_nat_proof=&*nat_probe_v92;" in code
+          assert "direct_egress.RevokeAll();" in code
+          assert "native_signed_route_v136={};" in code
+          assert code.count("SHYT_ENABLE_TEST_LOCAL_MTLS")>=5
+          assert code.count("direct_egress.Arm(")==0
+          assert code.count("native_shy2_ingress.Arm(")==0
+          assert "Link::RoutesThroughServer(server, dest_addr_nbo, dest_port_nbo)" in code
+          assert "Link::EncodeData(dest_addr_nbo, dest_port_nbo, framed)" in code
+          assert hashlib.sha256((root/game).read_bytes()).hexdigest()==manifest["sha256"][game]
+          assert any("V136 actual native P2PTransport" in entry for entry in manifest["applied"])
+          assert manifest.get("release_blockers")
+          print("SHYT_V136_ORIGINAL_REAL_NATIVE_GAME_ENCRYPTED_DEBUG_DIRECT_OWNER_SOURCE_PASS_NOT_GAMEPLAY")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shyt-v136-original-native-transport-provenance-INTERNAL
+          retention-days: 3
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/yt-v136-composed/SEAMLESS-HUNT-COMPOSE-MANIFEST.json
