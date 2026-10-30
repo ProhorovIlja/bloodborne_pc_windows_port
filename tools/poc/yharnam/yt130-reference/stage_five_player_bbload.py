@@ -92,6 +92,59 @@ def patch_complete_teams(text: str) -> str:
     return text
 
 
+
+# V120: measure actual game payloads generated AFTER each load worker has
+# every hunter Playing AND every leader has its exact five-member team. Each
+# decoded entry carries its send timestamp, so late arrivals from the previous
+# (joining/redirect) period are excluded rather than inflating delivery.
+# IMPORTANT: instrumentation of the genuine upstream Qt bbload only.
+STEADY_EDITS = (
+    ('  quint64 packets_lost = 0; // gaps in the sequence numbers\n',
+     '  quint64 packets_lost = 0; // gaps in the sequence numbers\n'
+     '  quint64 steady_packets_sent = 0;\n'
+     '  quint64 steady_packets_received = 0;\n'),
+    ('  s64 started_us = 0;\n',
+     '  s64 started_us = 0;\n'
+     '  s64 steady_since_us = 0; // set once, after real full-team Playing\n'),
+    ('    const double seconds = (now_us - last_report_us) / 1e6;\n',
+     '    // V120: only real original whole-five team Playing can arm.\n'
+     '    if (steady_since_us == 0 && playing == static_cast<int>(games.size())) {\n'
+     '      int complete = 0;\n'
+     '      for (auto &game : games) {\n'
+     '        complete += game->CompleteTeam(settings.team_size);\n'
+     '      }\n'
+     '      if (complete == settings.teams) {\n'
+     '        steady_since_us = now_us;\n'
+     '      }\n'
+     '    }\n'
+     '    const double seconds = (now_us - last_report_us) / 1e6;\n'),
+    ('        {"complete_teams", complete_teams},\n',
+     '        {"complete_teams", complete_teams},\n'
+     '        {"steady_packets_sent", static_cast<double>(totals.steady_packets_sent)},\n'
+     '        {"steady_packets_received", static_cast<double>(totals.steady_packets_received)},\n'
+     '        {"steady_window_ms", steady_since_us ?\n'
+     '            static_cast<double>((NowUs() - steady_since_us) / 1000) : 0.0},\n'),
+    ('    load.totals.packets_sent += frame.entries.size();\n',
+     '    load.totals.packets_sent += frame.entries.size();\n'
+     '    if (load.steady_since_us > 0 && now_us >= load.steady_since_us) {\n'
+     '      load.totals.steady_packets_sent += frame.entries.size();\n'
+     '    }\n'),
+    ('    ++received_game_packets;\n',
+     '    ++received_game_packets;\n'
+     '    if (load.steady_since_us > 0 &&\n'
+     '        static_cast<s64>(sent) >= load.steady_since_us) {\n'
+     '      ++load.totals.steady_packets_received;\n'
+     '    }\n'),
+)
+
+
+def patch_steady_window(text: str) -> str:
+    for old, replacement in STEADY_EDITS:
+        if text.count(old) != 1:
+            raise ValueError("Pinned steady five-hunter game payload anchor drift")
+        text = text.replace(old, replacement, 1)
+    return text
+
 def blob_sha(raw: bytes) -> str:
     return hashlib.sha1(
         b"blob " + str(len(raw)).encode() + b"\x00" + raw
@@ -113,7 +166,7 @@ def rewrite(text: str) -> str:
         if text.count(old) != 1:
             raise ValueError("Pinned game-receiver bbload anchor drift")
         text = text.replace(old, replacement, 1)
-    return patch_complete_teams(text)
+    return patch_steady_window(patch_complete_teams(text))
 
 
 def transform(raw: bytes) -> bytes:

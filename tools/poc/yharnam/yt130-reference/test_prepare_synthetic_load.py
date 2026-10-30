@@ -13,6 +13,9 @@ class TestPinnedLoad(unittest.TestCase):
         source = Path(m.__file__).read_text(encoding="utf-8")
         self.assertIn('"game_receivers": sum(r["game_receivers"] for r in results)', source)
         self.assertIn('"complete_teams": sum(r["complete_teams"] for r in results)', source)
+        self.assertIn('"steady_packets_sent": sum(r["steady_packets_sent"] for r in results)', source)
+        self.assertIn('"steady_packets_received": sum(r["steady_packets_received"] for r in results)', source)
+        self.assertIn('r["steady_window_ms"] >= 5000', source)
         self.assertIn("if s.count(anchor) != 1:", source)
 
     def test_refuse_unpinned_synthetic_source(self):

@@ -274,7 +274,11 @@ jobs:
             "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
           grep -Fq 'game_receivers += game->Playing() && game->SawGamePackets();' \
             "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
-          echo FIVE_HUNTER_LOAD_GENERATOR_ISOLATED_NOT_GAME_SERVER_RELEASE
+          grep -Fq 'steady_since_us = now_us;' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq 'steady_packets_received;' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          echo FIVE_HUNTER_V120_GAME_SENDER_TIMESTAMP_STEADY_COUNTERS_STAGED
       - name: Compile ORIGINAL upstream synthetic player generator
         shell: bash
         run: |
@@ -297,10 +301,14 @@ jobs:
             "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq '"complete_teams": sum(r["complete_teams"] for r in results)' \
             "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
+          grep -Fq '"steady_packets_received": sum(r["steady_packets_received"] for r in results)' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
+          grep -Fq '"steady_packets_received": sum(r["steady_packets_received"] for r in results)' \
+            "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           grep -Fq 'shlex.split(args.extra)' \
             "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
           git -C "$RUNNER_TEMP/yt-src" diff --check
-          echo YT130_ORIGINAL_5_PLAYER_REDIS_SHARD_GENERATOR_RECEIVERS_STAGED
+          echo YT130_ORIGINAL_5_PLAYER_REDIS_SHARD_GENERATOR_RECEIVERS_AND_V120_STEADY_METRICS_STAGED
       - name: Diagnose real synthetic 4-peer sign-in before large load
         shell: bash
         run: |

@@ -14,7 +14,10 @@ class FivePlayerLoadgenTests(unittest.TestCase):
     def pinned_anchor_fixture():
         return ('before\n' + mod.OLD_HELP + '\n' + mod.OLD_CLAMP + '\n' +
                 '\n'.join(old for old, _ in mod.OWNER_EDITS) + '\n' +
-                '\n'.join(old for old, _ in mod.RECEIVER_EDITS) + '\nafter')
+                '\n'.join(old for old, _ in mod.RECEIVER_EDITS) + '\n' +
+                # Four V120 anchors predate all earlier source transforms.
+                '\n'.join(mod.STEADY_EDITS[i][0] for i in (0, 1, 2, 4))
+                + '\nafter')
 
     def test_exact_upstream_pr444_owner_changes_and_five_player_anchors(self):
         original = self.pinned_anchor_fixture()
@@ -32,6 +35,9 @@ class FivePlayerLoadgenTests(unittest.TestCase):
             for old, replacement in mod.FULL_TEAM_EDITS:
                 if old in final:
                     final = final.replace(old, replacement, 1)
+            for old, replacement in mod.STEADY_EDITS:
+                if old in final:
+                    final = final.replace(old, replacement, 1)
             self.assertIn(final, transformed)
         self.assertIn("game_receivers += game->Playing() && game->SawGamePackets();",
                       transformed)
@@ -41,6 +47,12 @@ class FivePlayerLoadgenTests(unittest.TestCase):
         self.assertIn('{"complete_teams", complete_teams}', transformed)
         self.assertIn("seat == 0 && state == State::Playing && team_members == expected",
                       transformed)
+        self.assertEqual(len(mod.STEADY_EDITS), 6)
+        self.assertIn("steady_since_us = now_us;", transformed)
+        self.assertIn("steady_packets_sent += frame.entries.size();", transformed)
+        self.assertIn("steady_packets_received;", transformed)
+        self.assertIn('{"steady_window_ms", steady_since_us ?', transformed)
+        self.assertIn("static_cast<s64>(sent) >= load.steady_since_us", transformed)
         for old, new in mod.OWNER_EDITS:
             self.assertIn(new, transformed)
         self.assertIn('std::clamp(parser.value("owners").toInt(), 1, settings.team_size)',
@@ -83,6 +95,24 @@ class FivePlayerLoadgenTests(unittest.TestCase):
                                             "complete-five-team bbload anchor drift"):
                     mod.patch_complete_teams(prior.replace(old, "BROKEN", 1))
         self.assertIn("complete_teams", mod.patch_complete_teams(prior))
+
+    def test_missing_real_steady_counter_anchor_fails_closed(self):
+        prior = self.pinned_anchor_fixture()
+        prior = prior.replace(mod.OLD_HELP, mod.NEW_HELP, 1)
+        prior = prior.replace(mod.OLD_CLAMP, mod.NEW_CLAMP, 1)
+        for old, new in mod.OWNER_EDITS:
+            prior = prior.replace(old, new, 1)
+        for old, new in mod.RECEIVER_EDITS:
+            prior = prior.replace(old, new, 1)
+        prior = mod.patch_complete_teams(prior)
+        for old, _ in mod.STEADY_EDITS:
+            with self.subTest(steady=old[:45]):
+                self.assertEqual(prior.count(old), 1)
+                with self.assertRaisesRegex(ValueError,
+                                            "steady five-hunter game payload anchor drift"):
+                    mod.patch_steady_window(prior.replace(old, "BROKEN", 1))
+        self.assertIn("steady_packets_received",
+                      mod.patch_steady_window(prior))
 
     def test_unpinned_source_refused(self):
         with self.assertRaisesRegex(ValueError, "exact official pinned"):

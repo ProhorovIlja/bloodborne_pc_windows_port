@@ -17,7 +17,9 @@ run=load("yt117_run","run_five_hunter_shards_v117.py")
 def sample(shards=3):
     return dict(
         players=200, shards=shards, playing=200, game_receivers=200,
-        complete_teams=40,
+        complete_teams=40, steady_packets_sent=15000,
+        steady_packets_received=15000, steady_workers=4,
+        steady_window_ms_min=15000,
         packets_sent=16000, packets_received=16000, packets_lost=0,
         refused=0, udp_buffer_drops=0, relay_ms_p99=11.5,
         redirects=50 if shards==3 else 0, redirect_ms_p99=450 if shards==3 else 0,
@@ -35,6 +37,9 @@ class OriginalShardSourceTests(unittest.TestCase):
         self.assertIn("shlex.split(args.extra)", s)
         self.assertIn('sum(r["game_receivers"] for r in results)',s)
         self.assertIn('sum(r["complete_teams"] for r in results)',s)
+        self.assertIn('sum(r["steady_packets_sent"] for r in results)',s)
+        self.assertIn('sum(r["steady_packets_received"] for r in results)',s)
+        self.assertIn('min(r["steady_window_ms"] for r in results)',s)
         self.assertIn('sum(r["packets_sent"] for r in results)',s)
         self.assertIn('sum(r["packets_received"] for r in results)',s)
         self.assertEqual(patch.PIN, "0645740a33ae21c56df3b4a0d9777086dbca6053")
@@ -71,6 +76,18 @@ class OriginalShardsQoSTests(unittest.TestCase):
                 self.assertEqual(run.grade(s,shards)["quality"],
                                  "REAL_GAME_DELIVERY_DEGRADED")
                 s=sample(shards)
+                s["steady_packets_received"]=10000
+                self.assertEqual(run.grade(s,shards)["quality"],
+                                 "STEADY_DELIVERY_DEGRADED")
+                s=sample(shards)
+                s["steady_workers"]=3
+                self.assertEqual(run.grade(s,shards)["quality"],
+                                 "NO_FIVE_HUNTER_STEADY_WINDOW")
+                s=sample(shards)
+                s["steady_window_ms_min"]=4999
+                self.assertEqual(run.grade(s,shards)["quality"],
+                                 "NO_FIVE_HUNTER_STEADY_WINDOW")
+                s=sample(shards)
                 s["udp_buffer_drops"]=1
                 self.assertEqual(run.grade(s,shards)["quality"],
                                  "HOST_KERNEL_UDP_DROPS")
@@ -82,6 +99,15 @@ class OriginalShardsQoSTests(unittest.TestCase):
                 s["per_shard"][0]["link_thread_cpu_avg"]=90
                 self.assertEqual(run.grade(s,shards)["quality"],
                                  "SHARD_CPU_SATURATED")
+    def test_startup_losses_are_never_mislabeled_as_healthy_200(self):
+        report=sample(3)
+        report["packets_received"]=14500
+        result=run.grade(report,3)
+        self.assertEqual(result["quality"],"REAL_GAME_DELIVERY_DEGRADED")
+        self.assertEqual(result["steady_quality"],
+                         "STEADY_DELIVERY_PASS_SYNTHETIC_ONLY")
+        self.assertEqual(result["steady_delivered_pct"],100.0)
+
     def test_cross_shard_redirects_must_really_happen(self):
         s=sample(3)
         s["redirects"]=0
@@ -94,6 +120,8 @@ class OriginalShardsQoSTests(unittest.TestCase):
             ("shards",1),("players",199),("playing","200"),("game_receivers",None),
             ("packets_lost",-1),("packets_sent",float("nan")),
             ("complete_teams",None),("complete_teams",False),
+            ("steady_packets_sent",None),("steady_workers",True),
+            ("steady_window_ms_min",float("nan")),
             ("relay_ms_p99",float("inf")),("udp_buffer_drops",True),
             ("per_shard",[]),("per_shard",[{},{}]),
             ("per_shard",[{"shard":["unsafe"]}, {}, {}]),

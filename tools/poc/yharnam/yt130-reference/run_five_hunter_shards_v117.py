@@ -42,17 +42,29 @@ def grade(item: dict, expected_shards: int) -> dict:
         if type(cpu) not in (float, int) or not math.isfinite(cpu) or cpu < 0:
             return {"quality": "INVALID_PER_SHARD_CPU"}
     for key in ("playing", "game_receivers", "complete_teams",
+                "steady_workers", "steady_packets_sent", "steady_packets_received",
                 "packets_sent", "packets_received",
                 "packets_lost", "refused", "udp_buffer_drops"):
         value = item.get(key)
         if type(value) is not int or value < 0:
             return {"quality": "MISSING_REAL_GAME_COUNTERS", "field": key}
-    for key in ("relay_ms_p99", "redirects", "redirect_ms_p99"):
+    for key in ("relay_ms_p99", "redirects", "redirect_ms_p99",
+                "steady_window_ms_min"):
         val = item.get(key)
         if type(val) not in (int, float) or not math.isfinite(val) or val < 0:
             return {"quality": "INVALID_TIMING_OR_REDIRECT", "field": key}
     playing, receivers = item["playing"], item["game_receivers"]
     sent, received = item["packets_sent"], item["packets_received"]
+    steady_sent = item["steady_packets_sent"]
+    steady_received = item["steady_packets_received"]
+    if item["steady_workers"] != 4 or item["steady_window_ms_min"] < 5000:
+        steady_quality = "NO_FIVE_HUNTER_STEADY_WINDOW"
+    elif steady_sent < 10000 or steady_received > steady_sent:
+        steady_quality = "INSUFFICIENT_OR_INVALID_STEADY_TRAFFIC"
+    elif steady_received * 100 < steady_sent * 99:
+        steady_quality = "STEADY_DELIVERY_DEGRADED"
+    else:
+        steady_quality = "STEADY_DELIVERY_PASS_SYNTHETIC_ONLY"
     if playing != POPULATION:
         quality = "NOT_ALL_PLAYING"
     elif receivers != POPULATION:
@@ -63,6 +75,8 @@ def grade(item: dict, expected_shards: int) -> dict:
         quality = "INSUFFICIENT_ACCEPTED_GAME_TRAFFIC"
     elif received > sent or received * 100 < sent * 99 or item["packets_lost"]:
         quality = "REAL_GAME_DELIVERY_DEGRADED"
+    elif steady_quality != "STEADY_DELIVERY_PASS_SYNTHETIC_ONLY":
+        quality = steady_quality
     elif item["udp_buffer_drops"]:
         quality = "HOST_KERNEL_UDP_DROPS"
     elif item["relay_ms_p99"] > 50:
@@ -78,6 +92,12 @@ def grade(item: dict, expected_shards: int) -> dict:
         "quality": quality, "players": POPULATION, "shards": expected_shards,
         "playing": playing, "game_receivers": receivers,
         "complete_teams": item["complete_teams"], "packets_sent": sent,
+        "steady_quality": steady_quality,
+        "steady_workers": item["steady_workers"],
+        "steady_window_ms_min": item["steady_window_ms_min"],
+        "steady_packets_sent": steady_sent,
+        "steady_packets_received": steady_received,
+        "steady_delivered_pct": round(100.0 * steady_received / max(1, steady_sent), 2),
         "packets_received": received, "packets_lost": item["packets_lost"],
         "relay_ms_p99": item["relay_ms_p99"],
         "redirects": item["redirects"], "redirect_ms_p99": item["redirect_ms_p99"],
@@ -151,7 +171,9 @@ def run(args) -> int:
         print("YT130_V117_REAL_5P_SHARDS", shards, result["quality"],
               "PLAYING", result.get("playing", "?"), "GAME_RECEIVERS",
               result.get("game_receivers", "?"), "COMPLETE_FIVE_TEAMS",
-              result.get("complete_teams", "?"), flush=True)
+              result.get("complete_teams", "?"), "STEADY",
+              result.get("steady_quality", "?"), "STEADY_PCT",
+              result.get("steady_delivered_pct", "?"), flush=True)
         if rc == 124:
             break
     args.output.parent.mkdir(parents=True, exist_ok=True)

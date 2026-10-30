@@ -24,6 +24,12 @@ COUNTERS_NEW = """            # SHYT-V117-TRUE-FIVE-HUNTER-SHARD-GAME-RECEIVERS:
             # No client may be called PLAYING/healthy without game receipt.
             "game_receivers": sum(r["game_receivers"] for r in results),
             "complete_teams": sum(r["complete_teams"] for r in results),
+            # V120: separate the after-complete-party stable transport period
+            # from startup/redirect. Individual source frame timestamps arm it.
+            "steady_packets_sent": sum(r["steady_packets_sent"] for r in results),
+            "steady_packets_received": sum(r["steady_packets_received"] for r in results),
+            "steady_workers": sum(r["steady_window_ms"] >= 5000 for r in results),
+            "steady_window_ms_min": min(r["steady_window_ms"] for r in results),
             "packets_sent": sum(r["packets_sent"] for r in results),
             "packets_lost": sum(r["packets_lost"] for r in results),
             "packets_received": sum(r["packets_received"] for r in results),"""
