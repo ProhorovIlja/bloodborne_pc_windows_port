@@ -7,6 +7,7 @@ on:
       - 'native/source-port/recomp-v194/bbrecomp_generated_host_v196.c'
       - 'native/source-port/recomp-v194/generate_upstream_snippets_v196.py'
       - 'native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py'
+      - 'native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,6 +33,9 @@ jobs:
           command -v clang
           command -v cmake
           command -v ninja
+          # Original macOS-only bbcpu.h ships a Linux inline stub that
+          # conflicts with original src/cpu/cpu.c's real compiler helpers.
+          python3 native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream-recomp
           if ! (cd public-upstream-recomp && CC=clang ./build.sh) > "$RUNNER_TEMP/v196-generator-build.log" 2>&1; then
             echo "::error title=Original bbrecomp build::Full upstream Linux generator and real Zydis failed"
             grep -m1 -E 'error:|fatal error:|FAILED:|Error' "$RUNNER_TEMP/v196-generator-build.log" | cut -c1-270 || true
