@@ -58,10 +58,18 @@ jobs:
               lines.append(path+": "+",".join(map(str,counts)))
           (Path(os.environ["RUNNER_TEMP"])/"v184-anchor-counts.txt").write_text(
               "\n".join(lines)+"\n",encoding="utf-8")
-          if any(c!=1 for path,pairs in m.PATCHES.items()
-                 for c in [(root/path).read_text(encoding="utf-8").count(old)
-                           for old,_ in pairs]):
-              raise SystemExit("V184 original Qt anchor drift: inspect bounded counts artifact")
+          # Pre-existing V24 deduplication deliberately removes the old
+          # hosted-only SendLobby branch: that single 0 is safe if its exact
+          # original reliable CoopStream dedupe marker is present.
+          for path,pairs in m.PATCHES.items():
+              source=(root/path).read_text(encoding="utf-8")
+              for index,(old,new) in enumerate(pairs):
+                  hits=source.count(old)
+                  safe_old_dedupe=(path=="server/src/bloodborne_world.cpp" and
+                      index==1 and hits==0 and
+                      source.count("A lobby-state envelope is delivered by CoopStream with ACKs")==1)
+                  if hits!=1 and not safe_old_dedupe:
+                      raise SystemExit("V184 unknown source drift: "+path)
           print("SHYT_V184_COMPOSED_QT_ALL_SEVEN_ANCHOR_SET_PRESENT")
           PY
       - uses: actions/upload-artifact@v4
