@@ -32,13 +32,13 @@ DIRECT_LOG = re.compile(
     re.I,
 )
 UNBOUNDED_CAT = re.compile(
-    r"(?:^|[;&|]\s*)(?:cat|type)\s+(?![<>])[^#\n]{0,140}\.(?:log|trace|out)\b|"
+    r"(?:^|[;&|]\s*|\brun:\s*)(?:cat|type)\s+(?![<>])[^#\n]{0,140}\.(?:log|trace|out)\b|"
     r"\bGet-Content\s+(?:-Raw\s+)?[^#\n]{0,140}\.(?:log|trace|out)\b",
     re.I,
 )
 UNBOUNDED_TEE = re.compile(r"\btee\s+(?:-[A-Za-z]+\s+)?[^\n#]{0,120}\.(?:log|trace|out)\b", re.I)
 TAIL_COUNT = re.compile(r"\btail\s+(?:-n\s*|--lines(?:=|\s+))([0-9]+)\b", re.I)
-UNBOUNDED_DIFF = re.compile(r"^\s*git\s+(?:-C\s+\S+\s+)?(?:diff|show)\b", re.I)
+UNBOUNDED_DIFF = re.compile(r"^\s*(?:run:\s*)?git\s+(?:-C\s+\S+\s+)?(?:diff|show)\b", re.I)
 SAFE_DIFF = re.compile(r"--(?:check|stat|numstat|name-only|name-status)\b", re.I)
 
 
