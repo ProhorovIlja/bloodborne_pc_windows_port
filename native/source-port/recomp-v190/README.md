@@ -39,3 +39,7 @@ The CLI emits one bounded JSON summary containing *only* stage, six kinds, compa
 - ❌ No standalone PS4-ELF-free Windows Bloodborne game, five-player live Yharnam Together session or measured secure WAN P2P.
 
 Next pick **nontrivial original functions with branches, stack memory or multi-register SSE** with strictly bounded differential oracles. Compare approaches from bloodborne-recomp, Astrr00, Remill, bbhost, LanternEngine and Paleblood. Don't substitute simple proof counts for game progress.
+
+## Public CPU register layout pin, added V190.1
+
+The new `audit_upstream_cpu_layout_v190.py` checks the **first four fields** of upstream `BbCpu` in `bloodborne-native/bloodborne-recomp` commit `8f31ec7c41f252730c6325d52647046baef7549f`: sixteen `r[16]` general registers (0–127 bytes), `rip` (128), `flags` (136), and 16 `BbVec` registers at offset 144 (32-byte byte/f32 lanes). The emitted C has static prefix layout assertions. Four additional synthetic unit tests require exact field order and byte shape, fail on inserted fields/reordered registers/differently sized vectors. **This only proves the CPU-state prefix used by V190.** It does not replace a full ABI verification of the upstream `BbCpu`, interpreter/JIT state, stack, TLS or `RcApi` callbacks.
