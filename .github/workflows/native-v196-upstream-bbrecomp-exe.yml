@@ -1,0 +1,107 @@
+name: Native V196 actual full upstream bbrecomp C generator to Win64 EXE
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v196-upstream-bbrecomp-exe.yml'
+      - 'native/source-port/recomp-v194/bbrecomp_generated_host_v196.c'
+      - 'native/source-port/recomp-v194/generate_upstream_snippets_v196.py'
+      - 'native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  generate-real-upstream-c-on-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Build actual pinned full upstream bbcpu and bbrecomp with real Zydis
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v clang
+          command -v cmake
+          command -v ninja
+          if ! (cd public-upstream-recomp && CC=clang ./build.sh) > "$RUNNER_TEMP/v196-generator-build.log" 2>&1; then
+            echo "::error title=Original bbrecomp build::Full upstream Linux generator and real Zydis failed"
+            grep -m1 -E 'error:|fatal error:|FAILED:|Error' "$RUNNER_TEMP/v196-generator-build.log" | cut -c1-270 || true
+            tail -n 12 "$RUNNER_TEMP/v196-generator-build.log" | cut -c1-280
+            exit 1
+          fi
+          test -x public-upstream-recomp/out/recomp/bbrecomp
+          test -f public-upstream-recomp/deps/include/Zydis/Zydis.h
+      - name: Generate invented x86-64 instructions through original full bbrecomp generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/v196-artifact"
+          python3 native/source-port/recomp-v194/generate_upstream_snippets_v196.py --upstream-checkout public-upstream-recomp --out "$RUNNER_TEMP/v196-artifact/generated.c"
+          cp -a public-upstream-recomp/deps/include "$RUNNER_TEMP/v196-artifact/include"
+          test -s "$RUNNER_TEMP/v196-artifact/generated.c"
+          echo SHYT_V196_ORIGINAL_UPSTREAM_GENERATOR_REAL_ZYDIS_PASS
+      - name: Compile actual upstream-generated C into a native Linux executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout public-upstream-recomp
+          clang -std=gnu11 -O2 -Wall -Wno-unused-label -Wno-unused-variable -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing -Ipublic-upstream-recomp/src -I"$RUNNER_TEMP/v196-artifact/include" native/source-port/recomp-v194/bbrecomp_generated_host_v196.c "$RUNNER_TEMP/v196-artifact/generated.c" -o "$RUNNER_TEMP/v196-upstream-generated"
+          "$RUNNER_TEMP/v196-upstream-generated"
+          if "$RUNNER_TEMP/v196-upstream-generated" --eboot fake 2>/dev/null; then
+            echo "::error::Native host incorrectly accepted EBOOT CLI"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v196-invented-instructions-real-upstream-generated-c
+          path: ${{ runner.temp }}/v196-artifact/
+          if-no-files-found: error
+          retention-days: 1
+  actual-upstream-generated-c-on-windows:
+    needs: generate-real-upstream-c-on-linux
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: v196-invented-instructions-real-upstream-generated-c
+          path: ${{ runner.temp }}/v196-upstream-artifact
+      - name: Prepare original upstream source-locked real rc.h with Win32 native QPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          python native/source-port/recomp-v194/check_upstream_full_abi_v194.py --upstream-checkout public-upstream-recomp
+          python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout public-upstream-recomp
+          test -s "$RUNNER_TEMP/v196-upstream-artifact/generated.c"
+          test -f "$RUNNER_TEMP/v196-upstream-artifact/include/Zydis/Zydis.h"
+      - name: Compile REAL upstream-generator C to AMD64 Windows-native PE EXE and execute
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang-cl /nologo /std:c11 /O2 /W0 /Ipublic-upstream-recomp/src "/I$RUNNER_TEMP/v196-upstream-artifact/include" native/source-port/recomp-v194/bbrecomp_generated_host_v196.c "$RUNNER_TEMP/v196-upstream-artifact/generated.c" "/Fe$RUNNER_TEMP/v196-native-bbrecomp.exe"
+          "$RUNNER_TEMP/v196-native-bbrecomp.exe"
+          if "$RUNNER_TEMP/v196-native-bbrecomp.exe" --eboot fake; then
+            echo "::error::Native host incorrectly accepted runtime EBOOT"
+            exit 1
+          fi
+          echo SHYT_V196_REAL_UPSTREAM_AOT_CODE_EXECUTES_ON_WIN64_WITHOUT_EBOOT
+          echo 'Invented x86 instructions ONLY. No Bloodborne boot, PS4 runtime or game-derived C artifact.'
