@@ -61,6 +61,25 @@ https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41253580
 
 Proof is only for synthetic five whole-function C, **not the real game**.
 
+## Reuse-integrity hardening (2026-11-01)
+
+An additional review found a real cache integrity bug: the V198 builder
+originally persisted SHA-256 hashes for every `.obj`, but checked only
+`0x8664` and the C fingerprint before reusing the object. A corrupted or
+modified COFF could therefore silently pass the old cache gate.
+
+The private builder now rehashes the **actual** cached object against its
+last atomically persisted manifest, rejects symlinked objects and rebuilds
+mismatched objects even if their AMD64 headers are intact. A synthetic
+Windows CI regression appends bytes to a valid COFF, preserving its
+machine header, and requires **exactly one recompilation** of two
+otherwise unchanged modules. It also checks that untouched cache
+entries are reusable. This is compiler output integrity, not an
+antivirus or game-binary authenticity guarantee.
+
+Tests: [V198 integrity replay](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41254174982)
+and [V199 full guest memory/flags + integrity replay](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41254180772).
+
 ## Private original Bloodborne ingestion blocker
 
 On **1 November 2026**, verified the connected private Drive's
