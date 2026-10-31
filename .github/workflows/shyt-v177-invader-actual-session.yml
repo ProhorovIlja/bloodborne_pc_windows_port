@@ -102,12 +102,17 @@ jobs:
         run: |
           set -euo pipefail
           pacman --noconfirm --disable-download-timeout -Sy
-          pacman --noconfirm --disable-download-timeout -S --needed git mingw-w64-clang-x86_64-clang
+          pacman --noconfirm --disable-download-timeout -S --needed git mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-python
       - name: Compile and RUN exact pinned original YT1.3 C++ with Windows CLANG64
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          winpy="$(cygpath -u "$pythonLocation")/python.exe"
-          "$winpy" tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe.exe
+          # Use CLANG64 Python and compiler from the SAME environment.
+          # Native setup-python is used above only for host-side staging.
+          command -v python
+          command -v clang++
+          python --version
+          clang++ --version
+          python tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe.exe
           git -C yt130-original diff --check
           echo SHYT_V177_REAL_WINDOWS_CXX20_INVADER_ROOM_MEMBERS_TEST_PASS_NO_GAME_ASSETS
