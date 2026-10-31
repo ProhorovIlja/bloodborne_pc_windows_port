@@ -23,8 +23,8 @@ AFTER="""        # SHYT_V182_ORIGINAL_QT_UDP_SOCKET_BUFFER_REPORT:
         # Only the one-time readback numeric line, not the server's raw logs.
         # Count each bind; multiple or missing binds are NOT confirmed capacity.
         udp_buffers = re.compile(
-            r'Link UDP socket buffers requested_bytes=(\\d+) '
-            r'effective_receive_bytes=(\\d+) effective_send_bytes=(\\d+)(?!\\d)')
+            r'Link UDP socket buffers requested_bytes=(\d+) '
+            r'effective_receive_bytes=(\d+) effective_send_bytes=(\d+)(?!\d)')
         def socket_buffers(shard_index):
             values = []
             path = os.path.join(root, f"shard{shard_index}", "shadnet.log")
