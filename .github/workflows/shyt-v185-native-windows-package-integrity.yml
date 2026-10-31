@@ -1,0 +1,35 @@
+name: SHYT V185 native Windows client and server release integrity
+on:
+  push:
+    branches: [feature/native-windows-package-integrity-v185-20261031]
+    paths:
+      - .github/workflows/shyt-v185-native-windows-package-integrity.yml
+      - tools/native/native_package_integrity_v185.py
+      - tools/native/test_native_package_integrity_v185.py
+      - docs/NATIVE_WINDOWS_ACCEPTANCE.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-native-package:
+    name: Native package fixture (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile read-only package checker
+        run: python -m py_compile tools/native/native_package_integrity_v185.py tools/native/test_native_package_integrity_v185.py
+      - name: Test ZIP, native PE64, private digests, nested DLLs and anti-game-file guard
+        run: python -m unittest discover -s tools/native -p test_native_package_integrity_v185.py -v
+      - name: Display evidence-only help
+        run: python tools/native/native_package_integrity_v185.py --help

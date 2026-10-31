@@ -1,0 +1,55 @@
+# Bloodborne Windows **PS4 compatibility-host** release integrity gates (V185)
+
+**Terminology correction (2026-10-31):** V185 audits a Windows **compatibility-host** for the original Bloodborne PS4 executable, **NOT a native Windows Bloodborne game/source port comparable to Dark Souls III PC**. Native x86-64 instruction execution is not the same as having the game itself compiled/rebuilt for Windows. The Windows PE `Bloodborne.exe` belongs to the host; game logic still comes from a PS4 ELF-derived image, supported by PS4 ABI/high-level compatibility and GPU command translation. See [SOURCE_PORT_VS_PS4_RUNTIME.md](SOURCE_PORT_VS_PS4_RUNTIME.md) for direct evidence, the actual DS3 PC PE import comparison and strict source-port acceptance requirements.
+
+**This PR's actual goal:** verify the integrity of the existing CLS/BBSC compatibility-host distribution and Yharnam Together server, not claim that PS4 components have been eliminated. Work toward a **truly Windows-native game** is a separate and much larger source-reconstruction/engine-port track. Its final client must run without the PS4 ELF or its derivatives. Our existing co-op/server/launcher code can inform that track, but passing this V185 gate does not complete it.
+
+This is a **release checklist**, not an assertion that production is ready. Always distinguish:
+- **Package integrity**: ZIP and extracted directory have correct 64-bit PE launchers / network server, matching SHA-256 of all shipped files, and nested `bin/**` dependencies are present.
+- **Compatibility-host actual game boot**: supply your own decrypted, updated Bloodborne 1.09 executable and run the host `Bloodborne.exe` on Windows. This is **not** a PS4-free Windows game port. V185 cannot even demonstrate this boot.
+- **Real game co-op**: two actual separate Windows machines, five slots, host/guest join, transitions, boss kills, crashes/restart, DBNO and per-player HUD, invasions. V185 cannot do this.
+- **Networking**: direct encrypted P2P path and properly authenticated fallback across NAT and reconnect, without leaking authoritative reliable/world/invite traffic or accepting forged grants; measure bytes/packets on both server and clients. Developer-only #61 is not production-enabled.
+- **Performance and endurance**: prolonged gameplay, leak/fps/GPU driver variants, Windows launcher update/reinstall with nested DLL integrity, crash recovery, saved games, mod toggles. Not yet accepted.
+- **Capacity**: repeat real Qt/Redis 200-player 40×5 load with coherent producer-to-consumer accounting and at least 99% measured delivery. Existing #72 is still red. Intentional policy filtering must not be counted as loss.
+
+## V185 offline package gate
+
+```sh
+python tools/native/native_package_integrity_v185.py /private/path/BBSC-Yharnam-Together-0.1.3.zip \
+  --write-manifest /private/evidence/BBSC-0.1.3-manifest.json
+
+python tools/native/native_package_integrity_v185.py /private/path/BBSC-Yharnam-Together-0.1.3.zip \
+  --verify-manifest /private/evidence/BBSC-0.1.3-manifest.json
+
+python tools/native/native_package_integrity_v185.py /private/extracted/BBSC-Yharnam-Together-0.1.3 \
+  --verify-manifest /private/evidence/BBSC-0.1.3-manifest.json
+```
+
+### Optional checks against the user's PRIVATE retail game
+
+The full Bloodborne game **is already available on the user's private Drive**, but game files MUST NOT be committed, uploaded as CI artifacts, or bundled into player releases. Where the private files are accessible on the user's own machine:
+
+```sh
+python tools/native/native_package_integrity_v185.py /private/CLS-Windows.zip \
+  --game-sfo /private/Bloodborne/sce_sys/param.sfo \
+  --game-eboot /private/Bloodborne/eboot.bin-decrypted \
+  --verify-game-image
+```
+
+This validates the real `param.sfo` PSF metadata for `CUSA03173` / `APP_VER 01.09`, the header of the already-decrypted original game's **PS4 ELF64 x86-64**, and, with `--verify-game-image`, the SHA-256 of its reconstructed loaded image. The PS4-specific ELF ABI still needs the native bbport compatibility runtime. Neither metadata check decrypts the game, proves game patch offsets, or runs anything; output records only true/false acceptance flags and never prints the original file paths.
+
+In a private dry run on 2026-10-31 the actual Drive game passed all three checks: correct PSF region/update, decrypted SCE ELF64 x86-64 header, and **exact SHA-256 of the canonical 91,042,036-byte loadable game image**. The expected clean 1.09 reference is public in the pinned `bbport/scripts/game_check.py`: `071df19c8880086d97182dbc057bc8cb37badaca57d9112683836b24a0444c0a`. The actual image matched it exactly and did not match the known baked-in Lance 60 FPS variant. This validates the game image targeted by our native hooks, but does **not** prove those hooks are currently installed correctly, Windows boots, savegames work, or gameplay/netcode is reliable.
+
+`--verify-game-image` reconstructs load segments strictly in a capped temporary in-memory image and hashes the result. It never saves the loaded image, uploads proprietary data, changes the original ELF or executes it. It refuses anomalous segment tables or unsafe virtual ranges. The public CI uses **only synthetic ELF fixtures**: no user game files.
+
+The report printed to stdout contains only a bounded count/fingerprint and explicitly marks boot, NAT, and gameplay tests as **false**. The private manifest contains **relative distribution paths and per-file SHA-256**. Keep it private and separate from the game folder; never commit the result, retail game assets, save files, settings or server credentials to the public repository. The checker never executes game binaries, downloads, extracts, or connects to a server. It refuses retail `eboot.bin` or game asset folders inside the distributable, case-conflicting names, ZIP traversal, symlinks, unexpected architectures, and oversized inputs.
+
+V185 checks the Windows PE machine type of four critical *host/server* components but **PE64 of those components is not proof of a rebuilt Windows-native game**, and this package still depends on original PS4 game code. ShadPS4-derived rendering/runtime libraries also don't automatically make it a full console emulator. Inspect native runtime source and actual host process for the authoritative distinction. ZIP+folder manifests compare the same tree, including nested DLLs from vendors, so a missing FSR/DLSS/XeSS/Qt runtime can be detected if it was included in the release baseline; completeness relative to upstream design requires an independently reviewed build manifest.
+
+## Source selection and compatibility
+
+Pin versions, do not take a random whole-fork overwrite: primary YT 1.3.1 `lKaniel/bloodborne-server`, native-port components `deadinside28/bloodborne_pc` and `Supermedo/bloodborne_pc`, and selectively reviewed bbhost / LanternEngine / shadPS4 renderer code. Track protocol schema, launcher, native executable, and server together. Current CLS v0.1.3 Windows test kit (private Drive + ChatGPT Library, see project handoff) identifies `5d2305ee` upstream, but that package number is **not** YT v1.3.0. Avoid publishing the private CLS archive or distributing copyrighted game assets.
+
+**Important packaging upstream:** `Supermedo/bloodborne_pc` PR #140 fixes nested `bin/**` scanning for package manifests and verifies the frozen launcher dependencies; review for source-exact adaptation before final packaging. Testing against sample ZIP is necessary, not sufficient.
+
+Repo code review: Draft #75 independent, default-off CLS lobby cap; #72 actual 200-player server load evidence; #61 developer-gated Direct signed NAT route; #73 upstream invasion-session membership; #74 bounded GitHub diagnostic responses. No automatic merge and no Fornex deploy until all relevant gates pass.
