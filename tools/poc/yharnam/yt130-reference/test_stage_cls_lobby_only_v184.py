@@ -34,6 +34,24 @@ class IndependentLobbyOnlyTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "anchor drift"):
                     v.rewrite(path, initial + "\n" + changes[0][0])
 
+    def test_composes_with_prior_anonymous_nonhosted_lobby_dedupe(self):
+        path = "server/src/bloodborne_world.cpp"
+        original = fixture(path)
+        old_block = v.PATCHES[path][1][0]
+        safe_dedupe = (
+            "void Service::SendLobby(qint64 now_ms) {\n"
+            "            // A lobby-state envelope is delivered by CoopStream with ACKs\n"
+            "            std::string bytes = envelope.lobby_state().SerializeAsString();\n"
+            "            if (sent == bytes) continue;\n"
+            "}\n")
+        modified = original.replace(old_block, safe_dedupe)
+        updated = v.rewrite(path, modified)
+        self.assertIn("!LobbyLimited() || now_ms - lobby_sent_ms", updated)
+        self.assertIn("lobby.SetLobbyCap(rules.lobby_players)", updated)
+        self.assertEqual(updated.count("A lobby-state envelope is delivered"), 1)
+        with self.assertRaisesRegex(ValueError, "unrecognized"):
+            v.rewrite(path, original.replace(old_block, "UNREVIEWED CHANGES"))
+
     def test_flag_off_and_hosted_unchanged(self):
         cfg = v.rewrite("server/src/config.cpp", fixture("server/src/config.cpp"))
         hdr = v.rewrite("server/src/config.h", fixture("server/src/config.h"))
