@@ -6,6 +6,8 @@ on:
       - .github/workflows/shyt-v182-qt-udp-buffer-evidence.yml
       - tools/poc/yharnam/yt130-reference/stage_udp_buffer_readback_report_v182.py
       - tools/poc/yharnam/yt130-reference/test_stage_udp_buffer_readback_report_v182.py
+      - tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
+      - tools/poc/yharnam/yt130-reference/test_grade_udp_socket_readback_v182.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_udp_buffer_readback_report_v182.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_grade_udp_socket_readback_v182.py -v
           python3 -m py_compile tools/poc/yharnam/yt130-reference/stage_udp_buffer_readback_report_v182.py
       - name: Stage exact existing original YT1.3 load generator, then V182
         run: |
