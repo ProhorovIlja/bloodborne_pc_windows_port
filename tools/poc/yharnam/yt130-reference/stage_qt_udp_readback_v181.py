@@ -45,6 +45,18 @@ READ_NEW = """        const qint64 bytes_read =
         // bytes into the authenticated link decoder. No payload/IDs logged.
         if (bytes_read <= 0 || bytes_read != raw.size())
             continue;"""
+# PR24/V125 event-loop instrumentation has already modified this callback.
+# Count only exact successful reads, preserving the anonymous wire counter.
+WIRED_READ_OLD = """        const qint64 received = m_socket->readDatagram(
+            raw.data(), raw.size(), &sender, &senderPort);
+        if (received > 0)
+            RecordWire(raw, true);"""
+WIRED_READ_NEW = """        const qint64 received = m_socket->readDatagram(
+            raw.data(), raw.size(), &sender, &senderPort);
+        // V181: reject bad and short reads before wire attribution.
+        if (received <= 0 || received != raw.size())
+            continue;
+        RecordWire(raw, true);"""
 
 
 def replace_exact(source: str, old: str, new: str, purpose: str) -> str:
@@ -60,7 +72,14 @@ def patch(source: str) -> str:
             or "bool LinkServer::Start(" not in source):
         raise ValueError("V181 expected real Qt LinkServer methods")
     source = replace_exact(source, BUFF_OLD, BUFF_NEW, "post-bind socket readback")
-    source = replace_exact(source, READ_OLD, READ_NEW, "actual UDP read result")
+    # Exactly one source-reviewed variant: original or existing wire-counter.
+    if source.count(READ_OLD) == 1 and not source.count(WIRED_READ_OLD):
+        source = replace_exact(source, READ_OLD, READ_NEW, "original UDP receive")
+    elif source.count(WIRED_READ_OLD) == 1 and not source.count(READ_OLD):
+        source = replace_exact(source, WIRED_READ_OLD, WIRED_READ_NEW,
+                               "existing original V125 UDP wire counter")
+    else:
+        raise ValueError("V181 unknown or mixed original Qt UDP receiver")
     return source
 
 
