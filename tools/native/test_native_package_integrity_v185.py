@@ -57,6 +57,33 @@ class NativePackageTests(unittest.TestCase):
             code = audit.main([str(args[0]), *map(str, args[1:])])
         return code, out.getvalue(), err.getvalue()
 
+    def test_real_game_sfo_version_gate_with_synthetic_fixture(self):
+        def make_sfo(title=b'CUSA03173\0', app=b'01.09\0'):
+            keys=b'APP_VER\0TITLE_ID\0'
+            key_off=20 + 16*2
+            data_off=key_off + len(keys)
+            entries=(struct.pack('<HHIII',0,0x204,len(app),len(app),0) +
+                     struct.pack('<HHIII',8,0x204,len(title),len(title),len(app)))
+            return (struct.pack('<4sIIII',b'\x00PSF',0x101,key_off,data_off,2)
+                    + entries + keys + app + title)
+        self.write_dir()
+        game = Path(self.tmp.name) / 'param.sfo'
+        game.write_bytes(make_sfo())
+        self.assertEqual(audit.read_game_sfo(game), {'APP_VER':'01.09','TITLE_ID':'CUSA03173'})
+        status, out, err = self.cli(self.root, '--game-sfo', game)
+        self.assertEqual(status, 0, err)
+        summary=json.loads(out)
+        self.assertTrue(summary['private_game_sfo_109_verified'])
+        self.assertFalse(summary['game_eboot_patch_sites_verified'])
+        self.assertNotIn(str(game), out)
+        for bad in (make_sfo(app=b'01.00\0'),make_sfo(title=b'CUSA00000\0'),
+                    b'broken',make_sfo()[:18]):
+            game.write_bytes(bad)
+            code, out, err = self.cli(self.root, '--game-sfo', game)
+            self.assertEqual(code, 2)
+            self.assertEqual(out, '')
+            self.assertNotIn(str(game), err)
+
     def test_zip_and_directory_same_reproducible_fingerprint(self):
         self.write_zip()
         self.write_dir()
