@@ -70,9 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           if ! (sudo apt-get -qq update &&
-            sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends
-              cmake ninja-build g++ pkg-config qt6-base-dev qt6-httpserver-dev
-              qt6-websockets-dev libqt6sql6-sqlite) > "$RUNNER_TEMP/v194-apt.log" 2>&1; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends cmake ninja-build g++ pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite) > "$RUNNER_TEMP/v194-apt.log" 2>&1; then
             echo "::error title=Qt dependency setup::v194 required Qt dependencies missing"
             tail -n 10 "$RUNNER_TEMP/v194-apt.log" | cut -c1-280
             exit 1
@@ -91,22 +89,26 @@ jobs:
       - name: Compile and run ACTUAL original Qt C++ team and server world regression
         run: |
           set -euo pipefail
-          if ! cmake -S "$RUNNER_TEMP/yt131/server" -B "$RUNNER_TEMP/v194-build" -G Ninja
-            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON > "$RUNNER_TEMP/v194-config.log" 2>&1; then
+          if ! cmake -S "$RUNNER_TEMP/yt131/server" -B "$RUNNER_TEMP/v194-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON > "$RUNNER_TEMP/v194-config.log" 2>&1; then
             echo "::error title=V194 CMake::Original v1.3.1 server configure failed"
             grep -m1 -E 'error:|Error|Could NOT' "$RUNNER_TEMP/v194-config.log" | cut -c1-280 || true
             tail -n 8 "$RUNNER_TEMP/v194-config.log" | cut -c1-280
             exit 1
           fi
-          if ! cmake --build "$RUNNER_TEMP/v194-build" --parallel 2
-            --target test_team_lobby test_bloodborne_world > "$RUNNER_TEMP/v194-build.log" 2>&1; then
+          if ! cmake --build "$RUNNER_TEMP/v194-build" --parallel 2 --target test_team_lobby test_bloodborne_world > "$RUNNER_TEMP/v194-build.log" 2>&1; then
             echo "::error title=V194 native build::Real Qt C++ team or world build failed"
             grep -m1 -E 'fatal error:|error:|undefined reference|FAILED:' "$RUNNER_TEMP/v194-build.log" | cut -c1-320 || true
             tail -n 8 "$RUNNER_TEMP/v194-build.log" | cut -c1-320
             exit 1
           fi
-          if ! ctest --test-dir "$RUNNER_TEMP/v194-build" --output-on-failure
-            --timeout 90 -j 2 -R '^(team_lobby|bloodborne_world)$' > "$RUNNER_TEMP/v194-ctest.log" 2>&1; then
+          if ! ctest --test-dir "$RUNNER_TEMP/v194-build" --output-on-failure --timeout 90 -j 2 -R '^(team_lobby|bloodborne_world)
+            echo "::error title=V194 native regression::Original Qt team/world CTests failed"
+            tail -n 22 "$RUNNER_TEMP/v194-ctest.log" | cut -c1-300
+            exit 1
+          fi
+          echo SHYT_V194_ORIGINAL_QT_YT131_5_SEAT_INVITE_CODE_OPEN_ASK_CTEST_PASS
+          echo 'Original server C++ only. Does NOT prove five-game client, 3 invaders, online interoperability, P2P, DBNO or live QoS.'
+ > "$RUNNER_TEMP/v194-ctest.log" 2>&1; then
             echo "::error title=V194 native regression::Original Qt team/world CTests failed"
             tail -n 22 "$RUNNER_TEMP/v194-ctest.log" | cut -c1-300
             exit 1
