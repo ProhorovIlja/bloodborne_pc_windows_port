@@ -54,7 +54,7 @@ def stage(root:Path)->None:
     # Only silence a host-specific harmless warning; preserve -Werror for all
     # other diagnostics and compiler errors.
     driver=driver.replace(old_flags,
-                          "-mcx16 -Werror -Wno-unused-function -Wno-atomic-alignment -Wno-unused-parameter",1)
+                          "-D_GNU_SOURCE -mcx16 -Werror -Wno-unused-function -Wno-atomic-alignment -Wno-unused-parameter",1)
     path.write_text(source.replace(BEFORE,AFTER,1),encoding="utf-8")
     build.write_text(driver,encoding="utf-8")
     subprocess.run(["git","-C",str(root),"diff","--check"],check=True,
