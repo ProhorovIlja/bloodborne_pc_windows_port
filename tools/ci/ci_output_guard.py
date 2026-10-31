@@ -180,14 +180,37 @@ def audit_open_prs(api: Github, max_prs: int = 100, max_files: int = 250) -> dic
                     skipped.append({"ref": label[:50], "reason": "workflow-unreadable", "file": path[:150]})
                     continue
             findings.extend({"ref": label, **risk} for risk in cached[sha])
+    # The same workflow blob is often inherited by dozens of stacked PRs.
+    # Collapse repeated findings *after* counting the original occurrences,
+    # otherwise the first 16 KiB are dominated by copies of one warning.
+    aggregated = {}
+    rule_counts = {}
+    for risk in findings:
+        rule_counts[risk["rule"]] = rule_counts.get(risk["rule"], 0) + 1
+        key = (risk["file"], risk["line"], risk["rule"], risk["severity"])
+        if key not in aggregated:
+            aggregated[key] = {
+                "file": risk["file"], "line": risk["line"],
+                "rule": risk["rule"], "severity": risk["severity"],
+                "affected_prs": 0, "example_refs": [],
+            }
+        row = aggregated[key]
+        row["affected_prs"] += 1
+        if len(row["example_refs"]) < 4:
+            row["example_refs"].append(risk["ref"])
+    unique_findings = sorted(
+        aggregated.values(), key=lambda x: (-x["affected_prs"], x["file"], x["line"])
+    )
     high = sum(x["severity"] in ("critical", "high") for x in findings)
     return {
         "kind": "open-pr-workflow-audit", "repo": api.repo,
         "prs_examined": len(prs), "refs_examined": len(refs),
         "unique_workflows_examined": inspected, "github_requests": api.calls,
-        "findings_count": len(findings), "high_or_critical_count": high,
+        "findings_count": len(findings),
+        "unique_findings_count": len(unique_findings),
+        "risk_by_rule": rule_counts, "high_or_critical_count": high,
         "incomplete": incomplete, "skipped_count": len(skipped),
-        "skipped_examples": skipped[:8], "findings": findings,
+        "skipped_examples": skipped[:8], "findings": unique_findings,
     }
 
 
