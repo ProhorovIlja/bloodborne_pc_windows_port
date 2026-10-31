@@ -24,8 +24,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Verify original public CPU register and SSE prefix, exact pin
+        run: python native/source-port/recomp-v190/audit_upstream_cpu_layout_v190.py --upstream-root upstream-recomp
       - name: Syntax-check bounded generic-only source
-        run: python -m py_compile native/source-port/recomp-v190/nontrivial_leaves_v190.py native/source-port/recomp-v190/test_nontrivial_leaves_v190.py
+        run: python -m py_compile native/source-port/recomp-v190/nontrivial_leaves_v190.py native/source-port/recomp-v190/test_nontrivial_leaves_v190.py native/source-port/recomp-v190/audit_upstream_cpu_layout_v190.py native/source-port/recomp-v190/test_cpu_layout_v190.py
       - name: Native Linux CPU oracle / generated C (synthetic bytes only)
         if: runner.os == 'Linux'
         run: python -m unittest discover -s native/source-port/recomp-v190 -p test_nontrivial_leaves_v190.py -v
