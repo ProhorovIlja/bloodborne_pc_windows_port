@@ -36,7 +36,7 @@ class Win64RecompCodegenTests(unittest.TestCase):
             out=Path(d)/'incomplete.dll'
             with patch.object(m.shutil,'which',return_value='/fake/clang'),patch.object(m,'run_command',side_effect=m.BuildError('private failure')):
                 with self.assertRaisesRegex(m.BuildError,'private failure'):
-                    m.compile_win64(ROOT/'fixtures',out,[ROOT.parent/'native_recomp_bridge_v187'])
+                    m.compile_win64(ROOT/'fixtures',out,[ROOT])
             self.assertFalse(out.exists())
 
     def test_requires_external_output_and_no_shell(self):
