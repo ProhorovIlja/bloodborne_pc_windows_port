@@ -76,20 +76,25 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_policy_route_attribution_v173.py "$RUNNER_TEMP/yt-src"
-          if ! python tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py "$RUNNER_TEMP/yt-src" > "$RUNNER_TEMP/v181-stage.txt" 2>&1; then
-            echo "::error title=V181 source integration::Exact original or wired LinkServer anchor mismatch"
-            tail -n 3 "$RUNNER_TEMP/v181-stage.txt" | cut -c1-240
-            exit 1
-          fi
           grep -Fq 'SHYT_V173_ORIGINAL_QT_POLICY_FILTER_ATTRIBUTION' "$RUNNER_TEMP/yt-src/server/src/server_link.h"
           grep -Fq 'YT130_ROUTE_POLICY allowed_entries=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
-          grep -Fq 'effective_receive_bytes=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
-          grep -Fq 'bytes_read <= 0 || bytes_read != raw.size()' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           grep -Fq 'void Service::SendEncodedTo(' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
           grep -Fq 'SendEncodedTo(invader->second, envelope, encoded, now_ms)' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
           grep -Fq 'std::span<const u8>' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.h"
           echo SHYT_V132_ORIGINAL_WORLD_RELIABLE_FANOUT_BYTES_SOURCE_STAGED_NO_LOAD_CLAIM
+      - name: Stage V181 separately after all original Qt instrumentation (bounded failure)
+        run: |
+          set -euo pipefail
+          if ! python tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py "$RUNNER_TEMP/yt-src" > "$RUNNER_TEMP/v181-stage.txt" 2>&1; then
+            echo "::error title=V181 native Qt source drift::Original/previously wired LinkServer mismatch"
+            tail -n 3 "$RUNNER_TEMP/v181-stage.txt" | cut -c1-220
+            exit 1
+          fi
+          grep -Fq 'effective_receive_bytes=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -Eq 'received <= 0 \|\| received != raw.size\(\)|bytes_read <= 0 \|\| bytes_read != raw.size\(\)' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          echo SHYT_V181_STAGED_WIRED_QT_SOURCE_GUARD_PASS
   real-qt-server:
     needs: source-guard
     runs-on: ubuntu-24.04
@@ -127,18 +132,23 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_policy_route_attribution_v173.py "$RUNNER_TEMP/yt-src"
-          if ! python tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py "$RUNNER_TEMP/yt-src" > "$RUNNER_TEMP/v181-stage.txt" 2>&1; then
-            echo "::error title=V181 source integration::Exact original or wired LinkServer anchor mismatch"
-            tail -n 3 "$RUNNER_TEMP/v181-stage.txt" | cut -c1-240
-            exit 1
-          fi
           grep -Fq 'SHYT_V173_ORIGINAL_QT_POLICY_FILTER_ATTRIBUTION' "$RUNNER_TEMP/yt-src/server/src/server_link.h"
           grep -Fq 'YT130_ROUTE_POLICY allowed_entries=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
-          grep -Fq 'effective_receive_bytes=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
-          grep -Fq 'bytes_read <= 0 || bytes_read != raw.size()' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           git -C "$RUNNER_TEMP/yt-src" diff -- server/src/bloodborne_world.cpp > "$RUNNER_TEMP/world-v155.diff"
           grep -F '+void Service::SendEncodedTo(' "$RUNNER_TEMP/world-v155.diff" >/dev/null
+      - name: Stage V181 separately after all original Qt instrumentation (bounded failure)
+        run: |
+          set -euo pipefail
+          if ! python tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py "$RUNNER_TEMP/yt-src" > "$RUNNER_TEMP/v181-stage.txt" 2>&1; then
+            echo "::error title=V181 native Qt source drift::Original/previously wired LinkServer mismatch"
+            tail -n 3 "$RUNNER_TEMP/v181-stage.txt" | cut -c1-220
+            exit 1
+          fi
+          grep -Fq 'effective_receive_bytes=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -Eq 'received <= 0 \|\| received != raw.size\(\)|bytes_read <= 0 \|\| bytes_read != raw.size\(\)' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          echo SHYT_V181_STAGED_WIRED_QT_SOURCE_GUARD_PASS
       - name: Actually compile modified original Qt LinkServer and core regressions
         run: |
           set -euo pipefail
