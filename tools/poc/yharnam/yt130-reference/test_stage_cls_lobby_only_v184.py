@@ -27,7 +27,9 @@ class IndependentLobbyOnlyTests(unittest.TestCase):
                 for before, after in changes:
                     self.assertIn(after, updated)
                     self.assertEqual(initial.count(before), 1)
-                with self.assertRaisesRegex(ValueError, "anchor drift"):
+                # An already staged original-world source has no hosted-only
+                # SendLobby anchor; it must fail closed, not look like dedupe.
+                with self.assertRaisesRegex(ValueError, "anchor drift|unrecognized"):
                     v.rewrite(path, updated)
                 with self.assertRaisesRegex(ValueError, "anchor drift"):
                     v.rewrite(path, initial.replace(changes[0][0], "SOURCE_DRIFT"))
