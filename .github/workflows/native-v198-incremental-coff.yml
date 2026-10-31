@@ -97,6 +97,7 @@ jobs:
           set -euo pipefail
           # Inputs are invented upstream whole-functions; all derived .obj
           # and source C files remain in private runner temp, outside Git.
+          mkdir -p public-upstream-recomp/deps
           cp -a "$RUNNER_TEMP/v197-upstream-artifact/include" public-upstream-recomp/deps/include
           python native/source-port/recomp-v194/build_incremental_coff_v198.py --upstream-checkout public-upstream-recomp --generated-dir "$RUNNER_TEMP/v197-upstream-artifact" --objects-dir "$RUNNER_TEMP/v198-coff" --jobs 2 --synthetic-test-host native/source-port/recomp-v194/bbrecomp_whole_function_host_v197.c --synthetic-exe "$RUNNER_TEMP/v198-functions.exe" > "$RUNNER_TEMP/v198-first.json"
           "$RUNNER_TEMP/v198-functions.exe"
