@@ -46,7 +46,8 @@ def minimum_original_source_entries(owner_seats: int, seconds: int) -> int:
 
 
 def grade(item: dict, expected_shards: int, expected_workers: int = 4,
-          require_directed: bool = False, owner_seats: int = 1) -> dict:
+          require_directed: bool = False, owner_seats: int = 1,
+          require_policy: bool = False) -> dict:
     if require_directed and owner_seats not in OWNER_CASES:
         raise ValueError("Required original owner count must be 1, 3 or 5")
     if expected_workers not in LOAD_PROCESSES:
@@ -76,6 +77,34 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
             return {"quality": "INVALID_QT_SHARD_WIRE_COUNTERS", "field": key}
         if value != sum(row[key] for row in rows):
             return {"quality": "QT_WIRE_COUNTER_TOTAL_MISMATCH", "field": key}
+    # V173/V174: source-authentic Qt routed/filtered entries, all-run 5s samples.
+    # Crucially NOT identical to V161 steady sender-time cohort window.
+    policy_fields = ("game_policy_allowed_entries", "game_policy_filtered_entries",
+                     "game_policy_filtered_enemy_hp_05",
+                     "game_policy_filtered_event_sync_31",
+                     "game_policy_sample_windows")
+    has_policy = any(k in item or any(k in row for row in rows)
+                     for k in policy_fields) or "game_policy_scope" in item
+    if require_policy and not has_policy:
+        return {"quality": "MISSING_REQUIRED_ORIGINAL_QT_POLICY_EVIDENCE"}
+    if has_policy:
+        if (type(item.get("game_policy_scope")) is not str or
+                "NOT same as V161 source-clock cohort" not in item["game_policy_scope"]):
+            return {"quality": "INVALID_QT_POLICY_SCOPE"}
+        for key in policy_fields:
+            if (type(item.get(key)) is not int or item[key] < 0 or
+                    any(type(row.get(key)) is not int or row[key] < 0 for row in rows)):
+                return {"quality": "INVALID_QT_POLICY_EVIDENCE", "field": key}
+            if item[key] != sum(row[key] for row in rows):
+                return {"quality": "QT_POLICY_COUNTER_TOTAL_MISMATCH", "field": key}
+        for row in rows:
+            if (row["game_policy_filtered_enemy_hp_05"] +
+                    row["game_policy_filtered_event_sync_31"] >
+                    row["game_policy_filtered_entries"]):
+                return {"quality": "QT_POLICY_FILTER_SUBTYPE_MISMATCH"}
+            if require_policy and (row["game_policy_sample_windows"] == 0 or
+                                   row["game_policy_allowed_entries"] == 0):
+                return {"quality": "EMPTY_ORIGINAL_QT_POLICY_CENSUS"}
     # V156 server's own refusal reasons from observed LobbyState.notice.
     # Reply counters can include repeat attempts: not distinct players.
     notice_fields = ("team_name_absent", "team_name_ambiguous",
@@ -266,6 +295,7 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
         "quality": quality, "players": POPULATION, "shards": expected_shards,
         **({key: item[key] for key in cohort_fields} if has_cohort else {}),
         **({key: item[key] for key in directed_fields} if has_directed else {}),
+        **({key: item[key] for key in policy_fields + ("game_policy_scope",)} if has_policy else {}),
         **({"cohort_min_offered_entries": minimum_original_source_entries(
             owner_seats, item["cohort_seconds"])} if require_directed else {}),
         "playing": playing, "game_receivers": receivers,
@@ -312,6 +342,7 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
         "redirects": item["redirects"], "redirect_ms_p99": item["redirect_ms_p99"],
         "udp_buffer_drops_host_wide": item["udp_buffer_drops"],
         "per_shard": [{
+            **({key: r[key] for key in policy_fields} if has_policy else {}),
             "shard": r["shard"], "players_at_end": r.get("players_at_end"),
             "link_thread_cpu_avg": r["link_thread_cpu_avg"],
             "game_wire_in_packets": r["game_wire_in_packets"],
@@ -389,7 +420,7 @@ def run(args) -> int:
                         continue
             result = (grade(values[0], shards, getattr(args, "load_processes", 4),
                             getattr(args, "require_directed", False),
-                            args.owners) if len(values) == 1 else
+                            args.owners, getattr(args, "require_policy", False)) if len(values) == 1 else
                       {"quality": "MISSING_OR_DUPLICATE_GENERATOR_REPORT", "shards": shards})
         result["scope"] = "DISPOSABLE_LOOPBACK_REDIRECT_NOT_REAL_WAN_OR_DIRECT_P2P"
         result["team_size"] = SIZE
@@ -437,5 +468,7 @@ if __name__ == "__main__":
                    help="how many of the five players independently own enemies (worst case 5)")
     p.add_argument("--require-directed", action="store_true",
                    help="fail closed without source-authenticated directed 5-seat flow QoS")
+    p.add_argument("--require-policy", action="store_true",
+                   help="require original Qt source-routed game policy census")
     p.add_argument("--require-healthy", action="store_true")
     raise SystemExit(run(p.parse_args()))
