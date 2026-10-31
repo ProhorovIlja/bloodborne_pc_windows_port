@@ -48,10 +48,18 @@ links and runs a private-independent Windows PE entrypoint, checks
 inter-function `CALL` and `RET`, then repeats compilation to verify
 zero unchanged shards recompiled and one changed shard rebuilt.
 
-CI URL: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/workflows/native-v198-incremental-coff.yml
+**Both Linux and Windows jobs SUCCESS**, including real native Windows PE launch, incremental zero-rebuild and one-shard invalidation:
+https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41253580155
 
-Initial status: source+CI added, awaiting completed Windows runner evidence.
-Never claim a PASS from partial Linux stage alone.
+- Original Linux generator with Zydis: SUCCESS.
+- Native Windows clang-cl separately built 2 original-generator C files into
+  2 checked AMD64 `.obj` files, linked them with the synthetic host and
+  executed direct CALL/RET: SUCCESS.
+- Second compile on identical inputs: `compiled=0, reused=2`.
+- Changed one private, synthetically-generated C shard: `compiled=1, reused=1`.
+- Runtime EBOOT argument refused. No full Bloodborne 1.09 executable present.
+
+Proof is only for synthetic five whole-function C, **not the real game**.
 
 ## Private original Bloodborne ingestion blocker
 
