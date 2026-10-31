@@ -6,6 +6,7 @@ on:
       - .github/workflows/shyt-v177-full-native-windows.yml
       - tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py
       - tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py
+      - tools/poc/yharnam/yt130-reference/test_invader_executable_v178.py
       - tools/poc/yharnam/yt130-reference/patch_original_multi_invader_client_v107.py
       - tools/poc/yharnam/yt130-reference/stage_native_param_memory_v109.py
       - tools/poc/yharnam/yt130-reference/stage_native_param_slots_v110.py
@@ -86,6 +87,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check native game regression executable path on Windows
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_invader_executable_v178.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'V178 native Windows compiler-output discovery regression failed' }
       - name: Stage actual original YT1.3 three invaders and guest performance fixes
         shell: pwsh
         run: |
