@@ -26,6 +26,8 @@ on:
       - tools/poc/yharnam/yt130-reference/test_stage_policy_route_attribution_v173.py
       - tools/poc/yharnam/yt130-reference/stage_policy_route_report_v174.py
       - tools/poc/yharnam/yt130-reference/test_stage_policy_route_report_v174.py
+      - tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py
+      - tools/poc/yharnam/yt130-reference/test_stage_qt_udp_readback_v181.py
       - tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
       - tools/poc/yharnam/yt130-reference/test_stage_world_encode_once_v132.py
   workflow_dispatch:
@@ -57,6 +59,7 @@ jobs:
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_directed_cohort_v169.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_policy_route_attribution_v173.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_policy_route_report_v174.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_qt_udp_readback_v181.py -v
           python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_five_player_bbload.py -v
           python -m compileall -q tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
       - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
@@ -73,8 +76,11 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_policy_route_attribution_v173.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py "$RUNNER_TEMP/yt-src"
           grep -Fq 'SHYT_V173_ORIGINAL_QT_POLICY_FILTER_ATTRIBUTION' "$RUNNER_TEMP/yt-src/server/src/server_link.h"
           grep -Fq 'YT130_ROUTE_POLICY allowed_entries=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -Fq 'effective_receive_bytes=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -Fq 'bytes_read <= 0 || bytes_read != raw.size()' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           grep -Fq 'void Service::SendEncodedTo(' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
           grep -Fq 'SendEncodedTo(invader->second, envelope, encoded, now_ms)' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
@@ -117,8 +123,11 @@ jobs:
           python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
           python tools/poc/yharnam/yt130-reference/stage_policy_route_attribution_v173.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py "$RUNNER_TEMP/yt-src"
           grep -Fq 'SHYT_V173_ORIGINAL_QT_POLICY_FILTER_ATTRIBUTION' "$RUNNER_TEMP/yt-src/server/src/server_link.h"
           grep -Fq 'YT130_ROUTE_POLICY allowed_entries=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -Fq 'effective_receive_bytes=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -Fq 'bytes_read <= 0 || bytes_read != raw.size()' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
           git -C "$RUNNER_TEMP/yt-src" diff --check
           git -C "$RUNNER_TEMP/yt-src" diff -- server/src/bloodborne_world.cpp > "$RUNNER_TEMP/world-v155.diff"
           grep -F '+void Service::SendEncodedTo(' "$RUNNER_TEMP/world-v155.diff" >/dev/null
