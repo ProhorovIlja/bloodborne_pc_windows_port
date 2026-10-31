@@ -32,24 +32,33 @@
     {
       "full_name": "lKaniel/bloodborne-server",
       "category": "yt-native-coop-server-launcher",
-      "known_head": "8d5e54fee50e1d7c9dd25ba0a32f224b1d76b6f1",
-      "known_release_tag": "v1.3.0",
+      "known_head": "5d2305ee611ef1e03be39ff925f0da75c9a70393",
+      "known_release_tag": "v1.3.1",
       "compatibility": "SAME_UPSTREAM_FAMILY_PIN_REQUIRED",
-      "owner": "official"
+      "owner": "official",
+      "previous_reviewed_head": "8d5e54fee50e1d7c9dd25ba0a32f224b1d76b6f1",
+      "previous_release_tag": "v1.3.0",
+      "review_notes": "2026-11-01 official v1.3.1 release 2026-10-31: friends/open teams, host transfer, boss targeting, one-second guest stutter, cross-player NPC rewards/chalice/event fixes, launcher logging/Windows certificates; release still up to FOUR players. Project's pinned 1.3.0 Qt server test baseline remains unchanged; YT 1.3.1 acceptance requires dedicated wire/binary parity tests."
     },
     {
       "full_name": "visy/bloodborne_pc_windows_port",
       "category": "native-win-bbport-directparty",
       "known_head": "88f06059762b3c95347e6ed71c67724dcee25e50",
-      "known_release_tag": "v0.7.6",
-      "compatibility": "RUNTIME_AND_UI_IDEAS_ONLY; DIFFERENT_PARTY_WIRE"
+      "known_release_tag": "v0.7.7",
+      "compatibility": "RUNTIME_AND_UI_IDEAS_ONLY; DIFFERENT_PARTY_WIRE",
+      "previous_reviewed_head": "88f06059762b3c95347e6ed71c67724dcee25e50",
+      "previous_release_tag": "v0.7.6",
+      "review_notes": "2026-11-01 official 2026-10-31 release: direct-party Chalice layer travel, guest gathers, save editor/backups, firewall help, NPC/pickup/lift/4-peer join fixes, 120 FPS. Lessons + test plans only: the direct party transport is incompatible with Yharnam Together auth/relay and cannot replace it."
     },
     {
       "full_name": "Supermedo/bloodborne_pc",
       "category": "native-win-launcher-graphics-bbport",
       "known_head": "5adea35dbd38851339b63773c1245c02a314f094",
-      "known_release_tag": "windows-v1.9.4",
-      "compatibility": "SELECTIVE_RENDERER_LAUNCHER_FORK; NOT_YT_WIRE"
+      "known_release_tag": "windows-v1.9.7",
+      "compatibility": "SELECTIVE_RENDERER_LAUNCHER_FORK; NOT_YT_WIRE",
+      "previous_reviewed_head": "5adea35dbd38851339b63773c1245c02a314f094",
+      "previous_release_tag": "windows-v1.9.4",
+      "review_notes": "2026-11-01 official 2026-10-30 release: rollback/atomic launcher updates, online survives restart, preflight Vulkan/OneDrive/VC++ checks, atomic saves/settings, clean game verification. Source-review UI/installer techniques ONLY, no Supermedo auth wire or PS4 guest compatibility runtime."
     },
     {
       "full_name": "deadinside28/bloodborne_pc",
@@ -62,8 +71,11 @@
       "full_name": "droogie/bbhost",
       "category": "native-pc-runtime-renderer",
       "known_head": "3a9248f4c8d1bce7b503e274c5e891850f20a11d",
-      "known_release_tag": "v0.2.21",
-      "compatibility": "ENGINE_DIAGNOSTIC_IDEAS_AND_LICENSE_CHECK"
+      "known_release_tag": "v0.2.22",
+      "compatibility": "ENGINE_DIAGNOSTIC_IDEAS_AND_LICENSE_CHECK",
+      "previous_reviewed_head": "3a9248f4c8d1bce7b503e274c5e891850f20a11d",
+      "previous_release_tag": "v0.2.21",
+      "review_notes": "2026-11-01 official release 2026-10-31: 30-960 FPS timing, multithread draw preparation, UI sizing and plugin API, mouse wheel camera; input and performance research only. Existing default branch HEAD unchanged at prior reviewed pin. Separate renderer/runtime, no YT network wire adoption."
     },
     {
       "full_name": "Mrsuss60/bloodborne_pc_windows_port",
@@ -92,9 +104,11 @@
       "full_name": "Awakenchan/LanternEngine",
       "category": "native-lantern-engine-windows-linux-bbport",
       "known_head": "3860021d6550f95397ba74d046fb14498816a534",
-      "known_release_tag": "unverified",
+      "known_release_tag": "v0.9.38",
       "compatibility": "GPU_LAUNCHER_IDEAS_ONLY_NO_YT_AUTH_WIRE; GPL3_ADDITIONAL_TERMS_REVIEW",
-      "review_notes": "Awaken's Lantern Engine (formerly BloodBorneButPc), full engine and launcher source; do not import bbhost/The Hunter's Dream networking into YT."
+      "review_notes": "2026-11-01 official 2026-10-28 release: fix progressive FPS decline, high-FPS timing, controller menu leakage, black-screen on cutscenes, Discord presence, launcher auto-updates. Source-review to adapt user-requested quit/status/performance ideas; separate native+HLE engine; HEAD later at 0.9.39 beta 26.",
+      "previous_reviewed_head": "3860021d6550f95397ba74d046fb14498816a534",
+      "previous_release_tag": "unverified"
     },
     {
       "full_name": "DarkIzuku/bloodborne_pc",
@@ -151,6 +165,42 @@
       "known_head": "8ded22d75bf931fe89f97a6f12c0c37518c79eeb",
       "known_release_tag": "unverified",
       "compatibility": "INTERNAL_PR_AND_BRANCH_DRIFT_REVIEW_ONLY_NEVER_AUTO_MERGE_OR_DEPLOY"
+    },
+    {
+      "full_name": "bloodborne-native/bloodborne-launcher",
+      "category": "cross-platform-tauri-launcher-saves-config-shader-precompile",
+      "known_head": "f4839b9fd8964f94f7bd0036a45dd95a65c9f869",
+      "known_release_tag": "unverified",
+      "compatibility": "LAUNCHER_UI_ATOMIC_UPDATE_SAVES_AND_SETTINGS_IDEAS_ONLY_NO_PS4_RUNTIME_OR_YT_WIRE_IMPORT",
+      "owner": "upstream",
+      "review_notes": "2026-11-01: Tauri/React cross-platform launcher; 2026-10-31 HEAD offers opt-in shader precompile. Review game-specific APIs and licenses. Does not replace Yharnam Together auth, co-op wire or the current tested launcher."
+    },
+    {
+      "full_name": "JKAnderson/SoulsFormats",
+      "category": "fromsoftware-bnd4-dcx-flver-archives-reference",
+      "known_head": "9c0da6b0721372b34f36b4be503ec020dca1043a",
+      "known_release_tag": "unverified",
+      "compatibility": "FORMAT_RESEARCH_AND_SYNTHETIC_ASSET_PARSING_TESTS_ONLY; NO_COPY_GAME_ASSETS_OR_UNREVIEWED_GPL_CODE",
+      "owner": "upstream",
+      "review_notes": "2026-11-01: read/write FromSoftware BND, DCX and other formats; compare source structure to V77 native resource core and private Bloodborne 1.09/DS3; independently implement/test synthetic resource formats, license review first."
+    },
+    {
+      "full_name": "vawser/Smithbox",
+      "category": "bloodborne-ds3-map-model-param-editor-reference",
+      "known_head": "eae8d654427a31c80949a86f2e39c7935e956f49",
+      "known_release_tag": "2.2.6",
+      "compatibility": "FROM_SOFTWARE_DATA_LAYOUT_RESEARCH_ONLY; NO_GAME_BINARY_COPY_NO_NETWORK_RUNTIME_REUSE",
+      "owner": "upstream",
+      "review_notes": "2026-11-01: Bloodborne and DS3 maps, models, MSB/FLVER, params, EMEVD research; useful for comparing user private assets without publishing them or treating the editor as part of the game runtime. Latest tested public release 2.2.6, default branch newer."
+    },
+    {
+      "full_name": "Grimrukh/soulstruct",
+      "category": "bloodborne-ds3-events-esd-msb-param-format-research",
+      "known_head": "12b69189a2ccebbc623a1b6565be89a18d6c9958",
+      "known_release_tag": "v1.4.0",
+      "compatibility": "EVENT_SCRIPT_AND_FORMAT_REFERENCE_ONLY; NO_AUTOMATIC_MOD_INSTALL_OR_GAME_FILE_REPUBLISH",
+      "owner": "upstream",
+      "review_notes": "2026-11-01: Python open source source-format and script tools for Bloodborne and Dark Souls III (events, ESD, maps, parameters); useful for event/co-op synchronization exploration, version/feature checks needed. Default branch is newer than latest stable GitHub release."
     }
   ],
   "pull_requests": [
