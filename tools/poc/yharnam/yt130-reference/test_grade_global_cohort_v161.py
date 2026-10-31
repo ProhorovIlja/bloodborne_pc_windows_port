@@ -114,6 +114,79 @@ class SourceVerifiedGlobalQosV161(unittest.TestCase):
         self.assertEqual(grade.grade(missing,1,require_directed=True)["quality"],
                          "MISSING_OR_PARTIAL_DIRECTED_GAME_EVIDENCE")
 
+    def test_original_policy_counts_survive_final_json_and_are_not_cohort_loss(self):
+        # This is the EXACT final run_five_hunter_shards_v117.grade output
+        # written to the durable hosted 200-player JSONL, not raw
+        # upstream run_shards.py intermediate output.
+        baseline=cases.sample(3)
+        missing=grade.grade(baseline,3,require_policy=True)
+        self.assertEqual(missing["quality"],
+                         "MISSING_REQUIRED_ORIGINAL_QT_POLICY_EVIDENCE")
+        item=dict(baseline)
+        item["per_shard"]=[dict(row) for row in baseline["per_shard"]]
+        scope=("original Qt Hub::Routed count-only 5s all-run pre-socket "
+               "decisions, NOT same as V161 source-clock cohort")
+        counts=("game_policy_allowed_entries","game_policy_filtered_entries",
+                "game_policy_filtered_enemy_hp_05",
+                "game_policy_filtered_event_sync_31",
+                "game_policy_sample_windows")
+        for i,row in enumerate(item["per_shard"]):
+            row.update(game_policy_allowed_entries=1000+i,
+                       game_policy_filtered_entries=200+i,
+                       game_policy_filtered_enemy_hp_05=75+i,
+                       game_policy_filtered_event_sync_31=20+i,
+                       game_policy_sample_windows=3)
+        for k in counts:
+            item[k]=sum(row[k] for row in item["per_shard"])
+        item["game_policy_scope"]=scope
+        good=grade.grade(item,3,require_policy=True)
+        self.assertEqual(good["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
+        self.assertEqual(good["game_policy_scope"],scope)
+        self.assertEqual(good["game_policy_filtered_entries"],603)
+        self.assertEqual(good["game_policy_filtered_enemy_hp_05"],228)
+        self.assertEqual(good["game_policy_allowed_entries"],3003)
+        self.assertEqual(good["per_shard"][1]["game_policy_filtered_entries"],201)
+        # Do NOT mistake intentionally filtered source records for lost
+        # network packets. They are all-run, not exact V161 send-clock cohort.
+        for k in counts:
+            with self.subTest(inconsistent_total=k):
+                bad=dict(item)
+                bad[k]=item[k]+1
+                self.assertEqual(grade.grade(bad,3,require_policy=True)["quality"],
+                                 "QT_POLICY_COUNTER_TOTAL_MISMATCH")
+            with self.subTest(missing_shard=k):
+                bad=dict(item)
+                bad["per_shard"]=[dict(row) for row in item["per_shard"]]
+                bad["per_shard"][2].pop(k)
+                self.assertEqual(grade.grade(bad,3,require_policy=True)["quality"],
+                                 "INVALID_QT_POLICY_EVIDENCE")
+        bad=dict(item)
+        bad["game_policy_scope"]="actual production QoS"
+        self.assertEqual(grade.grade(bad,3,require_policy=True)["quality"],
+                         "INVALID_QT_POLICY_SCOPE")
+        bad=dict(item)
+        bad["per_shard"]=[dict(row) for row in item["per_shard"]]
+        bad["per_shard"][0]["game_policy_filtered_enemy_hp_05"]=201
+        bad["game_policy_filtered_enemy_hp_05"]+=126
+        self.assertEqual(grade.grade(bad,3,require_policy=True)["quality"],
+                         "QT_POLICY_FILTER_SUBTYPE_MISMATCH")
+        bad=dict(item)
+        bad["per_shard"]=[dict(row) for row in item["per_shard"]]
+        bad["per_shard"][0]["game_policy_sample_windows"]=0
+        bad["game_policy_sample_windows"]-=3
+        self.assertEqual(grade.grade(bad,3,require_policy=True)["quality"],
+                         "EMPTY_ORIGINAL_QT_POLICY_CENSUS")
+        bad=dict(item)
+        bad["per_shard"]=[dict(row) for row in item["per_shard"]]
+        bad["per_shard"][0]["game_policy_allowed_entries"]=True
+        self.assertEqual(grade.grade(bad,3,require_policy=True)["quality"],
+                         "INVALID_QT_POLICY_EVIDENCE")
+        # Source-only/legacy workflows explicitly not requiring V174 remain
+        # backwards compatible instead of silently pretending policy exists.
+        legacy=grade.grade(baseline,3)
+        self.assertEqual(legacy["quality"],"FULL_GAMEPLAY_SYNTHETIC_ONLY")
+        self.assertNotIn("game_policy_allowed_entries",legacy)
+
     def test_pinned_original_follower_fps_matches_800_route_minimum(self):
         # This contract is required by V172 in stage_directed_cohort_v169:
         # every source->destination directed flow offers at least 80% of
