@@ -63,7 +63,7 @@ jobs:
           with open('ci-output-audit.json', encoding='utf-8') as f:
               report=json.load(f)
           for field in ('prs_examined', 'refs_examined', 'unique_workflows_examined',
-                        'findings_count', 'high_or_critical_count', 'incomplete',
+                        'findings_count', 'unique_findings_count', 'high_or_critical_count', 'incomplete',
                         'skipped_count', 'truncated_findings'):
               print('CI_OUTPUT_AUDIT_' + field.upper(), report[field])
           PY
@@ -73,12 +73,12 @@ jobs:
           with open('ci-output-audit.json', encoding='utf-8') as f:
               report=json.load(f)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
-              out.write('## Read-only CI output safety inventory\\n\\n')
+              out.write('## Read-only CI output safety inventory\n\n')
               for key in ('prs_examined', 'refs_examined', 'unique_workflows_examined',
-                          'findings_count', 'high_or_critical_count', 'incomplete',
+                          'findings_count', 'unique_findings_count', 'high_or_critical_count', 'incomplete',
                           'skipped_count', 'truncated_findings'):
-                  out.write('- ' + key + ': ' + str(report[key]) + '\\n')
-              out.write('\\nAdvisory only. No job logs or PR code executed.\\n')
+                  out.write('- ' + key + ': ' + str(report[key]) + '\n')
+              out.write('\nAdvisory only. No job logs or PR code executed.\n')
           PY
       - name: Publish optional bounded metadata report (artifact outage is noncritical)
         continue-on-error: true
