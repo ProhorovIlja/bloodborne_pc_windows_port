@@ -1,0 +1,124 @@
+name: Native V200 original bbrecomp indirect CALL native Win64 no interpreter
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v200-indirect-call-native.yml'
+      - 'native/source-port/recomp-v194/build_incremental_coff_v198.py'
+      - 'native/source-port/recomp-v194/generate_indirect_calls_v200.py'
+      - 'native/source-port/recomp-v194/indirect_call_host_v200.c'
+      - 'native/source-port/recomp-v194/build_actual_upstream_win64_v197.py'
+      - 'native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py'
+      - 'native/source-port/recomp-v194/patch_upstream_ret_flags_v199.py'
+      - 'native/source-port/recomp-v194/patch_upstream_indirect_call_v200.py'
+      - 'native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-whole-functions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Build exact original full bbrecomp with real Zydis
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream-recomp
+          python3 native/source-port/recomp-v194/patch_upstream_ret_flags_v199.py --upstream-checkout public-upstream-recomp
+          python3 native/source-port/recomp-v194/patch_upstream_indirect_call_v200.py --upstream-checkout public-upstream-recomp
+          if ! (cd public-upstream-recomp && CC=clang ./build.sh) > "$RUNNER_TEMP/v200-upstream.log" 2>&1; then
+            echo "::error title=V200 full generator::public original bbrecomp Linux compiler failed"
+            grep -m1 -E 'error:|fatal error:|FAILED:|Error|undefined reference' "$RUNNER_TEMP/v200-upstream.log" | cut -c1-300 || true
+            tail -n 12 "$RUNNER_TEMP/v200-upstream.log" | cut -c1-280
+            exit 1
+          fi
+      - name: Generate a genuine original multi-function C shard from an invented ELF64
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/v200-artifact"
+          python3 native/source-port/recomp-v194/generate_indirect_calls_v200.py --upstream-checkout public-upstream-recomp --out "$RUNNER_TEMP/v200-artifact/recomp.c"
+          test -s "$RUNNER_TEMP/v200-artifact/recomp.c"
+          test -s "$RUNNER_TEMP/v200-artifact/recomp_00000.c"
+          cp -a public-upstream-recomp/deps/include "$RUNNER_TEMP/v200-artifact/include"
+          echo SHYT_V197_ORIGINAL_FULL_FUNCTION_CODE_GENERATION_PASS
+      - name: Link the real multi-function C shard into native Linux executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout public-upstream-recomp
+          clang -std=gnu11 -O2 -Wall -Wno-unused-label -Wno-unused-variable -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing -Ipublic-upstream-recomp/src -I"$RUNNER_TEMP/v200-artifact/include" native/source-port/recomp-v194/indirect_call_host_v200.c "$RUNNER_TEMP/v200-artifact/recomp.c" "$RUNNER_TEMP/v200-artifact/recomp_00000.c" -o "$RUNNER_TEMP/v200-original-indirect"
+          "$RUNNER_TEMP/v200-original-indirect"
+          if "$RUNNER_TEMP/v200-original-indirect" --eboot prohibited; then
+            echo "::error::The native executable accepted an EBOOT runtime argument"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v200-fully-invented-indirect-call-ELF-generated-C
+          path: ${{ runner.temp }}/v200-artifact/
+          if-no-files-found: error
+          retention-days: 1
+  compile-and-reuse-native-win64-coff:
+    needs: compile-whole-functions
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: v200-fully-invented-indirect-call-ELF-generated-C
+          path: ${{ runner.temp }}/v200-upstream-artifact
+      - name: Stage source-locked actual upstream rc.h with Win32 native timer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python native/source-port/recomp-v194/check_upstream_full_abi_v194.py --upstream-checkout public-upstream-recomp
+          python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout public-upstream-recomp
+      - name: Execute full original AOT functions and direct cross-function CALL/RET in PE
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Inputs are invented upstream whole-functions; all derived .obj
+          # and source C files remain in private runner temp, outside Git.
+          mkdir -p public-upstream-recomp/deps
+          cp -a "$RUNNER_TEMP/v200-upstream-artifact/include" public-upstream-recomp/deps/include
+          python native/source-port/recomp-v194/build_incremental_coff_v198.py --upstream-checkout public-upstream-recomp --generated-dir "$RUNNER_TEMP/v200-upstream-artifact" --objects-dir "$RUNNER_TEMP/v200-coff" --jobs 2 --synthetic-test-host native/source-port/recomp-v194/indirect_call_host_v200.c --synthetic-exe "$RUNNER_TEMP/v200-functions.exe" > "$RUNNER_TEMP/v200-first.json"
+          "$RUNNER_TEMP/v200-functions.exe"
+          if "$RUNNER_TEMP/v200-functions.exe" --eboot disallowed; then
+            echo "::error::Native executable unexpectedly accepted runtime ELF"
+            exit 1
+          fi
+          python native/source-port/recomp-v194/build_incremental_coff_v198.py --upstream-checkout public-upstream-recomp --generated-dir "$RUNNER_TEMP/v200-upstream-artifact" --objects-dir "$RUNNER_TEMP/v200-coff" --jobs 2 > "$RUNNER_TEMP/v200-reuse.json"
+          python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"v200-reuse.json").read_text().splitlines()[-1]); assert (r["compiled"],r["reused"],r["source_count"])==(0,2,2),r'
+          # A changed generated C shard must rebuild ONE actual COFF object.
+          printf '\n/* V200 synthetic only changed compiler-input comment */\n' >> "$RUNNER_TEMP/v200-upstream-artifact/recomp_00000.c"
+          python native/source-port/recomp-v194/build_incremental_coff_v198.py --upstream-checkout public-upstream-recomp --generated-dir "$RUNNER_TEMP/v200-upstream-artifact" --objects-dir "$RUNNER_TEMP/v200-coff" --jobs 2 > "$RUNNER_TEMP/v200-partial.json"
+          python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"v200-partial.json").read_text().splitlines()[-1]); assert (r["compiled"],r["reused"],r["source_count"])==(1,1,2),r'
+          # Corruption with an intact COFF machine header MUST NOT be reused.
+          printf 'tamper' >> "$RUNNER_TEMP/v200-coff/recomp_00000.c.obj"
+          python native/source-port/recomp-v194/build_incremental_coff_v198.py --upstream-checkout public-upstream-recomp --generated-dir "$RUNNER_TEMP/v200-upstream-artifact" --objects-dir "$RUNNER_TEMP/v200-coff" --jobs 2 > "$RUNNER_TEMP/v200-corrupted.json"
+          python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"v200-corrupted.json").read_text().splitlines()[-1]); assert (r["compiled"],r["reused"],r["source_count"])==(1,1,2),r'
+          echo SHYT_NATIVE_COFF_CACHE_CORRUPTION_AUTO_REBUILD_PASS
+          echo SHYT_NATIVE_V200_ORIGINAL_INDIRECT_CALL_WIN64_DISPATCH_PASS
+          echo 'No game data, ELF at runtime, emulator or PS4 kernel; synthetic function-only test'
