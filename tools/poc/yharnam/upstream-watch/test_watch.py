@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from urllib.error import HTTPError
 
 MODULE = Path(__file__).with_name("watch.py")
 SPEC = importlib.util.spec_from_file_location("bb_upstream_watch", MODULE)
@@ -219,6 +220,52 @@ class SourceWatchTests(unittest.TestCase):
             source.write_text(json.dumps(data))
             with self.assertRaisesRegex(ValueError, "Unpinned reviewed PR"):
                 m.load_inventory(source)
+
+    def test_no_release_404_is_confirmed_not_an_api_failure(self):
+        # A public repo's /releases/latest returns HTTP 404 if no latest
+        # GitHub release exists. That differs from 403, 429 or timeouts.
+        def get(path):
+            if path.endswith("/releases/latest"):
+                raise HTTPError(path, 404, "no published releases", {}, None)
+            if path.endswith("/commits/HEAD"):
+                return {"sha": "a" * 40}
+            if "/branches/" in path:
+                return {"commit": {"sha": "b" * 40}}
+            return {"state": "open", "head": {"sha": "c" * 40}}
+        report = m.survey(self.data, get)
+        self.assertEqual(report["errors"], [])
+        self.assertTrue(all(r["observed_release"] == "no-release"
+                            for r in report["repositories"]))
+        self.assertTrue(all(r["evidence_complete"] for r in report["repositories"]))
+        reviewed = next(r for r in report["repositories"]
+                        if r["repo"] == "Astrr00/BloodbornePC")
+        self.assertFalse(reviewed["release_changed"])
+        published = next(r for r in report["repositories"]
+                         if r["repo"] == "lKaniel/bloodborne-server")
+        self.assertTrue(published["release_changed"])
+
+    def test_bounded_parallel_reads_complete_once_and_fail_closed(self):
+        checked = []
+        def get(path):
+            checked.append(path)
+            if "/releases/latest" in path:
+                return {"tag_name": "unverified"}
+            if "/commits/HEAD" in path:
+                return {"sha": "a" * 40}
+            if "/branches/" in path:
+                return {"commit": {"sha": "b" * 40}}
+            return {"state": "open", "head": {"sha": "c" * 40}}
+        paths = m.gather_paths(self.data)
+        report = m.survey_bounded_parallel(self.data, get, workers=4)
+        self.assertCountEqual(checked, paths)
+        self.assertEqual(len(checked), len(set(checked)))
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(len(report["repositories"]), len(self.data["repositories"]))
+        self.assertEqual(len(report["branches"]), len(self.data["branches"]))
+        self.assertEqual(len(report["pull_requests"]), len(self.data["pull_requests"]))
+        for bad in (0, 9, -1):
+            with self.assertRaises(ValueError):
+                m.survey_bounded_parallel(self.data, get, workers=bad)
 
     def test_fetch_refuses_arbitrary_urls_and_unsafe_paths(self):
         for path in ("https://evil.invalid/", "/users/oai", "/repos/a/b/../secrets",
