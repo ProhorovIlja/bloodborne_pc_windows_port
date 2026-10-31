@@ -53,6 +53,23 @@ def classify(frame: bytes):
     return None
 
 
+def strict_leaf_hash(frame:bytes)->int:
+    """Source-locked FNV-1a candidate for an exact, fully decoded V193 FDE.
+
+    Upstream src/cpu/recomp.c::bbcpu_recomp_hash mixes every decoded instruction
+    byte, except a special TCB/FS/GS load. None of the ten accepted grammars
+    permits that exception; the complete recognized 16-byte body and its NOP
+    tail contain only valid instructions. This is NOT a substitute for an
+    independent live upstream-Zydis comparison or full-game hash coverage.
+    """
+    if classify(frame) is None:
+        raise BulkError('hash requires a strictly recognized 16-byte FDE')
+    h=0xcbf29ce484222325
+    for byte in frame:
+        h=((h ^ byte)*0x100000001b3)&0xffffffffffffffff
+    return h
+
+
 def census(image:bytes,starts:list[int]):
     """Classify every complete, properly sorted original FDE interval.
 
@@ -115,7 +132,7 @@ def func_source(index:int, kind:str, imm:int, *, guest_return:bool=False)->str:
     return prefix+body+' }'
 
 
-def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shard_size:int=256, *, guest_return:bool=False):
+def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shard_size:int=256, *, guest_return:bool=False, upstream_hash_prototype:bool=False):
     """Validate EVERY row against real image/FDE before writing any source.
 
     Output folder must be empty, non-symlinked. Never uses game image as input
@@ -128,6 +145,8 @@ def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shar
     output_root=out.resolve(strict=True)
     if any((parent/'.git').exists() for parent in (output_root,*output_root.parents)):
         raise BulkError('private source output must be outside all git worktrees')
+    if upstream_hash_prototype and not guest_return:
+        raise BulkError('upstream hash prototype requires guest RET prototype')
     if not rows or len(rows)>MAX_ROWS:raise BulkError('bulk source row budget exceeded')
     fde={a:b for a,b in zip(starts,starts[1:])}
     for i,(addr,kind,imm) in enumerate(rows):
@@ -137,12 +156,17 @@ def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shar
             raise BulkError('generated metadata fails source-exact grammar revalidation')
         if i and addr<=rows[i-1][0]:raise BulkError('not sorted or duplicate')
     shards=split_chunks(rows,shard_size)
+    # Computed only after validating the exact source frame and FDE bounds.
+    # Hashes are game-derived and are written only into the PRIVATE output.
+    hashes=[strict_leaf_hash(image[addr:addr+16]) if upstream_hash_prototype else 0
+            for addr,_,_ in rows]
     table=['/* USER PRIVATE derived from original game. DO NOT PUBLISH. */',
            '#include "recomp_abi.h"',
            *[f'extern void bb_native_{i}(BbCpu*);' for i in range(len(rows))],
            *[f'static RcFn native_direct_{i}=bb_native_{i};' for i in range(len(rows))],
            'static const RcFunction table[]={',
-           *[f'{{{addr}ull,16ull,0,bb_native_{i},&native_direct_{i}}},' for i,(addr,_,_) in enumerate(rows)],
+           *[f'{{{addr}ull,16ull,{hashes[i]}ull,bb_native_{i},&native_direct_{i}}},'
+             for i,(addr,_,_) in enumerate(rows)],
            '};',
            '__attribute__((visibility("default"))) const RcFunction *bb_recomp_init(const RcApi *api,size_t *count){',
            'if(!api||!count||api->version!=BB_RECOMP_API_VERSION)return 0;',
@@ -167,12 +191,14 @@ def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shar
     private={'image_sha256':v189.IMAGE_SHA,
              'count':len(rows),'shards':len(shards),'shard_size':shard_size,
              'guest_return_prototype':guest_return,
+             'upstream_hash_prototype':upstream_hash_prototype,
              'functions':[[addr,kind,imm] for addr,kind,imm in rows],
              'sources_sha256':{name:hashlib.sha256(c.encode()).hexdigest() for name,c in files.items()}}
     (out/'PRIVATE_DO_NOT_UPLOAD_manifest.json').write_text(json.dumps(private,separators=(',',':'))+'\n',encoding='utf8')
     return {'status':'generated-private','recognized_functions':len(rows),
             'source_units':len(files),'kinds':len({kind for _,kind,_ in rows}),
             'guest_return_prototype':guest_return,
+            'upstream_hash_prototype':upstream_hash_prototype,
             'upstream_code_hashes_ready':False,
             'complete_engine_proven':False,'whole_game_windows_boot_proven':False}
 
@@ -183,12 +209,15 @@ def main(argv=None):
     ap.add_argument('--shard-size',type=int,default=256)
     ap.add_argument('--guest-return-prototype',action='store_true',
                     help='Emit x86-64 guest RET stack/rip semantics (not ready for upstream runtime; hashes absent)')
+    ap.add_argument('--upstream-hash-prototype',action='store_true',
+                    help='Private strict-leaf FNV hashes; requires guest RET (not validated in live upstream runtime)')
     a=ap.parse_args(argv)
     try:
         image,starts=v189.load_original(a.eboot)
         rows,counts=census(image,starts)
         report=emit_private(a.private_output_dir,image,starts,rows,a.shard_size,
-                            guest_return=a.guest_return_prototype)
+                            guest_return=a.guest_return_prototype,
+                            upstream_hash_prototype=a.upstream_hash_prototype)
         report['by_grammar']=counts
         print(json.dumps(report,separators=(',',':')))
         return 0
