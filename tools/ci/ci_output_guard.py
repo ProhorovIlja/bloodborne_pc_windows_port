@@ -55,7 +55,9 @@ def scan_workflow(path: str, source: str) -> list[dict]:
             rule, severity = "unbounded-log-dump", "high"
         elif UNBOUNDED_TEE.search(line):
             rule, severity = "unbounded-tee-output", "medium"
-        elif UNBOUNDED_DIFF.search(line) and not SAFE_DIFF.search(line):
+        elif (UNBOUNDED_DIFF.search(line) and not SAFE_DIFF.search(line)
+              and not re.search(r"\s+>\s*[^&\s]", line)):
+            # A diff redirected to a local file is not printed into Actions.
             rule, severity = "unbounded-git-diff-output", "medium"
         else:
             match = TAIL_COUNT.search(line)
