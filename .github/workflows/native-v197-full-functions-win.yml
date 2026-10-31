@@ -1,0 +1,98 @@
+name: Native V197 real bbrecomp whole-function ELF to Win64 EXE
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v197-full-functions-win.yml'
+      - 'native/source-port/recomp-v194/generate_whole_functions_v197.py'
+      - 'native/source-port/recomp-v194/bbrecomp_whole_function_host_v197.c'
+      - 'native/source-port/recomp-v194/build_actual_upstream_win64_v197.py'
+      - 'native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py'
+      - 'native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile-whole-functions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Build exact original full bbrecomp with real Zydis
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream-recomp
+          if ! (cd public-upstream-recomp && CC=clang ./build.sh) > "$RUNNER_TEMP/v197-upstream.log" 2>&1; then
+            echo "::error title=V197 full generator::public original bbrecomp Linux compiler failed"
+            grep -m1 -E 'error:|fatal error:|FAILED:|Error|undefined reference' "$RUNNER_TEMP/v197-upstream.log" | cut -c1-300 || true
+            tail -n 12 "$RUNNER_TEMP/v197-upstream.log" | cut -c1-280
+            exit 1
+          fi
+      - name: Generate a genuine original multi-function C shard from an invented ELF64
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/v197-artifact"
+          python3 native/source-port/recomp-v194/generate_whole_functions_v197.py --upstream-checkout public-upstream-recomp --out "$RUNNER_TEMP/v197-artifact/recomp.c"
+          test -s "$RUNNER_TEMP/v197-artifact/recomp.c"
+          test -s "$RUNNER_TEMP/v197-artifact/recomp_00000.c"
+          cp -a public-upstream-recomp/deps/include "$RUNNER_TEMP/v197-artifact/include"
+          echo SHYT_V197_ORIGINAL_FULL_FUNCTION_CODE_GENERATION_PASS
+      - name: Link the real multi-function C shard into native Linux executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout public-upstream-recomp
+          clang -std=gnu11 -O2 -Wall -Wno-unused-label -Wno-unused-variable -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing -Ipublic-upstream-recomp/src -I"$RUNNER_TEMP/v197-artifact/include" native/source-port/recomp-v194/bbrecomp_whole_function_host_v197.c "$RUNNER_TEMP/v197-artifact/recomp.c" "$RUNNER_TEMP/v197-artifact/recomp_00000.c" -o "$RUNNER_TEMP/v197-original-functions"
+          "$RUNNER_TEMP/v197-original-functions"
+          if "$RUNNER_TEMP/v197-original-functions" --eboot prohibited; then
+            echo "::error::The native executable accepted an EBOOT runtime argument"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v197-fully-invented-whole-function-ELF-generated-C
+          path: ${{ runner.temp }}/v197-artifact/
+          if-no-files-found: error
+          retention-days: 1
+  invoke-real-functions-in-windows-exe:
+    needs: compile-whole-functions
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: v197-fully-invented-whole-function-ELF-generated-C
+          path: ${{ runner.temp }}/v197-upstream-artifact
+      - name: Stage source-locked actual upstream rc.h with Win32 native timer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python native/source-port/recomp-v194/check_upstream_full_abi_v194.py --upstream-checkout public-upstream-recomp
+          python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout public-upstream-recomp
+      - name: Execute full original AOT functions and direct cross-function CALL/RET in PE
+        shell: bash
+        run: |
+          set -euo pipefail
+          python native/source-port/recomp-v194/build_actual_upstream_win64_v197.py --upstream-checkout public-upstream-recomp --synthetic-artifact "$RUNNER_TEMP/v197-upstream-artifact" --out "$RUNNER_TEMP/v197-native-original-functions.exe"
+          echo 'Synthetic ELF generation time only; no original game data, EBOOT runtime, PS4 kernel or original game boot'
