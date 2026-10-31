@@ -1,0 +1,48 @@
+name: SHYT V192 real-game CALL graph native AOT synthetic-only CI
+on:
+  push:
+    branches: [feature/native-real-direct-call-stack-v192-20261101]
+    paths:
+      - .github/workflows/shyt-v192-original-direct-call-stack.yml
+      - native/source-port/recomp-v192/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  strict-call-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Verify public upstream CPU ABI prefix and source pin
+        run: python native/source-port/recomp-v190/audit_upstream_cpu_layout_v190.py --upstream-root upstream-recomp
+      - name: Compile only public generic Python tools
+        run: python -m py_compile native/source-port/recomp-v192/call_graph_v192.py native/source-port/recomp-v192/test_call_graph_v192.py
+      - name: Synthetic Linux real-x86 CALL+stack W^X and compiled native C tests
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s native/source-port/recomp-v192 -p test_call_graph_v192.py -v
+      - name: Synthetic native Windows AMD64 COFF DLL and CALL execution
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
+          python -m unittest discover -s native/source-port/recomp-v192 -p test_call_graph_v192.py -v
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          echo SHYT_V192_WIN64_COMPILED_DIRECT_CALL_SYNTHETIC_PASS_NO_GAME_FILES
