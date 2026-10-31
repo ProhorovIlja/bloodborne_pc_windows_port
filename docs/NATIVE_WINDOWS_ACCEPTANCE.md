@@ -23,6 +23,20 @@ python tools/native/native_package_integrity_v185.py /private/extracted/BBSC-Yha
   --verify-manifest /private/evidence/BBSC-0.1.3-manifest.json
 ```
 
+### Optional checks against the user's PRIVATE retail game
+
+The full Bloodborne game **is already available on the user's private Drive**, but game files MUST NOT be committed, uploaded as CI artifacts, or bundled into player releases. Where the private files are accessible on the user's own machine:
+
+```sh
+python tools/native/native_package_integrity_v185.py /private/CLS-Windows.zip \
+  --game-sfo /private/Bloodborne/sce_sys/param.sfo \
+  --game-eboot /private/Bloodborne/eboot.bin-decrypted
+```
+
+This validates the real `param.sfo` PSF metadata for `CUSA03173` / `APP_VER 01.09` and verifies only the header of the already-decrypted original game's **PS4 ELF64 x86-64**. The PS4-specific ELF ABI still needs the native bbport compatibility runtime. Neither metadata check decrypts the game, proves game patch offsets, or runs anything; output records only true/false acceptance flags and never prints the original file paths.
+
+In a private dry run on 2026-10-31 the actual Drive game metadata passed both checks. This is **stronger than finding filenames** but still falls short of an executable game boot.
+
 The report printed to stdout contains only a bounded count/fingerprint and explicitly marks boot, NAT, and gameplay tests as **false**. The private manifest contains **relative distribution paths and per-file SHA-256**. Keep it private and separate from the game folder; never commit the result, retail game assets, save files, settings or server credentials to the public repository. The checker never executes game binaries, downloads, extracts, or connects to a server. It refuses retail `eboot.bin` or game asset folders inside the distributable, case-conflicting names, ZIP traversal, symlinks, unexpected architectures, and oversized inputs.
 
 V185 checks the Windows PE machine type of four critical components but **PE64 is not proof that a particular game boots natively**. ShadPS4-derived rendering/runtime libraries also don't automatically make it a full console emulator. Inspect native runtime source and actual host process for the authoritative distinction. ZIP+folder manifests compare the same tree, including nested DLLs from vendors, so a missing FSR/DLSS/XeSS/Qt runtime can be detected if it was included in the release baseline; completeness relative to upstream design requires an independently reviewed build manifest.
