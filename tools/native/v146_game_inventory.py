@@ -22,6 +22,10 @@ SCHEMA = "SHYT_NATIVE_ASSET_INVENTORY_V1"
 # Reports must remain bounded even for accidentally selected drive roots.
 MAX_FILES = 350_000
 MAX_SFO_BYTES = 1024 * 1024
+# Never emit huge inventory JSON into CI or connector results. Explicit local
+# reports may be bigger, but remain bounded and never contain asset bytes.
+MAX_STDOUT_JSON_BYTES = 16_384
+MAX_REPORT_FILE_BYTES = 32 * 1024 * 1024
 
 
 class InventoryError(ValueError):
@@ -156,9 +160,16 @@ def main(argv=None) -> int:
                         help="opt in to expensive loaded-image SHA256 and TITLE_ID/version check")
     args = parser.parse_args(argv)
     try:
+        # The opt-in list can contain hundreds of thousands of file paths.
+        # Never print those into GitHub logs, a terminal, or an assistant tool.
+        if args.include_paths and args.output is None:
+            raise InventoryError("--include-paths requires --output outside game folder")
         data = inventory(args.game_dir, include_paths=args.include_paths,
                          verify_image=args.verify_image)
         text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+        json_bytes = len(text.encode("utf-8"))
+        if json_bytes > (MAX_REPORT_FILE_BYTES if args.output else MAX_STDOUT_JSON_BYTES):
+            raise InventoryError("inventory report exceeds safe output budget; use local --output or narrower scope")
         if args.output:
             path = args.output.resolve()
             root = args.game_dir.resolve()
