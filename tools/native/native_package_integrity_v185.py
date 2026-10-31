@@ -219,11 +219,34 @@ def read_game_sfo(path: Path) -> dict[str, str]:
     return values
 
 
+def read_decrypted_game_eboot(path: Path) -> dict[str, int]:
+    """Check header of user's own local PS4 ELF x86-64, without executing it.
+
+    SCE-specific e_type is not a Win32 PE and does not prove that import
+    resolution, patch sites, Vulkan, saves or gameplay work on this PC.
+    """
+    if not path.is_file() or path.is_symlink():
+        raise PackageError('decrypted eboot must be a regular local game file')
+    size = path.stat().st_size
+    if size < 1024 * 1024 or size > 512 * 1024 * 1024:
+        raise PackageError('decrypted eboot outside expected size range')
+    with path.open('rb') as f:
+        header = f.read(64)
+    if len(header) != 64 or header[:4] != b'\x7fELF' or header[4:8] != b'\x02\x01\x01\x09':
+        raise PackageError('expected PS4 ELF64 little-endian executable header')
+    kind, machine = struct.unpack_from('<HH', header, 16)
+    if machine != 0x3e or kind not in (0xfe00, 0xfe10):
+        raise PackageError('expected x86-64 PS4 ELF executable kind')
+    return {'elf_class': 64, 'machine_x86_64': 1, 'sce_elf_type': kind}
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('package', type=Path, help='local Windows release ZIP or extracted folder')
     p.add_argument('--game-sfo', type=Path,
                    help='optional PRIVATE local sce_sys/param.sfo: verify CUSA03173 update 1.09')
+    p.add_argument('--game-eboot', type=Path,
+                   help='optional PRIVATE decrypted eboot ELF64; requires --game-sfo')
     p.add_argument('--write-manifest', type=Path, help='private local full per-file digest manifest')
     p.add_argument('--verify-manifest', type=Path, help='check against private prior manifest')
     args = p.parse_args(argv)
@@ -235,6 +258,12 @@ def main(argv=None) -> int:
         if args.game_sfo:
             read_game_sfo(args.game_sfo)
             summary['private_game_sfo_109_verified'] = True
+            summary['game_eboot_patch_sites_verified'] = False
+        if args.game_eboot:
+            if not args.game_sfo:
+                raise PackageError('--game-eboot requires matching --game-sfo')
+            read_decrypted_game_eboot(args.game_eboot)
+            summary['private_game_elf64_x86_64_verified'] = True
             summary['game_eboot_patch_sites_verified'] = False
         if args.verify_manifest:
             old = json.loads(args.verify_manifest.read_text(encoding='utf-8'))
