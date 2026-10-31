@@ -84,6 +84,36 @@ class NativePackageTests(unittest.TestCase):
             self.assertEqual(out, '')
             self.assertNotIn(str(game), err)
 
+    def test_local_ps4_elf64_x86_64_gate_does_not_claim_boot(self):
+        self.write_dir()
+        game = Path(self.tmp.name) / 'eboot.bin-decrypted'
+        elf = bytearray(64)
+        elf[:8] = b'\x7fELF\x02\x01\x01\x09'
+        struct.pack_into('<HH', elf, 16, 0xfe10, 0x3e)
+        with game.open('wb') as f:
+            f.write(elf)
+            f.truncate(2 * 1024 * 1024)
+        self.assertEqual(audit.read_decrypted_game_eboot(game),
+                         {'elf_class':64,'machine_x86_64':1,'sce_elf_type':0xfe10})
+        # A decrypted game executable alone is NOT authenticated to a build.
+        status, out, err = self.cli(self.root, '--game-eboot', game)
+        self.assertEqual(status, 2)
+        self.assertEqual(out, '')
+        # Wrong architecture and wrong ELF class fail before calling a loader.
+        with game.open('r+b') as f:
+            f.seek(18)
+            f.write(struct.pack('<H', 40))
+        self.assertEqual(self.cli(self.root, '--game-eboot', game)[0], 2)
+        with self.assertRaises(audit.PackageError):
+            audit.read_decrypted_game_eboot(game)
+        with game.open('r+b') as f:
+            f.seek(18)
+            f.write(struct.pack('<H', 0x3e))
+            f.seek(4)
+            f.write(b'\x01')
+        with self.assertRaises(audit.PackageError):
+            audit.read_decrypted_game_eboot(game)
+
     def test_zip_and_directory_same_reproducible_fingerprint(self):
         self.write_zip()
         self.write_dir()
