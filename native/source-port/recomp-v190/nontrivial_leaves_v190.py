@@ -208,7 +208,7 @@ def emit(out:Path,rows):
            '#include <stdint.h>', '#include <stddef.h>',
            'union V { unsigned char b[32]; float f[8]; };',
            'struct BbCpu { uint64_t r[16]; uint64_t rip; uint64_t flags; union V v[16]; };',
-           '_Static_assert(offsetof(struct BbCpu,v)==144,"v190 mock layout");']
+           '_Static_assert(offsetof(struct BbCpu,r)==0 && offsetof(struct BbCpu,rip)==128 && offsetof(struct BbCpu,flags)==136 && offsetof(struct BbCpu,v)==144,"v190 pinned prefix layout");']
     for i,r in enumerate(rows):
         kind,off=r['kind'],r['offset']
         if kind=='mem64': expr=f'uint64_t v; __builtin_memcpy(&v,(const void*)(uintptr_t)(cpu->r[7]+{off}),8); cpu->r[0]=v;'
