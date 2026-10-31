@@ -67,6 +67,7 @@ class OutputGuardTests(unittest.TestCase):
 
     def test_git_diff_guard_is_safe(self):
         self.assertFalse(scan_workflow("ci.yml", "run: git -C source diff --check\n"))
+        self.assertFalse(scan_workflow("ci.yml", "run: git diff -- file > local.patch\n"))
         self.assertEqual(scan_workflow("ci.yml", "run: git diff\n")[0]["rule"],
                          "unbounded-git-diff-output")
 
