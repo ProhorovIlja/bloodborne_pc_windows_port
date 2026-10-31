@@ -44,6 +44,8 @@ from test_patch_http_compat import SOURCE as HTTP_FIXTURE, SessionUtcCompatibili
 from test_bloodborne_headers import FIXTURE as BLOODBORNE_HTTP_FIXTURE
 sys.path.insert(0, str(HERE.parent/"account-gateway-v32"))
 from test_patch_bearer_auth import AUTH as GATEWAY_AUTH_FIXTURE
+sys.path.insert(0,str(HERE.parent/"friends-privacy-v47"))
+from test_patch_session_privacy import SOURCE as SESSION_PRIVATE_FIXTURE
 def load(path,name):
     spec=importlib.util.spec_from_file_location(name,path)
     mod=importlib.util.module_from_spec(spec)
@@ -55,7 +57,7 @@ compose=load(HERE/"compose_sources.py","sh_compose")
 def originals():
     v3=compose.load_zip_module(ARCHIVES/compose.ARCHIVES["ui"],"PATCH-YHARNAM-TEAM-UI.py","sh_ui_test")
     v7=compose.load_zip_module(ARCHIVES/compose.ARCHIVES["direct"],"PATCH-BBPORT-NATIVE-DIRECT-V7.py","sh_direct_test")
-    return {
+    fixture = {
         compose.MAP3D: MAP_FIXTURE,
         compose.TEXTURE_GC: GC_FIXTURE,
         compose.MAPCHARTS: CHART_CACHE_FIXTURE.replace(
@@ -69,7 +71,9 @@ def originals():
             '    const bool arrived = member.lobby.empty();\n'
             '    for (const std::vector<u8>& message : messages) {\n'
             '        if (const auto envelope = DecodeEnvelope(message)) {\n'),
-        compose.SERVER_WORLD_H: '#include "bloodborne_party_boards.h"\n' + SERVER_HEADER_FIXTURE,
+        compose.SERVER_WORLD_H: '#include "bloodborne_party_boards.h"\n' + SERVER_HEADER_FIXTURE + (
+            '    const BloodborneCoop::TeamLobby& Lobby() const {\n'
+            '    BloodborneCoop::TeamLobby lobby;\n'),
         compose.COOP_STREAM: STREAM_FIXTURE,
         compose.SERVER_LINK_CPP: LINK_ID_FIXTURE.replace(
             '#include "server_link.h"',
@@ -90,14 +94,15 @@ def originals():
     m_signedIn.insert(online_id, hash);''') + (
             "    // Phase 7: a linked game's address for the rooms and signaling is its virtual one, known from\n"
             "    // its hello.\n"
-            "    for (const auto& linked : result.linked) {\n"),
+            "    for (const auto& linked : result.linked) {\n"
+            "    // Phase 11: the hello signs the player in (its id's account is made the first time).\n"),
         compose.LINK_SERVER_H: RPC_H_FIXTURE +
             '\n    QHash<QByteArray, QByteArray> m_signedIn; // player id -> its secret\'s hash, once signed in\n',
         compose.DATABASE_H: AUTH_DB_H,
         compose.DATABASE_CPP: AUTH_DB_CPP + '\n    qInfo() << "Database migrations complete";\n',
         compose.ACCOUNT_TEST_CPP: AUTH_ACCOUNT_TEST,
         compose.HTTP_CPP: HTTP_FIXTURE,
-        compose.HTTP_SESSION_CPP: SessionUtcCompatibility.SOURCE,
+        compose.HTTP_SESSION_CPP: SessionUtcCompatibility.SOURCE + '\n' + SESSION_PRIVATE_FIXTURE,
         compose.HTTP_STATS_CPP: StatsBackendQtCompatibility.STATS,
         compose.HTTP_BACKEND_CPP: StatsBackendQtCompatibility.BACKEND,
         compose.HTTP_BLOODBORNE_CPP: BLOODBORNE_HTTP_FIXTURE,
@@ -218,6 +223,66 @@ def run_coop():
 """,
     }
 
+    # The older V3-V8 offline fixtures intentionally include only the
+    # anchors those earlier transforms modify. Supply the unmodified V49
+    # pinned Qt/protobuf/Team UI anchors as additional source excerpts here.
+    fixture[compose.SERVER_WORLD] += (
+        "\nvoid Service::SendLobby(qint64 now_ms) {\n"
+        "    *envelope.mutable_lobby_state() = lobby.StateFor(member.lobby);\n"
+        "    *envelope.mutable_lobby_state() = lobby.StateFor(member.lobby);\n"
+    )
+    fixture[compose.SERVER_WORLD_H] = (
+        "#include <map>\n#include <QList>\n" + fixture[compose.SERVER_WORLD_H]
+        + "    void SendLobby(qint64 now_ms);\n"
+    )
+    fixture[compose.LINK_SERVER_CPP] = (
+        "#include <QRandomGenerator>\n" + fixture[compose.LINK_SERVER_CPP]
+    )
+    fixture["server/coop/coop.proto"] = fixture["server/coop/coop.proto"].replace(
+        "    string party = 7;\n",
+        "    string team = 4; // the team it is in, if any\n    string party = 7;\n"
+    )
+    fixture["bbport/gpu/bbcoop.h"] += (
+        "\n    int ready; /* a member's */\n"
+    )
+    fixture["bbport/gpu/bbcoop/coop.cpp"] += (
+        "\n    for (const bbcoop::LobbyPlayer& player : state->players()) {\n"
+        "        const bool mine = state->has_team() && player.team() == state->team().id();\n"
+        "        out.state = LobbyStateOf(player.state());\n"
+        "    }\n"
+        "    for (const bbcoop::TeamInvite& invite : state->invites()) {\n"
+    )
+    ui=fixture[compose.OVERLAY]
+    if "    // The players online (invite) and the invitations.\n" not in ui:
+        ui += "    // The players online (invite) and the invitations.\n"
+    heading='    draw->AddText(ImVec2(left_x, lists_y), Gold(), T("Hunters online", "Охотники в сети"));\n'
+    if heading not in ui: ui += heading
+    can='    const bool can_invite = lobby.in_team && lobby.member_count < BBCOOP_LOBBY_TEAM;\n'
+    if can not in ui: ui += can
+    old_block=(
+        "    if (lobby.player_count == 0) {\n"
+        '        draw->AddText(ImVec2(left_x, y + S(8.0f)), Dim(), T("Nobody else is online", "Больше никого нет в сети"));\n'
+        "    }\n"
+        "    for (int i = 0; i < lobby.player_count && i < rows; ++i, y += row_h) {\n"
+        "        const bbcoop_lobby_entry& p = lobby.players[i];\n"
+    )
+    if old_block not in ui: ui += old_block
+    name_block=(
+        "        draw->AddText(ImVec2(left_x + S(8.0f), y + S(8.0f)), Plain(),\n"
+        "                      Fit(p.name, state_x - left_x - S(24.0f)).c_str());\n"
+    )
+    if name_block not in ui: ui += name_block
+    tail=(
+        "            bbcoop_lobby_request(BBCOOP_TEAM_INVITE, p.id);\n"
+        "        }\n"
+        "    }\n"
+        "    y = lists_y + S(50.0f);\n"
+    )
+    if tail not in ui: ui += tail
+    fixture[compose.OVERLAY]=ui
+    return fixture
+
+
 class AllPatches(unittest.TestCase):
     def test_real_v3_v5_v7_v8_functions_combine(self):
         source=originals()
@@ -299,6 +364,19 @@ class AllPatches(unittest.TestCase):
         self.assertIn(b'SH-QT-HTTP-COMPAT-V30',result[compose.HTTP_CPP])
         self.assertIn(b'QT_VERSION_CHECK(6, 8, 0)',result[compose.HTTP_CPP])
         self.assertIn(b'SH-QT-SESSION-UTC',result[compose.HTTP_SESSION_CPP])
+        self.assertIn(b'SHYT-V47-FRIENDS-PRIVATE-SESSION',result[compose.HTTP_SESSION_CPP])
+        self.assertIn(b'MayJoinSession(',result[compose.HTTP_SESSION_CPP])
+        self.assertIn(b'MaySendSessionInvite(',result[compose.HTTP_SESSION_CPP])
+        self.assertEqual(result[compose.SERVER_WORLD].count(b'SHYT-V48-LOBBY-ACCOUNT-BOUND'), 2)
+        self.assertIn(b'RequireAuthenticatedIdentity();',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'SHYT-V49-ONLINE-MUTUAL-FRIENDS',result[compose.SERVER_WORLD])
+        self.assertIn(b'SetVisibleFriends',result[compose.LINK_SERVER_CPP])
+        self.assertIn(b'mutual_friend = 12;',result['server/coop/coop.proto'])
+        self.assertIn(b'out.mutual_friend = player.mutual_friend()',result['bbport/gpu/bbcoop/coop.cpp'])
+        self.assertIn(b'shyt-mutual-friends-filter',result[compose.OVERLAY])
+        self.assertIn(b'require_authenticated_identity = false',result[compose.SERVER_WORLD_H])
+        self.assertIn(b'MatchesAuthenticatedMember',result["server/src/sh_lobby_identity.hpp"])
+        self.assertIn(b'namespace SeamlessHunt::Friends',result['server/src/sh_friends_permissions.hpp'])
         self.assertIn(b'Qt::UTC',result[compose.HTTP_SESSION_CPP])
         self.assertIn(b'SH-QT-STATS-PORTABLE',result[compose.HTTP_STATS_CPP])
         self.assertIn(b'SH-QT-BACKEND-PORTABLE',result[compose.HTTP_BACKEND_CPP])
