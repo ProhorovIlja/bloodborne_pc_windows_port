@@ -103,30 +103,50 @@ jobs:
           set -euo pipefail
           pacman --noconfirm --disable-download-timeout -Sy
           pacman --noconfirm --disable-download-timeout -S --needed git mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libc++
-      - name: Compile and RUN exact pinned original YT1.3 C++ with Windows CLANG64
+      - name: Verify native Windows Python and CLANG64 executables
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          # Mirror the already-green full Windows V177 C++ harness:
-          # native setup-python drives subprocess while clang++ comes from CLANG64.
+          printf 'phase=toolchain-preflight\n' > v177-diagnostic.txt
+          if [[ -z "${pythonLocation:-}" ]]; then
+            echo 'missing setup-python pythonLocation' >> v177-diagnostic.txt
+            exit 1
+          fi
           winpy="$(cygpath -u "$pythonLocation")/python.exe"
-          test -f "$winpy"
+          if [[ ! -f "$winpy" ]]; then
+            echo 'native setup-python interpreter not found' >> v177-diagnostic.txt
+            exit 1
+          fi
           "$winpy" --version
-          command -v clang++
+          if ! command -v clang++; then
+            echo 'CLANG64 clang++ not found in PATH' >> v177-diagnostic.txt
+            exit 1
+          fi
           clang++ --version
-          # Use native Python ONLY to extract the exact staged YT1.3 C++,
-          # then compile AND run inside the CLANG64 shell. Avoid launching
-          # the MSYS2 compiler through Win32 Python's subprocess/PATH layer.
+          echo 'phase=toolchain-preflight-pass' > v177-diagnostic.txt
+      - name: Generate source-exact original YT1.3 C++ harness
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          echo 'phase=source-extraction' > v177-diagnostic.txt
+          winpy="$(cygpath -u "$pythonLocation")/python.exe"
           if ! "$winpy" -c 'import sys; from pathlib import Path; sys.path.insert(0,"tools/poc/yharnam/yt130-reference"); from check_native_invader_actual_session_v177 import harness; Path("v177-windows-exe.cpp").write_text(harness(Path("yt130-original")), encoding="utf-8")' > v177-emit.log 2>&1; then
-            { printf 'phase=source-extraction\n'; head -c 6000 v177-emit.log; } > v177-diagnostic.txt
-            echo "::error title=V177 original source extraction::Unable to generate pinned C++ harness"
+            { printf 'phase=source-extraction-failed\n'; head -c 6000 v177-emit.log; } > v177-diagnostic.txt
+            echo "::error title=V177 pinned C++ extraction::Original source harness failed"
             tail -n 12 v177-emit.log | cut -c1-480
             exit 1
           fi
-          test -s v177-windows-exe.cpp
+          if [[ ! -s v177-windows-exe.cpp ]]; then
+            echo 'generated C++ source is missing or empty' >> v177-diagnostic.txt
+            exit 1
+          fi
+      - name: Compile original invader C++ test in CLANG64
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          echo 'phase=compile' > v177-diagnostic.txt
           if ! clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic v177-windows-exe.cpp -o v177-windows-exe.exe > v177-compile.log 2>&1; then
-            { printf 'phase=compile\n'; head -c 6000 v177-compile.log; } > v177-diagnostic.txt
-            echo "V177_NATIVE_WINDOWS_CLANG64_COMPILE_FAILED"
+            { printf 'phase=compile-failed\n'; head -c 6000 v177-compile.log; } > v177-diagnostic.txt
             diagnostic="$(grep -m1 -E 'fatal error:|error:|undefined reference|not found' v177-compile.log | cut -c1-360 || true)"
             if [[ -n "$diagnostic" ]]; then
               echo "::error title=V177 CLANG64 compiler diagnostic::$diagnostic"
@@ -134,13 +154,23 @@ jobs:
             tail -n 25 v177-compile.log | cut -c1-480
             exit 1
           fi
+      - name: Execute original 5-seat repeated-invader C++ assertions on Windows
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          echo 'phase=run-test' > v177-diagnostic.txt
           if ! ./v177-windows-exe.exe > v177-run.log 2>&1; then
-            { printf 'phase=execution\n'; head -c 6000 v177-run.log; } > v177-diagnostic.txt
-            echo "::error title=V177 native Windows C++ regression::Compiled but test executable failed"
+            { printf 'phase=run-test-failed\n'; head -c 6000 v177-run.log; } > v177-diagnostic.txt
+            echo "::error title=V177 native C++ regression::Compiled executable failed assertions or runtime"
             tail -n 15 v177-run.log | cut -c1-480
             exit 1
           fi
           echo SHYT_V177_ORIGINAL_NATIVE_INVADER_CXX_REPEATED_IDENTITY_AND_5_SEAT_PASS
+      - name: Confirm original staged source diff is clean
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          echo 'phase=final-source-guard' > v177-diagnostic.txt
           git -C yt130-original diff --check
           echo SHYT_V177_REAL_WINDOWS_CXX20_INVADER_ROOM_MEMBERS_TEST_PASS_NO_GAME_ASSETS
       - name: Preserve only bounded CLANG64 failure evidence (max 6 KB)
