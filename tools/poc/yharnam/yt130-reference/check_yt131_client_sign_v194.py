@@ -105,9 +105,12 @@ def run(root:Path,out:Path,compiler:str)->None:
     source=root/SOURCE
     if not source.is_file() or source.is_symlink():
         raise ValueError("V194 client original C++ file missing")
-    original=source.read_bytes()
+    # Git for Windows may materialize LF source as CRLF. Always hash and
+    # compile the exact source stored in the pinned Git tree, never the
+    # platform-normalized worktree bytes.
+    original=subprocess.check_output(["git","-C",str(root),"show","HEAD:"+SOURCE])
     if blob(original)!=SOURCE_SHA:
-        raise ValueError("V194 client original C++ blob SHA changed")
+        raise ValueError("V194 pinned client C++ git blob SHA mismatch")
     if out.exists():
         raise ValueError("V194 client test target must be a fresh path")
     out.parent.mkdir(parents=True,exist_ok=True)
