@@ -1,0 +1,33 @@
+name: SHYT V193 bulk real-game leaf AOT synthetic-only native CI
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - .github/workflows/shyt-v193-bulk-native-leaves.yml
+      - native/source-port/recomp-v193/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-bulk-aot:
+    name: Synthetic-only 10-form native C and DLL (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Ensure read-only generic source compiles
+        run: python -m py_compile native/source-port/recomp-v193/bulk_aot_v193.py native/source-port/recomp-v193/test_bulk_aot_v193.py
+      - name: Test fail-closed grammar and actually compile/invoke synthetic native C
+        run: python -m unittest discover -s native/source-port/recomp-v193 -p 'test_bulk_aot_v193.py' -v
+      - name: Assert bulk AOT is not a full Windows game
+        run: python native/source-port/recomp-v193/bulk_aot_v193.py --help
