@@ -7,6 +7,7 @@ from pathlib import Path
 import importlib.util
 from unittest import TestCase, main, mock
 import tempfile
+import subprocess
 
 HERE=Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location("v194",HERE/"stage_yt131_five_seat_v194.py")
@@ -48,7 +49,7 @@ class Yt131FiveSeatStageTests(TestCase):
         with tempfile.TemporaryDirectory(prefix="v194-gate-") as tmp:
             root=Path(tmp)
             # Never trust a valid-looking directory without an exact checkout.
-            with self.assertRaises((OSError,ValueError)):
+            with self.assertRaises((OSError,ValueError,subprocess.CalledProcessError)):
                 m.stage(root)
             self.assertEqual(list(root.iterdir()),[])
 
