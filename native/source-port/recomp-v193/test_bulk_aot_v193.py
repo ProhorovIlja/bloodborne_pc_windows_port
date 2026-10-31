@@ -160,8 +160,8 @@ class BulkSourceTests(unittest.TestCase):
                 elif kind=='store64':
                     self.assertEqual(cpu.r[0],initial_rax)
                     self.assertEqual(bytes(buf[imm:imm+8]),struct.pack('<Q',0xbeef))
-                    self.assertEqual(bytes(buf[:imm]),b'\\x3a'*imm)
-                    self.assertEqual(bytes(buf[imm+8:]),b'\\x3a'*(len(buf)-imm-8))
+                    self.assertEqual(bytes(buf[:imm]),b'\x3a'*imm)
+                    self.assertEqual(bytes(buf[imm+8:]),b'\x3a'*(len(buf)-imm-8))
                 elif kind=='lea64':
                     self.assertEqual(cpu.r[0],0x12345678+imm)
                 elif kind=='sse32':
