@@ -116,6 +116,11 @@ def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shar
     """
     if out.is_symlink() or not out.is_dir() or any(out.iterdir()):
         raise BulkError('private output directory must be new, empty and regular')
+    # Avoid accidentally emitting game-derived source into a git checkout,
+    # including worktrees where .git is a regular file. Refuse before writes.
+    output_root=out.resolve(strict=True)
+    if any((parent/'.git').exists() for parent in (output_root,*output_root.parents)):
+        raise BulkError('private source output must be outside all git worktrees')
     if not rows or len(rows)>MAX_ROWS:raise BulkError('bulk source row budget exceeded')
     fde={a:b for a,b in zip(starts,starts[1:])}
     for i,(addr,kind,imm) in enumerate(rows):
