@@ -63,7 +63,11 @@ class NativeOracleTests(unittest.TestCase):
             root = Path(tmp)
             out = root / "generated"
             out.mkdir()
-            v.emit_private(out, image, starts, rows, 4)
+            report = v.emit_private(out, image, starts, rows, 4, guest_return=True)
+            self.assertTrue(report['guest_return_prototype'])
+            self.assertFalse(report['upstream_code_hashes_ready'])
+            # No claim that a zero-hash module can pass upstream runtime checks.
+            self.assertIn(',16ull,0,', (out/'recomp.c').read_text(encoding='utf8'))
             if sys.platform == "win32":
                 linker_path = HERE.parent / "recomp-v188" / "win64_coff_link_v188.py"
                 if not linker_path.is_file():
@@ -108,6 +112,10 @@ class NativeOracleTests(unittest.TestCase):
                         cpu.r[0] = original_rax
                         cpu.r[6] = 0xbeef
                         cpu.flags = original_flags
+                        return_marker = 0x1234aabbccdd5566
+                        guest_stack = (ctypes.c_uint64 * 2)(return_marker, 0)
+                        initial_sp = ctypes.addressof(guest_stack)
+                        cpu.r[4] = initial_sp
                         ctypes.memset(ctypes.addressof(cpu.v[0]), 0xa5, ctypes.sizeof(Vec))
                         buf = (ctypes.c_ubyte * 160)(*([0x3a] * 160))
                         p = ctypes.addressof(buf)
@@ -117,6 +125,8 @@ class NativeOracleTests(unittest.TestCase):
                             ctypes.memmove(p + disp, raw, len(raw))
                         fn = ctypes.CFUNCTYPE(None, ctypes.POINTER(Cpu))(funcs[i].fn)
                         fn(ctypes.byref(cpu))
+                        self.assertEqual(cpu.r[4], initial_sp + 8)
+                        self.assertEqual(cpu.rip, return_marker)
                         if kind == "zero32":
                             self.assertEqual(cpu.r[0], 0)
                             self.assertEqual(cpu.flags, (original_flags & ~v.CPU_FLAGS) | 0x44)
@@ -138,7 +148,11 @@ class NativeOracleTests(unittest.TestCase):
                             cpu.r[7] = 0
                             cpu.r[0] = original_rax
                             cpu.flags = original_flags
+                            cpu.r[4] = initial_sp
+                            cpu.rip = 0
                             fn(ctypes.byref(cpu))
+                            self.assertEqual(cpu.r[4], initial_sp + 8)
+                            self.assertEqual(cpu.rip, return_marker)
                             self.assertEqual(cpu.r[0], (original_rax & ~0xff) | 1)
                             self.assertEqual(cpu.flags, (original_flags & ~v.CPU_FLAGS) | 0x44)
                         else:
