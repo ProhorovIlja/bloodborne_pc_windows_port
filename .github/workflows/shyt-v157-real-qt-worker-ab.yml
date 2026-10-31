@@ -1,0 +1,263 @@
+name: SHYT V161 original Qt 200-player 4-8-16 worker global cohort A-B diagnostics
+on:
+  push:
+    branches: [feature/yt130-server-wire-attribution-v155-20261030]
+    paths:
+      - .github/workflows/shyt-v157-real-qt-worker-ab.yml
+      - tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
+      - tools/poc/yharnam/yt130-reference/test_shard_five_v117.py
+      - tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py
+      - tools/poc/yharnam/yt130-reference/test_stage_qt_receive_v158.py
+      - tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py
+      - tools/poc/yharnam/yt130-reference/test_stage_lobby_notice_detail_v159.py
+      - tools/poc/yharnam/yt130-reference/stage_global_cohort_v161.py
+      - tools/poc/yharnam/yt130-reference/test_stage_global_cohort_v161.py
+      - tools/poc/yharnam/yt130-reference/test_grade_global_cohort_v161.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-v157-source-verified-worker-ab-diagnostics
+  cancel-in-progress: false
+jobs:
+  source-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Real V132 source-exact protobuf fanout regression
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_world_encode_once_v132.py -v
+          python -m compileall -q tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_shard_five_v117.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_shard_wire_v155.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_lobby_notice_v156.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_qt_receive_v158.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_lobby_notice_detail_v159.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_global_cohort_v161.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_grade_global_cohort_v161.py -v
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_five_player_bbload.py -v
+          python -m compileall -q tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py
+      - name: Stage pinned native Qt code after PR37's real wire and event instrumentation
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" "$RUNNER_TEMP/yt-src"
+          for stage in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'void Service::SendEncodedTo(' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          grep -Fq 'SendEncodedTo(invader->second, envelope, encoded, now_ms)' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.cpp"
+          grep -Fq 'std::span<const u8>' "$RUNNER_TEMP/yt-src/server/src/bloodborne_world.h"
+          echo SHYT_V132_ORIGINAL_WORLD_RELIABLE_FANOUT_BYTES_SOURCE_STAGED_NO_LOAD_CLAIM
+  real-qt-server:
+    needs: source-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: qt6-yt130-auth-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            qt6-yt130-auth-${{ runner.os }}-
+      - name: Install exact native server prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build g++ ccache pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite redis-server python3-venv
+      - name: Clone source with original protobuf
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          git -C "$RUNNER_TEMP/yt-src" submodule update --init --recursive server/externals/protobuf
+      - name: Apply previously proven staged five-player Qt changes plus V125 only
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" "$RUNNER_TEMP/yt-src"
+          for stage in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python "tools/poc/yharnam/yt130-reference/$stage" "$RUNNER_TEMP/yt-src"
+          done
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_native_relay_pair_log_v114.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          git -C "$RUNNER_TEMP/yt-src" diff -- server/src/bloodborne_world.cpp > "$RUNNER_TEMP/world-v155.diff"
+          grep -F '+void Service::SendEncodedTo(' "$RUNNER_TEMP/world-v155.diff" >/dev/null
+      - name: Actually compile modified original Qt LinkServer and core regressions
+        run: |
+          set -euo pipefail
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          ccache --max-size 1300M
+          cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0" "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O2 -g0" "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache" "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target shadnet test_server_link test_bloodborne_world
+          ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(server_link|bloodborne_world)$'
+          ccache --show-stats
+          echo SHYT_V132_REAL_QT_WORLD_CTESTS_PASS_NOT_CAPACITY
+      - name: Stage authentic original bbload five-hunter game payload counters
+        run: |
+          set -euo pipefail
+          python tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py "$RUNNER_TEMP/yt-src"
+          python tools/poc/yharnam/yt130-reference/stage_global_cohort_v161.py "$RUNNER_TEMP/yt-src"
+          grep -Fq 'team_name_absent' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq 'game_frame_decoded' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq 'SHYT_V161_GLOBAL_COHORT_SEND_TIMESTAMP_BUCKETS' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"cohort_packets_sent": cohort_sent' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq '"team_total_notices": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq 'YT130_WIRE_TRAFFIC kind=3' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq '"game_wire_in_packets": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq 'shlex.split(args.extra)' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq 'settings.owners = std::clamp(' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq 'udp_write_failed' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"udp_write_failed": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          grep -Fq '"awaiting_welcome": sum(' "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          grep -Fq 'game_receivers += game->Playing() && game->SawGamePackets();' "$RUNNER_TEMP/yt-src/server/loadtest/bbload.cpp"
+          grep -Fq '"game_receivers": sum(r["game_receivers"] for r in results)' "$RUNNER_TEMP/yt-src/server/loadtest/run_load.py"
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target bbload
+          test -x "$RUNNER_TEMP/yt-build/bbload"
+          echo SHYT_V132_ORIGINAL_BBLOAD_REAL_CPP_PLAYER_GENERATOR_BUILT
+      - name: Compare real original Qt 200-client generator 4/8/16 workers, same YT server
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/v157-venv"
+          "$RUNNER_TEMP/v157-venv/bin/pip" install -q --disable-pip-version-check \
+            -r "$RUNNER_TEMP/yt-src/server/directory/requirements.txt"
+          for workers in 4 8 16; do
+            echo "SHYT_V157_REAL_QT_1SHARD_5OWNERS_START workers=$workers 200players 5seats"
+            timeout 145s "$RUNNER_TEMP/v157-venv/bin/python" \
+              tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py \
+              --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+              --bbload "$RUNNER_TEMP/yt-build/bbload" \
+              --shard-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+              --owners 5 --one-only --load-processes "$workers" --timeout 120 \
+              --output "yt130-v157-one-shard-owners5-workers$workers.jsonl"
+          done
+          for workers in 4 16; do
+            echo "SHYT_V157_REAL_QT_3SHARD_CODE_JOIN_START workers=$workers 200players 5seats"
+            timeout 145s "$RUNNER_TEMP/v157-venv/bin/python" \
+              tools/poc/yharnam/yt130-reference/run_five_hunter_shards_v117.py \
+              --shadnet "$RUNNER_TEMP/yt-build/shadnet" \
+              --bbload "$RUNNER_TEMP/yt-build/bbload" \
+              --shard-script "$RUNNER_TEMP/yt-src/server/loadtest/run_shards.py" \
+              --owners 1 --three-only --cross code --load-processes "$workers" --timeout 120 \
+              --output "yt130-v157-three-shard-owners1-code-workers$workers.jsonl"
+          done
+      - name: Require actual original Qt/Redis 200-hunter evidence, not capacity pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for group,shard,owner,workers in [
+              ("one-shard",1,5,4),("one-shard",1,5,8),("one-shard",1,5,16),
+              ("three-shard",3,1,4),("three-shard",3,1,16)]:
+              mid="owners5" if owner==5 else "owners1-code"
+              p=Path(f"yt130-v157-{group}-{mid}-workers{workers}.jsonl")
+              if not p.is_file():
+                  raise SystemExit("MISSING_SOURCE_PROVEN_REAL_QT_200_PLAYER_A_B_REPORT")
+              rows=[json.loads(line) for line in p.read_text().splitlines()]
+              if len(rows)!=1:
+                  raise SystemExit("DUPLICATE_OR_MISSING_200_PLAYER_A_B_REPORT")
+              r=rows[0]
+              if r.get("players")!=200 or r.get("team_size")!=5 or (
+                  r.get("load_processes")!=workers or r.get("shards")!=shard):
+                  raise SystemExit("INVALID_A_B_FIXED_POPULATION_OR_WORKER_COUNT")
+              if r.get("quality","").startswith(("INVALID_","MISSING_","WRONG_")):
+                  raise SystemExit("MISSING_SOURCE_VERIFIED_MEASUREMENT")
+              if any(k not in r for k in (
+                  "cohort_quality","cohort_start_us","cohort_end_us",
+                  "cohort_seconds","cohort_packets_sent",
+                  "cohort_packets_received","cohort_scope",
+                  "game_wire_in_packets", "team_name_absent",
+                  "game_data_datagrams_received", "game_data_decode_failed",
+                  "game_frame_decode_failed", "game_frame_bad_header",
+                  "game_frame_short_entries", "game_frame_decoded",
+                  "udp_read_failed", "udp_read_short")):
+                  raise SystemExit("MISSING_QT_WIRE_OR_REAL_CLIENT_RECEIVE_DIAGNOSTICS")
+              if (r["game_frame_decoded"] + r["game_data_decode_failed"] +
+                  r["game_frame_decode_failed"] + r["game_frame_bad_header"]
+                  != r["game_data_datagrams_received"]):
+                  raise SystemExit("QT_DATA_FRAME_RECEIVE_COUNTS_INCONSISTENT")
+              reasons=("team_no_invite","team_no_code","team_full",
+                       "team_already_joined","team_create_first",
+                       "team_world_unavailable","team_unknown_other")
+              if any(type(r.get(key)) is not int or r[key]<0 for key in reasons):
+                  raise SystemExit("MISSING_SOURCE_VERIFIED_TEAM_JOIN_REASON")
+              if sum(r[k] for k in reasons) != r["team_other_notice"]:
+                  raise SystemExit("ORIGINAL_QT_JOIN_OTHER_REFUSAL_REASONS_SUM_MISMATCH")
+              if r["cohort_end_us"]-r["cohort_start_us"] != (
+                  r["cohort_seconds"] * 1_000_000):
+                  raise SystemExit("INVALID_GLOBAL_MONOTONIC_STEADY_COHORT")
+              if r["cohort_quality"] == "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY":
+                  if (r["cohort_seconds"] < 5 or
+                      r["cohort_packets_received"] * 100 <
+                      r["cohort_packets_sent"] * 99):
+                      raise SystemExit("COHORT_FALSE_POSITIVE_QOS")
+              print("SHYT_V161_REAL_QT_RECEIVER_COHORT_AB_DIAGNOSTIC_ONLY",
+                  "shards",shard,"owners",owner,"load_processes",workers,
+                  "quality",r.get("quality"),"playing",r.get("playing"),
+                  "teams",r.get("complete_teams"),
+                  "steady_window_ms",r.get("steady_window_ms_min"),
+                  "steady_pct",r.get("steady_delivered_pct"),
+                  "overall_sent",r.get("packets_sent"),
+                  "overall_received",r.get("packets_received"),
+                  "qt_data_in",r.get("game_wire_in_packets"),
+                  "qt_data_out",r.get("game_wire_out_packets"),
+                  "name_missing",r.get("team_name_absent"),
+                  "lookup_throttled",r.get("team_lookup_throttled"),
+                  "no_invite",r.get("team_no_invite"),
+                  "no_team_code",r.get("team_no_code"),
+                  "team_full",r.get("team_full"),
+                  "already_joined",r.get("team_already_joined"),
+                  "create_first",r.get("team_create_first"),
+                  "team_world_unavailable",r.get("team_world_unavailable"),
+                  "other_unknown",r.get("team_unknown_other"),
+                  "old_steady_pct",r.get("steady_delivered_pct"),
+                  "global_cohort_quality",r.get("cohort_quality"),
+                  "global_cohort_seconds",r.get("cohort_seconds"),
+                  "global_cohort_sent",r.get("cohort_packets_sent"),
+                  "global_cohort_received",r.get("cohort_packets_received"),
+                  "qt_client_udp_read_failed",r.get("udp_read_failed"),
+                  "qt_client_udp_read_short",r.get("udp_read_short"),
+                  "qt_client_game_data_frames",r.get("game_data_datagrams_received"),
+                  "qt_client_game_frames_decoded",r.get("game_frame_decoded"),
+                  "qt_client_data_decode_failed",r.get("game_data_decode_failed"),
+                  "qt_client_frame_decode_failed",r.get("game_frame_decode_failed"),
+                  "qt_client_frame_short_entries",r.get("game_frame_short_entries"))
+          print("SHYT_V157_AB_REPORTS_COMPLETE_THIS_DOES_NOT_PROVE_99PCT_NETWORK_QOS")
+          PY
+      - name: Preserve 4/8/16 worker real 200-player Qt results even if diagnostics fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt130-V161-200-player-real-Qt-4-8-16-workers-shared-clock-COHORT-DIAG-NOT-RELEASE
+          path: |
+            yt130-v157-one-shard-owners5-workers*.jsonl
+            yt130-v157-three-shard-owners1-code-workers*.jsonl
+          retention-days: 7
+          if-no-files-found: warn

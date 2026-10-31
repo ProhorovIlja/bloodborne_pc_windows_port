@@ -1,0 +1,78 @@
+name: SHYT V181 exact original Qt UDP buffer readback and receive safety
+on:
+  push:
+    branches: [feature/yt130-server-wire-attribution-v155-20261030]
+    paths:
+      - .github/workflows/shyt-v181-original-qt-udp-readback.yml
+      - tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py
+      - tools/poc/yharnam/yt130-reference/test_stage_qt_udp_readback_v181.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pinned-real-qt:
+    name: Pin original YT1.3 and compile actual Qt LinkServer UDP guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Test exact source guards without game files
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_qt_udp_readback_v181.py -v
+          python3 -m py_compile tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py
+      - name: Install real native Qt6 server prerequisites
+        run: |
+          set -euo pipefail
+          if ! sudo apt-get -qq update > "$RUNNER_TEMP/v181-apt.log" 2>&1; then
+            echo "::error title=V181 native Qt packages::apt update failed"
+            tail -n 12 "$RUNNER_TEMP/v181-apt.log" | cut -c1-300
+            exit 1
+          fi
+          if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends cmake ninja-build g++ pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite > "$RUNNER_TEMP/v181-apt.log" 2>&1; then
+            echo "::error title=V181 native Qt packages::Native Linux Qt prerequisites unavailable"
+            tail -n 12 "$RUNNER_TEMP/v181-apt.log" | cut -c1-300
+            exit 1
+          fi
+      - name: Fetch exact YT1.3 original source and protobuf, no retail game
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout -q --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          git -C "$RUNNER_TEMP/yt-src" submodule update -q --init --recursive server/externals/protobuf
+          test "$(git -C "$RUNNER_TEMP/yt-src" rev-parse HEAD)" = 0645740a33ae21c56df3b4a0d9777086dbca6053
+      - name: Patch ONLY real Qt LinkServer and verify source scope
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+          git -C "$RUNNER_TEMP/yt-src" diff --name-only > "$RUNNER_TEMP/v181-names.txt"
+          grep -Fxq server/src/link_server.cpp "$RUNNER_TEMP/v181-names.txt"
+          test "$(wc -l < "$RUNNER_TEMP/v181-names.txt")" -eq 1
+          grep -Fq 'effective_receive_bytes=' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          grep -Fq 'bytes_read <= 0 || bytes_read != raw.size()' "$RUNNER_TEMP/yt-src/server/src/link_server.cpp"
+          echo SHYT_V181_EXACT_QT_UDP_SOURCE_LOCK_PASS
+      - name: Compile original Qt C++ server and run original LinkServer tests
+        run: |
+          set -euo pipefail
+          if ! cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON > "$RUNNER_TEMP/v181-config.log" 2>&1; then
+            echo "::error title=V181 original Qt configure::CMake configuration failed"
+            tail -n 15 "$RUNNER_TEMP/v181-config.log" | cut -c1-350
+            exit 1
+          fi
+          if ! cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target shadnet test_server_link test_bloodborne_world > "$RUNNER_TEMP/v181-build.log" 2>&1; then
+            echo "::error title=V181 original Qt C++ build::Native C++ build failed"
+            grep -m1 -E 'fatal error:|error:|undefined reference|FAILED:' "$RUNNER_TEMP/v181-build.log" | cut -c1-300 || true
+            tail -n 18 "$RUNNER_TEMP/v181-build.log" | cut -c1-350
+            exit 1
+          fi
+          if ! ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 120 -j 2 -R '^(server_link|bloodborne_world)$' > "$RUNNER_TEMP/v181-ctest.log" 2>&1; then
+            echo "::error title=V181 original Qt CTest::Native server regression failed"
+            tail -n 15 "$RUNNER_TEMP/v181-ctest.log" | cut -c1-350
+            exit 1
+          fi
+          echo SHYT_V181_ORIGINAL_QT_UDP_READBACK_REAL_NATIVE_LINUX_CPP_PASS
+          echo 'No 200-player QoS, WAN NAT, real gameplay, or Fornex claim'

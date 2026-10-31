@@ -1,0 +1,63 @@
+name: SHYT V159 real original Qt lobby join rejection details source
+on:
+  push:
+    branches: [feature/yt130-server-wire-attribution-v155-20261030]
+    paths:
+      - .github/workflows/shyt-v159-original-team-join-reason-detail.yml
+      - tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py
+      - tools/poc/yharnam/yt130-reference/test_stage_lobby_notice_v156.py
+      - tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py
+      - tools/poc/yharnam/yt130-reference/test_stage_qt_receive_v158.py
+      - tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py
+      - tools/poc/yharnam/yt130-reference/test_stage_lobby_notice_detail_v159.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-original-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: original-yt130
+          persist-credentials: false
+          submodules: false
+      - name: Source-locked original Qt real TeamLobby join refusal codes, count-only
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_lobby_notice_v156.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_qt_receive_v158.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_lobby_notice_detail_v159.py -v
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference \
+            -p test_stage_shard_wire_v155.py -v
+          python3 tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py original-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py original-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py original-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py original-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py original-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py original-yt130
+          python3 -m compileall -q original-yt130/server/loadtest/run_shards.py
+          git -C original-yt130 diff --check
+          git -C original-yt130 diff --name-only > /tmp/v158-modified.txt
+          grep -Fxq server/loadtest/bbload.cpp /tmp/v158-modified.txt
+          grep -Fxq server/loadtest/run_shards.py /tmp/v158-modified.txt
+          test "$(wc -l </tmp/v158-modified.txt)" -eq 2
+          grep -Fq 'lobby.notice() == "no hunter of that name is online"' original-yt130/server/loadtest/bbload.cpp
+          grep -Fq 'lobby.notice() == "too many wrong codes or names: try again in a minute"' original-yt130/server/loadtest/bbload.cpp
+          grep -Fq '"team_name_absent": sum(r["team_name_absent"] for r in results)' original-yt130/server/loadtest/run_shards.py
+          grep -Fq "++load.totals.udp_read_failed;" original-yt130/server/loadtest/bbload.cpp
+          grep -Fq "++load.totals.game_frame_decode_failed;" original-yt130/server/loadtest/bbload.cpp
+          grep -Fq '"game_frame_decoded": sum(r["game_frame_decoded"] for r in results)' original-yt130/server/loadtest/run_shards.py
+          grep -Fq '++load.totals.team_no_invite;' original-yt130/server/loadtest/bbload.cpp
+          grep -Fq '++load.totals.team_already_joined;' original-yt130/server/loadtest/bbload.cpp
+          grep -Fq '"team_no_invite": sum(r["team_no_invite"] for r in results)' original-yt130/server/loadtest/run_shards.py
+          echo SHYT_V159_PINNED_QT_LOBBY_JOIN_REASON_DETAILS_SOURCE_PASS

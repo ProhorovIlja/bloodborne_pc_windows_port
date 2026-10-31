@@ -1,0 +1,320 @@
+"""V161: all 5-hunter bbload workers use one sender timestamp cohort."""
+import importlib.util
+import json
+from pathlib import Path
+from textwrap import dedent
+from types import SimpleNamespace
+import unittest
+
+p=Path(__file__).with_name("stage_global_cohort_v161.py")
+spec=importlib.util.spec_from_file_location("yt_v161_global",p)
+v=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(v)
+
+def original_bbload_fixture():
+    return (
+        "#include <QHostAddress>\n"
+        "SHYT_V158_NATIVE_QT_RECEIVE_DIAGNOSTICS\n"
+        "SHYT_V159_ORIGINAL_TEAM_LOBBY_REFUSAL_DETAIL\n"+
+        v.CLASS_OLD+v.SENT_OLD+v.RECEIVED_OLD+v.FINISH_OLD
+    )
+
+def original_shard_fixture():
+    return (
+        "# SHYT-V155-ORIGINAL-QT-ANONYMOUS-DATA-WIRE\n"
+        '"game_frame_decoded": sum(r["game_frame_decoded"] for r in results),\n'
+        '"team_unknown_other": sum(r["team_unknown_other"] for r in results),\n'
+        +v.RESULTS_OLD+v.ANCHOR_AGG+v.SUMMARY_OLD
+    )
+
+def worker(ready,finish,counts,playing=None,games=5):
+    if playing is None:
+        playing=games
+    return {
+        "games":games,"playing":playing,
+        "complete_teams":games//5 if playing==games else 0,
+        "cohort_ready_us":ready,"cohort_finish_us":finish,
+        "cohort_epoch_entries":[{"start_us":second*1_000_000,
+            "sent_entries":sent,"received_entries":recv}
+            for second,(sent,recv) in counts.items()],
+    }
+
+def inspect(results,players=10,processes=2):
+    # Injected fragment runs at 8-space indentation in run_shards.py;
+    # synthetic fixture explicitly declares the required 200-player shape.
+    namespace={"results":results,"args":SimpleNamespace(
+        team_size=5,shards=0,players=players,processes=processes)}
+    exec(dedent(v.PATCH_AGG),namespace)
+    return namespace
+
+class GlobalCohortV161(unittest.TestCase):
+    def test_pinned_original_qt_source_guards_and_current_original_coop_kept(self):
+        self.assertEqual(v.PIN,"0645740a33ae21c56df3b4a0d9777086dbca6053")
+        self.assertEqual(v.BB,"server/loadtest/bbload.cpp")
+        staged=v.patch_bbload(original_bbload_fixture())
+        self.assertIn(v.MARK,staged)
+        self.assertIn("std::map<s64, std::pair<quint64, quint64>>",staged)
+        self.assertIn("static_cast<s64>(sent) / 1'000'000",staged)
+        self.assertIn("(now_us / 1'000'000)",staged)
+        self.assertIn("steady_since_us",staged)
+        self.assertIn("cohort_ready_us",staged)
+        self.assertIn("cohort_finish_us",staged)
+        self.assertEqual(staged.count("QJsonArray cohort_json;"),1)
+        self.assertNotIn("member.id()",v.PATCH_AGG)
+        self.assertNotIn("name=",v.PATCH_AGG)
+        self.assertNotIn("ip=",v.PATCH_AGG)
+        with self.assertRaisesRegex(ValueError,"drift"):
+            v.patch_bbload(staged)
+        with self.assertRaisesRegex(ValueError,"requires staged"):
+            v.patch_bbload(original_bbload_fixture().replace(
+                "SHYT_V158_NATIVE_QT_RECEIVE_DIAGNOSTICS","not yet"))
+        for a in (v.CLASS_OLD,v.SENT_OLD,v.RECEIVED_OLD,v.FINISH_OLD):
+            with self.subTest(anchor=a[:30]):
+                with self.assertRaises(ValueError):
+                    v.patch_bbload(original_bbload_fixture().replace(a,"drift"))
+    def test_run_shards_source_pinned_and_emit_is_separate_qos_metric(self):
+        s=v.patch_shards(original_shard_fixture())
+        self.assertIn('"cohort_packets_received": cohort_received',s)
+        self.assertIn('"per_shard": per_shard',s)
+        self.assertIn("if load.returncode != 0 or len(child_rows) != 1:",s)
+        self.assertNotIn("packets_lost",v.PATCH_AGG)
+        self.assertNotIn("steady_packets_received",v.PATCH_AGG)
+        with self.assertRaises(ValueError):
+            v.patch_shards(s)
+    def test_actual_child_stdout_must_be_unique_successful_summary(self):
+        class Child:
+            def __init__(self,stdout,returncode=0):
+                self.stdout=stdout
+                self.returncode=returncode
+            def communicate(self):
+                return self.stdout,""
+        good=Child('{"games":5}\n')
+        other=Child('{"games":5}\n')
+        def collect(children):
+            ns={"loads":children,"json":json}
+            exec(dedent(v.RESULTS_NEW),ns)
+            return ns["results"]
+        self.assertEqual(collect([good,other]),[{"games":5},{"games":5}])
+        for children in (
+                [good,Child("")],                    # crashed/silent worker
+                [good,Child('{"games":5}\n{"games":5}\n')],
+                [good,Child('{"games":5}\n',returncode=2)]):
+            with self.subTest(children=len(children)):
+                with self.assertRaisesRegex(RuntimeError,
+                                            "expected exactly one successful"):
+                    collect(children)
+
+    def test_different_worker_readiness_never_creates_false_loss(self):
+        # 1st worker arms 5 seconds earlier; mismatched V120 would count
+        # early sent entries while the receiver has not yet armed.
+        complete={s:(400,398) for s in range(12,45)}
+        a=worker(12_000_000,47_000_000,complete)
+        b=worker(17_300_000,47_000_000,complete)
+        out=inspect([a,b])
+        self.assertEqual(out["cohort_start_us"],18_000_000)
+        self.assertEqual(out["cohort_end_us"],45_000_000)
+        self.assertEqual(out["cohort_seconds"],27)
+        self.assertEqual(out["cohort_sent"],27*2*400)
+        self.assertEqual(out["cohort_received"],27*2*398)
+        self.assertEqual(out["cohort_quality"],"GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+    def test_actual_global_loss_remains_red(self):
+        gaps={s:(400,300) for s in range(20,44)}
+        o=inspect([worker(20_000_000,46_000_000,gaps),
+                   worker(20_000_000,46_000_000,gaps)])
+        self.assertEqual(o["cohort_quality"],"GLOBAL_GAME_COHORT_DELIVERY_DEGRADED")
+        self.assertEqual(o["cohort_sent"],24*2*400)
+    def test_incomplete_team_or_insufficient_window_fails_closed(self):
+        data={s:(500,500) for s in range(10,20)}
+        o=inspect([worker(10_000_000,20_000_000,data),
+                   worker(11_000_000,20_000_000,data,playing=4)])
+        self.assertEqual(o["cohort_quality"],"NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        o=inspect([worker(14_900_000,20_000_000,data),
+                   worker(14_800_000,20_000_000,data)])
+        self.assertEqual(o["cohort_seconds"],3)
+        self.assertEqual(o["cohort_quality"],"NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+    def test_real_200_player_worker_topologies_reject_missing_population(self):
+        # The actual generator runs 40 teams of five across N workers;
+        # no one of 4, 8 or 16 worker topologies may silently lose one.
+        for processes in (4,8,16):
+            with self.subTest(processes=processes):
+                teams_per_worker=[40//processes+(1 if i<40%processes else 0)
+                                  for i in range(processes)]
+                self.assertEqual(sum(teams_per_worker),40)
+                counts={sec:(500,500) for sec in range(10,40)}
+                rows=[worker(12_000_000,42_000_000,counts,games=teams*5)
+                      for teams in teams_per_worker]
+                self.assertEqual(inspect(rows,players=200,processes=processes)["cohort_quality"],
+                                 "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+                self.assertEqual(inspect(rows[:-1],players=200,processes=processes)["cohort_quality"],
+                                 "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+                self.assertEqual(inspect(rows+[rows[0]],players=200,processes=processes)["cohort_quality"],
+                                 "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        # Original run_shards creates no empty child processes when
+        # requested process count exceeds 40 complete five-seat teams.
+        rows=[worker(12_000_000,42_000_000,
+                     {sec:(500,500) for sec in range(10,40)})
+              for _ in range(40)]
+        self.assertEqual(inspect(rows,players=200,processes=64)["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+
+    def test_incomplete_or_duplicate_child_reports_never_form_a_green_cohort(self):
+        healthy={sec:(400,400) for sec in range(10,40)}
+        a=worker(12_000_000,42_000_000,healthy)
+        b=worker(12_000_000,42_000_000,healthy)
+        self.assertEqual(inspect([a,b])["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        self.assertEqual(inspect([a])["cohort_quality"],
+                         "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        self.assertEqual(inspect([a,b,a])["cohort_quality"],
+                         "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        bad=worker(12_000_000,42_000_000,healthy)
+        bad["games"]=1
+        self.assertEqual(inspect([a,bad])["cohort_quality"],
+                         "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        bad=worker(12_000_000,42_000_000,healthy)
+        bad["complete_teams"]=0
+        self.assertEqual(inspect([a,bad])["cohort_quality"],
+                         "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+        for bad_value in (True,False,2.5,"5",None):
+            with self.subTest(games=bad_value):
+                damaged=dict(b)
+                damaged["games"]=bad_value
+                self.assertEqual(inspect([a,damaged])["cohort_quality"],
+                                 "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+
+    def test_silent_worker_cannot_borrow_healthy_workers_global_qos(self):
+        # A worker with 5 games Playing but no actual packets must not
+        # disappear inside the sum of the other workers' healthy traffic.
+        data={sec:(400,400) for sec in range(10,40)}
+        healthy=worker(12_000_000,42_000_000,data)
+        silent=worker(12_000_000,42_000_000,{sec:(0,0) for sec in range(10,40)})
+        out=inspect([healthy,silent])
+        self.assertEqual(out["cohort_sent"],0)  # no partial totals may escape invalid cohort
+        self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
+        # Sending without receiving, or receiving without sending, also
+        # means at least one 5-seat worker has lost its game traffic.
+        for sent,recv in ((400,0),(0,400)):
+            with self.subTest(sent=sent,received=recv):
+                incomplete=worker(12_000_000,42_000_000,
+                                  {sec:(sent,recv) for sec in range(10,40)})
+                self.assertEqual(inspect([healthy,incomplete])["cohort_quality"],
+                                 "INVALID_GLOBAL_COHORT_BUCKETS")
+        self.assertEqual(inspect([healthy,healthy])["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+
+    def test_every_worker_must_have_game_packets_in_every_scored_second(self):
+        # The other worker's very large healthy sample must never hide
+        # a 5-seat worker that stops sending or receiving mid-measurement.
+        strong={sec:(10_000,10_000) for sec in range(10,40)}
+        weak={sec:(20,20) for sec in range(10,40)}
+        a=worker(12_000_000,42_000_000,strong)
+        b=worker(12_000_000,42_000_000,weak)
+        self.assertEqual(inspect([a,b])["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        missing=worker(12_000_000,42_000_000,
+                       {sec:pair for sec,pair in weak.items() if sec!=23})
+        self.assertEqual(inspect([a,missing])["cohort_quality"],
+                         "INVALID_GLOBAL_COHORT_BUCKETS")
+        for sent,recv in ((0,0),(20,0),(0,20)):
+            with self.subTest(sent=sent,received=recv):
+                intermittent=dict(weak)
+                intermittent[23]=(sent,recv)
+                out=inspect([a,worker(12_000_000,42_000_000,intermittent)])
+                self.assertEqual(out["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
+
+    def test_owner_follower_asymmetry_cannot_be_mistaken_for_loss(self):
+        # Source verified: the enemy owner sends multiple 0x31 frames
+        # per teammate; followers usually send one 0x06. A worker's
+        # own sent packets are NOT the expected packets it should receive.
+        owner={sec:(1000,200) for sec in range(10,40)}
+        follower={sec:(200,1000) for sec in range(10,40)}
+        a=worker(12_000_000,42_000_000,owner)
+        b=worker(12_000_000,42_000_000,follower)
+        report=inspect([a,b])
+        self.assertEqual(report["cohort_sent"],report["cohort_received"])
+        self.assertEqual(report["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+        # Truly missing globally aligned entries must still go RED.
+        damaged={sec:(200,950) for sec in range(10,40)}
+        report=inspect([a,worker(12_000_000,42_000_000,damaged)])
+        self.assertEqual(report["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_DELIVERY_DEGRADED")
+
+    def test_imbalanced_worker_volume_is_not_a_loss_proof(self):
+        # A 20->10 local send/receive ratio is compatible with
+        # asymmetric owner role or map distribution. It is NOT a
+        # packet-loss verdict absent per-sender directed flow evidence.
+        heavy={sec:(10000,10000) for sec in range(10,40)}
+        light={sec:(20,10) for sec in range(10,40)}
+        report=inspect([worker(12_000_000,42_000_000,heavy),
+                        worker(12_000_000,42_000_000,light)])
+        self.assertGreater(report["cohort_received"]*100,
+                           report["cohort_sent"]*99)
+        self.assertEqual(report["cohort_quality"],
+                         "GLOBAL_GAME_COHORT_PASS_DIAGNOSTIC_ONLY")
+
+    def test_corrupt_epoch_numbers_never_crash_or_score_green(self):
+        base={sec:(500,499) for sec in range(10,36)}
+        good=worker(12_000_000,38_000_000,base)
+        for key,bad in (
+                ("start_us",float("nan")),
+                ("start_us",float("inf")),
+                ("start_us",float("-inf")),
+                ("start_us",float(2**53)),
+                ("start_us",False),
+                ("sent_entries",float("nan")),
+                ("sent_entries",float("inf")),
+                ("sent_entries",float("-inf")),
+                ("sent_entries",float(2**53)),
+                ("received_entries",float("nan")),
+                ("received_entries",float("inf")),
+                ("received_entries",float("-inf")),
+                ("received_entries",float(2**53)),
+                ("received_entries",True)):
+            with self.subTest(field=key,bad=repr(bad)):
+                broken=worker(12_000_000,38_000_000,base)
+                broken["cohort_epoch_entries"][7][key]=bad
+                self.assertEqual(
+                    inspect([good,broken])["cohort_quality"],
+                    "INVALID_GLOBAL_COHORT_BUCKETS")
+        for key,bad in (("cohort_ready_us",float("nan")),
+                        ("cohort_ready_us",float("inf")),
+                        ("cohort_ready_us",float("-inf")),
+                        ("cohort_ready_us",float(2**53)),
+                        ("cohort_ready_us",True),
+                        ("cohort_ready_us",False),
+                        ("cohort_ready_us",12_000_000.5),
+                        ("cohort_finish_us",float("nan")),
+                        ("cohort_finish_us",float("inf")),
+                        ("cohort_finish_us",float("-inf")),
+                        ("cohort_finish_us",float(2**53)),
+                        ("cohort_finish_us",True),
+                        ("cohort_finish_us",False),
+                        ("cohort_finish_us",38_000_000.5)):
+            with self.subTest(timestamp=key,bad=repr(bad)):
+                broken=worker(12_000_000,38_000_000,base)
+                broken[key]=bad
+                self.assertEqual(
+                    inspect([good,broken])["cohort_quality"],
+                    "NO_GLOBAL_200_PLAYER_FIVE_SEAT_COHORT")
+
+    def test_malformed_duplicate_epoch_and_bad_received_counts(self):
+        data={s:(500,499) for s in range(10,36)}
+        a=worker(12_000_000,38_000_000,data)
+        b=worker(12_000_000,38_000_000,data)
+        b["cohort_epoch_entries"].append(dict(b["cohort_epoch_entries"][0]))
+        self.assertEqual(inspect([a,b])["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
+        b["cohort_epoch_entries"].pop()
+        b["cohort_epoch_entries"][0]["start_us"]=14_000_001
+        self.assertEqual(inspect([a,b])["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
+        b["cohort_epoch_entries"][0]["start_us"]=10_000_000
+        b["cohort_epoch_entries"][5]["received_entries"]=-3
+        self.assertEqual(inspect([a,b])["cohort_quality"],"INVALID_GLOBAL_COHORT_BUCKETS")
+        b["cohort_epoch_entries"][5]["received_entries"]=499
+        for e in b["cohort_epoch_entries"]:
+            e["received_entries"]=e["sent_entries"]+1000
+        self.assertEqual(inspect([a,b])["cohort_quality"],
+                         "INSUFFICIENT_OR_INVALID_GLOBAL_GAME_COHORT")
+
+if __name__=="__main__":
+    unittest.main()
