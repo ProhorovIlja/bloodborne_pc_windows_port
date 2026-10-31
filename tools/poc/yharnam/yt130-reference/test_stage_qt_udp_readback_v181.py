@@ -38,6 +38,29 @@ class UdpReadbackGuardTests(unittest.TestCase):
         self.assertLess(patched.index("bytes_read <= 0"), patched.index("continue;"))
         self.assertNotIn("m_socket->readDatagram(raw.data(), raw.size(), &sender, &senderPort);\n\n        if (raw.isEmpty())", patched)
 
+    def test_existing_real_qt_wire_counter_kept_and_receives_only_valid_frames(self):
+        # The main V155 workflow stages wire/event-loop diagnostics FIRST.
+        wired = source_fixture().replace(v.READ_OLD, v.WIRED_READ_OLD)
+        result = v.patch(wired)
+        self.assertEqual(result.count("RecordWire(raw, true);"), 1)
+        self.assertEqual(result.count("m_socket->readDatagram("), 1)
+        self.assertIn("received <= 0 || received != raw.size()", result)
+        self.assertLess(result.index("received <= 0 || received != raw.size()"),
+                        result.index("RecordWire(raw, true);"))
+        self.assertNotIn("if (received > 0)", result)
+        self.assertEqual(result.count(v.MARK), 1)
+        with self.assertRaisesRegex(ValueError, "already applied"):
+            v.patch(result)
+
+    def test_mixed_and_duplicate_receiver_states_fail_closed(self):
+        fixture = source_fixture()
+        both = fixture + "\n" + v.WIRED_READ_OLD
+        with self.assertRaisesRegex(ValueError, "mixed"):
+            v.patch(both)
+        duplicated = fixture + "\n" + v.READ_OLD
+        with self.assertRaisesRegex(ValueError, "mixed"):
+            v.patch(duplicated)
+
     def test_idempotence_and_source_drift_fail_closed(self):
         original = source_fixture()
         rewritten = v.patch(original)
