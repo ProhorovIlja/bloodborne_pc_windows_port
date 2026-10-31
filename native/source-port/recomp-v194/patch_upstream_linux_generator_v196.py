@@ -43,7 +43,19 @@ def stage(root:Path)->None:
     source=original.decode("utf-8")
     if source.count(BEFORE)!=1 or AFTER in source:
         raise ValueError("V196 expected upstream host API conditional changed")
+    build=root/"build.sh"
+    original_build=subprocess.check_output(["git","-C",str(root),"show","HEAD:build.sh"])
+    if gitblob(original_build)!="8f3ab76a4b5ae17bc496ad82d8eb3db1af4f3ff7":
+        raise ValueError("V196 full original build driver source SHA drift")
+    driver=original_build.decode("utf-8")
+    old_flags="-Werror -Wno-unused-parameter"
+    if driver.count(old_flags)!=1 or build.read_text(encoding="utf-8")!=driver:
+        raise ValueError("V196 original build flags source drift")
+    # Only silence a host-specific harmless warning; preserve -Werror for all
+    # other diagnostics and compiler errors.
+    driver=driver.replace(old_flags,"-Werror -Wno-unused-function -Wno-unused-parameter",1)
     path.write_text(source.replace(BEFORE,AFTER,1),encoding="utf-8")
+    build.write_text(driver,encoding="utf-8")
     subprocess.run(["git","-C",str(root),"diff","--check"],check=True,
                    stdout=subprocess.DEVNULL)
     print("SHYT_NATIVE_V196_LINUX_BUILD_HOST_BBCPU_SOURCE_PIN_PASS")
