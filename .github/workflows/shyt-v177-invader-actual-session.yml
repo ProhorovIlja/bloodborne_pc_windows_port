@@ -6,6 +6,7 @@ on:
       - .github/workflows/shyt-v177-invader-actual-session.yml
       - tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py
       - tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py
+      - tools/poc/yharnam/yt130-reference/test_invader_executable_v178.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -46,6 +47,8 @@ jobs:
           grep -Fq 'TEST(Invasion, FiveSeatAndRepeatedInvaderNotAlone)' yt130-original/emulator/tests/bloodborne/test_bloodborne_invasion.cpp
           ! grep -Fq 'TeamSessionMembers(SessionMembers(), !InvaderInWorld().empty())' yt130-original/emulator/src/core/bloodborne_server_world.cpp
           git -C yt130-original diff --check
+      - name: Test native compiler executable paths on POSIX and MinGW
+        run: python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_invader_executable_v178.py -v
       - name: Compile and execute exact native C++ room membership algorithm
         run: |
           set -euo pipefail
@@ -87,6 +90,7 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euo pipefail
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_invader_executable_v178.py -v
           python tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py --pinned yt130-original --reviewed-pr475 yt475-reviewed
           python tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe
           git -C yt130-original diff --check
