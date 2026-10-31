@@ -1,0 +1,80 @@
+name: Seamless Hunt bounded CI diagnostics and all-open-PR workflow audit
+
+on:
+  push:
+    branches: [feature/ci-output-budget-all-prs-20261031]
+    paths:
+      - .github/workflows/shyt-ci-output-budget-audit.yml
+      - tools/ci/ci_output_guard.py
+      - tools/ci/test_ci_output_guard.py
+      - docs/CI_OUTPUT_SAFETY.md
+  workflow_dispatch:
+  schedule:
+    # Active on the default branch after review/merge only.
+    - cron: '29 4 * * *'
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: shyt-ci-output-audit-readonly
+  cancel-in-progress: false
+
+jobs:
+  bounded-diagnostics-audit:
+    name: Read-only all-open-PR audit, metadata only, max 16 KiB results
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Test hard byte budgets and prove raw Actions log endpoints are absent
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/ci -p test_ci_output_guard.py -v
+          python3 -m py_compile tools/ci/ci_output_guard.py
+      - name: Audit checked-out branch workflows without execution
+        run: |
+          set -euo pipefail
+          python3 tools/ci/ci_output_guard.py --output ci-output-local.json scan-local > /dev/null
+          python3 - <<'PY'
+          import json
+          with open('ci-output-local.json', encoding='utf-8') as f:
+              result=json.load(f)
+          print('CI_OUTPUT_LOCAL_READONLY_FILES', result['files_examined'])
+          print('CI_OUTPUT_LOCAL_SUSPECT_PATTERNS', result['findings_count'])
+          PY
+          test "$(wc -c < ci-output-local.json)" -le 16384
+      - name: Audit default and ALL currently open PR workflow branches via metadata
+        id: all_prs
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 tools/ci/ci_output_guard.py --output ci-output-audit.json \
+            audit-open-prs --repo "$GITHUB_REPOSITORY" --max-prs 100 --max-files 250 > /dev/null
+          python3 - <<'PY'
+          import json
+          with open('ci-output-audit.json', encoding='utf-8') as f:
+              report=json.load(f)
+          for field in ('prs_examined', 'refs_examined', 'unique_workflows_examined',
+                        'findings_count', 'high_or_critical_count', 'incomplete',
+                        'skipped_count', 'truncated_findings'):
+              print('CI_OUTPUT_AUDIT_' + field.upper(), report[field])
+          PY
+          test "$(wc -c < ci-output-audit.json)" -le 16384
+      - name: Publish ONLY byte-bounded review evidence, never logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-output-metadata-only-\${{ github.run_id }}
+          path: |
+            ci-output-local.json
+            ci-output-audit.json
+          if-no-files-found: warn
+          retention-days: 3
