@@ -37,7 +37,10 @@ jobs:
       - name: Apply FIVE seats to original YT 1.3.1 including friends and open join
         run: |
           set -euo pipefail
-          python3 tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py yt131
+          if ! python3 tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py yt131 > "$RUNNER_TEMP/v194-stage.log" 2>&1; then
+            echo "::error title=V194 original YT1.3.1 source drift::$(tail -n 1 "$RUNNER_TEMP/v194-stage.log" | cut -c1-240)"
+            exit 1
+          fi
           git -C yt131 diff --check
           git -C yt131 diff --name-only > "$RUNNER_TEMP/v194-paths.txt"
           test "$(wc -l < "$RUNNER_TEMP/v194-paths.txt")" -eq 3
