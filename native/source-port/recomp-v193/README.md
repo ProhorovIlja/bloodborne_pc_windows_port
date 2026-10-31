@@ -43,7 +43,15 @@ The V193 leaf proof has a critical distinction from an upstream-runtime-usable m
 
 The optional `--guest-return-prototype` switch now emits that specific guest return operation after the verified leaf body. It assumes an already validated/mapped guest stack, and Windows and Linux synthetic-only native tests exercise the stack/RIP effects for all ten patterns. It does **not** compute the upstream original-code hashes or implement guest memory, calls, imports, exceptions, a full `BbCpu` ABI, or runtime integration. Output explicitly reports `upstream_code_hashes_ready=false` and remains private. The default remains the old test-only return behavior to preserve the existing private batch results and tests. Do not promote the opt-in prototype to a production module.
 
-The next acceptance gate is an **independent source-locked hash comparison against upstream's Zydis-based `bbcpu_recomp_hash`** for original unmodified game functions, followed by actual guest dispatch tests and a complete `BbCpu` layout check. Never use fabricated hashes to bypass that check.
+### Strict-leaf FNV hash prototype (also opt-in)
+
+The newly reviewed upstream code `bloodborne-native/bloodborne-recomp` `src/cpu/recomp.c` (blob `2e005442`) defines `bbcpu_recomp_hash` as a 64-bit FNV-1a fold over the bytes of each decoded instruction. Its special `FS/GS` TCB-load substitution **does not occur** in the ten exact accepted V193 grammars. `src/cpu/decode.c` (blob `e3a84f80`) ends a basic block at `RET`, then the hash continues at the following fully validated NOP instructions. Consequently a completely decoded, exact 16-byte V193 frame can be provisionally hashed by FNV-1a of all 16 original bytes.
+
+Use **both** `--guest-return-prototype --upstream-hash-prototype` for this research-only mode. The generator rejects hash mode without guest RET, revalidates each original function's full bytes/FDE *before writing*, and places per-function hashes **only in private generated C**. The output prints just `upstream_hash_prototype=true`, while `upstream_code_hashes_ready=false` remains mandatory. Public synthetic Windows/Linux CI checks two pinned independent FNV reference vectors, altered inputs, rejected unknown instruction tails, each function's compiled `RcFunction.hash`, and actual guest stack/RIP effects.
+
+**Not proven:** a direct independent comparison with upstream `bbcpu_recomp_hash` over the user's original full game image; non-16-byte/general game functions, runtime insertion or dispatch, whole `BbCpu`/unwind state, original Windows gameplay and any final native PC runtime. Do not use this optional table in a live game or claim it is upstream-runtime compatible. The default V193 output remains the historical zero-hash test DLL to preserve previous evidence.
+
+The next acceptance gate is a true source-locked **live upstream Zydis/hash comparison on original unmodified game functions** (privately), then guest dispatch tests and a complete `BbCpu` layout check. Never use fabricated hashes to bypass that check.
 
 ## Not yet solved
 
