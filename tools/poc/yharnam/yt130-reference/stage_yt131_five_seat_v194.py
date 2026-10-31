@@ -126,6 +126,12 @@ def transform(source: dict[str, str]) -> dict[str, str]:
     test_path = "server/tests/test_team_lobby.cpp"
     test = result[test_path]
     test = replace_one(test, OLD_OPEN, NEW_OPEN, "YT131 ASK join/full team")
+    # New YT1.3.1 lobby metadata advertises the server-defined capacity even
+    # before an OPEN/ASK team is listed. Old 4-seat assertion must become 5.
+    test = replace_one(test,
+                       'CHECK(lobby.StateFor("b").team_size() == 4);',
+                       'CHECK(lobby.StateFor("b").team_size() == 5);',
+                       "YT131 official lobby advertised capacity")
     test = replace_one(test, "int main() {", EXTRA_TEST + "int main() {",
                        "YT131 original Qt native test main")
     test = replace_one(test, "  failed |= OpenTeamsAreAskedToJoin();",
