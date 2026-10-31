@@ -1,0 +1,103 @@
+name: SHYT V195 YT 1.3.1 guarded single-invader five-body Qt source
+on:
+  push:
+    branches: [feature/yt130-cls-independent-lobby-v184-20261031]
+    paths:
+      - '.github/workflows/shyt-v195-yt131-invasion.yml'
+      - 'tools/poc/yharnam/yt130-reference/stage_yt131_invasion_guard_v195.py'
+      - 'tools/poc/yharnam/yt130-reference/test_yt131_invasion_guard_v195.py'
+      - 'tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py'
+      - 'tools/poc/yharnam/yt130-reference/patch_five_hunter_team.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-v195-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: yt131
+          persist-credentials: false
+          submodules: false
+      - name: Check fail-closed V195 original Qt source oracle
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p 'test_yt131_invasion_guard_v195.py' -v
+          python3 -m py_compile tools/poc/yharnam/yt130-reference/stage_yt131_invasion_guard_v195.py
+          test "$(git -C yt131 rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+      - name: Apply exactly V194 then V195 to ephemeral original YT 1.3.1
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py yt131
+          python3 tools/poc/yharnam/yt130-reference/stage_yt131_invasion_guard_v195.py yt131
+          git -C yt131 diff --check
+          git -C yt131 diff --name-only > "$RUNNER_TEMP/v195-paths.txt"
+          test "$(wc -l < "$RUNNER_TEMP/v195-paths.txt")" -eq 6
+          for path in server/coop/team_lobby.h server/coop/team_lobby.cpp server/tests/test_team_lobby.cpp server/coop/invasions.h server/src/bloodborne_world.cpp server/tests/test_invasions.cpp; do
+            grep -Fqx "$path" "$RUNNER_TEMP/v195-paths.txt"
+          done
+          test -z "$(git -C yt131 diff --name-only -- server/coop/coop.proto)"
+          grep -Fq 'ImplementedInvadersPerWorld = 1' yt131/server/coop/invasions.h
+          grep -Fq 'SupportsCurrentServerInvasion(live.players, 1)' yt131/server/src/bloodborne_world.cpp
+          grep -Fq 'FifthSeatInvaderCapacityAndOptIn' yt131/server/tests/test_invasions.cpp
+          echo SHYT_V195_YT131_FIVE_SEATS_ONE_INVADER_QT_SOURCE_PASS
+          echo 'No simulated 3 invaders, live PvP, WAN P2P, game launch or production deployment'
+  original-invasion-cpp:
+    needs: source-safety
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install native C++ Qt6 prerequisites
+        run: |
+          set -euo pipefail
+          if ! (sudo apt-get -qq update && sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends cmake ninja-build g++ pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite) > "$RUNNER_TEMP/v195-apt.log" 2>&1; then
+            echo "::error title=V195 Qt deps::cannot prepare disposable Qt6 toolchain"
+            tail -n 10 "$RUNNER_TEMP/v195-apt.log" | cut -c1-280
+            exit 1
+          fi
+      - name: Clone exact 1.3.1 with its public upstream protobuf
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt131"
+          git -C "$RUNNER_TEMP/yt131" checkout -q --detach 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          git -C "$RUNNER_TEMP/yt131" submodule update -q --init --recursive server/externals/protobuf
+      - name: Stage exact 5-player lobby and guarded original invasion C++
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py "$RUNNER_TEMP/yt131"
+          python3 tools/poc/yharnam/yt130-reference/stage_yt131_invasion_guard_v195.py "$RUNNER_TEMP/yt131"
+          git -C "$RUNNER_TEMP/yt131" diff --check
+      - name: Build and run ORIGINAL native Qt TeamLobby and Invasions C++ regressions
+        run: |
+          set -euo pipefail
+          if ! cmake -S "$RUNNER_TEMP/yt131/server" -B "$RUNNER_TEMP/v195-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON > "$RUNNER_TEMP/v195-cmake.log" 2>&1; then
+            echo "::error title=V195 CMake::original Qt server config failed"
+            tail -n 12 "$RUNNER_TEMP/v195-cmake.log" | cut -c1-300
+            exit 1
+          fi
+          if ! cmake --build "$RUNNER_TEMP/v195-build" --parallel 2 --target test_team_lobby test_invasions > "$RUNNER_TEMP/v195-build.log" 2>&1; then
+            echo "::error title=V195 Qt build::original Qt team or invader C++ failed to compile"
+            grep -m1 -E 'fatal error:|error:|undefined reference|FAILED:' "$RUNNER_TEMP/v195-build.log" | cut -c1-300 || true
+            tail -n 10 "$RUNNER_TEMP/v195-build.log" | cut -c1-300
+            exit 1
+          fi
+          if ! ctest --test-dir "$RUNNER_TEMP/v195-build" --output-on-failure --timeout 90 -j 2 -R '^(team_lobby|invasions)$' > "$RUNNER_TEMP/v195-ctest.log" 2>&1; then
+            echo "::error title=V195 Qt tests::native lobby/invasion CTest failed"
+            tail -n 18 "$RUNNER_TEMP/v195-ctest.log" | cut -c1-300
+            exit 1
+          fi
+          echo SHYT_V195_YT131_ORIGINAL_QT_SINGLE_HOSTILE_CAPACITY_TEST_PASS
+          echo 'Does NOT establish game-side hostile kind/sign, 2+3 invader sessions or live gameplay'
