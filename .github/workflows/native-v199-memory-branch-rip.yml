@@ -9,6 +9,7 @@ on:
       - 'native/source-port/recomp-v194/whole_function_memory_host_v199.c'
       - 'native/source-port/recomp-v194/build_actual_upstream_win64_v197.py'
       - 'native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py'
+      - 'native/source-port/recomp-v194/patch_upstream_ret_flags_v199.py'
       - 'native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py'
   workflow_dispatch:
 permissions:
@@ -33,6 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream-recomp
+          python3 native/source-port/recomp-v194/patch_upstream_ret_flags_v199.py --upstream-checkout public-upstream-recomp
           if ! (cd public-upstream-recomp && CC=clang ./build.sh) > "$RUNNER_TEMP/v199-upstream.log" 2>&1; then
             echo "::error title=V199 full generator::public original bbrecomp Linux compiler failed"
             grep -m1 -E 'error:|fatal error:|FAILED:|Error|undefined reference' "$RUNNER_TEMP/v199-upstream.log" | cut -c1-300 || true
