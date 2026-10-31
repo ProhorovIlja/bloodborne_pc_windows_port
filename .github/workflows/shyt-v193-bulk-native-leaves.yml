@@ -26,8 +26,8 @@ jobs:
         with:
           python-version: '3.12'
       - name: Ensure read-only generic source compiles
-        run: python -m py_compile native/source-port/recomp-v193/bulk_aot_v193.py native/source-port/recomp-v193/test_bulk_aot_v193.py
+        run: python -m py_compile native/source-port/recomp-v193/bulk_aot_v193.py native/source-port/recomp-v193/test_bulk_aot_v193.py native/source-port/recomp-v193/test_bulk_native_oracle_v193.py
       - name: Test fail-closed grammar and actually compile/invoke synthetic native C
-        run: python -m unittest discover -s native/source-port/recomp-v193 -p 'test_bulk_aot_v193.py' -v
+        run: python -m unittest discover -s native/source-port/recomp-v193 -p 'test_*v193.py' -v
       - name: Assert bulk AOT is not a full Windows game
         run: python native/source-port/recomp-v193/bulk_aot_v193.py --help
