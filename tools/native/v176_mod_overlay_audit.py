@@ -21,6 +21,9 @@ EXEC = frozenset({".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".py", 
 MAX_MODS = 1024
 MAX_FILES = 350000
 MAX_PATHS = 64
+# Bounded reports protect console, GitHub Actions and connector consumers.
+MAX_STDOUT_JSON_BYTES = 16_384
+MAX_REPORT_FILE_BYTES = 8 * 1024 * 1024
 
 
 class AuditError(ValueError):
@@ -149,9 +152,16 @@ def main(argv=None) -> int:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     try:
+        # A full collision/filename report is local-only, never streamed into
+        # CI logs or an assistant response. This never changes the mods.
+        if args.include_paths and args.output is None:
+            raise AuditError("--include-paths requires explicit local --output")
         report = audit(args.mods_root, existing_overlay=args.existing_overlay,
                        include_paths=args.include_paths)
         result = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+        limit = MAX_REPORT_FILE_BYTES if args.output else MAX_STDOUT_JSON_BYTES
+        if len(result.encode("utf-8")) > limit:
+            raise AuditError("mod audit report exceeds safe output budget; use local --output or narrower scope")
         if args.output:
             target = args.output.resolve()
             roots = [args.mods_root.resolve()] + (
