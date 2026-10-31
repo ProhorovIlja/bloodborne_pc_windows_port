@@ -95,6 +95,25 @@ int main(){
 }
 """
 
+def resolve_output_binary(target: Path) -> Path:
+    """Find the actual compiler output on POSIX and Win32/MinGW.
+
+    clang++/g++ on Windows can append .exe to an -o name without an extension.
+    Refuse a missing or ambiguous output instead of silently running a stale
+    binary from an earlier CI attempt.
+    """
+    candidates = [target]
+    if target.suffix.lower() != ".exe":
+        candidates.append(Path(str(target) + ".exe"))
+    existing = [candidate for candidate in candidates if candidate.is_file()]
+    if len(existing) != 1:
+        raise FileNotFoundError(
+            "V177 compiler output missing or ambiguous: "
+            + ", ".join(str(candidate) for candidate in candidates)
+        )
+    return existing[0].resolve()
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--pinned",type=Path,required=True)
@@ -107,6 +126,6 @@ def main():
     subprocess.run([a.compiler,"-std=c++20","-O2","-Wall","-Wextra",
                     "-Werror","-pedantic",str(target.with_suffix(".cpp")),
                     "-o",str(target)],check=True)
-    subprocess.run([str(target.resolve())],check=True)
+    subprocess.run([str(resolve_output_binary(target))],check=True)
     print("SHYT_V177_ORIGINAL_NATIVE_INVADER_CXX_REPEATED_IDENTITY_AND_5_SEAT_PASS")
 if __name__=="__main__":main()
