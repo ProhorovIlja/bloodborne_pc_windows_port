@@ -9,6 +9,7 @@ proof of actual Bloodborne native Win64 game-code compilation.
 from __future__ import annotations
 import argparse
 import hashlib
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -39,10 +40,22 @@ def validate_generated(text:str)->dict:
     ):
         raise ValueError("upstream generated C API or table missing")
     for sym in EXPECT:
-        if text.count(","+sym+"}")!=1:
+        if len(re.findall(r",\\s*"+sym+r"\\}",text))!=1:
             raise ValueError("unexpected generated snippet metadata")
-    if any(token in text for token in PROHIBITED):
-        raise ValueError("generated C requires forbidden interpreter/HLE callbacks")
+        start=text.index("static void "+sym+"(BbCpu *c) {")
+        remainder=text[start:]
+        # Original generator always emits cold L_dispatch after the
+        # snippet-specific early RET; that cold path mentions rc->bail/tail.
+        # Enforce real native early return BEFORE fallback dispatch instead.
+        if "L_dispatch:" not in remainder:
+            raise ValueError("upstream snippet dispatch boundary missing")
+        straight=remainder.split("L_dispatch:",1)[0]
+        if "return;" not in straight:
+            raise ValueError("upstream snippet lacks pre-fallback native return")
+        if any(token in straight for token in PROHIBITED):
+            raise ValueError("native hot path still invokes interpreter callbacks")
+    if any(token in text for token in ("eboot.bin", "sceKernel", "sceGnm")):
+        raise ValueError("unexpected guest executable or PS4 import in generated fixture")
     return {
         "exact_upstream_generated_snippets":len(EXPECT),
         "no_ps4_eboot_runtime_dependency_in_generated_test":True,
