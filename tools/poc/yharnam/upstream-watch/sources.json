@@ -6,6 +6,30 @@
   "pinned_yt_game_server": "0645740a33ae21c56df3b4a0d9777086dbca6053",
   "repositories": [
     {
+      "full_name": "bloodborne-native/bloodborne-recomp",
+      "category": "original-game-x64-static-aot-general-compiler",
+      "known_head": "8f31ec7c41f252730c6325d52647046baef7549f",
+      "known_release_tag": "unverified",
+      "compatibility": "SOURCE_AND_ABI_RESEARCH_ONLY_NO_MAC_ARM64_RUNTIME_COPY; VERIFY_GPL2_AND_GAME_ORIGIN_NO_AUTO_IMPORT",
+      "review_notes": "2026-11-01: src/cpu/recomp.c bbcpu_recomp_hash source proof, src/cpu/decode.c Zydis blocks and tools/recomp bbrecomp; broader recompilation, but official build script targets macOS arm64 and runtime relies on PS4 guest API. Review source and licensing before reuse."
+    },
+    {
+      "full_name": "bloodborne-native/bloodborne-runtime",
+      "category": "native-renderer-guest-platform-runtime-research",
+      "known_head": "aa7632e4a2ea4227ea03bf387198d30f5515a5fd",
+      "known_release_tag": "unverified",
+      "compatibility": "NATIVE_GRAPHICS_AND_PLATFORM_BOUNDARY_REVIEW_ONLY; NO_PS4_COMPAT_RUNTIME_OR_YT_WIRE_IMPORT",
+      "review_notes": "2026-11-01: graphics and platform subsystem research for independent Win64 engine, not an acceptable PS4 runtime dependency in final game. Keep game files private and check licensing."
+    },
+    {
+      "full_name": "Astrr00/BloodbornePC",
+      "category": "independent-win64-pc-static-recompiler-hle-vulkan",
+      "known_head": "802e3f2bf2e38e71da0a46362ae4510a429f7213",
+      "known_release_tag": "unverified",
+      "compatibility": "NATIVE_PC_ENGINE_AND_RECOMPILER_IDEAS_ONLY; SEPARATE_HLE_GUEST_AND_YT_NET; LICENSE_AND_VERSION_PARITY_REQUIRED",
+      "review_notes": "2026-11-01: Windows bbgame playthrough reports with limitations (README: native static recompile; 1.00 progress more tested than 1.09); no evidence of full independent game completion. No wholesale import or cross-wire compatibility assumption."
+    },
+    {
       "full_name": "lKaniel/bloodborne-server",
       "category": "yt-native-coop-server-launcher",
       "known_head": "8d5e54fee50e1d7c9dd25ba0a32f224b1d76b6f1",
