@@ -111,5 +111,10 @@ jobs:
           printf '\n/* V198 synthetic only changed compiler-input comment */\n' >> "$RUNNER_TEMP/v197-upstream-artifact/recomp_00000.c"
           python native/source-port/recomp-v194/build_incremental_coff_v198.py --upstream-checkout public-upstream-recomp --generated-dir "$RUNNER_TEMP/v197-upstream-artifact" --objects-dir "$RUNNER_TEMP/v198-coff" --jobs 2 > "$RUNNER_TEMP/v198-partial.json"
           python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"v198-partial.json").read_text().splitlines()[-1]); assert (r["compiled"],r["reused"],r["source_count"])==(1,1,2),r'
+          # Corruption with an intact COFF machine header MUST NOT be reused.
+          printf 'tamper' >> "$RUNNER_TEMP/v198-coff/recomp_00000.c.obj"
+          python native/source-port/recomp-v194/build_incremental_coff_v198.py --upstream-checkout public-upstream-recomp --generated-dir "$RUNNER_TEMP/v197-upstream-artifact" --objects-dir "$RUNNER_TEMP/v198-coff" --jobs 2 > "$RUNNER_TEMP/v198-corrupted.json"
+          python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"v198-corrupted.json").read_text().splitlines()[-1]); assert (r["compiled"],r["reused"],r["source_count"])==(1,1,2),r'
+          echo SHYT_NATIVE_COFF_CACHE_CORRUPTION_AUTO_REBUILD_PASS
           echo SHYT_NATIVE_V198_ORIGINAL_GENERATOR_TO_REUSABLE_WIN64_COFF_OBJECTS_PASS
           echo 'No game data, ELF at runtime, emulator or PS4 kernel; synthetic function-only test'
