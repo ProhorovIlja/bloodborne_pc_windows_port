@@ -1,0 +1,48 @@
+name: SHYT V191 original game forward-CFG native AOT synthetic-only CI
+on:
+  push:
+    branches: [feature/native-real-forward-cfg-v191-20261101]
+    paths:
+      - .github/workflows/shyt-v191-native-branch-cfg.yml
+      - native/source-port/recomp-v191/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-forward-cfg:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Pin native CPU-prefix layout against public original upstream
+        run: python native/source-port/recomp-v190/audit_upstream_cpu_layout_v190.py --upstream-root upstream-recomp
+      - name: Syntax check source without any private game files
+        run: python -m py_compile native/source-port/recomp-v191/branch_cfg_v191.py native/source-port/recomp-v191/test_branch_cfg_v191.py
+      - name: Linux W^X original CPU fixture and compiled branch CFG tests
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s native/source-port/recomp-v191 -p test_branch_cfg_v191.py -v
+      - name: Actual Windows COFF native DLL execution synthetic-only
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
+          python -m unittest discover -s native/source-port/recomp-v191 -p test_branch_cfg_v191.py -v
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          echo SHYT_V191_WINDOWS_SYNTHETIC_BRANCH_CFLAGS_NATIVE_PASS_NO_GAME_ASSETS
