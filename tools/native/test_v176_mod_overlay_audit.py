@@ -1,6 +1,6 @@
 """V176: synthetic private game/mod fixtures only, never uploaded to Actions."""
 from pathlib import Path
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 from io import StringIO
 import json
@@ -89,6 +89,49 @@ class NativeModPreflightV176(unittest.TestCase):
         self.assertEqual(a.main([str(self.root),"--output",str(result)]),0)
         self.assertEqual(json.loads(result.read_text())["archives_uninspected"],1)
         self.assertNotIn("ARCHIVE_UNINSPECTED",result.read_text())
+
+    def test_private_paths_never_stream_to_console(self):
+        output, errors = StringIO(), StringIO()
+        with redirect_stdout(output), redirect_stderr(errors):
+            status = a.main([str(self.root), "--include-paths"])
+        self.assertEqual(status, 2)
+        self.assertEqual(output.getvalue(), "")
+        self.assertIn("requires explicit local --output", errors.getvalue())
+        self.assertNotIn("MOAL", errors.getvalue())
+
+    def test_stdout_budget_rejects_without_partial_report(self):
+        old = a.MAX_STDOUT_JSON_BYTES
+        try:
+            a.MAX_STDOUT_JSON_BYTES = 100
+            output, errors = StringIO(), StringIO()
+            with redirect_stdout(output), redirect_stderr(errors):
+                status = a.main([str(self.root)])
+            self.assertEqual(status, 2)
+            self.assertEqual(output.getvalue(), "")
+            self.assertIn("safe output budget", errors.getvalue())
+        finally:
+            a.MAX_STDOUT_JSON_BYTES = old
+
+    def test_explicit_local_path_report_is_allowed_and_bounded(self):
+        dest = Path(self.temp.name) / "private-mod-report.json"
+        output, errors = StringIO(), StringIO()
+        with redirect_stdout(output), redirect_stderr(errors):
+            self.assertEqual(a.main([str(self.root), "--include-paths",
+                                     "--output", str(dest)]), 0)
+        self.assertEqual(output.getvalue(), "")
+        report = json.loads(dest.read_text(encoding="utf-8"))
+        self.assertTrue(report["privacy"]["relative_paths_opt_in"])
+        self.assertEqual(report["mod_directories"], 2)
+        self.assertNotIn("PRIVATE_MOD_BYTES", dest.read_text(encoding="utf-8"))
+        old = a.MAX_REPORT_FILE_BYTES
+        try:
+            a.MAX_REPORT_FILE_BYTES = 100
+            oversize = Path(self.temp.name) / "blocked-report.json"
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                self.assertEqual(a.main([str(self.root), "--output", str(oversize)]), 2)
+            self.assertFalse(oversize.exists())
+        finally:
+            a.MAX_REPORT_FILE_BYTES = old
 
     def test_scan_limit_and_case_collision(self):
         (self.jump/"action"/"C0000.BEHBND.DCX").write_bytes(b"collision")
