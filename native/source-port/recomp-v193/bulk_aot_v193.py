@@ -86,7 +86,7 @@ def split_chunks(rows, chunk_size:int):
     return [rows[i:i+chunk_size] for i in range(0,len(rows),chunk_size)]
 
 
-def func_source(index:int, kind:str, imm:int)->str:
+def func_source(index:int, kind:str, imm:int, *, guest_return:bool=False)->str:
     if kind not in KINDS:raise BulkError('unexpected generated code grammar')
     prefix=f'void bb_native_{index}(BbCpu *cpu) {{ '
     if kind=='zero32':
@@ -105,10 +105,17 @@ def func_source(index:int, kind:str, imm:int)->str:
               'cpu->flags=(cpu->flags&~0x8c5ull)|(x==0?0x40ull:0ull)|(x&0x80000000u?0x80ull:0ull)|(pf?0x4ull:0ull); '
               'cpu->r[0]=(cpu->r[0]&~255ull)|(x==0);')
     else:raise BulkError('unsupported')
+    if guest_return:
+        # Real guest RET semantics: pop the original x86-64 return address.
+        # This is ONLY a prototype until the upstream original-code hash and
+        # full runtime / guest stack boundary checks have been integrated.
+        body += ('uint64_t guest_return_address; '
+                 '__builtin_memcpy(&guest_return_address,(const void*)(uintptr_t)cpu->r[4],8); '
+                 'cpu->r[4]+=8; cpu->rip=guest_return_address;')
     return prefix+body+' }'
 
 
-def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shard_size:int=256):
+def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shard_size:int=256, *, guest_return:bool=False):
     """Validate EVERY row against real image/FDE before writing any source.
 
     Output folder must be empty, non-symlinked. Never uses game image as input
@@ -149,7 +156,7 @@ def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shar
     files={'recomp.c':'\n'.join(table)+'\n'}
     for i,chunk in enumerate(shards):
         offset=i*shard_size
-        body=begin+[func_source(offset+j,k,imm) for j,(_,k,imm) in enumerate(chunk)]
+        body=begin+[func_source(offset+j,k,imm,guest_return=guest_return) for j,(_,k,imm) in enumerate(chunk)]
         files[f'recomp_{i+1}.c']='\n'.join(body)+'\n'
     # All paths checked and content built before the first source write.
     for path,content in files.items():
@@ -159,11 +166,14 @@ def emit_private(out:Path, image:bytes, starts:list[int], rows:list[tuple], shar
     # private manifest may contain game-code-derived function addresses; not public
     private={'image_sha256':v189.IMAGE_SHA,
              'count':len(rows),'shards':len(shards),'shard_size':shard_size,
+             'guest_return_prototype':guest_return,
              'functions':[[addr,kind,imm] for addr,kind,imm in rows],
              'sources_sha256':{name:hashlib.sha256(c.encode()).hexdigest() for name,c in files.items()}}
     (out/'PRIVATE_DO_NOT_UPLOAD_manifest.json').write_text(json.dumps(private,separators=(',',':'))+'\n',encoding='utf8')
     return {'status':'generated-private','recognized_functions':len(rows),
             'source_units':len(files),'kinds':len({kind for _,kind,_ in rows}),
+            'guest_return_prototype':guest_return,
+            'upstream_code_hashes_ready':False,
             'complete_engine_proven':False,'whole_game_windows_boot_proven':False}
 
 
@@ -171,11 +181,14 @@ def main(argv=None):
     ap=argparse.ArgumentParser(description=__doc__.splitlines()[0]);ap.add_argument('--eboot',required=True,type=Path)
     ap.add_argument('--private-output-dir',required=True,type=Path)
     ap.add_argument('--shard-size',type=int,default=256)
+    ap.add_argument('--guest-return-prototype',action='store_true',
+                    help='Emit x86-64 guest RET stack/rip semantics (not ready for upstream runtime; hashes absent)')
     a=ap.parse_args(argv)
     try:
         image,starts=v189.load_original(a.eboot)
         rows,counts=census(image,starts)
-        report=emit_private(a.private_output_dir,image,starts,rows,a.shard_size)
+        report=emit_private(a.private_output_dir,image,starts,rows,a.shard_size,
+                            guest_return=a.guest_return_prototype)
         report['by_grammar']=counts
         print(json.dumps(report,separators=(',',':')))
         return 0
