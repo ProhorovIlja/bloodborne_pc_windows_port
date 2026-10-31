@@ -106,7 +106,20 @@ PATCHES = {
 def rewrite(path: str, source: str) -> str:
     if path not in PATCHES:
         raise ValueError("V184 unexpected source path")
-    for old, new in PATCHES[path]:
+    changes = PATCHES[path]
+    # Our existing V24 non-hosted lobby-dedupe stage already replaces the
+    # hosted-only SendLobby conditional with unconditional secure dedupe.
+    # That is strictly stronger than the donor's LobbyLimited check. Keep it,
+    # and apply ONLY the shared Tick throttle and the independent SetHosted.
+    if path == "server/src/bloodborne_world.cpp" and (
+            source.count(changes[1][0]) == 0):
+        pre_deduped = (
+            source.count("A lobby-state envelope is delivered by CoopStream with ACKs") == 1
+            and source.count("void Service::SendLobby(qint64 now_ms)") == 1)
+        if not pre_deduped:
+            raise ValueError("V184 unrecognized pre-existing Qt lobby dedupe")
+        changes = (changes[0], changes[2])
+    for old, new in changes:
         if source.count(old) != 1 or new in source:
             raise ValueError("V184 pinned original Qt anchor drift: " + path)
         source = source.replace(old, new, 1)
