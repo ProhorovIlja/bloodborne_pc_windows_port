@@ -117,9 +117,15 @@ jobs:
           # Use native Python ONLY to extract the exact staged YT1.3 C++,
           # then compile AND run inside the CLANG64 shell. Avoid launching
           # the MSYS2 compiler through Win32 Python's subprocess/PATH layer.
-          "$winpy" -c 'import sys; from pathlib import Path; sys.path.insert(0,"tools/poc/yharnam/yt130-reference"); from check_native_invader_actual_session_v177 import harness; Path("v177-windows-exe.cpp").write_text(harness(Path("yt130-original")), encoding="utf-8")'
+          if ! "$winpy" -c 'import sys; from pathlib import Path; sys.path.insert(0,"tools/poc/yharnam/yt130-reference"); from check_native_invader_actual_session_v177 import harness; Path("v177-windows-exe.cpp").write_text(harness(Path("yt130-original")), encoding="utf-8")' > v177-emit.log 2>&1; then
+            { printf 'phase=source-extraction\n'; head -c 6000 v177-emit.log; } > v177-diagnostic.txt
+            echo "::error title=V177 original source extraction::Unable to generate pinned C++ harness"
+            tail -n 12 v177-emit.log | cut -c1-480
+            exit 1
+          fi
           test -s v177-windows-exe.cpp
           if ! clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic v177-windows-exe.cpp -o v177-windows-exe.exe > v177-compile.log 2>&1; then
+            { printf 'phase=compile\n'; head -c 6000 v177-compile.log; } > v177-diagnostic.txt
             echo "V177_NATIVE_WINDOWS_CLANG64_COMPILE_FAILED"
             diagnostic="$(grep -m1 -E 'fatal error:|error:|undefined reference|not found' v177-compile.log | cut -c1-360 || true)"
             if [[ -n "$diagnostic" ]]; then
@@ -129,6 +135,7 @@ jobs:
             exit 1
           fi
           if ! ./v177-windows-exe.exe > v177-run.log 2>&1; then
+            { printf 'phase=execution\n'; head -c 6000 v177-run.log; } > v177-diagnostic.txt
             echo "::error title=V177 native Windows C++ regression::Compiled but test executable failed"
             tail -n 15 v177-run.log | cut -c1-480
             exit 1
@@ -136,3 +143,11 @@ jobs:
           echo SHYT_V177_ORIGINAL_NATIVE_INVADER_CXX_REPEATED_IDENTITY_AND_5_SEAT_PASS
           git -C yt130-original diff --check
           echo SHYT_V177_REAL_WINDOWS_CXX20_INVADER_ROOM_MEMBERS_TEST_PASS_NO_GAME_ASSETS
+      - name: Preserve only bounded CLANG64 failure evidence (max 6 KB)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v177-clang64-diagnostic
+          path: v177-diagnostic.txt
+          if-no-files-found: ignore
+          retention-days: 1
