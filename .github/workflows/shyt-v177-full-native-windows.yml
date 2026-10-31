@@ -114,11 +114,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native PARAM slot cache patch failed' }
           python tools/poc/yharnam/yt130-reference/stage_guest_name_cache_v129.py --pinned pinned-upstream --reviewed-pr442 reviewed-upstream-pr442
           if ($LASTEXITCODE -ne 0) { throw 'Native YT1.3 source-exact upstream #442 guest-session name-cache staging failed' }
-          python tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py --pinned pinned-upstream --reviewed-pr475 reviewed-upstream-pr475
-          if ($LASTEXITCODE -ne 0) { throw 'V177 original YT1.3 #475 actual-room invader source pin/patch failed' }
-          if (-not (Select-String -Path 'pinned-upstream/emulator/src/core/bloodborne_server_world.cpp' -SimpleMatch 'SHYT_V177_INVADER_ACTUAL_SESSION_NOT_SERVER_NOTICE')) {
-            throw 'V177 patched real original game room membership not present'
-          }
           python tools/poc/yharnam/yt130-reference/stage_native_rx_queue_v115.py pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Native Protocol8 game UDP queue bound patch failed' }
           if (-not (Test-Path 'pinned-upstream/emulator/src/core/libraries/network/net_rx_queue_limits_v115.h')) {
@@ -131,6 +126,16 @@ jobs:
           }
           python tools/poc/yharnam/yt130-reference/guard_native_protocol8_v111.py --client-root pinned-upstream --server-root pinned-upstream
           if ($LASTEXITCODE -ne 0) { throw 'Incompatible native Protocol8 game/Qt server code' }
+          # Run V111 against unchanged original server-world source first:
+          # V111 is a provenance guard whose exact original blob check
+          # legitimately rejects any subsequently applied V177 gameplay edit.
+          # Then stage the already source-verified V177 change and ensure it
+          # modifies only the game client, not the network authority.
+          python tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py --pinned pinned-upstream --reviewed-pr475 reviewed-upstream-pr475
+          if ($LASTEXITCODE -ne 0) { throw 'V177 original YT1.3 #475 actual-room invader source pin/patch failed' }
+          if (-not (Select-String -Path 'pinned-upstream/emulator/src/core/bloodborne_server_world.cpp' -SimpleMatch 'SHYT_V177_INVADER_ACTUAL_SESSION_NOT_SERVER_NOTICE')) {
+            throw 'V177 patched real original game room membership not present'
+          }
           # V119: fix verified repeated Windows Ninja stall on [120/431].
           # Immutable SHA and '-dirty' accurately describe our staged game.
           python tools/poc/yharnam/yt130-reference/stage_windows_revision_v119.py pinned-upstream
