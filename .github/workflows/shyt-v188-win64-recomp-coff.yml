@@ -1,0 +1,53 @@
+name: SHYT V188 genuine Windows x64 LLVM COFF source-port bridge
+on:
+  push:
+    branches: [feature/native-win64-coff-recomp-v188-20261031]
+    paths:
+      - .github/workflows/shyt-v188-win64-recomp-coff.yml
+      - native/source-port/recomp-v188/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit:
+    name: Offline V188 source/PE tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Check pinned public upstream generator target and DLL export ABI
+        run: python native/source-port/recomp-v188/check_upstream_v188.py --upstream-root upstream-recomp
+      - name: Source and PE format tests, no proprietary assets
+        run: python -m unittest discover -s native/source-port/recomp-v188 -p 'test_*v188.py' -v
+      - name: Compile original V187 host and negative-test DLL
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S native/source-port/recomp-v187 -B build-v187 -A x64
+          cmake --build build-v187 --config Release --parallel 2
+      - name: Compile synthetic upstream-style generated source to real Windows COFF and PE DLL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
+          python native/source-port/recomp-v188/win64_coff_link_v188.py --source-dir native/source-port/recomp-v188/fixtures --include-dir native/source-port/recomp-v187 --out build-v187/Release/v188_generated.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & .\build-v187\Release\v187_host_probe.exe .\build-v187\Release\v188_generated.dll .\build-v187\Release\v187_bad.dll
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          echo SHYT_V188_REAL_WIN64_LLVM_COFF_COMPILED_AND_LOADED_SYNTHETIC_SOURCE_PASS
