@@ -49,6 +49,23 @@ class Cpu(ctypes.Structure):
                 ("flags", ctypes.c_uint64), ("v", Vec * 16)]
 
 class NativeOracleTests(unittest.TestCase):
+    def test_upstream_fnv_byte_reference_vectors_and_rejections(self):
+        # Golden literals for 64-bit FNV-1a, used by upstream hash_more for
+        # exact, fully decodable V193 leaf frames (no TCB/FS/GS exceptions).
+        first = BODIES[0] + b'\x90' * 13
+        last = BODIES[-1] + b'\x90' * 10
+        self.assertEqual(v.strict_leaf_hash(first), 0x90705547f2bf684f)
+        self.assertEqual(v.strict_leaf_hash(last), 0xaf4fd4be8ef5b02b)
+        original = BODIES[1] + b'\x90' * 10
+        changed = b'\xb8' + struct.pack('<I', 0x12345679) + b'\xc3' + b'\x90' * 10
+        self.assertNotEqual(v.strict_leaf_hash(original), v.strict_leaf_hash(changed))
+        with self.assertRaises(v.BulkError):
+            v.strict_leaf_hash(BODIES[0])  # partial FDE
+        with self.assertRaises(v.BulkError):
+            v.strict_leaf_hash(BODIES[0] + b'\x90' * 12 + b'\xcc')
+        with self.assertRaises(v.BulkError):
+            v.strict_leaf_hash(b'\xe8' + bytes(4) + b'\xc3' + b'\x90' * 10)
+
     def test_all_ten_native_functions_and_abi_negative_cases(self):
         image = b"".join(b + b"\x90" * (16 - len(b)) for b in BODIES)
         starts = list(range(0, len(image) + 1, 16))
@@ -63,11 +80,16 @@ class NativeOracleTests(unittest.TestCase):
             root = Path(tmp)
             out = root / "generated"
             out.mkdir()
-            report = v.emit_private(out, image, starts, rows, 4, guest_return=True)
+            with self.assertRaises(v.BulkError):
+                v.emit_private(out, image, starts, rows, 4, upstream_hash_prototype=True)
+            self.assertEqual(list(out.iterdir()), [])
+            report = v.emit_private(out, image, starts, rows, 4,
+                                    guest_return=True, upstream_hash_prototype=True)
             self.assertTrue(report['guest_return_prototype'])
+            self.assertTrue(report['upstream_hash_prototype'])
             self.assertFalse(report['upstream_code_hashes_ready'])
-            # No claim that a zero-hash module can pass upstream runtime checks.
-            self.assertIn(',16ull,0,', (out/'recomp.c').read_text(encoding='utf8'))
+            # Provisional hashes are still not accepted as live runtime proof.
+            self.assertNotIn(',16ull,0,', (out/'recomp.c').read_text(encoding='utf8'))
             if sys.platform == "win32":
                 linker_path = HERE.parent / "recomp-v188" / "win64_coff_link_v188.py"
                 if not linker_path.is_file():
@@ -102,6 +124,8 @@ class NativeOracleTests(unittest.TestCase):
                 self.assertTrue(bool(funcs))
                 self.assertEqual(count.value, 10)
                 self.assertEqual([funcs[i].offset for i in range(10)], [r[0] for r in rows])
+                self.assertEqual([funcs[i].hash for i in range(10)],
+                                 [v.strict_leaf_hash(image[addr:addr+16]) for addr,_,_ in rows])
                 for i, (_, kind, disp) in enumerate(rows):
                     with self.subTest(kind=kind):
                         self.assertTrue(bool(funcs[i].fn))
