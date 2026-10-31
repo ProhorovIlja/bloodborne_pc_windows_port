@@ -114,6 +114,78 @@ class NativePackageTests(unittest.TestCase):
         with self.assertRaises(audit.PackageError):
             audit.read_decrypted_game_eboot(game)
 
+    def test_canonical_loaded_game_elf_image_only_valid_segments(self):
+        game = Path(self.tmp.name) / 'synthetic-eboot'
+        elf = bytearray(4096)
+        elf[:8] = b'\x7fELF\x02\x01\x01\x09'
+        struct.pack_into('<HH', elf, 16, 0xfe10, 0x3e)
+        struct.pack_into('<Q', elf, 32, 0x40)  # ELF program header offset
+        struct.pack_into('<HH', elf, 54, 56, 2)  # phentsize, phnum
+        struct.pack_into('<IIQQQQQQ', elf, 0x40,
+                         1, 5, 0x1000, 0, 0, 4, 8, 0x1000)
+        struct.pack_into('<IIQQQQQQ', elf, 0x40 + 56,
+                         1, 6, 0x2000, 16, 16, 3, 4, 0x1000)
+        with game.open('wb') as f:
+            f.write(elf)
+            f.write(b'ABCD')
+            f.seek(0x2000)
+            f.write(b'XYZ')
+            f.truncate(2 * 1024**2)
+        expected = b'ABCD' + b'\0' * 12 + b'XYZ\0'
+        self.assertEqual(audit.loaded_game_image_sha256(game),
+                         __import__('hashlib').sha256(expected).hexdigest())
+        # A hash of the raw file is different from canonical loaded image.
+        with game.open('r+b') as f:
+            f.seek(0x3000)
+            f.write(b'irrelevant outside load segments')
+        self.assertEqual(audit.loaded_game_image_sha256(game),
+                         __import__('hashlib').sha256(expected).hexdigest())
+        # Crafted huge virtual addresses are rejected rather than allocated.
+        with game.open('r+b') as f:
+            f.seek(0x40 + 16)
+            f.write(struct.pack('<Q', 0x20000000))
+        with self.assertRaisesRegex(audit.PackageError, 'unsafe'):
+            audit.loaded_game_image_sha256(game)
+
+    def test_private_game_image_hash_mismatch_fails_closed(self):
+        self.write_dir()
+        game = Path(self.tmp.name) / 'synthetic-eboot'
+        data = bytearray(128)
+        data[:8] = b'\x7fELF\x02\x01\x01\x09'
+        struct.pack_into('<HH', data, 16, 0xfe10, 0x3e)
+        struct.pack_into('<Q', data, 32, 0x40)
+        struct.pack_into('<HH', data, 54, 56, 1)
+        struct.pack_into('<IIQQQQQQ', data, 0x40, 1, 5, 0x1000, 0, 0, 4, 4, 0x1000)
+        with game.open('wb') as f:
+            f.write(data)
+            f.seek(0x1000)
+            f.write(b'FAKE')
+            f.truncate(2 * 1024**2)
+        keys = b'APP_VER\0TITLE_ID\0'
+        app, title = b'01.09\0', b'CUSA03173\0'
+        ko = 20+16*2
+        metadata = (struct.pack('<4sIIII', b'\0PSF', 0x101, ko, ko+len(keys), 2)
+                    + struct.pack('<HHIII', 0, 0x204, len(app), len(app), 0)
+                    + struct.pack('<HHIII', 8, 0x204, len(title), len(title), len(app))
+                    + keys+app+title)
+        sfo = Path(self.tmp.name) / 'param.sfo'
+        sfo.write_bytes(metadata)
+        code, output, error = self.cli(self.root, '--game-sfo', sfo,
+                                       '--game-eboot', game, '--verify-game-image')
+        self.assertEqual(code, 2)
+        self.assertEqual(output, '')
+        self.assertIn('loaded-image hash differs', error)
+        original = audit.SUPPORTED_GAME_IMAGE_SHA256
+        try:
+            audit.SUPPORTED_GAME_IMAGE_SHA256 = audit.loaded_game_image_sha256(game)
+            code, output, error = self.cli(self.root, '--game-sfo', sfo,
+                                           '--game-eboot', game, '--verify-game-image')
+            self.assertEqual(code, 0, error)
+            self.assertTrue(json.loads(output)['private_clean_109_loaded_image_verified'])
+            self.assertFalse(json.loads(output)['gameplay_boot_tested'])
+        finally:
+            audit.SUPPORTED_GAME_IMAGE_SHA256 = original
+
     def test_zip_and_directory_same_reproducible_fingerprint(self):
         self.write_zip()
         self.write_dir()
