@@ -52,7 +52,10 @@ jobs:
           grep -Fq 'constexpr size_t TeamSize = 5;' yt131/server/coop/team_lobby.h
           grep -Fq 'std::array<u32, 4> GuestSigns{7, 6, 5, 4};' yt131/server/coop/team_lobby.cpp
           grep -Fq 'case Action::ASK_JOIN:' yt131/server/coop/team_lobby.cpp
-          grep -Fq 'case Action::FRIEND_ADD:' yt131/server/coop/team_lobby.cpp
+          # Friends live in the separate lobby_friends service, not TeamLobby.
+          # Verify their 1.3.1 wire action remains unchanged, plus public OPEN.
+          grep -Fq 'FRIEND_ADD = 19;' yt131/server/coop/coop.proto
+          grep -Fq 'case Action::OPEN:' yt131/server/coop/team_lobby.cpp
           grep -Fq 'FiveSeatPublicOpenTeamHonorsServerCapacity' yt131/server/tests/test_team_lobby.cpp
           echo SHYT_V194_ORIGINAL_YT131_FIVE_SEAT_SOURCE_ONLY_PASS
   original-qt:
