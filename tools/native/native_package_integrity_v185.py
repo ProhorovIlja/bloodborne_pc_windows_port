@@ -184,9 +184,46 @@ def inside_dir(root: Path, out: Path) -> bool:
     return root.is_dir() and out.resolve().is_relative_to(root.resolve())
 
 
+def read_game_sfo(path: Path) -> dict[str, str]:
+    """Offline read-only PSF metadata; never uploads game contents.
+
+    The supported YT1.3 native game patch sites target Bloodborne 1.09
+    CUSA03173. TITLE_ID alone is not a verification of the eboot's actual
+    patch sites, and this is NOT a boot, decrypt or game-asset test.
+    """
+    if not path.is_file() or path.is_symlink() or path.stat().st_size > 64 * 1024:
+        raise PackageError('game param.sfo must be a small regular local file')
+    data = path.read_bytes()
+    if len(data) < 20 or data[:4] != b'\x00PSF':
+        raise PackageError('invalid PSF game metadata')
+    _magic, version, key_off, data_off, count = struct.unpack_from('<4sIIII', data)
+    if version not in (0x101, 0x102) or count > 128 or 20 + 16 * count > len(data) or \
+            key_off > len(data) or data_off > len(data):
+        raise PackageError('invalid PSF offsets')
+    values: dict[str, str] = {}
+    for i in range(count):
+        ko, fmt, sz, cap, dat = struct.unpack_from('<HHIII', data, 20 + 16 * i)
+        if sz > cap or sz > 4096 or key_off + ko >= len(data) or \
+                data_off + dat + sz > len(data):
+            raise PackageError('invalid PSF table entry')
+        end = data.find(b'\x00', key_off + ko, data_off)
+        if end < 0:
+            raise PackageError('invalid PSF key')
+        name = data[key_off + ko:end].decode('ascii', 'strict')
+        if name in ('APP_VER', 'TITLE_ID'):
+            if name in values or fmt not in (0x204, 0x4):
+                raise PackageError('invalid/duplicate PSF game version field')
+            values[name] = data[data_off + dat:data_off + dat + sz].split(b'\x00', 1)[0].decode('ascii', 'strict')
+    if values.get('TITLE_ID') != 'CUSA03173' or values.get('APP_VER') != '01.09':
+        raise PackageError('game edition/update incompatible with pinned YT1.3 1.09 hooks')
+    return values
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('package', type=Path, help='local Windows release ZIP or extracted folder')
+    p.add_argument('--game-sfo', type=Path,
+                   help='optional PRIVATE local sce_sys/param.sfo: verify CUSA03173 update 1.09')
     p.add_argument('--write-manifest', type=Path, help='private local full per-file digest manifest')
     p.add_argument('--verify-manifest', type=Path, help='check against private prior manifest')
     args = p.parse_args(argv)
@@ -195,6 +232,10 @@ def main(argv=None) -> int:
             raise PackageError('manifest must be outside package directory')
         result = inspect(args.package)
         summary = result['summary']
+        if args.game_sfo:
+            read_game_sfo(args.game_sfo)
+            summary['private_game_sfo_109_verified'] = True
+            summary['game_eboot_patch_sites_verified'] = False
         if args.verify_manifest:
             old = json.loads(args.verify_manifest.read_text(encoding='utf-8'))
             if old.get('schema') != MANIFEST_SCHEMA or old.get('files') != result['files']:
