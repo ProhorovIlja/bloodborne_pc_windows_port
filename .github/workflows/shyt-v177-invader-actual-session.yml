@@ -1,0 +1,180 @@
+name: SHYT V177 original YT1.3 invader actual room, five hunters, native C++ tests
+on:
+  push:
+    branches: [feature/yt130-invasion-actual-session-v177-20261031]
+    paths:
+      - .github/workflows/shyt-v177-invader-actual-session.yml
+      - tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py
+      - tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py
+      - tools/poc/yharnam/yt130-reference/test_invader_executable_v178.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-v177-pinned-invader-room-session
+  cancel-in-progress: false
+jobs:
+  original-yt-ubuntu-cxx:
+    name: Pinned native 1.3 original+upstream PR475 and actual 5-seat C++ regression (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: yt130-original
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 899e40da19d2253ebb1028cc529e49be2d90987a
+          path: yt475-reviewed
+          persist-credentials: false
+          submodules: false
+      - name: Patch ONLY exact original v1.3 game code with source-reviewed #475
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py
+          python3 -m py_compile tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py
+          python3 tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py --pinned yt130-original --reviewed-pr475 yt475-reviewed
+          grep -Fq 'SHYT_V177_INVADER_ACTUAL_SESSION_NOT_SERVER_NOTICE' yt130-original/emulator/src/core/bloodborne_server_world.cpp
+          grep -Fq 'TEST(Invasion, FiveSeatAndRepeatedInvaderNotAlone)' yt130-original/emulator/tests/bloodborne/test_bloodborne_invasion.cpp
+          ! grep -Fq 'TeamSessionMembers(SessionMembers(), !InvaderInWorld().empty())' yt130-original/emulator/src/core/bloodborne_server_world.cpp
+          git -C yt130-original diff --check
+      - name: Test native compiler executable paths on POSIX and MinGW
+        run: python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_invader_executable_v178.py -v
+      - name: Compile and execute exact native C++ room membership algorithm
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler g++ --out "$RUNNER_TEMP/v177-game-members"
+          python3 tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out "$RUNNER_TEMP/v177-game-members-clang"
+          echo SHYT_V177_SOURCE_PINNED_5_SEAT_CXX20_GCC_AND_CLANG_PASS_NOT_FULL_GAME_BOOT
+  original-yt-windows-clang64:
+    name: Source-locked original native Windows CLANG64 C++ regression, no PS4 assets
+    runs-on: windows-2022
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: yt130-original
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 899e40da19d2253ebb1028cc529e49be2d90987a
+          path: yt475-reviewed
+          persist-credentials: false
+          submodules: false
+      # Match the already-green FULL WINDOWS V177 job: stage with native
+      # actions/setup-python, compile and execute with actual CLANG64.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify output-path regression and stage source-locked original gameplay
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_invader_executable_v178.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows executable-path regression failed' }
+          python tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py --pinned yt130-original --reviewed-pr475 yt475-reviewed
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned original invader game source staging failed' }
+          git -C yt130-original diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Source patch whitespace or conflicts' }
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: false
+      - name: Install the same proven native CLANG64 compiler as the full Windows job
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed git mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libc++
+      - name: Verify native Windows Python and CLANG64 executables
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          printf 'phase=toolchain-preflight\n' > v177-diagnostic.txt
+          if [[ -z "${pythonLocation:-}" ]]; then
+            echo 'missing setup-python pythonLocation' >> v177-diagnostic.txt
+            exit 1
+          fi
+          winpy="$(cygpath -u "$pythonLocation")/python.exe"
+          if [[ ! -f "$winpy" ]]; then
+            echo 'native setup-python interpreter not found' >> v177-diagnostic.txt
+            exit 1
+          fi
+          "$winpy" --version
+          if ! command -v clang++; then
+            echo 'CLANG64 clang++ not found in PATH' >> v177-diagnostic.txt
+            exit 1
+          fi
+          clang++ --version
+          echo 'phase=toolchain-preflight-pass' > v177-diagnostic.txt
+      - name: Generate source-exact original YT1.3 C++ harness
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          echo 'phase=source-extraction' > v177-diagnostic.txt
+          winpy="$(cygpath -u "$pythonLocation")/python.exe"
+          if ! "$winpy" -c 'import sys; from pathlib import Path; sys.path.insert(0,"tools/poc/yharnam/yt130-reference"); from check_native_invader_actual_session_v177 import harness; Path("v177-windows-exe.cpp").write_text(harness(Path("yt130-original")), encoding="utf-8")' > v177-emit.log 2>&1; then
+            { printf 'phase=source-extraction-failed\n'; head -c 6000 v177-emit.log; } > v177-diagnostic.txt
+            echo "::error title=V177 pinned C++ extraction::Original source harness failed"
+            tail -n 12 v177-emit.log | cut -c1-480
+            exit 1
+          fi
+          if [[ ! -s v177-windows-exe.cpp ]]; then
+            echo 'generated C++ source is missing or empty' >> v177-diagnostic.txt
+            exit 1
+          fi
+      - name: Compile original invader C++ test in CLANG64
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          echo 'phase=compile' > v177-diagnostic.txt
+          if ! clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic v177-windows-exe.cpp -o v177-windows-exe.exe > v177-compile.log 2>&1; then
+            { printf 'phase=compile-failed\n'; head -c 6000 v177-compile.log; } > v177-diagnostic.txt
+            diagnostic="$(grep -m1 -E 'fatal error:|error:|undefined reference|not found' v177-compile.log | cut -c1-360 || true)"
+            if [[ -n "$diagnostic" ]]; then
+              echo "::error title=V177 CLANG64 compiler diagnostic::$diagnostic"
+            fi
+            tail -n 25 v177-compile.log | cut -c1-480
+            exit 1
+          fi
+      - name: Execute original 5-seat repeated-invader C++ assertions on Windows
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          echo 'phase=run-test' > v177-diagnostic.txt
+          if ! ./v177-windows-exe.exe > v177-run.log 2>&1; then
+            { printf 'phase=run-test-failed\n'; head -c 6000 v177-run.log; } > v177-diagnostic.txt
+            echo "::error title=V177 native C++ regression::Compiled executable failed assertions or runtime"
+            tail -n 15 v177-run.log | cut -c1-480
+            exit 1
+          fi
+          # Source whitespace and pin were already validated on native
+          # Windows in the staging step; do not repeat a whole-repo Git diff
+          # from MSYS2 after the actual compiler and gameplay test succeeded.
+          echo SHYT_V177_ORIGINAL_NATIVE_INVADER_CXX_REPEATED_IDENTITY_AND_5_SEAT_PASS
+          echo SHYT_V177_REAL_WINDOWS_CXX20_INVADER_ROOM_MEMBERS_TEST_PASS_NO_GAME_ASSETS
+      - name: Preserve only bounded CLANG64 failure evidence (max 6 KB)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v177-clang64-diagnostic
+          path: v177-diagnostic.txt
+          if-no-files-found: ignore
+          retention-days: 1
