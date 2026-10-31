@@ -199,33 +199,42 @@ def abi_dir() -> Path:
 
 
 def probe_compiled_library(path: Path, functions):
-    """Call the leaf functions through the v4 C ABI in the host process."""
+    """Call the leaf functions via v4 ABI; unload DLL before deleting on Win32."""
     library=ctypes.CDLL(str(path))
-    class Cpu(ctypes.Structure):_fields_=[('r',ctypes.c_uint64*16),('rip',ctypes.c_uint64)]
-    class Function(ctypes.Structure):_fields_=[('offset',ctypes.c_uint64),('size',ctypes.c_uint64),('hash',ctypes.c_uint64),('fn',ctypes.c_void_p),('direct',ctypes.c_void_p)]
-    class Api(ctypes.Structure):_fields_=[('version',ctypes.c_uint32),('image_base',ctypes.c_uint64),('step',ctypes.c_void_p),('call',ctypes.c_void_p),('tail',ctypes.c_void_p),('bail',ctypes.c_void_p),('trace',ctypes.c_void_p)]
-    entry=library.bb_recomp_init
-    entry.argtypes=[ctypes.POINTER(Api),ctypes.POINTER(ctypes.c_size_t)]
-    entry.restype=ctypes.POINTER(Function)
-    count=ctypes.c_size_t()
-    arr=entry(ctypes.byref(Api(version=4)),ctypes.byref(count))
-    if not arr or count.value!=len(functions):
-        raise ProofError('generated module init ABI mismatch')
-    values=[0,1,0xffffffff,0x100000000,0xffffffffffffffff]
-    values += [random.Random(189+i).getrandbits(64) for i in range(64)]
-    verified=0
-    for i,(kind,(address,size,imm,_)) in enumerate(zip(PATTERNS,functions)):
-        desc=arr[i]
-        if desc.offset!=address or desc.size!=size or not desc.fn:
-            raise ProofError('recompiled leaf descriptor mismatch')
-        compiled=ctypes.CFUNCTYPE(None,ctypes.POINTER(Cpu))(desc.fn)
-        for x in values:
-            cpu=Cpu();cpu.r[7]=x
-            compiled(ctypes.byref(cpu))
-            if cpu.r[0]!=expected(kind,x,imm):
-                raise ProofError('compiled scalar game semantics mismatch')
-            verified+=1
-    return verified
+    try:
+        class Cpu(ctypes.Structure):_fields_=[('r',ctypes.c_uint64*16),('rip',ctypes.c_uint64)]
+        class Function(ctypes.Structure):_fields_=[('offset',ctypes.c_uint64),('size',ctypes.c_uint64),('hash',ctypes.c_uint64),('fn',ctypes.c_void_p),('direct',ctypes.c_void_p)]
+        class Api(ctypes.Structure):_fields_=[('version',ctypes.c_uint32),('image_base',ctypes.c_uint64),('step',ctypes.c_void_p),('call',ctypes.c_void_p),('tail',ctypes.c_void_p),('bail',ctypes.c_void_p),('trace',ctypes.c_void_p)]
+        entry=library.bb_recomp_init
+        entry.argtypes=[ctypes.POINTER(Api),ctypes.POINTER(ctypes.c_size_t)]
+        entry.restype=ctypes.POINTER(Function)
+        count=ctypes.c_size_t()
+        arr=entry(ctypes.byref(Api(version=4)),ctypes.byref(count))
+        if not arr or count.value!=len(functions):
+            raise ProofError('generated module init ABI mismatch')
+        values=[0,1,0xffffffff,0x100000000,0xffffffffffffffff]
+        values += [random.Random(189+i).getrandbits(64) for i in range(64)]
+        verified=0
+        for i,(kind,(address,size,imm,_)) in enumerate(zip(PATTERNS,functions)):
+            desc=arr[i]
+            if desc.offset!=address or desc.size!=size or not desc.fn:
+                raise ProofError('recompiled leaf descriptor mismatch')
+            compiled=ctypes.CFUNCTYPE(None,ctypes.POINTER(Cpu))(desc.fn)
+            for x in values:
+                cpu=Cpu();cpu.r[7]=x
+                compiled(ctypes.byref(cpu))
+                if cpu.r[0]!=expected(kind,x,imm):
+                    raise ProofError('compiled scalar game semantics mismatch')
+                verified+=1
+        return verified
+
+    finally:
+        if sys.platform == "win32":
+            # Windows locks loaded DLLs; tempfile cleanup must never race the loader.
+            # No C function references may be called after this point.
+            import _ctypes
+            _ctypes.FreeLibrary(library._handle)
+            library._handle = 0
 
 
 def check_linux_generated(out: Path, functions):
