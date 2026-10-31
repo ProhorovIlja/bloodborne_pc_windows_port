@@ -66,6 +66,58 @@ class NativeInventoryV146Tests(unittest.TestCase):
             result=mod.main([str(self.root),"--output",str(target)])
         self.assertEqual(result,2)
         self.assertFalse(target.exists())
+    def test_full_relative_path_listing_must_not_reach_stdout(self):
+        output = StringIO()
+        errors = StringIO()
+        with redirect_stdout(output), redirect_stderr(errors):
+            status = mod.main([str(self.root), "--include-paths"])
+        self.assertEqual(status, 2)
+        self.assertEqual(output.getvalue(), "")
+        self.assertIn("requires --output", errors.getvalue())
+        self.assertNotIn("PRIVATE_HUNTER_BUILD", errors.getvalue())
+
+    def test_full_relative_paths_only_saved_to_local_explicit_file(self):
+        destination = Path(self.temp.name) / "metadata-paths.json"
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(mod.main([str(self.root), "--include-paths",
+                                       "--output", str(destination)]), 0)
+        self.assertLess(len(output.getvalue().encode("utf-8")), 512)
+        self.assertNotIn("PRIVATE_HUNTER_BUILD", output.getvalue())
+        data = json.loads(destination.read_text(encoding="utf-8"))
+        self.assertEqual(len(data["relative_file_entries"]), 5)
+        self.assertTrue(all(e["path"].startswith("dvdroot_ps4/") or "/" not in e["path"]
+                            or e["path"].startswith("sce_")
+                            for e in data["relative_file_entries"]))
+
+    def test_stdout_byte_budget_fails_before_emitting_json(self):
+        original = mod.MAX_STDOUT_JSON_BYTES
+        try:
+            mod.MAX_STDOUT_JSON_BYTES = 100
+            output, error = StringIO(), StringIO()
+            with redirect_stdout(output), redirect_stderr(error):
+                status = mod.main([str(self.root)])
+            self.assertEqual(status, 2)
+            self.assertEqual(output.getvalue(), "")
+            self.assertIn("safe output budget", error.getvalue())
+        finally:
+            mod.MAX_STDOUT_JSON_BYTES = original
+
+    def test_local_file_byte_budget_rejects_without_partial_file(self):
+        destination = Path(self.temp.name) / "too-big-report.json"
+        original = mod.MAX_REPORT_FILE_BYTES
+        try:
+            mod.MAX_REPORT_FILE_BYTES = 100
+            output, error = StringIO(), StringIO()
+            with redirect_stdout(output), redirect_stderr(error):
+                status = mod.main([str(self.root), "--output", str(destination)])
+            self.assertEqual(status, 2)
+            self.assertFalse(destination.exists())
+            self.assertEqual(output.getvalue(), "")
+            self.assertIn("safe output budget", error.getvalue())
+        finally:
+            mod.MAX_REPORT_FILE_BYTES = original
+
     def test_missing_executable_and_invalid_image_are_fail_closed(self):
         (self.root/"eboot.bin").unlink()
         with self.assertRaisesRegex(mod.InventoryError,"eboot.bin"):
