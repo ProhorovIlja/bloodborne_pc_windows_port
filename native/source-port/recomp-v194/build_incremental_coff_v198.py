@@ -115,11 +115,21 @@ def build(root:Path,generated:Path,objects:Path,host:Path|None,jobs:int,
         blob=hashlib.sha256((salt+"\n"+digest(source)).encode()).hexdigest()
         expected[source.name]=blob
     stamp=objects/"native-coff-v198.json"
-    previous=read_json(stamp).get("fingerprints",{})
+    saved=read_json(stamp)
+    previous=saved.get("fingerprints",{})
+    # A SHA-256 of the generated source alone is NOT enough to trust cached
+    # native machine code. Bit flips, incomplete partial writes and malicious
+    # replacement can all retain the 0x8664 COFF prefix. Verify the hashes
+    # stored in the previous, atomic manifest before EVER reusing a COFF object.
+    previous_objects=saved.get("objects",{})
     tasks=[]
     for source in sources:
         target=objects/(source.name+".obj")
-        if previous.get(source.name)==expected[source.name] and target.is_file():
+        valid=(previous.get(source.name)==expected[source.name]
+               and not target.is_symlink() and target.is_file()
+               and isinstance(previous_objects.get(source.name),str)
+               and digest(target)==previous_objects[source.name])
+        if valid:
             check_coff(target)
         else:
             tasks.append((source,target))
