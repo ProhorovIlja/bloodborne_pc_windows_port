@@ -1,0 +1,39 @@
+name: SHYT V190 original-game memory flags SSE AOT synthetic-only native CI
+on:
+  push:
+    branches: [feature/native-real-memory-flags-sse-v190-20261101]
+    paths:
+      - .github/workflows/shyt-v190-native-memory-flags-sse.yml
+      - native/source-port/recomp-v190/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-synthetic-recomp:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax-check bounded generic-only source
+        run: python -m py_compile native/source-port/recomp-v190/nontrivial_leaves_v190.py native/source-port/recomp-v190/test_nontrivial_leaves_v190.py
+      - name: Native Linux CPU oracle / generated C (synthetic bytes only)
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s native/source-port/recomp-v190 -p test_nontrivial_leaves_v190.py -v
+      - name: Native Windows AMD64 COFF + DLL execution (synthetic only)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
+          python -m unittest discover -s native/source-port/recomp-v190 -p test_nontrivial_leaves_v190.py -v
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          echo SHYT_V190_SYNTHETIC_WIN64_MEMORY_FLAGS_SSE_NATIVE_PASS_NO_RETAIL_ASSETS
