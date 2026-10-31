@@ -40,7 +40,7 @@ def validate_generated(text:str)->dict:
     ):
         raise ValueError("upstream generated C API or table missing")
     for sym in EXPECT:
-        if len(re.findall(r",\\s*"+sym+r"\\}",text))!=1:
+        if len(re.findall(r",\s*"+sym+r"\}",text))!=1:
             raise ValueError("unexpected generated snippet metadata")
         start=text.index("static void "+sym+"(BbCpu *c) {")
         remainder=text[start:]
