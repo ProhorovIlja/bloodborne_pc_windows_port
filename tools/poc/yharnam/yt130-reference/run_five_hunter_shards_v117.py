@@ -105,6 +105,39 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
             if require_policy and (row["game_policy_sample_windows"] == 0 or
                                    row["game_policy_allowed_entries"] == 0):
                 return {"quality": "EMPTY_ORIGINAL_QT_POLICY_CENSUS"}
+    # V182: optional one-bind post-setsockopt readback from each original Qt
+    # shard. Kernel-effective socket sizes are NOT per-socket packet-loss
+    # counters or evidence that a 200-hunter delivery threshold passed.
+    udp_socket_fields = ("udp_socket_requested_bytes",
+                         "udp_socket_effective_receive_bytes",
+                         "udp_socket_effective_send_bytes",
+                         "udp_socket_bind_reports", "udp_socket_readback_valid")
+    udp_socket_summary = ("udp_socket_readback_complete",
+                          "udp_socket_min_effective_receive_bytes",
+                          "udp_socket_min_effective_send_bytes",
+                          "udp_socket_readback_scope")
+    has_udp_socket = any(key in item for key in udp_socket_summary) or any(
+        any(key in row for key in udp_socket_fields) for row in rows)
+    if has_udp_socket:
+        if (type(item.get("udp_socket_readback_complete")) is not bool or
+            type(item.get("udp_socket_readback_scope")) is not str or
+            "NOT per-socket packet losses or production QoS" not in item["udp_socket_readback_scope"]):
+            return {"quality": "INVALID_QT_UDP_SOCKET_READBACK_SCOPE"}
+        for key in udp_socket_summary[1:3]:
+            if type(item.get(key)) is not int or item[key] < 0:
+                return {"quality": "INVALID_QT_UDP_SOCKET_READBACK_TOTAL", "field": key}
+        for row in rows:
+            if (type(row.get("udp_socket_readback_valid")) is not bool or
+                any(type(row.get(key)) is not int or row[key] < 0
+                    for key in udp_socket_fields[:-1])):
+                return {"quality": "INVALID_QT_UDP_SOCKET_READBACK_SHARD"}
+        if (item["udp_socket_readback_complete"] != all(
+                row["udp_socket_readback_valid"] for row in rows) or
+            item["udp_socket_min_effective_receive_bytes"] != min(
+                row["udp_socket_effective_receive_bytes"] for row in rows) or
+            item["udp_socket_min_effective_send_bytes"] != min(
+                row["udp_socket_effective_send_bytes"] for row in rows)):
+            return {"quality": "QT_UDP_SOCKET_READBACK_TOTAL_MISMATCH"}
     # V156 server's own refusal reasons from observed LobbyState.notice.
     # Reply counters can include repeat attempts: not distinct players.
     notice_fields = ("team_name_absent", "team_name_ambiguous",
@@ -291,11 +324,15 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
         quality = "INSUFFICIENT_QT_ORIGINAL_GAME_OFFERED_RATE"
     else:
         quality = "FULL_GAMEPLAY_SYNTHETIC_ONLY"
+    if (has_udp_socket and not item["udp_socket_readback_complete"] and
+            quality == "FULL_GAMEPLAY_SYNTHETIC_ONLY"):
+        quality = "QT_UDP_SOCKET_READBACK_MISSING_OR_AMBIGUOUS"
     return {
         "quality": quality, "players": POPULATION, "shards": expected_shards,
         **({key: item[key] for key in cohort_fields} if has_cohort else {}),
         **({key: item[key] for key in directed_fields} if has_directed else {}),
         **({key: item[key] for key in policy_fields + ("game_policy_scope",)} if has_policy else {}),
+        **({key: item[key] for key in udp_socket_summary} if has_udp_socket else {}),
         **({"cohort_min_offered_entries": minimum_original_source_entries(
             owner_seats, item["cohort_seconds"])} if require_directed else {}),
         "playing": playing, "game_receivers": receivers,
@@ -343,6 +380,7 @@ def grade(item: dict, expected_shards: int, expected_workers: int = 4,
         "udp_buffer_drops_host_wide": item["udp_buffer_drops"],
         "per_shard": [{
             **({key: r[key] for key in policy_fields} if has_policy else {}),
+            **({key: r[key] for key in udp_socket_fields} if has_udp_socket else {}),
             "shard": r["shard"], "players_at_end": r.get("players_at_end"),
             "link_thread_cpu_avg": r["link_thread_cpu_avg"],
             "game_wire_in_packets": r["game_wire_in_packets"],
