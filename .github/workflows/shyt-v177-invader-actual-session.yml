@@ -78,20 +78,36 @@ jobs:
           path: yt475-reviewed
           persist-credentials: false
           submodules: false
+      # Match the already-green FULL WINDOWS V177 job: stage with native
+      # actions/setup-python, compile and execute with actual CLANG64.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify output-path regression and stage source-locked original gameplay
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_invader_executable_v178.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows executable-path regression failed' }
+          python tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py --pinned yt130-original --reviewed-pr475 yt475-reviewed
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned original invader game source staging failed' }
+          git -C yt130-original diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Source patch whitespace or conflicts' }
       - uses: msys2/setup-msys2@v2
         with:
           msystem: CLANG64
-          update: true
-          install: >-
-            git
-            mingw-w64-clang-x86_64-clang
-            mingw-w64-clang-x86_64-python
-      - name: Windows native C++ test of EXACT original YT1.3 backported code
+          update: false
+      - name: Install the same proven native CLANG64 compiler as the full Windows job
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          python -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_invader_executable_v178.py -v
-          python tools/poc/yharnam/yt130-reference/stage_invader_actual_session_v177.py --pinned yt130-original --reviewed-pr475 yt475-reviewed
-          python tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe
+          pacman --noconfirm --disable-download-timeout -Sy
+          pacman --noconfirm --disable-download-timeout -S --needed git mingw-w64-clang-x86_64-clang
+      - name: Compile and RUN exact pinned original YT1.3 C++ with Windows CLANG64
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          winpy="$(cygpath -u "$pythonLocation")/python.exe"
+          "$winpy" tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe.exe
           git -C yt130-original diff --check
           echo SHYT_V177_REAL_WINDOWS_CXX20_INVADER_ROOM_MEMBERS_TEST_PASS_NO_GAME_ASSETS
