@@ -1103,7 +1103,8 @@
       "last_seen": "open",
       "area": "Linux native build and launcher",
       "priority": "P1",
-      "action": "COMPARE_QT_AND_NATIVE_WIN_GAMESERVER_NO_FORK_WIRE_SWAP"
+      "action": "REVIEW_CROSS_OS_QT_SERVER_AND_COOP_BUILD_NO_ASSUME_PROOF_WIN64_GAME_OR_FIVE_SEATS",
+      "last_seen_head": "cb9807c2332e4949f2e4f3c9c1a1f854c60cb99d"
     },
     {
       "repo": "lKaniel/bloodborne-server",
@@ -1156,10 +1157,12 @@
     {
       "repo": "visy/bloodborne_pc_windows_port",
       "number": 24,
-      "last_seen": "open",
+      "last_seen": "merged",
       "area": "host-selected party capacity",
       "priority": "P0",
-      "action": "FIVE_HUNTERS_JOIN_OWN_AUTH_PROTOCOL_ONLY"
+      "action": "HOST_SELECTED_MAX_SEATS_IDEA_ONLY; YT_AUTH_AND_5_SEAT_COMPAT_TEST_REQUIRED",
+      "previous_last_seen": "open",
+      "last_seen_head": "1e860afaca996c5d8dce52237bec50964e7128aa"
     },
     {
       "repo": "droogie/bbhost",
@@ -1286,6 +1289,51 @@
       "priority": "P1",
       "action": "VERIFY_DBNO_DEATH_VS_DISCONNECT_AND_PER_PLAYER_SUPPLIES",
       "last_seen_head": "bda11fcf8748614d2991f4a929a3c2b169b64bf3"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 475,
+      "last_seen": "open",
+      "last_seen_head": "899e40da19d2253ebb1028cc529e49be2d90987a",
+      "area": "YT131-invasion-guest-session-race",
+      "priority": "P0",
+      "action": "REGRESSION_TEST_INVADER_ARRIVES_GUEST_MUST_REMAIN; REAL_MULTIPC_INVADE; NO_SERVER_PATCH_IF_CLIENT_ONLY"
+    },
+    {
+      "repo": "lKaniel/bloodborne-server",
+      "number": 474,
+      "last_seen": "open",
+      "last_seen_head": "722df97660fe282ec853f4c81884099ed320304f",
+      "area": "YT131-rig-isolated-teams-switch-and-solo-invasion",
+      "priority": "P0",
+      "action": "ADAPT_SYNTHETIC_4_GAME_SLOTS_TO_FIVE_HUNTER_PLUS_INVADER_TESTS_NOT_PRODUCTION_PROOF"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 147,
+      "last_seen": "open",
+      "last_seen_head": "99783097dd1bfe12b47aad9ca7d1941d299262b8",
+      "area": "GOTY-APP_VER_0100-but-real-0109-code-version-detection",
+      "priority": "P1",
+      "action": "COMPARE_PRIVATE_CUSA03173_EXACT_HASH_AND_PATCH_GROUPS_BEFORE_APPLYING; NEVER_BLIND_APP_VER_OVERRIDES"
+    },
+    {
+      "repo": "Supermedo/bloodborne_pc",
+      "number": 144,
+      "last_seen": "open",
+      "last_seen_head": "a1d32a4571da89e96d6211b7dfaf91b0f7c1d8d6",
+      "area": "vulkan-motion-vector-image-LRU-fence-retirement",
+      "priority": "P1",
+      "action": "REVIEW_GPU_LIFETIME_SYNC_BUDGET_AND_WINDOWS_DEVICE_TESTS_NO_CROSS_ENGINE_COPY"
+    },
+    {
+      "repo": "visy/bloodborne_pc_windows_port",
+      "number": 26,
+      "last_seen": "merged",
+      "last_seen_head": "9bbb823e22d361b0220a3c2b592c704e924bfaf4",
+      "area": "open-passwordless-party-on-LAN-VPN-risk",
+      "priority": "P1",
+      "action": "AUTH_FRIENDS_OPEN_TEAM_THREAT_MODEL_NO_SILENT_PASSWORDLESS_PUBLIC_JOIN_NO_WIRE_PORT"
     }
   ],
   "branches": [
