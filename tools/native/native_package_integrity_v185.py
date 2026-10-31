@@ -23,6 +23,10 @@ MAX_FILES = 20_000
 MAX_TOTAL = 4 * 1024**3
 MAX_ENTRY = 768 * 1024**2
 MAX_CONSOLE = 16_384
+# Pin the clean 1.09 loaded-image checksum from public, reviewable
+# lKaniel/bloodborne-server bbport/scripts/game_check.py (upstream 5d2305ee).
+# Never hash PS4 SELF wrapper bytes; loadable ELF image bytes are canonical.
+SUPPORTED_GAME_IMAGE_SHA256 = '071df19c8880086d97182dbc057bc8cb37badaca57d9112683836b24a0444c0a'
 MANIFEST_SCHEMA = 'SHYT-NATIVE-PORT-PACKAGE-V185'
 
 class PackageError(Exception):
@@ -240,6 +244,44 @@ def read_decrypted_game_eboot(path: Path) -> dict[str, int]:
     return {'elf_class': 64, 'machine_x86_64': 1, 'sce_elf_type': kind}
 
 
+def loaded_game_image_sha256(path: Path) -> str:
+    """Read user's own ELF load segments, with strict offsets and a 256-MiB cap.
+
+    Mirrors the image-hashing principle in bbport's public game_check.py,
+    without importing/launching arbitrary game tools or leaking image bytes.
+    """
+    read_decrypted_game_eboot(path)
+    with path.open('rb') as f:
+        header = f.read(4096)
+        phoff = struct.unpack_from('<Q', header, 32)[0]
+        entsize, count = struct.unpack_from('<HH', header, 54)
+        if entsize != 56 or not (1 <= count <= 64) or phoff + count * entsize > path.stat().st_size:
+            raise PackageError('invalid PS4 ELF segment table')
+        f.seek(phoff)
+        table = f.read(entsize * count)
+        if len(table) != entsize * count:
+            raise PackageError('short PS4 ELF segment table')
+        loads = []
+        for i in range(count):
+            kind, flags, offset, vaddr, paddr, filesz, memsz, align = struct.unpack_from(
+                '<IIQQQQQQ', table, i * entsize)
+            if kind in (1, 0x61000010):
+                if (filesz > memsz or offset + filesz > path.stat().st_size or
+                        vaddr + memsz > 256 * 1024**2 or memsz == 0):
+                    raise PackageError('unsafe PS4 ELF load segment')
+                loads.append((offset, vaddr, filesz, memsz))
+        if not loads or len(loads) > 32:
+            raise PackageError('missing/ambiguous PS4 ELF load segments')
+        image = bytearray(max(va + ms for _, va, fs, ms in loads))
+        for offset, addr, size, memsz in loads:
+            f.seek(offset)
+            chunk = f.read(size)
+            if len(chunk) != size:
+                raise PackageError('short PS4 ELF load segment')
+            image[addr:addr+size] = chunk
+    return hashlib.sha256(image).hexdigest()
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('package', type=Path, help='local Windows release ZIP or extracted folder')
@@ -247,6 +289,8 @@ def main(argv=None) -> int:
                    help='optional PRIVATE local sce_sys/param.sfo: verify CUSA03173 update 1.09')
     p.add_argument('--game-eboot', type=Path,
                    help='optional PRIVATE decrypted eboot ELF64; requires --game-sfo')
+    p.add_argument('--verify-game-image', action='store_true',
+                   help='verify canonical 1.09 ELF load-image hash, requires --game-sfo and --game-eboot')
     p.add_argument('--write-manifest', type=Path, help='private local full per-file digest manifest')
     p.add_argument('--verify-manifest', type=Path, help='check against private prior manifest')
     args = p.parse_args(argv)
@@ -265,6 +309,12 @@ def main(argv=None) -> int:
             read_decrypted_game_eboot(args.game_eboot)
             summary['private_game_elf64_x86_64_verified'] = True
             summary['game_eboot_patch_sites_verified'] = False
+        if args.verify_game_image:
+            if not args.game_sfo or not args.game_eboot:
+                raise PackageError('--verify-game-image requires private --game-sfo and --game-eboot')
+            if loaded_game_image_sha256(args.game_eboot) != SUPPORTED_GAME_IMAGE_SHA256:
+                raise PackageError('game ELF loaded-image hash differs from clean Bloodborne 1.09')
+            summary['private_clean_109_loaded_image_verified'] = True
         if args.verify_manifest:
             old = json.loads(args.verify_manifest.read_text(encoding='utf-8'))
             if old.get('schema') != MANIFEST_SCHEMA or old.get('files') != result['files']:
