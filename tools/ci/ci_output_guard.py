@@ -90,8 +90,8 @@ def bounded_report(data: dict, budget: int = REPORT_BYTES) -> bytes:
 
 class Github:
     def __init__(self, repo: str, token: str = ""):
-        if not REPO_PATTERN.fullmatch(repo):
-            raise ValueError("Expected owner/repo")
+        if not REPO_PATTERN.fullmatch(repo) or any(part in (".", "..") for part in repo.split("/")):
+            raise ValueError("Expected owner/repo without path traversal")
         self.repo = repo
         self.token = token
         self.calls = 0
