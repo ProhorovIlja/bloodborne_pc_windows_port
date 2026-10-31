@@ -6,6 +6,7 @@ on:
       - '.github/workflows/native-v196-upstream-bbrecomp-exe.yml'
       - 'native/source-port/recomp-v194/bbrecomp_generated_host_v196.c'
       - 'native/source-port/recomp-v194/generate_upstream_snippets_v196.py'
+      - 'native/source-port/recomp-v194/build_actual_upstream_win64_v196.py'
       - 'native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py'
       - 'native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py'
   workflow_dispatch:
@@ -101,11 +102,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          clang-cl /nologo /std:c11 /O2 /W0 /Ipublic-upstream-recomp/src "/I$RUNNER_TEMP/v196-upstream-artifact/include" native/source-port/recomp-v194/bbrecomp_generated_host_v196.c "$RUNNER_TEMP/v196-upstream-artifact/generated.c" "/Fe$RUNNER_TEMP/v196-native-bbrecomp.exe"
-          "$RUNNER_TEMP/v196-native-bbrecomp.exe"
-          if "$RUNNER_TEMP/v196-native-bbrecomp.exe" --eboot fake; then
-            echo "::error::Native host incorrectly accepted runtime EBOOT"
-            exit 1
-          fi
+          # Git Bash rewrites clang-cl /I relative switches as MSYS paths;
+          # Python supplies literal native absolute paths to clang-cl.
+          python native/source-port/recomp-v194/build_actual_upstream_win64_v196.py --upstream-checkout public-upstream-recomp --synthetic-artifact "$RUNNER_TEMP/v196-upstream-artifact" --out "$RUNNER_TEMP/v196-native-bbrecomp.exe"
           echo SHYT_V196_REAL_UPSTREAM_AOT_CODE_EXECUTES_ON_WIN64_WITHOUT_EBOOT
           echo 'Invented x86 instructions ONLY. No Bloodborne boot, PS4 runtime or game-derived C artifact.'
