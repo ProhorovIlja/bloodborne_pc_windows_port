@@ -113,6 +113,12 @@ jobs:
           command -v clang++
           python --version
           clang++ --version
-          python tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe.exe
+          # Bound compiler diagnostics: do not bury the useful error in giant job logs.
+          if ! python tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe.exe > v177-compile.log 2>&1; then
+            echo "V177_NATIVE_WINDOWS_CLANG64_FAILED (last 100 lines follow)"
+            tail -n 100 v177-compile.log
+            exit 1
+          fi
+          tail -n 12 v177-compile.log
           git -C yt130-original diff --check
           echo SHYT_V177_REAL_WINDOWS_CXX20_INVADER_ROOM_MEMBERS_TEST_PASS_NO_GAME_ASSETS
