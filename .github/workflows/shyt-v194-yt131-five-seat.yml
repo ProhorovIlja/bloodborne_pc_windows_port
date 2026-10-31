@@ -1,0 +1,110 @@
+name: SHYT V194 exact YT 1.3.1 five-seat native Qt migration gate
+on:
+  push:
+    branches: [feature/yt130-cls-independent-lobby-v184-20261031]
+    paths:
+      - '.github/workflows/shyt-v194-yt131-five-seat.yml'
+      - 'tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py'
+      - 'tools/poc/yharnam/yt130-reference/test_stage_yt131_five_seat_v194.py'
+      - 'tools/poc/yharnam/yt130-reference/patch_five_hunter_team.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-v194-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  exact-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: yt131
+          persist-credentials: false
+          submodules: false
+      - name: Exercise fail-closed prototype and source pins
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p 'test_stage_yt131_five_seat_v194.py' -v
+          test "$(git -C yt131 rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+      - name: Apply FIVE seats to original YT 1.3.1 including friends and open join
+        run: |
+          set -euo pipefail
+          if ! python3 tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py yt131 > "$RUNNER_TEMP/v194-stage.log" 2>&1; then
+            echo "::error title=V194 original YT1.3.1 source drift::$(tail -n 1 "$RUNNER_TEMP/v194-stage.log" | cut -c1-240)"
+            exit 1
+          fi
+          git -C yt131 diff --check
+          git -C yt131 diff --name-only > "$RUNNER_TEMP/v194-paths.txt"
+          test "$(wc -l < "$RUNNER_TEMP/v194-paths.txt")" -eq 3
+          grep -Fqx 'server/coop/team_lobby.h' "$RUNNER_TEMP/v194-paths.txt"
+          grep -Fqx 'server/coop/team_lobby.cpp' "$RUNNER_TEMP/v194-paths.txt"
+          grep -Fqx 'server/tests/test_team_lobby.cpp' "$RUNNER_TEMP/v194-paths.txt"
+          test "$(git -C yt131 rev-parse HEAD:server/coop/coop.proto)" = f0055dce7cb09ff8bd382cff883b588abcf1b4a8
+          test -z "$(git -C yt131 diff --name-only -- server/coop/coop.proto)"
+          grep -Fq 'constexpr size_t TeamSize = 5;' yt131/server/coop/team_lobby.h
+          grep -Fq 'std::array<u32, 4> GuestSigns{7, 6, 5, 4};' yt131/server/coop/team_lobby.cpp
+          grep -Fq 'case Action::ASK_JOIN:' yt131/server/coop/team_lobby.cpp
+          # Friends live in the separate lobby_friends service, not TeamLobby.
+          # Verify their 1.3.1 wire action remains unchanged, plus public OPEN.
+          grep -Fq 'FRIEND_ADD = 19;' yt131/server/coop/coop.proto
+          grep -Fq 'case Action::OPEN:' yt131/server/coop/team_lobby.cpp
+          grep -Fq 'FiveSeatPublicOpenTeamHonorsServerCapacity' yt131/server/tests/test_team_lobby.cpp
+          echo SHYT_V194_ORIGINAL_YT131_FIVE_SEAT_SOURCE_ONLY_PASS
+  original-qt:
+    needs: exact-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install tested real Qt6, SQLite, and native C++ dependencies
+        run: |
+          set -euo pipefail
+          if ! (sudo apt-get -qq update &&
+            sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends cmake ninja-build g++ pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite) > "$RUNNER_TEMP/v194-apt.log" 2>&1; then
+            echo "::error title=Qt dependency setup::v194 required Qt dependencies missing"
+            tail -n 10 "$RUNNER_TEMP/v194-apt.log" | cut -c1-280
+            exit 1
+          fi
+      - name: Check out exact original YT 1.3.1 plus its pinned protobuf
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt131"
+          git -C "$RUNNER_TEMP/yt131" checkout -q --detach 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          git -C "$RUNNER_TEMP/yt131" submodule update -q --init --recursive server/externals/protobuf
+      - name: Source-lock original YT 1.3.1 five-seat TeamLobby and native tests
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/stage_yt131_five_seat_v194.py "$RUNNER_TEMP/yt131"
+          git -C "$RUNNER_TEMP/yt131" diff --check
+      - name: Compile and run ACTUAL original Qt C++ team and server world regression
+        run: |
+          set -euo pipefail
+          if ! cmake -S "$RUNNER_TEMP/yt131/server" -B "$RUNNER_TEMP/v194-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON > "$RUNNER_TEMP/v194-config.log" 2>&1; then
+            echo "::error title=V194 CMake::Original v1.3.1 server configure failed"
+            grep -m1 -E 'error:|Error|Could NOT' "$RUNNER_TEMP/v194-config.log" | cut -c1-280 || true
+            tail -n 8 "$RUNNER_TEMP/v194-config.log" | cut -c1-280
+            exit 1
+          fi
+          if ! cmake --build "$RUNNER_TEMP/v194-build" --parallel 2 --target test_team_lobby test_bloodborne_world > "$RUNNER_TEMP/v194-build.log" 2>&1; then
+            echo "::error title=V194 native build::Real Qt C++ team or world build failed"
+            grep -m1 -E 'fatal error:|error:|undefined reference|FAILED:' "$RUNNER_TEMP/v194-build.log" | cut -c1-320 || true
+            tail -n 8 "$RUNNER_TEMP/v194-build.log" | cut -c1-320
+            exit 1
+          fi
+          if ! ctest --test-dir "$RUNNER_TEMP/v194-build" --output-on-failure --timeout 90 -j 2 -R '^(team_lobby|bloodborne_world)$' > "$RUNNER_TEMP/v194-ctest.log" 2>&1; then
+            echo "::error title=V194 native regression::Original Qt team/world CTests failed"
+            tail -n 22 "$RUNNER_TEMP/v194-ctest.log" | cut -c1-300
+            exit 1
+          fi
+          echo SHYT_V194_ORIGINAL_QT_YT131_5_SEAT_INVITE_CODE_OPEN_ASK_CTEST_PASS
+          echo 'Original server C++ only. Does NOT prove five-game client, 3 invaders, online interoperability, P2P, DBNO or live QoS.'

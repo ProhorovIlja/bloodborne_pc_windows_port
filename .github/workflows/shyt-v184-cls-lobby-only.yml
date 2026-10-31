@@ -1,0 +1,99 @@
+name: SHYT V184 CLS lobby-only limit original Qt C++ guard
+on:
+  push:
+    branches: [feature/yt130-cls-independent-lobby-v184-20261031]
+    paths:
+      - .github/workflows/shyt-v184-cls-lobby-only.yml
+      - tools/poc/yharnam/yt130-reference/stage_cls_lobby_only_v184.py
+      - tools/poc/yharnam/yt130-reference/stage_cls_lobby_cpp_test_v184.py
+      - tools/poc/yharnam/yt130-reference/test_stage_cls_lobby_only_v184.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  strict-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-yt130
+          persist-credentials: false
+          submodules: false
+      - name: Verify locked donor port and no default Hosted side effects
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_cls_lobby_only_v184.py -v
+          python3 -m py_compile tools/poc/yharnam/yt130-reference/stage_cls_lobby_only_v184.py
+          python3 -m py_compile tools/poc/yharnam/yt130-reference/stage_cls_lobby_cpp_test_v184.py
+      - name: Apply exact changes only to disposable YT1.3 original
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/stage_cls_lobby_only_v184.py pinned-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_cls_lobby_cpp_test_v184.py pinned-yt130
+          git -C pinned-yt130 diff --check
+          git -C pinned-yt130 diff --name-only > "$RUNNER_TEMP/v184-changed.txt"
+          test "$(wc -l < "$RUNNER_TEMP/v184-changed.txt")" -eq 8
+          grep -Fqx server/src/link_server.cpp "$RUNNER_TEMP/v184-changed.txt"
+          grep -Fqx server/src/config.cpp "$RUNNER_TEMP/v184-changed.txt"
+          grep -Fqx server/src/config.h "$RUNNER_TEMP/v184-changed.txt"
+          grep -Fqx server/src/bloodborne_world.h "$RUNNER_TEMP/v184-changed.txt"
+          grep -Fqx server/src/bloodborne_world.cpp "$RUNNER_TEMP/v184-changed.txt"
+          grep -Fqx server/coop/team_lobby.h "$RUNNER_TEMP/v184-changed.txt"
+          grep -Fqx server/coop/team_lobby.cpp "$RUNNER_TEMP/v184-changed.txt"
+          grep -Fqx server/tests/test_team_lobby.cpp "$RUNNER_TEMP/v184-changed.txt"
+          echo SHYT_V184_ORIGINAL_NONHOSTED_LOBBY_ONLY_SOURCE_PASS
+  qt-cpp:
+    needs: strict-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install native original Qt6 C++ prerequisites with bounded failure output
+        run: |
+          set -euo pipefail
+          if ! (sudo apt-get -qq update && sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y --no-install-recommends cmake ninja-build g++ pkg-config qt6-base-dev qt6-httpserver-dev qt6-websockets-dev libqt6sql6-sqlite) > "$RUNNER_TEMP/v184-install.txt" 2>&1; then
+            echo "::error title=V184 Qt dependencies::Dependency setup failed"
+            tail -n 10 "$RUNNER_TEMP/v184-install.txt" | cut -c1-280
+            exit 1
+          fi
+      - name: Check out exact original YT1.3 with pinned protobuf
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --no-checkout https://github.com/lKaniel/bloodborne-server.git "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" checkout -q --detach 0645740a33ae21c56df3b4a0d9777086dbca6053
+          git -C "$RUNNER_TEMP/yt-src" submodule update -q --init --recursive server/externals/protobuf
+      - name: Source-pin donor-only lobby cap and C++ runtime tests
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/stage_cls_lobby_only_v184.py "$RUNNER_TEMP/yt-src"
+          python3 tools/poc/yharnam/yt130-reference/stage_cls_lobby_cpp_test_v184.py "$RUNNER_TEMP/yt-src"
+          git -C "$RUNNER_TEMP/yt-src" diff --check
+      - name: Compile original Qt game server and execute team + world tests
+        run: |
+          set -euo pipefail
+          if ! cmake -S "$RUNNER_TEMP/yt-src/server" -B "$RUNNER_TEMP/yt-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON > "$RUNNER_TEMP/v184-config.txt" 2>&1; then
+            echo "::error title=V184 Qt configure::CMake configure failed"
+            tail -n 12 "$RUNNER_TEMP/v184-config.txt" | cut -c1-300
+            exit 1
+          fi
+          if ! cmake --build "$RUNNER_TEMP/yt-build" --parallel 2 --target shadnet test_team_lobby test_bloodborne_world > "$RUNNER_TEMP/v184-build.txt" 2>&1; then
+            echo "::error title=V184 Qt C++ compile::Original C++ compilation failed"
+            grep -m1 -E 'fatal error:|error:|undefined reference|FAILED:' "$RUNNER_TEMP/v184-build.txt" | cut -c1-300 || true
+            tail -n 12 "$RUNNER_TEMP/v184-build.txt" | cut -c1-320
+            exit 1
+          fi
+          if ! ctest --test-dir "$RUNNER_TEMP/yt-build" --output-on-failure --timeout 90 -j 2 -R '^(team_lobby|bloodborne_world)$' > "$RUNNER_TEMP/v184-ctest.txt" 2>&1; then
+            echo "::error title=V184 original lobby runtime::Native C++ regression failed"
+            tail -n 16 "$RUNNER_TEMP/v184-ctest.txt" | cut -c1-320
+            exit 1
+          fi
+          echo SHYT_V184_CLS_LOBBY_ONLY_REAL_ORIGINAL_QT_CPP_PASS
+          echo 'No live 200-player acceptance, P2P, client boot or Fornex deployment claim'

@@ -1,0 +1,95 @@
+name: SHYT V184 CLS independent lobby cap source-compose with real five-seat YT1.3
+on:
+  push:
+    branches: [feature/yt130-cls-independent-lobby-v184-20261031]
+    paths:
+      - .github/workflows/shyt-v184-five-seat-stack.yml
+      - tools/poc/yharnam/yt130-reference/stage_cls_lobby_only_v184.py
+      - tools/poc/yharnam/yt130-reference/stage_cls_lobby_cpp_test_v184.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-composition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: pinned-yt130
+          persist-credentials: false
+          submodules: false
+      - name: Apply real five-hunter, server, world and V181 network stages FIRST
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-auth-stage/stage_auth.py "$GITHUB_WORKSPACE/tools/poc/yharnam/yt130-auth-stage/overrides" pinned-yt130
+          for step in stage_lobby_dedupe.py stage_wire_traffic.py stage_coop_reliability.py stage_lobby_coalesce.py stage_lobby_coalesce_cpp_test.py stage_eventloop_timing.py; do
+            python3 "tools/poc/yharnam/yt130-reference/$step" pinned-yt130
+          done
+          python3 tools/poc/yharnam/yt130-reference/stage_five_hunter_server.py pinned-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_five_hunter_invasion_guard.py pinned-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_multi_invader_server_v108.py pinned-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_world_encode_once_v132.py pinned-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_policy_route_attribution_v173.py pinned-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py pinned-yt130
+          git -C pinned-yt130 diff --check
+          echo SHYT_V184_EXISTING_FIVE_SEAT_REAL_QT_STAGE_PASS
+      - name: Record only which original Qt anchors survived the prior five-seat stack
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          f=Path("tools/poc/yharnam/yt130-reference/stage_cls_lobby_only_v184.py")
+          spec=importlib.util.spec_from_file_location("v184_diagnose",f)
+          m=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
+          root=Path("pinned-yt130")
+          lines=[]
+          for path,pairs in m.PATCHES.items():
+              text=(root/path).read_text(encoding="utf-8")
+              counts=[text.count(old) for old,_ in pairs]
+              lines.append(path+": "+",".join(map(str,counts)))
+          (Path(os.environ["RUNNER_TEMP"])/"v184-anchor-counts.txt").write_text(
+              "\n".join(lines)+"\n",encoding="utf-8")
+          # Pre-existing V24 deduplication deliberately removes the old
+          # hosted-only SendLobby branch: that single 0 is safe if its exact
+          # original reliable CoopStream dedupe marker is present.
+          for path,pairs in m.PATCHES.items():
+              source=(root/path).read_text(encoding="utf-8")
+              for index,(old,new) in enumerate(pairs):
+                  hits=source.count(old)
+                  safe_old_dedupe=(path=="server/src/bloodborne_world.cpp" and
+                      index==1 and hits==0 and
+                      source.count("A lobby-state envelope is delivered by CoopStream with ACKs")==1)
+                  if hits!=1 and not safe_old_dedupe:
+                      raise SystemExit("V184 unknown source drift: "+path)
+          print("SHYT_V184_COMPOSED_QT_ALL_SEVEN_ANCHOR_SET_PRESENT")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shyt-v184-anonymous-qt-anchor-counts-NOT-PRODUCTION
+          path: ${{ runner.temp }}/v184-anchor-counts.txt
+          retention-days: 2
+          if-no-files-found: ignore
+          compression-level: 9
+      - name: Add CLS lobby-only cap atop existing V155/V181 native five-seat server
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/stage_cls_lobby_only_v184.py pinned-yt130
+          python3 tools/poc/yharnam/yt130-reference/stage_cls_lobby_cpp_test_v184.py pinned-yt130
+          git -C pinned-yt130 diff --check
+          grep -Fq 'LobbyLimits' pinned-yt130/server/src/config.cpp
+          grep -Fq 'bool capped = false;' pinned-yt130/server/coop/team_lobby.h
+          grep -Fq 'SHYT_V184_NONHOSTED_LOBBY_CTEST' pinned-yt130/server/tests/test_team_lobby.cpp
+          grep -Fq 'SHYT_V173_ORIGINAL_QT_POLICY_FILTER_ATTRIBUTION' pinned-yt130/server/src/server_link.h
+          grep -Fq 'effective_receive_bytes=' pinned-yt130/server/src/link_server.cpp
+          echo SHYT_V184_CLS_LOBBY_WITH_FIVE_HUNTER_INVASION_AND_UDP_SOURCE_PASS
+          echo 'Source composition only; not a WAN, game or 200-player QoS claim'
