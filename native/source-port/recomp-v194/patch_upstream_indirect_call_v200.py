@@ -22,7 +22,6 @@ UPSTREAM="8f31ec7c41f252730c6325d52647046baef7549f"
 PATH="tools/recomp/bbrecomp.c"
 BLOB="f5032c9ead4988579e005af8a0a0ce4ba4ab66d8"
 MARK="SHYT_NATIVE_V200_INDIRECT_CALL_NATIVE_DISPATCH"
-CALL_OLD='emit("{ const uint64_t t = %s; " SPILL " rc->call(c, t, B + 0x%" PRIx64 "ull); " RELOAD " fk = FK_CPU; }\n", b.s, next);'
 # This expression is a single physical line of source, with literal escaped
 # backslash-n inside its C format. Define it below to avoid text ambiguity.
 CALL_OLD='emit("{ const uint64_t t = %s; " SPILL " rc->call(c, t, B + 0x%" PRIx64 "ull); " RELOAD " fk = FK_CPU; }\\n", b.s, next);'
