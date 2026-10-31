@@ -84,8 +84,14 @@ def stage(root:Path)->None:
     src=root/TARGET
     if src.is_symlink() or not src.is_file():raise ValueError("V195 upstream rc.h unavailable")
     saved=subprocess.check_output(["git","-C",str(root),"show","HEAD:"+TARGET])
-    if git_blob(saved)!=UPSTREAM_RC_BLOB or src.read_bytes()!=saved:
-        raise ValueError("V195 original upstream header bytes changed")
+    # Git for Windows may check out the identical pinned Git blob with
+    # CRLF line endings. Validate Git's ORIGINAL bytes and compare the
+    # decoded working-copy text (universal newlines), never raw worktree
+    # bytes to Linux-formatted git show output.
+    if git_blob(saved)!=UPSTREAM_RC_BLOB or (
+        src.read_text(encoding="utf-8")!=saved.decode("utf-8")
+    ):
+        raise ValueError("V195 original upstream header contents changed")
     data=transform(saved.decode("utf-8"))
     src.write_text(data,encoding="utf-8")
     subprocess.run(["git","-C",str(root),"diff","--check"],check=True,
