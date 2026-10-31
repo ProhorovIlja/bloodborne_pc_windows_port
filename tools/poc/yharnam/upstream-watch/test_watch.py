@@ -25,7 +25,16 @@ class SourceWatchTests(unittest.TestCase):
                          "droogie/bbhost", "Mrsuss60/bloodborne_pc_windows_port",
                          "Awakenchan/LanternEngine", "DarkIzuku/bloodborne_pc",
                          "Wozzardman/shadnet-p2p"}.issubset(names))
-        self.assertGreaterEqual(len(names), 12)
+        self.assertGreaterEqual(len(names), 20)
+        # Newly source-checked AOT and Windows-native engine research roots:
+        # watch for drift but never automatically import guest runtimes.
+        for source in ("bloodborne-native/bloodborne-recomp",
+                       "bloodborne-native/bloodborne-runtime",
+                       "Astrr00/BloodbornePC"):
+            self.assertIn(source, names)
+            row=next(r for r in self.data["repositories"] if r["full_name"]==source)
+            self.assertEqual(len(row["known_head"]),40)
+            self.assertIn("ONLY",row["compatibility"])
         self.assertGreaterEqual(len(self.data["pull_requests"]), 61)
         self.assertIn(("Jgamrot/yharnam-pc", 219),
                       {(p["repo"], p["number"]) for p in self.data["pull_requests"]})
