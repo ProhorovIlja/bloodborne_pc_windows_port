@@ -25,9 +25,10 @@
       "full_name": "Astrr00/BloodbornePC",
       "category": "independent-win64-pc-static-recompiler-hle-vulkan",
       "known_head": "802e3f2bf2e38e71da0a46362ae4510a429f7213",
-      "known_release_tag": "unverified",
+      "known_release_tag": "no-release",
       "compatibility": "NATIVE_PC_ENGINE_AND_RECOMPILER_IDEAS_ONLY; SEPARATE_HLE_GUEST_AND_YT_NET; LICENSE_AND_VERSION_PARITY_REQUIRED",
-      "review_notes": "2026-11-01: Windows bbgame playthrough reports with limitations (README: native static recompile; 1.00 progress more tested than 1.09); no evidence of full independent game completion. No wholesale import or cross-wire compatibility assumption."
+      "review_notes": "2026-11-01: Windows bbgame playthrough reports with limitations (README: native static recompile; 1.00 progress more tested than 1.09); no evidence of full independent game completion. No wholesale import or cross-wire compatibility assumption.",
+      "release_review_note": "2026-11-01: GitHub /releases/latest confirmed 404; no published latest release. Treat future first release as a change."
     },
     {
       "full_name": "lKaniel/bloodborne-server",
@@ -170,19 +171,21 @@
       "full_name": "bloodborne-native/bloodborne-launcher",
       "category": "cross-platform-tauri-launcher-saves-config-shader-precompile",
       "known_head": "f4839b9fd8964f94f7bd0036a45dd95a65c9f869",
-      "known_release_tag": "unverified",
+      "known_release_tag": "no-release",
       "compatibility": "LAUNCHER_UI_ATOMIC_UPDATE_SAVES_AND_SETTINGS_IDEAS_ONLY_NO_PS4_RUNTIME_OR_YT_WIRE_IMPORT",
       "owner": "upstream",
-      "review_notes": "2026-11-01: Tauri/React cross-platform launcher; 2026-10-31 HEAD offers opt-in shader precompile. Review game-specific APIs and licenses. Does not replace Yharnam Together auth, co-op wire or the current tested launcher."
+      "review_notes": "2026-11-01: Tauri/React cross-platform launcher; 2026-10-31 HEAD offers opt-in shader precompile. Review game-specific APIs and licenses. Does not replace Yharnam Together auth, co-op wire or the current tested launcher.",
+      "release_review_note": "2026-11-01: GitHub /releases/latest confirmed 404; no published latest release. Treat future first release as a change."
     },
     {
       "full_name": "JKAnderson/SoulsFormats",
       "category": "fromsoftware-bnd4-dcx-flver-archives-reference",
       "known_head": "9c0da6b0721372b34f36b4be503ec020dca1043a",
-      "known_release_tag": "unverified",
+      "known_release_tag": "no-release",
       "compatibility": "FORMAT_RESEARCH_AND_SYNTHETIC_ASSET_PARSING_TESTS_ONLY; NO_COPY_GAME_ASSETS_OR_UNREVIEWED_GPL_CODE",
       "owner": "upstream",
-      "review_notes": "2026-11-01: read/write FromSoftware BND, DCX and other formats; compare source structure to V77 native resource core and private Bloodborne 1.09/DS3; independently implement/test synthetic resource formats, license review first."
+      "review_notes": "2026-11-01: read/write FromSoftware BND, DCX and other formats; compare source structure to V77 native resource core and private Bloodborne 1.09/DS3; independently implement/test synthetic resource formats, license review first.",
+      "release_review_note": "2026-11-01: GitHub /releases/latest confirmed 404; no published latest release. Treat future first release as a change."
     },
     {
       "full_name": "vawser/Smithbox",
