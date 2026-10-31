@@ -1,0 +1,46 @@
+name: Native V195 actual upstream recompiler C header Win32 QPC
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v195-upstream-rc-win.yml'
+      - 'native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py'
+      - 'native/source-port/recomp-v194/upstream_rc_probe_v195.c'
+      - 'native/source-port/recomp-v194/build_upstream_rc_probe_v195.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-upstream-generated-c-runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Source-lock exact original upstream rc.h and CPU layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python native/source-port/recomp-v194/check_upstream_full_abi_v194.py --upstream-checkout public-upstream-recomp
+          python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout public-upstream-recomp
+          git -C public-upstream-recomp diff --check
+          test "$(git -C public-upstream-recomp diff --name-only)" = src/recomp/rc.h
+          echo SHYT_V195_WIN32_UPSTREAM_HEADER_SOURCE_ONLY_PASS
+      - name: Compile and execute actual upstream rc.h with native Win32 or Linux clocks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python native/source-port/recomp-v194/build_upstream_rc_probe_v195.py --upstream-checkout public-upstream-recomp
+          echo 'No original-game code, runtime EBOOT, PS4 syscalls, binary emulation or gameplay'
