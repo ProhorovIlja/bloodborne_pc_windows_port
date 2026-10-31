@@ -30,12 +30,15 @@ The full Bloodborne game **is already available on the user's private Drive**, b
 ```sh
 python tools/native/native_package_integrity_v185.py /private/CLS-Windows.zip \
   --game-sfo /private/Bloodborne/sce_sys/param.sfo \
-  --game-eboot /private/Bloodborne/eboot.bin-decrypted
+  --game-eboot /private/Bloodborne/eboot.bin-decrypted \
+  --verify-game-image
 ```
 
 This validates the real `param.sfo` PSF metadata for `CUSA03173` / `APP_VER 01.09` and verifies only the header of the already-decrypted original game's **PS4 ELF64 x86-64**. The PS4-specific ELF ABI still needs the native bbport compatibility runtime. Neither metadata check decrypts the game, proves game patch offsets, or runs anything; output records only true/false acceptance flags and never prints the original file paths.
 
-In a private dry run on 2026-10-31 the actual Drive game metadata passed both checks. This is **stronger than finding filenames** but still falls short of an executable game boot.
+In a private dry run on 2026-10-31 the actual Drive game passed all three checks: correct PSF region/update, decrypted SCE ELF64 x86-64 header, and **exact SHA-256 of the canonical 91,042,036-byte loadable game image**. The expected clean 1.09 reference is public in the pinned `bbport/scripts/game_check.py`: `071df19c8880086d97182dbc057bc8cb37badaca57d9112683836b24a0444c0a`. The actual image matched it exactly and did not match the known baked-in Lance 60 FPS variant. This validates the game image targeted by our native hooks, but does **not** prove those hooks are currently installed correctly, Windows boots, savegames work, or gameplay/netcode is reliable.
+
+`--verify-game-image` reconstructs load segments strictly in a capped temporary in-memory image and hashes the result. It never saves the loaded image, uploads proprietary data, changes the original ELF or executes it. It refuses anomalous segment tables or unsafe virtual ranges. The public CI uses **only synthetic ELF fixtures**: no user game files.
 
 The report printed to stdout contains only a bounded count/fingerprint and explicitly marks boot, NAT, and gameplay tests as **false**. The private manifest contains **relative distribution paths and per-file SHA-256**. Keep it private and separate from the game folder; never commit the result, retail game assets, save files, settings or server credentials to the public repository. The checker never executes game binaries, downloads, extracts, or connects to a server. It refuses retail `eboot.bin` or game asset folders inside the distributable, case-conflicting names, ZIP traversal, symlinks, unexpected architectures, and oversized inputs.
 
