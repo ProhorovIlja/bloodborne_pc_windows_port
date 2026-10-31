@@ -48,6 +48,23 @@ class Cpu(ctypes.Structure):
     _fields_ = [("r", ctypes.c_uint64 * 16), ("rip", ctypes.c_uint64),
                 ("flags", ctypes.c_uint64), ("v", Vec * 16)]
 
+def synthetic_runtime_hash(frame):
+    """Independent byte-loop oracle for allowed non-TCB 16-byte FDEs."""
+    if len(frame) != 16 or v.classify(frame) is None:
+        return None
+    h = 14695981039346656037
+    for b in frame:
+        h ^= b
+        h = (h * 1099511628211) % (1 << 64)
+    return h
+
+
+def admit_synthetic_func(func, frame):
+    """Simulate only the upstream ORIGINAL-CODE-HASH admission check."""
+    verified = synthetic_runtime_hash(frame)
+    return verified is not None and verified == func.hash
+
+
 class NativeOracleTests(unittest.TestCase):
     def test_upstream_fnv_byte_reference_vectors_and_rejections(self):
         # Golden literals for 64-bit FNV-1a, used by upstream hash_more for
@@ -125,7 +142,18 @@ class NativeOracleTests(unittest.TestCase):
                 self.assertEqual(count.value, 10)
                 self.assertEqual([funcs[i].offset for i in range(10)], [r[0] for r in rows])
                 self.assertEqual([funcs[i].hash for i in range(10)],
-                                 [v.strict_leaf_hash(image[addr:addr+16]) for addr,_,_ in rows])
+                                 [synthetic_runtime_hash(image[addr:addr+16]) for addr,_,_ in rows])
+                # Function activation must compare the CURRENT decoded bytes,
+                # not merely accept a generated entry's self-reported hash.
+                for i,(addr,kind,disp) in enumerate(rows):
+                    original=image[addr:addr+16]
+                    self.assertTrue(admit_synthetic_func(funcs[i],original))
+                    # Two valid 1-byte NOPs -> one valid 2-byte NOP:
+                    # executable behavior is unchanged but hash MUST differ.
+                    changed=original[:-2]+b'\x66\x90'
+                    self.assertIsNotNone(v.classify(changed))
+                    self.assertFalse(admit_synthetic_func(funcs[i],changed))
+                self.assertFalse(admit_synthetic_func(funcs[0],b'\xcc'*16))
                 for i, (_, kind, disp) in enumerate(rows):
                     with self.subTest(kind=kind):
                         self.assertTrue(bool(funcs[i].fn))
