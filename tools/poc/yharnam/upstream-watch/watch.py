@@ -8,6 +8,7 @@ writes to GitHub, tests locally only, and cannot touch game/server state.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
 import os
@@ -100,6 +101,52 @@ def _attempt(get, endpoint: str, failures: list[dict]) -> dict | None:
         return None
 
 
+def _attempt_release(get, endpoint: str, failures: list[dict]) -> dict | None:
+    """Distinguish a confirmed NO release from a missing API response.
+
+    GitHub returns 404 for /releases/latest on a public repo without releases.
+    That is negative evidence, not a rate limit or an unavailable repository.
+    The caller must separately verify that the repo HEAD was readable.
+    """
+    try:
+        return get(endpoint)
+    except HTTPError as ex:
+        if ex.code == 404:
+            return {"tag_name": "no-release"}
+        failures.append({"endpoint": endpoint, "error_type": type(ex).__name__})
+    except (OSError, URLError, ValueError, KeyError, TimeoutError) as ex:
+        failures.append({"endpoint": endpoint, "error_type": type(ex).__name__})
+    return None
+
+
+def gather_paths(registry: dict) -> list[str]:
+    """Unique, source-validated public metadata endpoints, stable order."""
+    paths = []
+    for entry in registry["repositories"]:
+        n = entry["full_name"]
+        paths += ["/repos/" + n + "/commits/HEAD", "/repos/" + n + "/releases/latest"]
+    for entry in registry.get("branches", []):
+        paths.append("/repos/" + entry["repo"] + "/branches/" + entry["branch"])
+    for entry in registry["pull_requests"]:
+        paths.append("/repos/" + entry["repo"] + "/pulls/" + str(entry["number"]))
+    return list(dict.fromkeys(paths))
+
+
+def survey_bounded_parallel(registry: dict, get, workers: int = 6) -> dict:
+    """Read-only bounded metadata fanout; retain survey's deterministic order.
+
+    Workers fetch only enumerated validated endpoints; errors are passed back
+    unchanged and classified by the existing fail-closed survey. CI never
+    writes to GitHub or to any game server.
+    """
+    if not 1 <= workers <= 8:
+        raise ValueError("source watch worker limit must be 1..8")
+    paths = gather_paths(registry)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {path: executor.submit(get, path) for path in paths}
+        return survey(registry, lambda path: futures[path].result())
+
+
 def survey(registry: dict, get) -> dict:
     output = {
         "schema": 1,
@@ -114,7 +161,7 @@ def survey(registry: dict, get) -> dict:
     for entry in registry["repositories"]:
         name = entry["full_name"]
         commit = _attempt(get, "/repos/" + name + "/commits/HEAD", output["errors"])
-        release = _attempt(get, "/repos/" + name + "/releases/latest", output["errors"])
+        release = _attempt_release(get, "/repos/" + name + "/releases/latest", output["errors"])
         head = commit.get("sha", "") if commit else ""
         tag = release.get("tag_name", "") if release else ""
         output["repositories"].append({
@@ -241,10 +288,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--inventory", type=Path, default=REGISTRY)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--workers", type=int, default=6, help="bounded read-only parallel metadata requests, 1..8")
     args = parser.parse_args()
     config = load_inventory(args.inventory)
     token = os.environ.get("GITHUB_TOKEN", "")
-    report = survey(config, lambda path: fetch(path, token))
+    report = survey_bounded_parallel(config, lambda path: fetch(path, token), workers=args.workers)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "upstreams.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
