@@ -1,0 +1,52 @@
+name: SHYT V189 real game leaf AOT private-proof tooling, synthetic CI
+on:
+  push:
+    branches: [feature/native-real-game-leaf-aot-v189-20261031]
+    paths:
+      - .github/workflows/shyt-v189-real-leaf-recomp.yml
+      - native/source-port/recomp-v189/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-game-aot:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check source generator syntax and no proprietary game bytes
+        run: python -m py_compile native/source-port/recomp-v189/real_leaf_recomp_v189.py native/source-port/recomp-v189/test_real_leaf_recomp_v189.py native/source-port/recomp-v189/test_native_module_v189.py
+      - name: Linux original-style synthetic ELF FDE, actual CPU oracle and compiler tests
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s native/source-port/recomp-v189 -p 'test_*v189.py' -v
+      - name: Windows real LLVM COFF + PE32+ DLL execution using synthetic instructions ONLY
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
+          $log = Join-Path $env:RUNNER_TEMP "v189-ci-only-tests.txt"
+          python -m unittest discover -s native/source-port/recomp-v189 -p 'test_*v189.py' -v *> $log
+          $testExit = $LASTEXITCODE
+          Get-Content $log -Tail 20 | ForEach-Object { $_.Substring(0, [Math]::Min(250, $_.Length)) } | Set-Content (Join-Path $env:RUNNER_TEMP "v189-ci-only-diagnostic.txt")
+          if ($testExit -ne 0) {
+            echo "::error title=V189 synthetic Windows test::Exact unit or native ABI failure; inspect 20-line bounded CI-only artifact"
+            exit 1
+          }
+          echo SHYT_V189_SYNTHETIC_WIN64_COFF_DLL_EXECUTE_PASS_NO_GAME_ASSETS
+      - uses: actions/upload-artifact@v4
+        if: failure() && runner.os == 'Windows'
+        with:
+          name: v189-20-line-synthetic-only-error
+          path: ${{ runner.temp }}/v189-ci-only-diagnostic.txt
+          if-no-files-found: ignore
+          retention-days: 2
