@@ -67,7 +67,6 @@ def scan_workflow(path: str, source: str) -> list[dict]:
                 "line": index,
                 "rule": rule,
                 "severity": severity,
-                "sample": stripped[:170],
             })
     return findings
 
