@@ -1,0 +1,51 @@
+name: SHYT V182 original Qt socket buffer numeric evidence, source only
+on:
+  push:
+    branches: [feature/yt130-server-wire-attribution-v155-20261030]
+    paths:
+      - .github/workflows/shyt-v182-qt-udp-buffer-evidence.yml
+      - tools/poc/yharnam/yt130-reference/stage_udp_buffer_readback_report_v182.py
+      - tools/poc/yharnam/yt130-reference/test_stage_udp_buffer_readback_report_v182.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-shards:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 0645740a33ae21c56df3b4a0d9777086dbca6053
+          path: yt-original
+          persist-credentials: false
+          submodules: false
+      - name: Test bounded-only numeric parser with fake logs, no game
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/poc/yharnam/yt130-reference -p test_stage_udp_buffer_readback_report_v182.py -v
+          python3 -m py_compile tools/poc/yharnam/yt130-reference/stage_udp_buffer_readback_report_v182.py
+      - name: Stage exact existing original YT1.3 load generator, then V182
+        run: |
+          set -euo pipefail
+          python3 tools/poc/yharnam/yt130-reference/stage_five_player_bbload.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/prepare_synthetic_load.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_shard_generator_v117.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_shard_wire_v155.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_lobby_notice_v156.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_qt_receive_v158.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_lobby_notice_detail_v159.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_global_cohort_v161.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_directed_cohort_v169.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_policy_route_report_v174.py yt-original
+          python3 tools/poc/yharnam/yt130-reference/stage_udp_buffer_readback_report_v182.py yt-original
+          python3 -m py_compile yt-original/server/loadtest/run_shards.py
+          git -C yt-original diff --check
+          grep -Fq 'SHYT_V182_ORIGINAL_QT_UDP_SOCKET_BUFFER_REPORT' yt-original/server/loadtest/run_shards.py
+          grep -Fq 'udp_socket_readback_complete' yt-original/server/loadtest/run_shards.py
+          echo SHYT_V182_ORIGINAL_QT_NUMERIC_UDP_BUFFER_REPORT_SOURCE_PASS
