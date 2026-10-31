@@ -55,6 +55,13 @@ def stage(root:Path)->None:
     # other diagnostics and compiler errors.
     driver=driver.replace(old_flags,
                           "-D_GNU_SOURCE -mcx16 -Werror -Wno-unused-function -Wno-atomic-alignment -Wno-unused-parameter",1)
+    # Static x87 interpretation helper (linked into the build-time generator)
+    # calls libm explicitly on Linux; macOS links libSystem automatically.
+    original_link='"$D/lib/libZycore.a" -o out/recomp/bbrecomp'
+    if driver.count(original_link)!=1:
+        raise ValueError("V196 original generator link flags changed")
+    driver=driver.replace(original_link,
+                          '"$D/lib/libZycore.a" -lm -ldl -pthread -o out/recomp/bbrecomp',1)
     path.write_text(source.replace(BEFORE,AFTER,1),encoding="utf-8")
     build.write_text(driver,encoding="utf-8")
     subprocess.run(["git","-C",str(root),"diff","--check"],check=True,
