@@ -40,6 +40,38 @@ jobs:
           python3 tools/poc/yharnam/yt130-reference/stage_qt_udp_readback_v181.py pinned-yt130
           git -C pinned-yt130 diff --check
           echo SHYT_V184_EXISTING_FIVE_SEAT_REAL_QT_STAGE_PASS
+      - name: Record only which original Qt anchors survived the prior five-seat stack
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          f=Path("tools/poc/yharnam/yt130-reference/stage_cls_lobby_only_v184.py")
+          spec=importlib.util.spec_from_file_location("v184_diagnose",f)
+          m=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
+          root=Path("pinned-yt130")
+          lines=[]
+          for path,pairs in m.PATCHES.items():
+              text=(root/path).read_text(encoding="utf-8")
+              counts=[text.count(old) for old,_ in pairs]
+              lines.append(path+": "+",".join(map(str,counts)))
+          (Path(os.environ["RUNNER_TEMP"])/"v184-anchor-counts.txt").write_text(
+              "\n".join(lines)+"\n",encoding="utf-8")
+          if any(c!=1 for path,pairs in m.PATCHES.items()
+                 for c in [(root/path).read_text(encoding="utf-8").count(old)
+                           for old,_ in pairs]):
+              raise SystemExit("V184 original Qt anchor drift: inspect bounded counts artifact")
+          print("SHYT_V184_COMPOSED_QT_ALL_SEVEN_ANCHOR_SET_PRESENT")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shyt-v184-anonymous-qt-anchor-counts-NOT-PRODUCTION
+          path: ${{ runner.temp }}/v184-anchor-counts.txt
+          retention-days: 2
+          if-no-files-found: ignore
+          compression-level: 9
       - name: Add CLS lobby-only cap atop existing V155/V181 native five-seat server
         run: |
           set -euo pipefail
