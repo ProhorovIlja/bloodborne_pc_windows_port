@@ -34,6 +34,19 @@ jobs:
         shell: pwsh
         run: |
           $env:PATH = "C:\Program Files\LLVM\bin;$env:PATH"
-          python -m unittest discover -s native/source-port/recomp-v189 -p 'test_*v189.py' -v
-          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $log = Join-Path $env:RUNNER_TEMP "v189-ci-only-tests.txt"
+          python -m unittest discover -s native/source-port/recomp-v189 -p 'test_*v189.py' -v *> $log
+          $testExit = $LASTEXITCODE
+          Get-Content $log -Tail 20 | ForEach-Object { $_.Substring(0, [Math]::Min(250, $_.Length)) } | Set-Content (Join-Path $env:RUNNER_TEMP "v189-ci-only-diagnostic.txt")
+          if ($testExit -ne 0) {
+            echo "::error title=V189 synthetic Windows test::Exact unit or native ABI failure; inspect 20-line bounded CI-only artifact"
+            exit 1
+          }
           echo SHYT_V189_SYNTHETIC_WIN64_COFF_DLL_EXECUTE_PASS_NO_GAME_ASSETS
+      - uses: actions/upload-artifact@v4
+        if: failure() && runner.os == 'Windows'
+        with:
+          name: v189-20-line-synthetic-only-error
+          path: ${{ runner.temp }}/v189-ci-only-diagnostic.txt
+          if-no-files-found: ignore
+          retention-days: 2
