@@ -68,6 +68,20 @@ V149 CI checks out exactly this original source and on both Ubuntu and Windows i
 
 The next meaningful packaging gate is to stage this original YT Windows `run.py`, its source-verified dependent `scripts/` and runtime redistributables alongside the exact V143-compiled YT `bb-probe.exe`. Only after that and asset-backed local tests can the client/launcher profile be safely switched to YT rather than the standalone Visy protocol. Source-only CI must never fetch or distribute the operator's 30+ GiB game copy.
 
+## Stage 0e: read-only local mod overlay preflight, V176
+
+The connected private game archive has a **separate clean CUSA03173** (including original `eboot.bin`, `sce_sys` and `dvdroot_ps4`), `CUSA03173-mods`, and a second independent `MODS` collection. Verified examples include MOAL (`script/talk/*.talkesdbnd.dcx`, plus .bak backups), Jump on O+L3 / Jump Attack on X+R1 (`action/`), optional memory-saver substitutions and resolution/HUD overlays. **This is an observed directory listing, NOT proof that every asset is complete or versions match. No proprietary content is checked into this repository.**
+
+The user's own mod instructions require a single content folder per package (e.g. `MODS/Jump.../action/`, `MODS/MOAL/script/talk/`) and warn against nested `MODS/Mod Name/Mod Name/dvdroot_ps4/` structures. Keep the game's original `CUSA03173` and modded overlay entirely separate. The local V176 preflight checks **paths only**, never touches or reads the contents, never extracts archives and never guesses patch compatibility:
+
+```powershell
+py -3 tools/native/v176_mod_overlay_audit.py "D:\\Bloodborne\\MODS" --existing-overlay "D:\\Bloodborne\\CUSA03173-mods" --output "D:\\YT-private\\mod-preflight.json"
+```
+
+It enumerates mod folders, counts ignored `.bak` and uninspected ZIPs, identifies unsafe executable/script candidate files, symlinks, invalid nested `dvdroot_ps4`, case-insensitive duplicate file paths across mods and files that would replace an existing modded overlay. Default output redacts mod names, relative paths and all game content. `--include-paths` is an opt-in diagnostic for *relative path* collision examples (up to 64); don't publish it without reviewing private names. A mod being `ready_for_manual_compatibility_review` means **folder layout only**. It does NOT mean safe to activate, correct for the selected Bloodborne patch, or correct for Yharnam Together's networked gameplay.
+
+**Safe launcher integration contract:** before enabling a new mod, check the exact executable/patch and original tree, take a save backup outside both trees, deterministically order overlays, reject conflicts until the player selects precedence, and keep script, regulation, TAE, event and network-impacting mods (notably input actions, MOAL and game logic) isolated from an authenticated multiplayer build until gameplay+save+online tests. Do not automatically apply high-risk graphics/memory substitutions just because a user uploaded them. Test the pristine game first, then each mod separately, then combinations. Do not infer compatibility between Bloodborne and Dark Souls III from similar archive names. DS3's `DarkSoulsIII.exe`, `Data*.bdt/.bhd`, `action/chr/event/map/param/script` are **reference inputs**; they are not native Bloodborne executable replacements.
+
 ## Migration gates (do them in this order)
 
 1. **Input contract:** Validate image fingerprint, region/version, `sce_module/libc.prx`, asset-tree layout, shader readiness and mod/patch precedence from the *locally reported inventory*. Keep unknown versions blocked until independently tested; do not assume a regional directory name proves the executable.
