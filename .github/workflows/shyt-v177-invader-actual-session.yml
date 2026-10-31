@@ -114,12 +114,25 @@ jobs:
           "$winpy" --version
           command -v clang++
           clang++ --version
-          # Bound compiler diagnostics: do not bury the useful error in giant job logs.
-          if ! "$winpy" tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe.exe > v177-compile.log 2>&1; then
-            echo "V177_NATIVE_WINDOWS_CLANG64_FAILED (last 100 lines follow)"
-            tail -n 100 v177-compile.log
+          # Use native Python ONLY to extract the exact staged YT1.3 C++,
+          # then compile AND run inside the CLANG64 shell. Avoid launching
+          # the MSYS2 compiler through Win32 Python's subprocess/PATH layer.
+          "$winpy" -c 'import sys; from pathlib import Path; sys.path.insert(0,"tools/poc/yharnam/yt130-reference"); from check_native_invader_actual_session_v177 import harness; Path("v177-windows-exe.cpp").write_text(harness(Path("yt130-original")), encoding="utf-8")'
+          test -s v177-windows-exe.cpp
+          if ! clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic v177-windows-exe.cpp -o v177-windows-exe.exe > v177-compile.log 2>&1; then
+            echo "V177_NATIVE_WINDOWS_CLANG64_COMPILE_FAILED"
+            diagnostic="$(grep -m1 -E 'fatal error:|error:|undefined reference|not found' v177-compile.log | cut -c1-360 || true)"
+            if [[ -n "$diagnostic" ]]; then
+              echo "::error title=V177 CLANG64 compiler diagnostic::$diagnostic"
+            fi
+            tail -n 25 v177-compile.log | cut -c1-480
             exit 1
           fi
-          tail -n 12 v177-compile.log
+          if ! ./v177-windows-exe.exe > v177-run.log 2>&1; then
+            echo "::error title=V177 native Windows C++ regression::Compiled but test executable failed"
+            tail -n 15 v177-run.log | cut -c1-480
+            exit 1
+          fi
+          echo SHYT_V177_ORIGINAL_NATIVE_INVADER_CXX_REPEATED_IDENTITY_AND_5_SEAT_PASS
           git -C yt130-original diff --check
           echo SHYT_V177_REAL_WINDOWS_CXX20_INVADER_ROOM_MEMBERS_TEST_PASS_NO_GAME_ASSETS
