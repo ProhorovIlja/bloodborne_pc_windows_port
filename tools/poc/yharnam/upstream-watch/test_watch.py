@@ -25,7 +25,7 @@ class SourceWatchTests(unittest.TestCase):
                          "droogie/bbhost", "Mrsuss60/bloodborne_pc_windows_port",
                          "Awakenchan/LanternEngine", "DarkIzuku/bloodborne_pc",
                          "Wozzardman/shadnet-p2p"}.issubset(names))
-        self.assertGreaterEqual(len(names), 20)
+        self.assertGreaterEqual(len(names), 24)
         # Newly source-checked AOT and Windows-native engine research roots:
         # watch for drift but never automatically import guest runtimes.
         for source in ("bloodborne-native/bloodborne-recomp",
@@ -42,6 +42,21 @@ class SourceWatchTests(unittest.TestCase):
                       {(p["repo"], p["number"]) for p in self.data["pull_requests"]})
         self.assertIn(("Jgamrot/yharnam-pc", 198),
                       {(p["repo"], p["number"]) for p in self.data["pull_requests"]})
+        for source in ("bloodborne-native/bloodborne-launcher",
+                       "JKAnderson/SoulsFormats", "vawser/Smithbox",
+                       "Grimrukh/soulstruct"):
+            self.assertIn(source,names)
+            row=next(r for r in self.data["repositories"] if r["full_name"]==source)
+            self.assertEqual(len(row["known_head"]),40)
+            self.assertIn("ONLY",row["compatibility"])
+        # Latest upstream release is a source-review pin; the running Qt
+        # server compatibility baseline stays v1.3.0 until separately tested.
+        upstream=next(r for r in self.data["repositories"] if r["full_name"]=="lKaniel/bloodborne-server")
+        self.assertEqual(upstream["known_release_tag"],"v1.3.1")
+        self.assertEqual(upstream["known_head"],"5d2305ee611ef1e03be39ff925f0da75c9a70393")
+        self.assertEqual(self.data["pinned_yt_game_server"],
+                         "0645740a33ae21c56df3b4a0d9777086dbca6053")
+        self.assertNotEqual(upstream["known_head"],self.data["pinned_yt_game_server"])
         self.assertIn("Jgamrot/yharnam-pc", names)
         self.assertIn(("Jgamrot/yharnam-pc", 77),
                       {(p["repo"], p["number"]) for p in self.data["pull_requests"]})
