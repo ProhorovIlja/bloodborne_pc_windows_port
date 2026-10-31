@@ -165,13 +165,10 @@ jobs:
             tail -n 15 v177-run.log | cut -c1-480
             exit 1
           fi
+          # Source whitespace and pin were already validated on native
+          # Windows in the staging step; do not repeat a whole-repo Git diff
+          # from MSYS2 after the actual compiler and gameplay test succeeded.
           echo SHYT_V177_ORIGINAL_NATIVE_INVADER_CXX_REPEATED_IDENTITY_AND_5_SEAT_PASS
-      - name: Confirm original staged source diff is clean
-        shell: msys2 {0}
-        run: |
-          set -euo pipefail
-          echo 'phase=final-source-guard' > v177-diagnostic.txt
-          git -C yt130-original diff --check
           echo SHYT_V177_REAL_WINDOWS_CXX20_INVADER_ROOM_MEMBERS_TEST_PASS_NO_GAME_ASSETS
       - name: Preserve only bounded CLANG64 failure evidence (max 6 KB)
         if: failure()
