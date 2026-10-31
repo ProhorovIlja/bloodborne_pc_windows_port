@@ -1300,7 +1300,9 @@
       "last_seen_head": "899e40da19d2253ebb1028cc529e49be2d90987a",
       "area": "YT131-invasion-guest-session-race",
       "priority": "P0",
-      "action": "REGRESSION_TEST_INVADER_ARRIVES_GUEST_MUST_REMAIN; REAL_MULTIPC_INVADE; NO_SERVER_PATCH_IF_CLIENT_ONLY"
+      "action": "ALREADY_SOURCE_PORTED_IN_OUR_DRAFT_PR73_V177_GREEN_CI; REBASE_PERSISTENT_INVADER_IDENTITY_FIX_ON_YT131_AND_RUN_REAL_MULTIPC_INVASIONS",
+      "internal_corresponding_pr": 73,
+      "internal_head_sha": "440acc290b5477b131dcf9218c2a13880b45a38e"
     },
     {
       "repo": "lKaniel/bloodborne-server",
