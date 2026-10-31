@@ -80,6 +80,7 @@ jobs:
           msystem: CLANG64
           update: true
           install: >-
+            git
             mingw-w64-clang-x86_64-clang
             mingw-w64-clang-x86_64-python
       - name: Windows native C++ test of EXACT original YT1.3 backported code
