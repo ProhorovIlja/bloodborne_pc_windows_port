@@ -102,19 +102,20 @@ jobs:
         run: |
           set -euo pipefail
           pacman --noconfirm --disable-download-timeout -Sy
-          pacman --noconfirm --disable-download-timeout -S --needed git mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-python
+          pacman --noconfirm --disable-download-timeout -S --needed git mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libc++
       - name: Compile and RUN exact pinned original YT1.3 C++ with Windows CLANG64
         shell: msys2 {0}
         run: |
           set -euo pipefail
-          # Use CLANG64 Python and compiler from the SAME environment.
-          # Native setup-python is used above only for host-side staging.
-          command -v python
+          # Mirror the already-green full Windows V177 C++ harness:
+          # native setup-python drives subprocess while clang++ comes from CLANG64.
+          winpy="$(cygpath -u "$pythonLocation")/python.exe"
+          test -f "$winpy"
+          "$winpy" --version
           command -v clang++
-          python --version
           clang++ --version
           # Bound compiler diagnostics: do not bury the useful error in giant job logs.
-          if ! python tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe.exe > v177-compile.log 2>&1; then
+          if ! "$winpy" tools/poc/yharnam/yt130-reference/check_native_invader_actual_session_v177.py --pinned yt130-original --compiler clang++ --out v177-windows-exe.exe > v177-compile.log 2>&1; then
             echo "V177_NATIVE_WINDOWS_CLANG64_FAILED (last 100 lines follow)"
             tail -n 100 v177-compile.log
             exit 1
