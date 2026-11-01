@@ -175,6 +175,16 @@ def selftest() -> None:
         assert coff_ok(path)
         path.write_bytes(struct.pack('<HH', 0x14c, 3) + bytes(16))
         assert not coff_ok(path)
+    # V218 rejects oversized and overlong interactive batches BEFORE preflight.
+    for names, budget in [(['recomp.c'] * 5, 45), (['recomp.c'], 5)]:
+        try:
+            compile_sources(Path('nonexistent'), Path('nonexistent'),
+                            Path('nonexistent'), Path('nonexistent'),
+                            names, 0, budget)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('V218 interactive batch/time bounds bypassed')
     print('SHYT_V217_PRIVATE_AMD64_COFF_MANIFEST_SELFTEST_PASS')
 
 if __name__ == '__main__':
