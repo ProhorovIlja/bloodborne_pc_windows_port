@@ -118,3 +118,16 @@ int shyt_aot_services_link_direct_v261(
         services->functions, services->function_count,
         services->published_api->image_base, attester, attest_ctx, stats);
 }
+
+/* V268: revoke every generated direct-call slot during a safe offline
+ * transition, without relying on an old code-hash attestation callback. */
+int shyt_aot_services_revoke_direct_v268(
+    ShytAotServicesV245 *services, ShytDirectStatsV259 *stats)
+{
+    if (!services || !services->published_api || !services->functions ||
+        !services->function_count || !stats)
+        return 0;
+    return shyt_aot_revoke_direct_slots_v268(
+        services->functions,services->function_count,
+        services->published_api->image_base,stats);
+}
