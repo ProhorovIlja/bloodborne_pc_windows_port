@@ -37,9 +37,15 @@ the parent CUSA03173 folder confirmed BOTH
   - **235,000 relocations TOTAL**.
 - Relative relocation addends pointing into executable code:
   **202,757**, with **129,135** distinct code-address targets.
-  This supplies a large extra set for original function scanning,
-  especially vtables/function pointers. Not all targets can be assumed
-  to be distinct valid function entrypoints.
+  Cross-checked every unique target against every REAL unwinding-function
+  range: **86,827** are EXACT existing unwind function start addresses,
+  **0** are interior addresses of those functions, and **42,308**
+  fall **outside all unwind function ranges**. Thus there are at least
+  **205,267 candidate code-start addresses** when combining the
+  162,959 confirmed FDE starts with distinct external pointer targets.
+  **IMPORTANT:** the 42,308 are pointer targets, not confirmed functions;
+  the original Zydis control-flow scanner must validate their decoding
+  and boundaries before labeling them true functions.
 - Original jump/data import relocation slots: **684**.
 - The adjacent private `sce_sys/param.sfo` in the same CUSA03173
   install was downloaded and parsed in the same private session:
