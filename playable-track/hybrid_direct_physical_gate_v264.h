@@ -49,10 +49,18 @@ public:
         if (!endpoint.addr_nbo || !endpoint.port_nbo ||
             now_ms<0 || endpoint.valid_until_ms<=now_ms)
             return false;
+        // First update the existing exact endpoint. Otherwise an earlier
+        // expired slot could create a duplicate route and waste one of
+        // the four places available in a five-player session.
         for (auto& item : endpoints_) {
-            if ((item.addr_nbo==endpoint.addr_nbo &&
-                 item.port_nbo==endpoint.port_nbo) ||
-                item.addr_nbo==0 || item.valid_until_ms<=now_ms) {
+            if (item.addr_nbo==endpoint.addr_nbo &&
+                item.port_nbo==endpoint.port_nbo) {
+                item=endpoint;
+                return true;
+            }
+        }
+        for (auto& item : endpoints_) {
+            if (item.addr_nbo==0 || item.valid_until_ms<=now_ms) {
                 item=endpoint;
                 return true;
             }
