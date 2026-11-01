@@ -1,4 +1,4 @@
-name: Playable Yharnam Together v1 hybrid transport guarded policy
+name: Playable Yharnam Together v1.3.1 real protocol / hybrid failover guard
 on:
   push:
     branches: [feature/yt-playable-hybrid-policy-v1-20261101]
@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Read exact real released Yharnam Together upstream server protocol
+      - name: Checkout published Yharnam Together v1.3.1 source SHA (not a speculative PR)
         uses: actions/checkout@v4
         with:
           repository: lKaniel/bloodborne-server
@@ -29,6 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # This is the exact SHA listed in the official published v1.3.1 GitHub release.
           test "$(git -C actual-yharnam-upstream rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers -pedantic \
             -Iactual-yharnam-upstream/server -Iplayable-track \
