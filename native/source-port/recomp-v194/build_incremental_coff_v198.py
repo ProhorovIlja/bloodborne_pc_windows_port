@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import time
+import audit_native_runtime_v202 as native_audit
 
 UPSTREAM="8f31ec7c41f252730c6325d52647046baef7549f"
 FORMAT=1
@@ -86,12 +87,21 @@ def check_coff(path:Path)->None:
             raise ValueError("compiler did not emit native AMD64 COFF object")
 
 def build(root:Path,generated:Path,objects:Path,host:Path|None,jobs:int,
-          exe:Path|None)->dict:
+          exe:Path|None,require_no_guest_runtime:bool=False)->dict:
     root=root.resolve(strict=True)
     generated=generated.resolve(strict=True)
     objects=objects.absolute()
     if not 1<=jobs<=MAX_WORKERS:raise ValueError("workers must be 1..8")
     sources=validate(root,generated,objects,host)
+    # The independently source-checked strict release gate must run BEFORE
+    # object caching or compilation. An EBOOT-free synthetic test harness
+    # is NOT evidence that the full original generated C has no guest runtime.
+    if require_no_guest_runtime:
+        report=native_audit.audit(generated)
+        if not report["strict_native_runtime_ready"]:
+            raise ValueError("strict native Windows release blocked: generated C invokes "
+                             "legacy guest-runtime callbacks (step/call/tail/bail/trace); "
+                             "details are private to the caller")
     if exe is not None and host is None:
         raise ValueError("linking a runnable host requires its explicit native C entry source")
     if exe is not None and (exe.exists() or exe.suffix.lower()!=".exe" or
@@ -161,7 +171,8 @@ def build(root:Path,generated:Path,objects:Path,host:Path|None,jobs:int,
     os.replace(temporary,stamp)
     result={"source_count":len(sources),"compiled":len(results),
             "reused":len(sources)-len(results),
-            "native_amd64_coff":True,"game_boot_proven":False}
+            "native_amd64_coff":True,"game_boot_proven":False,
+            "strict_no_guest_runtime_mode":require_no_guest_runtime}
     if exe is not None:
         host_object=objects/"v198-host.obj"
         hrun=subprocess.run([compiler,*flags,"/Fo"+str(host_object),
@@ -189,10 +200,12 @@ if __name__=="__main__":
     a.add_argument("--jobs",type=int,default=2)
     a.add_argument("--synthetic-test-host",type=Path)
     a.add_argument("--synthetic-exe",type=Path)
+    a.add_argument("--require-no-guest-runtime",action="store_true")
     args=a.parse_args()
     try:
         result=build(args.upstream_checkout,args.generated_dir,args.objects_dir,
-                     args.synthetic_test_host,args.jobs,args.synthetic_exe)
+                     args.synthetic_test_host,args.jobs,args.synthetic_exe,
+                     args.require_no_guest_runtime)
     except (ValueError,RuntimeError,OSError,subprocess.CalledProcessError) as e:
         print(str(e)[:270],file=sys.stderr)
         raise SystemExit(2)
