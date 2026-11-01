@@ -63,11 +63,11 @@ def prepare(root,eboot,work):
     work=private(work)
     # Reject incorrect original image, an unbuilt/stale patched generator,
     # or inadequate private workspace before spending hours on a full scan.
-    preflight.check(eboot,work,root,16)
     if not eboot.is_file():raise ValueError("decrypted original eboot.bin missing")
     size=eboot.stat().st_size
     if not 1000000<=size<=512*1024*1024:
         raise ValueError("executable size is invalid for original game")
+    preflight.check(eboot,work,root,16)
     with eboot.open("rb") as f:magic=f.read(4)
     if magic not in (b"\x7fELF",b"O\x15=\x1d"):
         raise ValueError("original PS4 SELF/plain ELF header required; no encrypted dump")
