@@ -31,15 +31,22 @@ Linux/WSL2 is needed ONLY to run the original generator at BUILD TIME.
 The eventual Windows game executable must never load WSL, original
 EBOOT, a guest ELF, an emulator, or a PS4 kernel at RUNTIME.
 
-## Current original-game blocker
+## Original-game executable VERIFIED IN PRIVATE DRIVE (2026-11-01 correction)
 
-Connected private Google Drive under gungrain@gmail.com was checked
-again: the user's Bloodborne CUSA03173 directory exposes dvdroot_ps4,
-sce_module and sce_sys assets, and other copies of its assets, but no
-eboot.bin, ELF or SELF named file was discoverable in the Drive metadata.
-The original game's *assets* are not its executable code. No legitimate
-full original 1.09 AOT generation can be performed in our tools until
-the user-owned decrypted original executable is available privately.
+**CORRECTION:** Directly fetching the contents of the private CUSA03173
+folder, rather than relying on Drive metadata search, found BOTH
+`eboot.bin-decrypted` (93,667,640 bytes) and `eboot.bin` (93,825,704
+bytes). The first file was streamed into an **isolated private working
+container** and its exact bytes were independently checked: authentic
+PS4-type ELF64, little-endian x86-64 (ELF type `0xfe10`), 10 program
+headers, actual executable segment 84,776,668 bytes, 162,959 validated
+unwind function entries and 235,000 real relocations. The complete private
+recompilation is **not yet run**; only real executable-header, unwind,
+relocation and import-metadata analysis has actually been completed.
+The version 1.09 remains unverified until original version metadata is
+checked. NO executable bytes or proprietary derived function bodies may
+be uploaded to GitHub. Prior claims that the user's original executable
+was missing were caused by incomplete Drive search and are WRONG.
 
 The V204 manifest labels the actual game version as UNVERIFIED until
 matched against trusted original 1.09 metadata, rather than
@@ -103,8 +110,11 @@ are not magically removed just because individual functions compile.
 - V204 tests cover source syntax, missing-private-original refusal,
   strict native runtime fallback rejection and research-only object
   compilation/reuse, on entirely invented original-generator functions.
-- Real 1.09 entire-game preparation remains NOT EXECUTED because the
-  original EBOOT is not accessible in connected Drive.
+- The decrypted original ELF **IS accessible** and was read privately;
+  original-game complete Zydis scan/AOT generation and full Windows COFF
+  compilation remain NOT EXECUTED. Our current execution container has no
+  network access to fetch the full pinned public upstream build tools,
+  so a real whole-function generator run has not yet occurred here.
 - A plain decrypted ELF may lack original PS4 module/dynamic metadata
   required by pointers.py/imports.py. Do not silently ignore
   failed import/pointer discovery and claim full function coverage.
