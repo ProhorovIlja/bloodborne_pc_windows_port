@@ -90,9 +90,9 @@ PS4-shaped game executable and/or platform compatibility runtime
 at game startup. They do not satisfy the user's independent
 Windows-source-port target.
 
-The full private retail game image remains unavailable through
-the accessible Drive root (`eboot.bin` was not found in previous
-metadata search); we cannot yet verify full original-code
+**CORRECTION 2026-11-01:** The user's genuine decrypted ELF was found
+by directly fetching the CUSA03173 folder (the metadata search was
+incomplete); we cannot yet verify full original-code
 function coverage, real native imports, dynamic branch tables,
 uncommon stack layouts, original game events, graphics,
 audio, file IO, saves, threading, all boss/map/DLC/chalice paths,
