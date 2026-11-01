@@ -1,0 +1,45 @@
+name: YT 1.3.2 candidate PR484 five hunters source/HUD compatibility (not shipping)
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt132-pr484-five-seats-source.yml'
+      - 'playable-track/yt132_candidate_five_seat_gate.py'
+      - 'playable-track/test_yt132_pr484_party_layout.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  upstream-five-seat-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - name: Our independent experimental source branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Upstream public DRAFT candidate for 1.3.2 five-player work
+        uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: f19696f32833161aa2300b36321d8c5c4d663c6b
+          path: yt132-pr484
+          submodules: false
+          persist-credentials: false
+      - name: Verify five places, four portraits, server and game agree
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile playable-track/yt132_candidate_five_seat_gate.py
+          python playable-track/yt132_candidate_five_seat_gate.py --checkout yt132-pr484
+          clang++ -std=c++20 -Wall -Wextra -Werror -pedantic -O2 \
+            -Iyt132-pr484/bbport/gpu/shim \
+            playable-track/test_yt132_pr484_party_layout.cpp \
+            -o "$RUNNER_TEMP/yt132-pr484-party"
+          "$RUNNER_TEMP/yt132-pr484-party"
+          echo SHYT_YT132_PR484_ORIGINAL_LAYOUT_CPP_PASS
+          echo 'Draft candidate, not published 1.3.2, game playtest, fifth character, or P2P transport.'
