@@ -83,7 +83,12 @@ public:
         auto candidate=state_; // invalid answer cannot damage pending state
         candidate.MixHash(peer_ephemeral);
         candidate.MixKey(*shared); // NK "ee"
-        auto opened=binding_;
+        // V260: authenticate the ACTUAL received ciphertext, not the
+        // expected plaintext binding. Filling this with binding_ before
+        // decrypt caused every real encrypted Answer to fail AEAD.
+        std::array<u8,BindingBytes> opened{};
+        std::copy_n(answer.begin()+Magic.size()+LinkAuth::KeyBytes,
+                    BindingBytes,opened.begin());
         if(!candidate.DecryptAndHash(opened,answer.data()+WireBytes-LinkAuth::TagBytes) ||
            opened!=binding_) return std::nullopt;
         finished_=true;
@@ -130,7 +135,11 @@ public:
         auto state=Begin(binding_,static_public_);
         state.MixHash(peer_ephemeral);
         state.MixKey(*es);
-        auto decrypted=binding_;
+        // V260: decrypt wire ciphertext, never an expected plaintext
+        // buffer. The same bug existed on the initial Hello path.
+        std::array<u8,BindingBytes> decrypted{};
+        std::copy_n(first.begin()+Magic.size()+LinkAuth::KeyBytes,
+                    BindingBytes,decrypted.begin());
         if(!state.DecryptAndHash(decrypted,first.data()+WireBytes-LinkAuth::TagBytes) ||
            decrypted!=binding_) return std::nullopt;
         const Key mine=LinkAuth::Noise::PublicOf(fresh_ephemeral);
