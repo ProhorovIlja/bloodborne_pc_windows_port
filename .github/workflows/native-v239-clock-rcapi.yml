@@ -7,6 +7,7 @@ on:
       - 'native/source-port/recomp-v194/native_clock_rcapi_route_v239.*'
       - 'native/source-port/recomp-v194/native_win_clock_v236.*'
       - 'native/source-port/recomp-v194/test_native_clock_rcapi_v239.c'
+      - 'native/source-port/recomp-v194/test_native_math_clock_chain_v242.c'
   workflow_dispatch:
 permissions:
   contents: read
