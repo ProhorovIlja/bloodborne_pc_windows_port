@@ -22,7 +22,15 @@ bool target_here(const std::vector<MemberVitals>& board,
                       member.vital == Vital::Up;
            });
 }
+// Matches the source-only candidate's conservative identity ambiguity guard.
+bool unique_member_ids(std::vector<std::string> ids) {
+    std::ranges::sort(ids);
+    return std::adjacent_find(ids.begin(), ids.end()) == ids.end();
+}
 int main() {
+    assert(unique_member_ids({"a","b","c","d","e"}));
+    assert(!unique_member_ids({"a","b","c","c","e"}));
+    assert(!unique_member_ids({"same","same"}));
     const std::vector<MemberVitals> players{
         {"A", 1, Vital::Up}, {"B", 1, Vital::Up},
         {"C", 2, Vital::Up}, {"D", 1, Vital::Down}};
