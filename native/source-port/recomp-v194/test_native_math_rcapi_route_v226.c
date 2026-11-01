@@ -15,14 +15,27 @@ static int permit(void *ctx, uint64_t a, size_t n, int write) {
     return 1;
 }
 static jmp_buf fault_jump;
-static unsigned faults, fallbacks;
+static unsigned faults, fallbacks, pin_entries, pin_leaves;
+static int pinned, deny_pin;
+static int pin_enter(void *ctx) {
+    (void)ctx;
+    if (deny_pin || pinned) return 0;
+    pinned=1; ++pin_entries; return 1;
+}
+static void pin_leave(void *ctx) {
+    (void)ctx;
+    assert(pinned);
+    pinned=0; ++pin_leaves;
+}
 static uint64_t last_target, last_next, last_rsp, last_rip;
 static void fatal_guest(BbCpu *cpu, uint64_t t, uint64_t n, void *ctx) {
     (void)cpu; (void)t; (void)n; (void)ctx;
+    assert(!pinned); /* released before nonlocal guest trap */
     ++faults;
     longjmp(fault_jump,1);
 }
 static void previous_call(BbCpu *cpu,uint64_t target,uint64_t next) {
+    assert(!pinned); /* fallback cannot retain a lease */
     ++fallbacks;
     last_target=target;last_next=next;
     last_rsp=cpu->r[RSP];last_rip=cpu->rip;
@@ -52,15 +65,19 @@ int main(void) {
     Bounds bound={(uint64_t)(uintptr_t)&stack[0],
                   (uint64_t)(uintptr_t)&stack[16],0,0};
     ShytMathRcApiRoute route;
-    assert(shyt_math_rcapi_route_v226_install(
+    assert(!shyt_math_rcapi_route_v226_install(
         &route,&upstream,&table,permit,&bound,fatal_guest,NULL));
+    assert(shyt_math_rcapi_route_v226_install_pinned(
+        &route,&upstream,&table,permit,&bound,fatal_guest,NULL,
+        pin_enter,pin_leave,NULL));
     const RcApi *api=shyt_math_rcapi_route_v226_api(&route);
     assert(api && api->call!=upstream.call);
     assert(api->step==upstream.step && api->tail==upstream.tail);
     assert(api->bail==upstream.bail && api->image_base==base);
     /* A repeated installation must NOT overwrite the active router. */
-    assert(!shyt_math_rcapi_route_v226_install(
-        &route,&upstream,&table,permit,&bound,fatal_guest,NULL));
+    assert(!shyt_math_rcapi_route_v226_install_pinned(
+        &route,&upstream,&table,permit,&bound,fatal_guest,NULL,
+        pin_enter,pin_leave,NULL));
     assert(shyt_math_rcapi_route_v226_api(&route)==api);
     BbCpu cpu;memset(&cpu,0,sizeof(cpu));
     cpu.r[RSP]=(uint64_t)(uintptr_t)&stack[8];
@@ -104,5 +121,10 @@ int main(void) {
     api->call(&cpu,frexp_target,0xaae);
     assert(faults==4 && fallbacks==1 && cpu.v[0].fd[0]==0.5);
     assert(stack[2]==4 && cpu.rip==0xaae && cpu.r[RSP]==sp);
+    deny_pin=1;
+    if(setjmp(fault_jump)==0) api->call(&cpu,frexp_target,0xaaf);
+    assert(faults==5 && !pinned);
+    deny_pin=0;
+    assert(pin_entries==pin_leaves);
     return 0;
 }
