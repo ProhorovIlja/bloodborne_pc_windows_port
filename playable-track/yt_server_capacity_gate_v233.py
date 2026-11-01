@@ -40,7 +40,9 @@ def read_one(path: Path) -> dict:
                 "packets_lost", "udp_buffer_drops"):
         if not isinstance(obj[key], int):
             raise ValueError(f"player/packet metric must be an integer: {key}")
-    if obj["playing"] > obj["players"] or obj["packets_received"] > obj["packets_sent"]:
+    if (obj["playing"] > obj["players"] or obj["packets_received"] > obj["packets_sent"]
+            or obj["packets_lost"] > obj["packets_sent"]
+            or obj["players"] < 1 or obj["packets_sent"] == 0):
         raise ValueError("inconsistent played games or packet counts")
     return obj
 
@@ -48,12 +50,20 @@ def read_one(path: Path) -> dict:
 def compare(baseline: dict, candidate: dict, *, main_cpu_slack: float = 5.0,
             relay_p99_slack: float = 10.0,
             outbound_mbit_slack: float = 0.0,
-            rss_slack_mb: float = 50.0) -> dict:
+            rss_slack_mb: float = 50.0,
+            server_cpu_slack: float = 5.0,
+            welcome_p99_slack: float = 25.0,
+            loss_rate_slack: float = 0.0005) -> dict:
     if any(x < 0 or not math.isfinite(x) for x in
-           (main_cpu_slack, relay_p99_slack, outbound_mbit_slack, rss_slack_mb)):
+           (main_cpu_slack, relay_p99_slack, outbound_mbit_slack, rss_slack_mb,
+            server_cpu_slack, welcome_p99_slack, loss_rate_slack)):
         raise ValueError("invalid regression budget")
     if baseline["players"] != candidate["players"] or baseline["players"] < 1:
         raise ValueError("benchmark loads differ; no comparison permitted")
+    # Compare packet-loss RATES; packet volume can change as routing improves.
+    # Both reports require nonzero packets_sent, avoiding divide-by-zero.
+    baseline_loss = baseline["packets_lost"] / baseline["packets_sent"]
+    candidate_loss = candidate["packets_lost"] / candidate["packets_sent"]
     gates = {
         "playing_population_not_reduced":
             candidate["playing"] >= baseline["playing"],
@@ -61,6 +71,12 @@ def compare(baseline: dict, candidate: dict, *, main_cpu_slack: float = 5.0,
             candidate["refused"] <= baseline["refused"],
         "no_new_udp_receive_buffer_drops":
             candidate["udp_buffer_drops"] <= baseline["udp_buffer_drops"],
+        "total_server_cpu_within_budget":
+            candidate["server_cpu_avg"] <= baseline["server_cpu_avg"] + server_cpu_slack,
+        "packet_loss_rate_within_budget":
+            candidate_loss <= baseline_loss + loss_rate_slack,
+        "join_p99_within_budget":
+            candidate["welcome_ms_p99"] <= baseline["welcome_ms_p99"] + welcome_p99_slack,
         "main_relay_thread_cpu_within_budget":
             candidate["main_thread_cpu_avg"] <= baseline["main_thread_cpu_avg"] + main_cpu_slack,
         "p99_relay_latency_within_budget":
@@ -77,6 +93,8 @@ def compare(baseline: dict, candidate: dict, *, main_cpu_slack: float = 5.0,
         "same_simulated_player_count": baseline["players"],
         "all_gates_pass": all(gates.values()),
         "gates": gates,
+        "packet_loss_rate_baseline": round(baseline_loss, 8),
+        "packet_loss_rate_candidate": round(candidate_loss, 8),
         "delta": {k: delta(k) for k in (
             "main_thread_cpu_avg", "server_cpu_avg",
             "server_out_mbit", "server_in_mbit", "relay_ms_p99",
@@ -96,6 +114,9 @@ def main():
     ap.add_argument("--max-relay-p99-regression-ms", type=float, default=10.0)
     ap.add_argument("--max-outbound-regression-mbit", type=float, default=0.0)
     ap.add_argument("--max-rss-regression-mb", type=float, default=50.0)
+    ap.add_argument("--max-total-cpu-regression-points", type=float, default=5.0)
+    ap.add_argument("--max-welcome-p99-regression-ms", type=float, default=25.0)
+    ap.add_argument("--max-packet-loss-rate-regression", type=float, default=0.0005)
     args = ap.parse_args()
     try:
         report = compare(
@@ -103,7 +124,10 @@ def main():
             main_cpu_slack=args.max_main_cpu_regression_points,
             relay_p99_slack=args.max_relay_p99_regression_ms,
             outbound_mbit_slack=args.max_outbound_regression_mbit,
-            rss_slack_mb=args.max_rss_regression_mb
+            rss_slack_mb=args.max_rss_regression_mb,
+            server_cpu_slack=args.max_total_cpu_regression_points,
+            welcome_p99_slack=args.max_welcome_p99_regression_ms,
+            loss_rate_slack=args.max_packet_loss_rate_regression
         )
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         ap.error(str(exc))
