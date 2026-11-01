@@ -35,7 +35,8 @@ def run(upstream_mods_py: pathlib.Path):
                       "B Cosmetic", "E Alone", "Disabled"],
             "disabled": ["Disabled"]
         }))
-        report = inspect(upstream, mods, profile, base)
+        report = inspect(upstream, mods, profile, base, fingerprint_gameplay=True)
+        assert len(report["effective_gameplay_override_fingerprint_sha256"]) == 64
         assert report["enabled_mod_count"] == 5, report
         assert report["enumerated_game_files"] == 6, report
         assert report["file_replacements_between_mod_layers"] == 3, report
@@ -51,6 +52,19 @@ def run(upstream_mods_py: pathlib.Path):
         assert not report["mod_binary_compatibility_proven"]
         assert not report["original_game_modified"]
         assert "Doll" not in json.dumps(report)
+        # The checksum is over final gameplay winners, not folder names.
+        digest_before = report["effective_gameplay_override_fingerprint_sha256"]
+        same = inspect(upstream, mods, profile, base, fingerprint_gameplay=True)
+        assert same["effective_gameplay_override_fingerprint_sha256"] == digest_before
+        put(mods / "C Gameplay", "dvdroot_ps4/param/GameParam.parambnd.dcx", b"modified")
+        changed = inspect(upstream, mods, profile, base, fingerprint_gameplay=True)
+        assert changed["effective_gameplay_override_fingerprint_sha256"] != digest_before
+        # Cosmetic-only replacements must not change the gameplay checksum.
+        stable = changed["effective_gameplay_override_fingerprint_sha256"]
+        put(mods / "B Cosmetic", "dvdroot_ps4/parts/hunter.DCX", b"new-cosmetic")
+        assert inspect(upstream, mods, profile, base,
+                       fingerprint_gameplay=True)[
+                           "effective_gameplay_override_fingerprint_sha256"] == stable
 
         # Malformed/unsafe layouts must stop preflight, not silently apply.
         # Windows filesystems usually collapse upper/lower-case paths.
