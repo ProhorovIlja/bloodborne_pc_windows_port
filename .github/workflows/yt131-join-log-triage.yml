@@ -1,0 +1,29 @@
+name: YT 1.3.1 bounded offline member-data join log triage
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - 'playable-track/inspect_yt131_join_log_v1.py'
+      - '.github/workflows/yt131-join-log-triage.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  privacy-safe-regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Syntax and synthetic join-request correlation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile playable-track/inspect_yt131_join_log_v1.py
+          python playable-track/inspect_yt131_join_log_v1.py --self-test
+          echo "No private logs, screenshots, games or player IDs in CI."
