@@ -116,14 +116,14 @@ def patch(source:str)->str:
     # permissions before the server link's auth state is reset.
     src=replace_once(src,
         "        const auto key = LinkAuth::KeyFromHex(server_key);",
-        "        RevokeVerifiedMovementEndpoints(); // V266: server key/epoch changed\\n"
+        "        RevokeVerifiedMovementEndpoints(); // V266: server key/epoch changed\n"
         "        const auto key = LinkAuth::KeyFromHex(server_key);")
     # A stopped game transport cannot retain old authenticated endpoints.
     src=replace_once(src,
-        "        std::lock_guard lock(start_mutex);\\n"
+        "        std::lock_guard lock(start_mutex);\n"
         "        if (!running.exchange(false, std::memory_order_acq_rel)) {",
-        "        std::lock_guard lock(start_mutex);\\n"
-        "        RevokeVerifiedMovementEndpoints(); // V266: shutdown revoke\\n"
+        "        std::lock_guard lock(start_mutex);\n"
+        "        RevokeVerifiedMovementEndpoints(); // V266: shutdown revoke\n"
         "        if (!running.exchange(false, std::memory_order_acq_rel)) {")
 
     gate="""            // V265: a separately typed, encrypted SHDP packet from a
