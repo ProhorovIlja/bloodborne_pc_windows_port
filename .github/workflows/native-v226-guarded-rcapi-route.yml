@@ -9,6 +9,10 @@ on:
       - 'native/source-port/recomp-v194/native_math_rcapi_route_v226.c'
       - 'native/source-port/recomp-v194/native_math_rcapi_route_v226.h'
       - 'native/source-port/recomp-v194/test_native_math_rcapi_route_v226.c'
+      - 'native/source-port/recomp-v194/native_math_arena_route_v229.h'
+      - 'native/source-port/recomp-v194/native_math_arena_route_v229.c'
+      - 'native/source-port/recomp-v194/native_guest_arena_v228.h'
+      - 'native/source-port/recomp-v194/native_guest_arena_v228.c'
       - 'native/source-port/recomp-v194/test_native_math_import_dispatch_v224.c'
   workflow_dispatch:
 permissions:
@@ -69,7 +73,7 @@ jobs:
             mingw-w64-common mingw-w64-x86-64-dev > /dev/null 2>&1
           SRC=native/source-port/recomp-v194
           UP=public-upstream
-          for stem in native_math_rcapi_route_v226 native_math_import_dispatch_v224; do
+          for stem in native_math_rcapi_route_v226 native_math_import_dispatch_v224 native_guest_memory_v227 native_guest_arena_v228 native_math_arena_route_v229; do
             clang --target=x86_64-w64-windows-gnu -std=gnu11 -O0 \
               -ffp-contract=off -Wall -Wextra -Werror \
               -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
@@ -80,10 +84,10 @@ jobs:
           from pathlib import Path
           import os,struct
           base=Path(os.environ['RUNNER_TEMP'])
-          for stem in ('native_math_rcapi_route_v226','native_math_import_dispatch_v224'):
+          for stem in ('native_math_rcapi_route_v226','native_math_import_dispatch_v224','native_guest_memory_v227','native_guest_arena_v228','native_math_arena_route_v229'):
               data=(base/(stem+'.obj')).read_bytes()
               assert len(data)>1000
               assert struct.unpack_from('<H',data)[0]==0x8664
-          print('SHYT_V226_ACTUAL_WIN64_COFF_GUARDED_ROUTER_PASS')
+          print('SHYT_V229_ACTUAL_WIN64_COFF_PINNED_RCAPIV4_ROUTE_PASS')
           PY
           echo 'No original game, address mapping, private C or COFF in CI.'
