@@ -14,6 +14,7 @@ import subprocess
 import sys
 import audit_native_runtime_v202 as auditor
 import verify_generated_coverage_v207 as coverage
+from bounded_private_subprocess_v210 import run_stage
 
 PIN="8f31ec7c41f252730c6325d52647046baef7549f"
 STAMP="SHYT_PRIVATE_FULL_IMAGE_V204"
@@ -49,11 +50,9 @@ def upstream(root):
         if marker not in src:raise ValueError("pinned full native generator patch missing")
     return root
 
-def run(cmd,step,env=None):
-    # Never print proprietary text, symbols, paths, or original game bytes.
-    result=subprocess.run([str(x) for x in cmd],capture_output=True,
-                          env=env,timeout=7200)
-    if result.returncode:raise RuntimeError("private stage failed: "+step)
+def run(cmd,step,log_dir,env=None):
+    # Bounded streaming: no 2-hour capture_output memory growth, no chat logs.
+    run_stage(cmd,step,log_dir,env=env,timeout=7200)
 
 def prepare(root,eboot,work):
     if not sys.platform.startswith("linux"):
@@ -72,13 +71,14 @@ def prepare(root,eboot,work):
         raise ValueError("private output is not empty; use a new work folder")
     work.mkdir(parents=True,exist_ok=True)
     scan=work/"scan"; gen=work/"generated"
+    private_logs=work/"_private_stage_logs"
     scan.mkdir();gen.mkdir()
     t=root/"tools/recomp"
     elf=work/"original.elf"
     original=eboot.resolve(strict=True)
-    run([sys.executable,t/"ps4elf.py",original,elf],"extract ELF")
-    run([sys.executable,t/"pointers.py",original,scan/"pointers.txt"],"pointers")
-    run([root/"out/recomp/scan",elf,scan,scan/"pointers.txt"],"function scan")
+    run([sys.executable,t/"ps4elf.py",original,elf],"extract_elf",private_logs)
+    run([sys.executable,t/"pointers.py",original,scan/"pointers.txt"],"pointers",private_logs)
+    run([root/"out/recomp/scan",elf,scan,scan/"pointers.txt"],"function_scan",private_logs)
     tab=scan/"functions.tsv"
     count=0;prev=-1
     with tab.open(encoding="utf-8") as f, (scan/"all.txt").open("w") as out:
@@ -94,13 +94,13 @@ def prepare(root,eboot,work):
             prev=addr;count+=1
             if count>1000000:raise ValueError("original function count exceeds safety bound")
     if not count:raise ValueError("original scanner discovered no function")
-    run([sys.executable,t/"imports.py",original,scan],"original imports")
+    run([sys.executable,t/"imports.py",original,scan],"original_imports",private_logs)
     annotations=root/"annotations/functions.tsv"
     if not annotations.is_file():raise ValueError("upstream annotations missing")
     env={**os.environ,"BB_JIT":"0",
          "BB_RECOMP_ANNOTATIONS":str(annotations)}
     run([root/"out/recomp/bbrecomp",elf,tab,gen/"recomp.c",
-         "@"+str(scan/"all.txt")],"full original function generation",env)
+         "@"+str(scan/"all.txt")],"generate_functions",private_logs,env)
     # The upstream generator excludes import stubs and setjmp callers.
     # Scanner rows are NOT the same as registered natively compiled functions.
     registration=coverage.inspect_file(gen/"recomp.c",count,tab)
