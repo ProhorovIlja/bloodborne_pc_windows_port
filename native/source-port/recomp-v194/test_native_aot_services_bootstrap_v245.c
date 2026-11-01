@@ -46,6 +46,14 @@ static void generated_entry(BbCpu *cpu) {
     assert(cpu->r[RAX]<UINT64_C(160000000000) && cpu->rip==0x503);
 }
 static RcFunction generated[1];
+static RcFn native_direct_slot=NULL;
+static int direct_granted=0;
+static int exact_guest_function_attestation(void *ctx,uint64_t target,
+                                             uint64_t bytes,uint64_t hash) {
+    const uint64_t base=*(const uint64_t *)ctx;
+    return direct_granted && target==base+0x4000 &&
+           bytes==16 && hash==UINT64_C(0xbeef);
+}
 static const RcFunction *synthetic_recomp_init(const RcApi *api,size_t *count) {
     if (!api || api->version!=BB_RECOMP_API_VERSION || !count) return NULL;
     g_registered_api=api;
@@ -53,7 +61,7 @@ static const RcFunction *synthetic_recomp_init(const RcApi *api,size_t *count) {
     generated[0].size=16;
     generated[0].hash=0xbeef;
     generated[0].fn=generated_entry;
-    generated[0].direct=NULL;
+    generated[0].direct=&native_direct_slot;
     *count=1;
     return generated;
 }
@@ -129,6 +137,28 @@ int main(void) {
     services.functions[0].fn(&cpu);
     assert(cpu.r[RSP]==original_rsp);
     assert(g_fallbacks==0 && g_pins==3 && g_leaves==3);
+
+    /* V261: native AOT direct-call slot is absent until owner-attested.
+     * The no-game fixture deliberately denies, then grants, then revokes. */
+    ShytDirectStatsV259 stats={0};
+    assert(native_direct_slot==NULL);
+    assert(!shyt_aot_services_link_direct_v261(
+        &services,NULL,&base,&stats));
+    assert(shyt_aot_services_link_direct_v261(
+        &services,exact_guest_function_attestation,(void *)&base,&stats));
+    assert(stats.direct==0 && stats.kept_indirect==1 &&
+           native_direct_slot==NULL);
+    direct_granted=1;
+    assert(shyt_aot_services_link_direct_v261(
+        &services,exact_guest_function_attestation,(void *)&base,&stats));
+    assert(stats.direct==1 && native_direct_slot==generated_entry);
+    cpu.r[RSP]=original_rsp;
+    native_direct_slot(&cpu); /* actual AOT-style C -> C direct call */
+    assert(g_fallbacks==0 && g_pins==6 && g_leaves==6);
+    direct_granted=0;
+    assert(shyt_aot_services_link_direct_v261(
+        &services,exact_guest_function_attestation,(void *)&base,&stats));
+    assert(stats.kept_indirect==1 && native_direct_slot==NULL);
 #endif
     puts("SHYT_V245_REAL_RCAPI_NATIVE_AOT_BOOTSTRAP_SYNTHETIC_PASS");
     return 0;
