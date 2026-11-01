@@ -22,6 +22,9 @@ constexpr PeerRouteLease fully_granted() {
     lease.has_common_protocol = true;
     lease.granted_sender_id = "hunter-A";
     lease.granted_receiver_id = "hunter-B";
+    lease.granted_party_session_id = "five-hunters-world-41";
+    lease.granted_sender_instance = 17;
+    lease.granted_receiver_instance = 29;
     lease.authority_epoch = 1777;
     lease.local_world_epoch = 1777;
     lease.approved_sender_map = 0x101;
@@ -62,6 +65,9 @@ int main() {
     l.has_common_protocol=false;assert(route(0x06,same_map,l)==Carrier::Server);l.has_common_protocol=true;
     l.granted_sender_id={};assert(route(0x06,same_map,l)==Carrier::Server);l.granted_sender_id="hunter-A";
     l.granted_receiver_id={};assert(route(0x06,same_map,l)==Carrier::Server);l.granted_receiver_id="hunter-B";
+    l.granted_party_session_id={};assert(route(0x06,same_map,l)==Carrier::Server);l.granted_party_session_id="five-hunters-world-41";
+    l.granted_sender_instance=0;assert(route(0x06,same_map,l)==Carrier::Server);l.granted_sender_instance=17;
+    l.granted_receiver_instance=0;assert(route(0x06,same_map,l)==Carrier::Server);l.granted_receiver_instance=29;
     l.sender_or_receiver_hostile=true;assert(route(0x06,same_map,l)==Carrier::Server);l.sender_or_receiver_hostile=false;
     l.local_world_epoch++;assert(route(0x06,same_map,l)==Carrier::Server);l.local_world_epoch--;
     l.approved_sender_map=0x102;assert(route(0x06,same_map,l)==Carrier::Server);l.approved_sender_map=0x101;
