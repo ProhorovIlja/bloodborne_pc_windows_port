@@ -20,6 +20,8 @@ constexpr PeerRouteLease fully_granted() {
     lease.direct_datagram_verified = true;
     lease.server_route_granted = true;
     lease.has_common_protocol = true;
+    lease.granted_sender_id = "hunter-A";
+    lease.granted_receiver_id = "hunter-B";
     lease.authority_epoch = 1777;
     lease.local_world_epoch = 1777;
     lease.approved_sender_map = 0x101;
@@ -58,6 +60,8 @@ int main() {
     l.direct_datagram_verified=false;assert(route(0x06,same_map,l)==Carrier::Server);l.direct_datagram_verified=true;
     l.server_route_granted=false;assert(route(0x06,same_map,l)==Carrier::Server);l.server_route_granted=true;
     l.has_common_protocol=false;assert(route(0x06,same_map,l)==Carrier::Server);l.has_common_protocol=true;
+    l.granted_sender_id={};assert(route(0x06,same_map,l)==Carrier::Server);l.granted_sender_id="hunter-A";
+    l.granted_receiver_id={};assert(route(0x06,same_map,l)==Carrier::Server);l.granted_receiver_id="hunter-B";
     l.sender_or_receiver_hostile=true;assert(route(0x06,same_map,l)==Carrier::Server);l.sender_or_receiver_hostile=false;
     l.local_world_epoch++;assert(route(0x06,same_map,l)==Carrier::Server);l.local_world_epoch--;
     l.approved_sender_map=0x102;assert(route(0x06,same_map,l)==Carrier::Server);l.approved_sender_map=0x101;
