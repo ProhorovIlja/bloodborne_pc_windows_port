@@ -1,0 +1,86 @@
+name: Native V214 public MinGW Win64 COFF cross SDK (NO GAME)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths: ['.github/workflows/native-v214-win64-cross-sdk.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package-mingw-cross-headers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: upstream
+          persist-credentials: false
+          submodules: false
+      - name: Install openly licensed MinGW-w64 cross headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get -qq update >/dev/null
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq mingw-w64-common mingw-w64-x86-64-dev >/dev/null
+          test -s /usr/x86_64-w64-mingw32/include/assert.h
+      - name: Source-lock portable Win32 timer support
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          sha256sum upstream/src/recomp/rc.h > "$RUNNER_TEMP/rc-before.sha256"
+          python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout upstream
+          git -C upstream diff --check
+      - name: Compile the genuine public CPU header for Win64 COFF
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '#include "recomp/rc.h"\nint v214_test(void) {return 2;}\n' > "$RUNNER_TEMP/v214_public.c"
+          clang --target=x86_64-w64-windows-gnu -std=gnu11 -O0 -c \
+            -Iupstream/src -Iupstream/deps/include \
+            -isystem /usr/x86_64-w64-mingw32/include \
+            "$RUNNER_TEMP/v214_public.c" -o "$RUNNER_TEMP/v214_public.obj" \
+            > "$RUNNER_TEMP/v214-compiler.log" 2>&1 || {
+              echo "::error title=V214::Public genuine rc.h cross-header compilation failed, check private runner stage"
+              exit 1
+            }
+          file "$RUNNER_TEMP/v214_public.obj" | grep -q -E 'Intel amd64|x86-64|COFF'
+      - name: Package toolchain headers and pinned public timer patch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/public-win64-sdk"
+          mkdir -p "$OUT/include" "$OUT/patches" "$OUT/licenses"
+          cp -a /usr/x86_64-w64-mingw32/include/. "$OUT/include/"
+          cp upstream/src/recomp/rc.h "$OUT/patches/patched_rc.h"
+          cp -a /usr/share/doc/mingw-w64-common/copyright "$OUT/licenses/" || true
+          cp -a /usr/share/doc/mingw-w64-x86-64-dev/copyright "$OUT/licenses/" || true
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          out=pathlib.Path(os.environ['RUNNER_TEMP'])/'public-win64-sdk'
+          old=(pathlib.Path(os.environ['RUNNER_TEMP'])/'rc-before.sha256').read_text().split()[0]
+          new=hashlib.sha256((out/'patches/patched_rc.h').read_bytes()).hexdigest()
+          (out/'manifest.json').write_text(json.dumps({
+              'upstream':'8f31ec7c41f252730c6325d52647046baef7549f',
+              'original_rc_sha256':old,'patched_rc_sha256':new,
+              'purpose':'Win64 C COFF compilation ONLY; no proprietary files or game data',
+              'format':'SHYT_V214_PUBLIC_WIN64_CROSS_HEADERS'},indent=2))
+          PY
+          cd "$RUNNER_TEMP"
+          tar czf win64-cross-headers-v214.tar.gz public-win64-sdk
+          sha256sum win64-cross-headers-v214.tar.gz > win64-cross-headers-v214.tar.gz.sha256
+          test "$(stat -c %s win64-cross-headers-v214.tar.gz)" -lt 268435456
+          echo SHYT_NATIVE_V214_PUBLIC_CROSS_HEADER_COFF_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v214-public-mingw-win64-cross-headers-no-game
+          path: |
+            ${{ runner.temp }}/win64-cross-headers-v214.tar.gz
+            ${{ runner.temp }}/win64-cross-headers-v214.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
