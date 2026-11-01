@@ -50,6 +50,21 @@ jobs:
               exit 1
             }
           file "$RUNNER_TEMP/v214_public.obj" | grep -q -E 'Intel amd64|x86-64|COFF'
+      - name: Record bounded public-only compile failure diagnostic
+        if: failure()
+        shell: bash
+        run: |
+          grep -m1 -E 'fatal error:|error:' "$RUNNER_TEMP/v214-compiler.log" \
+            | cut -c1-190 > "$RUNNER_TEMP/v214-first-error.txt" || true
+          test -s "$RUNNER_TEMP/v214-first-error.txt" || printf 'Compiler failed; no matching error line.\n' > "$RUNNER_TEMP/v214-first-error.txt"
+          test "$(wc -c < "$RUNNER_TEMP/v214-first-error.txt")" -lt 256
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-v214-public-bounded-first-error
+          path: ${{ runner.temp }}/v214-first-error.txt
+          if-no-files-found: error
+          retention-days: 1
       - name: Package toolchain headers and pinned public timer patch only
         shell: bash
         run: |
