@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""V203: real bbrecomp *whole-function* path over a wholly invented ELF64.
+
+Proves full scanner/function-size/RET/direct CALL generator output without
+original PS4 code or EBOOT. Source-only synthetic fixture. All game-derived
+C and original user executables remain PRIVATE, never passed to GitHub CI.
+"""
+from __future__ import annotations
+import argparse
+import hashlib
+from pathlib import Path
+import struct
+import subprocess
+import sys
+
+UPSTREAM="8f31ec7c41f252730c6325d52647046baef7549f"
+SOURCE_BLOB="f5032c9ead4988579e005af8a0a0ce4ba4ab66d8"
+# All invented x86-64. Functions without RET fall straight through into
+# the *next* fully recompiled function at the exact adjacent guest address.
+# This tests original generic L_dispatch -> native AOT, not only direct JMP.
+FUNCTIONS=(
+    (0x1000,bytes.fromhex("48c7c02a000000"),"fallthrough_42"),
+    (0x1007,bytes.fromhex("c3"),"return_after_42"),
+    (0x1010,bytes.fromhex("48c7c063000000"),"fallthrough_99"),
+    (0x1017,bytes.fromhex("c3"),"return_after_99"),
+    (0x1020,bytes.fromhex("48c7c007000000c3"),"direct_7"),
+)
+
+OFFSET_NAMES=tuple(f"f_{offset:x}" for offset,_,_ in FUNCTIONS)
+MAX_TOTAL_BYTES=2_000_000
+
+def gitblob(b:bytes)->str:
+    return hashlib.sha1(b"blob "+str(len(b)).encode()+b"\0"+b).hexdigest()
+
+def invented_elf()->bytes:
+    elf=bytearray(0x1100)
+    ident=b"\x7fELF\x02\x01\x01"+b"\0"*9
+    header=struct.pack("<16sHHIQQQIHHHHHH",ident,2,62,1,0x1000,
+                       0x40,0,0,64,56,1,0,0,0)
+    elf[:64]=header
+    elf[0x40:0x40+56]=struct.pack("<IIQQQQQQ",
+                                 1,5,0x1000,0x1000,0,
+                                 0x100,0x100,0x1000)
+    for offset,body,_ in FUNCTIONS:
+        assert 0x1000<=offset<0x1100 and offset+len(body)<=0x1100
+        elf[offset:offset+len(body)]=body
+    return bytes(elf)
+
+def audit_generated(table:str,body:str)->dict:
+    if table.count("const RcFunction *bb_recomp_init(")!=1:
+        raise ValueError("missing original real bbrecomp AOT function table")
+    for (offset,_,label),name in zip(FUNCTIONS,OFFSET_NAMES):
+        if table.count("void "+name+"(BbCpu *c);")!=1:
+            raise ValueError("original AOT entry missing: "+label)
+        if body.count("void "+name+"(BbCpu *c) {")!=1:
+            raise ValueError("original generated body missing: "+label)
+        if f"&d_{offset:x}" not in table:
+            raise ValueError("original registered native dispatch missing: "+label)
+    if "while (lo < hi)" not in table:
+        raise ValueError("original full generated RcFunction binary search absent")
+    if body.count("rc_native_find(dn)")<len(FUNCTIONS):
+        raise ValueError("original generic tail exit still needs runtime even on native matches")
+    if "else rc->tail(c)" not in body or "rc->bail(c, entry_rsp)" not in body:
+        raise ValueError("unsupported path was silently discarded")
+    if sum(len(x) for x in (table,body))>MAX_TOTAL_BYTES:
+        raise ValueError("unexpected generated C volume")
+    return {"real_upstream_full_functions":len(FUNCTIONS),
+            "function_fallthrough_edges_tested":2,
+            "native_registered_target_dispatch":True,
+            "unknown_target_fallback_explicit":True,
+            "real_game_recompiled":False,
+            "runtime_eboot_needed_by_synthetic_exe":False}
+
+def generate(checkout:Path,out:Path)->dict:
+    checkout=checkout.resolve(strict=True)
+    rev=subprocess.check_output(["git","-C",str(checkout),"rev-parse","HEAD"],
+                                text=True,stderr=subprocess.DEVNULL).strip()
+    if rev!=UPSTREAM:raise ValueError("original source revision mismatch")
+    src=subprocess.check_output(["git","-C",str(checkout),"show",
+                                 "HEAD:tools/recomp/bbrecomp.c"])
+    if gitblob(src)!=SOURCE_BLOB:
+        raise ValueError("original full recompiler source SHA mismatch")
+    compiler=checkout/"out/recomp/bbrecomp"
+    if not compiler.is_file():raise ValueError("full original recompiler not built")
+    if out.exists() or not out.parent.is_dir() or out.parent.is_symlink():
+        raise ValueError("requires a fresh off-git generated C target")
+    if any((p/".git").exists() for p in (out.parent,*out.parent.parents)):
+        raise ValueError("game-shaped generated C must stay outside any git checkout")
+    elf=out.parent/"INVENTED_ADJACENT_FALLTHROUGH_NOT_BLOODBORNE.elf"
+    tsv=out.parent/"functions.tsv"
+    offsets=out.parent/"function_offsets.txt"
+    if any(p.exists() for p in (elf,tsv,offsets)):
+        raise ValueError("synthetic input scratch collision")
+    elf.write_bytes(invented_elf())
+    tsv.write_text("start\tsize\tinsns\tundecodable\n"+
+                   "".join(f"0x{address:016x}\t{len(body)}\t2\t0\n"
+                           for address,body,_ in FUNCTIONS),encoding="ascii")
+    offsets.write_text("".join(f"0x{address:x}\n"
+                               for address,_,_ in FUNCTIONS),encoding="ascii")
+    cmd=[str(compiler),str(elf),str(tsv),str(out),"@"+str(offsets)]
+    run=subprocess.run(cmd,cwd=checkout,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                       timeout=120)
+    if run.returncode:
+        raise RuntimeError("original full-game C generation failed on invented ELF: "+
+                           (run.stderr or run.stdout)[-700:].decode(errors="replace"))
+    extra=out.with_name(out.stem+"_00000.c")
+    if not out.is_file() or not extra.is_file():
+        raise ValueError("full generator did not emit separate RcFunction and function C files")
+    result=audit_generated(out.read_text(encoding="utf-8"),
+                           extra.read_text(encoding="utf-8"))
+    print("SHYT_NATIVE_V203_ORIGINAL_FULL_FUNCTION_GENERATOR_SYNTHETIC_ELF_PASS")
+    print(result)
+    return result
+
+if __name__=="__main__":
+    p=argparse.ArgumentParser()
+    p.add_argument("--upstream-checkout",type=Path,required=True)
+    p.add_argument("--out",type=Path,required=True)
+    a=p.parse_args()
+    try:generate(a.upstream_checkout,a.out)
+    except (ValueError,RuntimeError,OSError,subprocess.CalledProcessError) as e:
+        print(type(e).__name__+": "+str(e)[:350],file=sys.stderr)
+        raise SystemExit(2)
