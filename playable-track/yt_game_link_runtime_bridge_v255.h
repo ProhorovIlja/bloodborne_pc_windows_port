@@ -31,6 +31,10 @@ struct VerifiedPeerRouteV255 {
     PacketEnds endpoints{};
     PeerCryptoDatagramsV241* peer_crypto=nullptr;
     DirectAckCoalescerV251* ack_tracker=nullptr;
+    // V258: never offload movement if the receiving client has not
+    // attached its authenticated peer UDP ingest to the SAME GameLinkPeer.
+    // Otherwise the send succeeds but remote movement is silently lost.
+    bool same_peer_ingress_installed = false;
 };
 
 // Callbacks return true ONLY when the underlying transport accepted the
@@ -54,7 +58,10 @@ EgressResult DispatchYtFrameV255(
     // guessed remote endpoint, copied session or separate sequence number.
     if(!active_grant || !active_grant->peer_crypto ||
        !active_grant->ack_tracker ||
-       pending.member != active_grant->identity.server_authorized_remote_id)
+       !active_grant->same_peer_ingress_installed ||
+       pending.member != active_grant->identity.server_authorized_remote_id ||
+       !active_grant->peer_crypto->MatchesOutgoingGrantV258(
+           active_grant->lease,active_grant->identity,active_grant->endpoints))
         return relay(pending.frame) ? EgressResult::Server : EgressResult::Failed;
 
     const auto secure_direct = [&](const GameFrame& movement) -> bool {
