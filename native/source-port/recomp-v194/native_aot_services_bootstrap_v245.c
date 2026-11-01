@@ -88,3 +88,21 @@ int shyt_aot_services_bootstrap_v245(
     services->function_count=count;
     return 1;
 }
+
+/* V261: enable actual RcFunction.direct slots only after owner-verified
+ * exact original-game function hashes. No code hash, no direct dispatch.
+ * Called before threads, and never without a valid installed AOT table.
+ * This cannot verify code by itself; the caller must independently do so. */
+int shyt_aot_services_link_direct_v261(
+    ShytAotServicesV245 *services,
+    ShytDirectFunctionAttestV259 attester, void *attest_ctx,
+    ShytDirectStatsV259 *stats)
+{
+    if (!services || !services->published_api || !services->functions ||
+        !services->function_count || !attester || !stats ||
+        !services->published_api->image_base)
+        return 0;
+    return shyt_aot_activate_direct_slots_v259(
+        services->functions, services->function_count,
+        services->published_api->image_base, attester, attest_ctx, stats);
+}
