@@ -78,3 +78,25 @@ object rather than rebuilding.
    subsystems, remains necessary for a true EBOOT-free PC game.
 4. No Fornex changes, PR merges, game uploads or original source
    redistribution occurred. Game boot is **NOT proven**.
+
+## Latest verified continuation: multi-shard original Win64 build
+
+After the initial three actual original-game objects, the private
+V217 builder successfully compiled **eight additional original
+generated C shards**, sampled from different parts of the full source
+set. **Eleven distinct actual x86-64 Windows COFF objects** now exist,
+each represented in the private SHA-256 cache manifest. First two
+original objects were independently rerun and **reused without
+recompilation**. These are code-generation/COFF facts, not executable
+gameplay or OS service integration.
+
+The clean public integration job initially failed because an
+upstream Git checkout lacked generated Zydis headers. Aligned
+the workflow with V214's pinned `V196 -> V195 -> CC=clang ./build.sh`
+sequence. The revised synthetic-only CI passed **both platform
+selftests and actual portable MinGW cross-C compilation + reuse**:
+https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41318386647
+
+The V216 independent original-game callback count remains
+**1,468,066** static callbacks; compiling objects does not remove
+them. No EBOOT-free playable build is claimed.
