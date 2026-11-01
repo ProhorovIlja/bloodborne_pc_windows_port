@@ -78,7 +78,13 @@ jobs:
               -ffp-contract=off -Wall -Wextra -Werror \
               -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
               -isystem /usr/x86_64-w64-mingw32/include \
-              -c "$SRC/$stem.c" -o "$RUNNER_TEMP/$stem.obj"
+              -c "$SRC/$stem.c" -o "$RUNNER_TEMP/$stem.obj" \
+              2> "$RUNNER_TEMP/v229-compiler-local-only.log" || {
+                printf 'stage=%s\n' "$stem" > "$RUNNER_TEMP/v229-compile-error.txt"
+                head -n 5 "$RUNNER_TEMP/v229-compiler-local-only.log" | cut -c1-180 \
+                  >> "$RUNNER_TEMP/v229-compile-error.txt"
+                exit 1
+              }
           done
           python - <<'PY'
           from pathlib import Path
@@ -91,3 +97,11 @@ jobs:
           print('SHYT_V229_ACTUAL_WIN64_COFF_PINNED_RCAPIV4_ROUTE_PASS')
           PY
           echo 'No original game, address mapping, private C or COFF in CI.'
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-v229-public-only-compile-error-under-1kb
+          path: ${{ runner.temp }}/v229-compile-error.txt
+          if-no-files-found: warn
+          retention-days: 1
