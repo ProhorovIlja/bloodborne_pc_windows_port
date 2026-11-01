@@ -8,6 +8,8 @@ on:
       - 'native/source-port/recomp-v194/native_win_clock_v236.*'
       - 'native/source-port/recomp-v194/test_native_clock_rcapi_v239.c'
       - 'native/source-port/recomp-v194/test_native_math_clock_chain_v242.c'
+      - 'native/source-port/recomp-v194/native_math_rcapi_route_v226.c'
+      - 'native/source-port/recomp-v194/test_native_math_unknown_fastpath_v252.c'
       - 'native/source-port/recomp-v194/build_private_aot_imports_v248.py'
       - 'native/source-port/recomp-v194/test_generated_aot_imports_v249.c'
       - 'native/source-port/recomp-v194/native_aot_services_bootstrap_v245.*'
@@ -148,3 +150,17 @@ jobs:
           & $genexe
           if ($LASTEXITCODE -ne 0) { throw 'V249 generated import Win64 runtime failed' }
           'V249 actual V248 generated C linked with original public AOT importer'
+          # V252: after fixing the V226 math route, 200 unknown imports
+          # bypass pinning even when the guest allocator pin is denied.
+          $fastpath=Join-Path $env:RUNNER_TEMP 'native-v252-math-fastpath.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/I$src" "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/native_math_shim_v222.c" `
+            "$src/native_math_guest_bridge_v223.c" `
+            "$src/native_math_import_dispatch_v224.c" `
+            "$src/native_math_rcapi_route_v226.c" `
+            "$src/test_native_math_unknown_fastpath_v252.c" "/Fe:$fastpath"
+          if ($LASTEXITCODE -ne 0) { throw 'V252 native import fastpath build failed' }
+          & $fastpath
+          if ($LASTEXITCODE -ne 0) { throw 'V252 pin/fault regression failed' }
+          'V252 unknown imported calls no longer pin or fault'
