@@ -67,10 +67,11 @@ All game-derived output must go to a private folder OUTSIDE Git.
     python3 native/source-port/recomp-v194/patch_upstream_fallthrough_v203.py --upstream-checkout upstream-recomp
     (cd upstream-recomp && CC=clang ./build.sh)
 
-Then point the actual complete-game pipeline at the original decrypted
-game executable. This example assumes a PRIVATE mounted Windows disk:
+Then point the actual complete-game pipeline at **eboot.bin-decrypted**,
+not the separate original encrypted/wrapped `eboot.bin`. The verified
+owner-provided decrypted file is a plain PS4-specific x86-64 ELF. This example assumes a PRIVATE mounted Windows disk:
 
-    python3 native/source-port/recomp-v194/prepare_private_full_game_v204.py --upstream upstream-recomp --eboot /mnt/d/PrivateInput/eboot.bin --work /mnt/d/PrivateNativeWork/BloodborneAOT
+    python3 native/source-port/recomp-v194/prepare_private_full_game_v204.py --upstream upstream-recomp --eboot /mnt/d/PrivateInput/eboot.bin-decrypted --work /mnt/d/PrivateNativeWork/BloodborneAOT
 
 Preparation refuses missing or encrypted input, a mismatched source
 revision, absent real scanner/compiler binaries, invalid function
