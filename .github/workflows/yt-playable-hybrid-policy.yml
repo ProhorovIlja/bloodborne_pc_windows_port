@@ -42,6 +42,13 @@ jobs:
             playable-track/test_hybrid_direct_ingress_v2.cpp \
             -o "$RUNNER_TEMP/yt-hybrid-ingress-v131"
           "$RUNNER_TEMP/yt-hybrid-ingress-v131"
+      - name: Offline v1.3.1 official installer and portable SHA integrity regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s playable-track -p 'test_verify_yt_v131_release.py' -v
+          # No release executable or private original game bytes in GitHub Actions.
+          echo SHYT_PLAYABLE_V131_LAUNCHER_INTEGRITY_TEST_PASS
       - name: Verify official release still has four-player limit
         shell: bash
         run: |
