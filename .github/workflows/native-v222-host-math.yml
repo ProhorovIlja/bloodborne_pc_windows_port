@@ -1,0 +1,50 @@
+name: Native V222 host math Win64 COFF and semantics (no game)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v222-host-math.yml'
+      - 'native/source-port/recomp-v194/native_math_shim_v222.h'
+      - 'native/source-port/recomp-v194/native_math_shim_v222.c'
+      - 'native/source-port/recomp-v194/test_native_math_shim_v222.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-math-semantics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and execute exact host math semantics fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=native/source-port/recomp-v194
+          clang -std=c11 -O2 -fno-fast-math -ffp-contract=off -Wall -Wextra -Werror -pedantic \
+            "$SRC/native_math_shim_v222.c" "$SRC/test_native_math_shim_v222.c" \
+            -lm -o "$RUNNER_TEMP/shyt-v222-math-test"
+          "$RUNNER_TEMP/shyt-v222-math-test"
+          echo SHYT_V222_23_NATIVE_HOST_MATH_SEMANTICS_PASS
+  native-win64-coff:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile math service to actual Windows AMD64 COFF
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $src = "native/source-port/recomp-v194"
+          $out = Join-Path $env:RUNNER_TEMP "shyt-v222-math.obj"
+          & clang-cl /nologo /c /W4 /WX /O2 "/Fo:$out" "$src/native_math_shim_v222.c"
+          if ($LASTEXITCODE -ne 0) { throw "Win64 native math compilation failed" }
+          $b = [IO.File]::ReadAllBytes($out)
+          if ($b.Length -lt 20 -or [BitConverter]::ToUInt16($b,0) -ne 0x8664) {
+            throw "Not an AMD64 native Windows COFF"
+          }
+          "SHYT_V222_23_NATIVE_HOST_MATH_WIN64_COFF_PASS"
