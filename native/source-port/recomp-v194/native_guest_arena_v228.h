@@ -17,6 +17,7 @@ typedef struct {
     void *base;
     size_t size;
     int live;
+    int initialized; /* no re-create: lock remains initialized after destroy */
     ShytGuestMemoryV227 writable_window;
 } ShytGuestArenaV228;
 
