@@ -18,7 +18,7 @@ PINNED_SHA="5d2305ee611ef1e03be39ff925f0da75c9a70393"
 PINNED_BLOB="087aef46868b55320f139b3f7c4f46e5fc545347"
 RELATIVE="emulator/src/core/libraries/network/p2p_sockets.cpp"
 HEADER="core/shyt_hybrid/yt_direct_physical_api_v264.h"
-SOURCE_HEADER='#include "core/libraries/network/sockets.h"'
+SOURCE_HEADER='#include "sockets.h"'
 
 def replace_once(source:str,needle:str,change:str)->str:
     if source.count(needle)!=1:
@@ -80,7 +80,6 @@ def patch(source:str)->str:
     // This is a separate authenticated wire route, not SendInternal's
     // shadNet SHAD port. Never send plaintext or unknown peer datagrams.
     int SendVerifiedMovement(const void* data,u32 len,u32 ip,u16 port) {
-        namespace Hybrid = BloodborneCoop::SHYTHybrid;
         if (!data || !LinkWelcomed() || !IsReady()) return -1;
         const auto bytes=std::span<const u8>{static_cast<const u8*>(data),len};
         const auto now=P2PNowMs();
