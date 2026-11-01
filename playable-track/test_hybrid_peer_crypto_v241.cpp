@@ -74,6 +74,14 @@ int main() {
     assert(!bad_scope.SealMovement(plain));
     PeerCryptoDatagramsV241 bad_keys(scope(),true,ab,ab);
     assert(!bad_keys.SealMovement(plain));
+    // V258: never create a peer session with an all-zero directional
+    // key (distinct nonzero synthetic test key cannot legitimize it).
+    LinkAuth::Key zeros{};
+    PeerCryptoDatagramsV241 zero_send(scope(),true,zeros,ba);
+    PeerCryptoDatagramsV241 zero_recv(scope(),true,ab,zeros);
+    assert(!zero_send.SealMovement(plain));
+    assert(!zero_recv.SealMovement(plain));
+
 
     // Session replay guard survives opposite-direction ACK-free traffic.
     GameFrame reply{};
