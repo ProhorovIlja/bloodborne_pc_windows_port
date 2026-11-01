@@ -58,3 +58,20 @@ offline server, compiled against the published YT 1.3.1 source.
 
 Only the original server link path must be enabled by default until
 these gates are satisfied. No private binaries or Fornex changes.
+
+
+## Security implementation reuse decision
+
+The same pinned YT repo already has `server/coop/link_auth.h` and
+`server/coop/link_crypto.cpp`, using the vendored **Monocypher**
+BSD-2-Clause/CC0 implementation of X25519, ChaCha20-Poly1305 and
+BLAKE2b. Its existing server link uses Noise NK plus a sequence replay
+window. Reuse **the audited primitives and packet-authentication
+patterns**, rather than inventing custom cryptography or copying an
+unreviewed BBHost crypto API. However the existing link's client-server
+session keys **must not be reused for peer-to-peer messages**.
+Define independent direction-specific keys per ordered hunter pair and
+session epoch, server-approved fingerprints, endpoint rebinding rules
+and replay counters, with test coverage and rollback. Under no
+circumstances enable `secure_peer_datagram_sender_installed` solely
+from user configuration or an unauthenticated UDP hello.
