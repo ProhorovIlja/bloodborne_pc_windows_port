@@ -94,6 +94,35 @@ public:
             ends.sender_map==scope_.map && ends.target_map==scope_.map;
     }
 
+    // V262: verify that the actual receiver's authenticated, live
+    // server-issued lease still authorizes precisely the pair for which
+    // these Noise-derived keys were created. The local role is INVERTED
+    // against outgoing: the remote peer is the GameFrame sender.
+    bool MatchesIncomingGrantV262(const PeerRouteLease& lease,
+                                  const DirectIngressIdentity& identity,
+                                  const PacketEnds& ends) const {
+        const auto& remote=local_is_a_ ? scope_.hunter_b : scope_.hunter_a;
+        const auto& local=local_is_a_ ? scope_.hunter_a : scope_.hunter_b;
+        const u32 remote_instance=local_is_a_ ? scope_.b_instance : scope_.a_instance;
+        const u32 local_instance=local_is_a_ ? scope_.a_instance : scope_.b_instance;
+        return valid_ &&
+            identity.server_authorized_remote_id==remote &&
+            identity.server_authorized_local_id==local &&
+            identity.server_authorized_party_session_id==scope_.party_session &&
+            identity.server_authorized_remote_instance==remote_instance &&
+            identity.local_instance==local_instance &&
+            lease.granted_sender_id==remote &&
+            lease.granted_receiver_id==local &&
+            lease.granted_sender_instance==remote_instance &&
+            lease.granted_receiver_instance==local_instance &&
+            lease.granted_party_session_id==scope_.party_session &&
+            lease.authority_epoch==scope_.world_epoch &&
+            lease.local_world_epoch==scope_.world_epoch &&
+            lease.approved_sender_map==scope_.map &&
+            lease.approved_target_map==scope_.map &&
+            ends.sender_map==scope_.map && ends.target_map==scope_.map;
+    }
+
     static constexpr size_t MaxDatagram = 1200;
     static constexpr size_t HeaderSize = LinkAuth::HeaderBytes;
     static constexpr size_t BindingSize = 32;
