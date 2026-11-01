@@ -1,5 +1,55 @@
 # Upstream research ledger: 2026-11-01 (v1.3.1 baseline)
 
+## New 2026-11-01: YT 1.3.2 DRAFT candidates, NOT v1.3.1 release
+
+Source/metadata checked at distinct PR heads. Do not merge, deploy or describe
+these as one tested integrated release. Official last release is v1.3.1.
+
+- **#484 Teams of five** https://github.com/lKaniel/bloodborne-server/pull/484
+  pinned f19696f32833161aa2300b36321d8c5c4d663c6b. Real code includes
+  TeamSize=5; signs 7,6,5,4; InvasionMaxPlayers=5; four game HUD entries;
+  emulator PartyListSize=4 and PortraitSlotCount=4; port SlotCount=4;
+  five client lobby member slots. Reuse this upstream work instead of
+  blindly stacking our historical V194/V195 source modifications over it.
+  Server source unit tests are NOT evidence of a real five-client session.
+  Our PR #85 checks this exact upstream cross-layer C++ source candidate
+  and compiles the original game HUD/portrait layout on Linux/Windows.
+- **#486 Five-game rig** https://github.com/lKaniel/bloodborne-server/pull/486
+  pinned 3e677729e3691c4f068eeb76e52a9f37b1eeb213. Adds guest4,
+  five-hunters lamp trip, code/open join, hosted fake-Discord scenarios.
+  Draft source existence is not a confirmed passed live-game session.
+- **#485 Quick match** https://github.com/lKaniel/bloodborne-server/pull/485
+  pinned 53d23c886e3ef8ab3b6fd702c749ae060bcca979. QUICK_MATCH=29
+  avoids RESET_LAMPS=28; level-aware open team or creates one, Global-only.
+- **#479 Team duels** https://github.com/lKaniel/bloodborne-server/pull/479
+  teams/FFA and last team standing; NOT proof of 3 simultaneous invaders.
+- **#481 Global/Discord auth** https://github.com/lKaniel/bloodborne-server/pull/481
+  browser OAuth PKCE/HTTPS for Hosted Global; needs external Discord app
+  credentials/config, not an automatic upgrade for a Local Fornex server.
+  Cross-shard logout limitations remain explicitly noted by author.
+- **#482 Optional Discord Rich Presence**
+  https://github.com/lKaniel/bloodborne-server/pull/482 ; off by
+  default, public-server join only, requires Discord application id.
+- **#483 Team-visible lobby** https://github.com/lKaniel/bloodborne-server/pull/483
+  shows hunter's group in online/friend lists.
+- **#480 Shard load caps** https://github.com/lKaniel/bloodborne-server/pull/480
+  reports 300/300 synthetic playing, relay p99 9.8 ms and 0.14% loss
+  for 60 s on their tested host. Not measured Fornex QoS or full game.
+- **#477 Backend reply cap** https://github.com/lKaniel/bloodborne-server/pull/477
+  bounds bloodstain, ghost and message responses after observed oversized
+  answer crash; high-value client stability when officially integrated.
+- **#478 Launcher repairs** https://github.com/lKaniel/bloodborne-server/pull/478
+  frozen SSL-context fallback, Windows CLANG64 DLL packaging and UTF-8 env.
+
+**Integration decision:** retain v1.3.1 playable baseline until upstream
+1.3.2 PRs are reconciled and actually tested. Prefer upstream five-player
+implementation to duplicating our prior isolated server-only patches.
+Require genuine 5-process join/leave/lamp/boss/wipe/reconnect and 4+1,
+3+2, 2+3 hostile slot tests before claiming any combinations. Develop
+authenticated direct P2P+NAT traversal, unified GameLinkPeer sequence
+and fallback in separate gated code. None of these PRs delivers that.
+
+
 **Scope:** check live release commits and open, unmerged PR heads across
 Yharnam Together, its close relatives and forks, standalone P2P
 implementations, other PC runtimes, rendering, server performance and
