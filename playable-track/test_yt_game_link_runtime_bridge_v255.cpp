@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // V255 original GameLink source-hook integration semantics.
 #include "yt_game_link_runtime_bridge_v255.h"
+#include "yt_game_link_direct_ingress_v262.h"
 #include <cassert>
 #include <cstdio>
 using namespace BloodborneCoop;
@@ -79,12 +80,21 @@ int main() {
            ==EgressResult::Server);
     assert(original_relay==before_ingress_relay+1 && unexpected_server==0);
     active.same_peer_ingress_installed=true;
+    // V263: the *same* original GameLinkPeer is now fed by either the
+    // genuine server packet or the matching authenticated peer receiver,
+    // with live server-issued party/world/endpoint constraints enforced.
+    VerifiedPeerIngressV262 inbound{};
+    inbound.session=&receiver;
+    inbound.lease=active.lease;
+    inbound.identity={"hunter-A",7,8,1100,"hunter-B","party-17"};
+    inbound.endpoints=active.endpoints;
+    inbound.approved_endpoint={0x0100007f,31234};
+    inbound.endpoint_proved_by_authenticated_handshake=true;
     auto direct_send=[&](std::string_view member, std::span<const u8> bytes) {
         assert(member=="hunter-B");
-        const auto frame=receiver.OpenMovement(bytes);
-        assert(frame);
-        assert(frame->ack==0);
-        const auto delivered=original_receiver.Receive(*frame,20000);
+        inbound.lease=active.lease;
+        const auto delivered=ReceiveDirectYtFrameV262(
+            original_receiver,inbound,inbound.approved_endpoint,bytes);
         assert(delivered.size()==1);
         ++direct;
         return true;
