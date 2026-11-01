@@ -46,3 +46,22 @@ Windows PE process and executes actual Win32 calls; Ubuntu exercises
 portable overflow arithmetic and unsupported-OS rejection. These tests
 contain no retail game assets. Check CI result for the exact head commit
 before reporting success. Fornex is unaffected.
+
+
+## V238: exact high-frequency clock conversion
+
+The initial V236 `shyt_clock_scale_ticks_v236` rejected any
+`remainder * target_hz` exceeding uint64, even when the *quotient*
+would fit. For example, 29,999,999,999 ticks from a 30 GHz source to
+1 GHz yields 999,999,999 ns, but its intermediate product exceeds uint64.
+
+V238 uses a full unsigned 128-bit intermediate for Clang/GCC (including
+clang-cl Win64, tested) and retains conservative fail-closed overflow
+handling for compilers without such support. Existing result-overflow checks
+remain. Regression tests include a 30 GHz fractional-second case and a
+near-UINT64_MAX rate case.
+
+Local reproducible verification of the arithmetic implementation:
+10,003 fixed/random cases against integer exact-division oracle PASS;
+clang-cl Windows COFF compilation PASS. This does not replace the complete
+GitHub Actions run, and is still host-only, not imported into Bloodborne.
