@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 import time
 from bounded_private_subprocess_v210 import run_stage
+import verify_coff_dependencies_v219 as deps
 
 PIN = '8f31ec7c41f252730c6325d52647046baef7549f'
 VALID = re.compile(r'recomp(?:_[0-9a-fA-F]{5})?\.c\Z')
@@ -108,6 +109,8 @@ def compile_sources(generated: Path, upstream: Path, sdk: Path, output: Path,
                  'opt': opt, 'target': 'x86_64-w64-windows-gnu',
                  'clang_version': subprocess.check_output(
                      [compiler, '--version'], text=True, timeout=10).splitlines()[0]}
+    # Old V217 manifests deliberately lack these keys and fail the reuse check.
+    build.update(deps.input_fingerprint(upstream,sdk,compiler))
     reused = compiled = 0
     started = time.monotonic()
     for name in names:
