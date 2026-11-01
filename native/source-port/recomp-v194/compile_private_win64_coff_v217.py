@@ -16,6 +16,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 from bounded_private_subprocess_v210 import run_stage
 
 PIN = '8f31ec7c41f252730c6325d52647046baef7549f'
@@ -84,9 +85,11 @@ def prerequisites(generated: Path, upstream: Path, sdk_root: Path,
     return header, digest(meta), compiler
 
 def compile_sources(generated: Path, upstream: Path, sdk: Path, output: Path,
-                    names: list[str], opt: int = 0) -> dict:
-    if opt not in (0, 1, 2) or not 1 <= len(names) <= 1000:
+                    names: list[str], opt: int = 0, budget_seconds: int = 45) -> dict:
+    if opt not in (0, 1, 2) or not 1 <= len(names) <= 4:
         raise ValueError('unbounded file selection or optimization')
+    if not 10 <= budget_seconds <= 3600:
+        raise ValueError('invalid private per-invocation runtime budget')
     if any(not VALID.fullmatch(n) for n in names) or len(set(names)) != len(names):
         raise ValueError('unsafe/duplicate generated file names')
     generated, output = private(generated), private(output)
@@ -106,7 +109,10 @@ def compile_sources(generated: Path, upstream: Path, sdk: Path, output: Path,
                  'clang_version': subprocess.check_output(
                      [compiler, '--version'], text=True, timeout=10).splitlines()[0]}
     reused = compiled = 0
+    started = time.monotonic()
     for name in names:
+        if time.monotonic() - started >= budget_seconds - 5:
+            break  # preserve completed per-object SHA-256 checkpoints
         source = generated / name
         if source.is_symlink() or not source.is_file() or not (
             1 <= source.stat().st_size <= MAX_SOURCE_BYTES):
@@ -136,7 +142,8 @@ def compile_sources(generated: Path, upstream: Path, sdk: Path, output: Path,
                     break
             else:
                 raise ValueError('too many private compile retries')
-            run_stage(command, stage, output / 'logs', timeout=600)
+            remaining = budget_seconds - (time.monotonic() - started) - 2
+            run_stage(command, stage, output / 'logs', timeout=max(1, min(600, remaining)))
             if not coff_ok(partial):
                 raise ValueError('compiler did not create AMD64 COFF')
             os.replace(partial, dest)
@@ -156,6 +163,7 @@ def compile_sources(generated: Path, upstream: Path, sdk: Path, output: Path,
     return {
         'selected_files': len(names), 'new_coff_objects': compiled,
         'reused_verified_coff_objects': reused,
+        'deferred_files': len(names) - compiled - reused,
         'complete_game_boot_proven': False,
         'strict_no_guest_runtime_proven': False}
 
@@ -177,6 +185,7 @@ if __name__ == '__main__':
     ap.add_argument('--output-dir', type=Path)
     ap.add_argument('--file', action='append', default=[])
     ap.add_argument('--opt', type=int, default=0)
+    ap.add_argument('--budget-seconds', type=int, default=45)
     ap.add_argument('--self-test', action='store_true')
     args = ap.parse_args()
     if args.self_test:
@@ -188,7 +197,7 @@ if __name__ == '__main__':
         try:
             result = compile_sources(args.generated_dir, args.upstream,
                                      args.sdk, args.output_dir,
-                                     args.file, args.opt)
+                                     args.file, args.opt, args.budget_seconds)
             print(json.dumps(result, separators=(',', ':')))
         except (OSError, ValueError, subprocess.SubprocessError,
                 RuntimeError):
