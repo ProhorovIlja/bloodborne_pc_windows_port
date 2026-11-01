@@ -110,7 +110,7 @@ def compile_sources(generated: Path, upstream: Path, sdk: Path, output: Path,
                  'clang_version': subprocess.check_output(
                      [compiler, '--version'], text=True, timeout=10).splitlines()[0]}
     # Old V217 manifests deliberately lack these keys and fail the reuse check.
-    build.update(deps.input_fingerprint(upstream,sdk,compiler))
+    spec_base.update(deps.input_fingerprint(upstream,sdk,compiler))
     reused = compiled = 0
     started = time.monotonic()
     for name in names:
