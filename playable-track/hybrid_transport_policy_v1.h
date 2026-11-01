@@ -13,6 +13,7 @@
 // Only native UNRELIABLE CHANNEL 0x06 (player movement) is eligible in v1.
 // No direct packets are ever sent under uncertainty.
 #include <cstdint>
+#include <string_view>
 #include "coop/packet_routes.h"
 
 namespace BloodborneCoop::SHYTHybrid {
@@ -31,6 +32,12 @@ struct PeerRouteLease {
     bool server_route_granted = false;
     bool sender_or_receiver_hostile = false;
     bool has_common_protocol = false;
+
+    // Server-issued grant MUST identify the exact ordered pair of hunters.
+    // Views refer to authenticated session-owned, lifetime-stable IDs.
+    // A valid lease for hunter A -> B cannot authorize C -> B or A -> C.
+    std::string_view granted_sender_id{};
+    std::string_view granted_receiver_id{};
 
     // Server grants only a specific sender/receiver and map, for the
     // current party-world epoch. Rejoin/load/teleport revokes the lease.
@@ -65,7 +72,8 @@ constexpr Carrier ChooseNativePacketCarrier(
         !link.same_party_session || !link.session_authenticated ||
         !link.peer_authenticated || !link.direct_datagram_verified ||
         !link.server_route_granted || link.sender_or_receiver_hostile ||
-        !link.has_common_protocol)
+        !link.has_common_protocol || link.granted_sender_id.empty() ||
+        link.granted_receiver_id.empty())
         return Carrier::Server;
 
     if (!link.authority_epoch ||
