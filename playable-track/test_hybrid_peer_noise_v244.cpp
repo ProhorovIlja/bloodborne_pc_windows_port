@@ -33,9 +33,27 @@ int main() {
     Responder bob(scope(),static_secret);
     const auto hello=alice.Start(a_secret);
     assert(hello && hello->size()==WireBytes && Prefix(*hello));
+    // V260: the scope binding occupies the encrypted payload. A future
+    // implementation that accidentally sends it in plaintext is rejected.
+    const auto expected_binding=PeerBindingV241(scope());
+    assert(!std::equal(expected_binding.begin(),expected_binding.end(),
+        hello->begin()+Magic.size()+LinkAuth::KeyBytes));
+    // Changing ciphertext (not only tag) must invalidate Noise authenticator.
+    auto forged_hello=*hello;
+    forged_hello[Magic.size()+LinkAuth::KeyBytes+7]^=0x11;
+    Responder forged_recipient(scope(),static_secret);
+    assert(!forged_recipient.Answer(forged_hello,filled(79)));
+
     assert(!alice.Start(a_secret)); // ephemeral must not be reused
     const auto answer=bob.Answer(*hello,b_secret);
     assert(answer && answer->answer.size()==WireBytes);
+    assert(!std::equal(expected_binding.begin(),expected_binding.end(),
+        answer->answer.begin()+Magic.size()+LinkAuth::KeyBytes));
+    auto forged_answer=answer->answer;
+    forged_answer[Magic.size()+LinkAuth::KeyBytes+8]^=0x80;
+    assert(!alice.Finish(forged_answer));
+    // The authentic response remains usable after forged packets.
+
     // A lost UDP answer is retransmitted byte-identically. Passing a
     // DIFFERENT ephemeral secret must never re-encrypt under old state.
     const Key different_ephemeral=filled(173);
