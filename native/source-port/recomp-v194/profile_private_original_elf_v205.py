@@ -10,6 +10,7 @@ but not the same as full control-flow discovery or a playable port.
 """
 from __future__ import annotations
 import argparse
+import bisect
 import collections
 import json
 from pathlib import Path
@@ -92,6 +93,9 @@ def profile(path:Path)->dict:
     overlaps=sum(a[1]>b[0] for a,b in zip(ranges,ranges[1:]))
     if invalid or overlaps:
         raise ValueError("malformed original unwind function ranges")
+    range_starts=[a for a,b in ranges]
+    range_ends=[b for a,b in ranges]
+    unwind_start_set=set(range_starts)
 
     dynamic=[]
     for pos in range(dyn[2],dyn[2]+dyn[5],16):
@@ -128,6 +132,16 @@ def profile(path:Path)->dict:
                 relative_total+=1
                 code_relative.add(addend)
             if kind in (6,7):indirect_slots+=1
+    exact_known=sum(x in unwind_start_set for x in code_relative)
+    interior=0
+    outside=0
+    for x in code_relative:
+        if x in unwind_start_set:continue
+        slot=bisect.bisect_right(range_starts,x)-1
+        if slot>=0 and x<range_ends[slot]:interior+=1
+        else:outside+=1
+    if exact_known+interior+outside!=len(code_relative):
+        raise ValueError("unwind relocation target classification failed")
     return {
         "format":"shyt-native-real-original-elf-profile-v205",
         "decrypted_original_ps4_x86_64_elf":True,
@@ -144,6 +158,11 @@ def profile(path:Path)->dict:
         "relocations_total":sum(kinds.values()),
         "relative_relocations_into_executable_code":relative_total,
         "distinct_relative_code_pointer_targets":len(code_relative),
+        "relative_targets_exactly_matching_unwind_function_starts":exact_known,
+        "relative_targets_inside_unwind_function_bodies":interior,
+        "relative_targets_outside_unwind_function_ranges":outside,
+        "unwind_plus_outside_pointer_candidate_address_count":
+            len(unwind_start_set)+outside,
         "import_jump_or_data_slots":indirect_slots,
         "entire_original_code_recompiled":False,
         "original_version_109_cryptographically_verified":False,
