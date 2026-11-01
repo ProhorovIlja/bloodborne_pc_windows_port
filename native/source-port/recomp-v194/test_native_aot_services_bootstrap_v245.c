@@ -116,6 +116,21 @@ int main(void) {
     audit[1].size=16;
     assert(shyt_aot_table_valid_v257(audit,2,base));
     ShytAotServicesV245 services={0};
+    /* V267: neither duplicate imported addresses nor duplicate native
+     * handler pointers may enter a process-global AOT route. These fail
+     * BEFORE V226/V239 install (hence leave services still mutable). */
+    ShytMathImportTable duplicated=math;
+    duplicated.entries[1].offset=duplicated.entries[0].offset;
+    assert(!shyt_aot_services_bootstrap_v245(
+        &services,&api,&duplicated,&clock,permit,&bounds,
+        fatal_memory,0,pin,unpin,0,synthetic_recomp_init));
+    assert(!services.published_api);
+    duplicated=math;
+    duplicated.entries[1].fn=duplicated.entries[0].fn;
+    assert(!shyt_aot_services_bootstrap_v245(
+        &services,&api,&duplicated,&clock,permit,&bounds,
+        fatal_memory,0,pin,unpin,0,synthetic_recomp_init));
+    assert(!services.published_api);
     /* Invalid overlap is rejected WITHOUT installing either route. */
     ShytClockTargetsV239 bad={base,descs[18].offset,0x3020};
     assert(!shyt_aot_services_bootstrap_v245(
