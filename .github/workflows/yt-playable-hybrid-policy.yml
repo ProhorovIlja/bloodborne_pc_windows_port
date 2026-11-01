@@ -109,6 +109,23 @@ jobs:
             actual-yharnam-upstream/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-authenticated-direct-ingress-v262"
           "$RUNNER_TEMP/yt-authenticated-direct-ingress-v262"
+          # Physical gate: four remote seats max; only SHDP accepts
+          # a server-approved endpoint, never raw SHAD.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iplayable-track playable-track/test_hybrid_direct_physical_gate_v264.cpp \
+            -o "$RUNNER_TEMP/yt-shdp-physical-gate-v264"
+          "$RUNNER_TEMP/yt-shdp-physical-gate-v264"
+          # Source-locked actual OS UDP receiver/send path. The default
+          # stays fully shadNet/server-only, and the original code is only
+          # modified in this disposable pinned YT source checkout.
+          python playable-track/apply_yt_physical_direct_v265.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_physical_direct_v265.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          grep -Fq 'ShytDirectPeerSendV265' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'ShytDirectPeerReceiveV265' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/sockets.h
           # V264: exact SHDP ciphertext-only physical transport gate,
           # four peers maximum, revoked/expired route refusal.
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
