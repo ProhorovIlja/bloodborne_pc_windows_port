@@ -97,7 +97,9 @@ read-only return-slot refusal, read-only output pointer refusal,
 `longjmp` fault handling after releasing the lifetime pin,
 and failure after arena destruction.
 
-**Do not mark V230 as PASS until its runtime job finishes.**
+**V230 SUCCESS:** Both the public dependency-preparation job and
+actual Windows PE execution job passed:
+https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41332349835
 This test fixture is not Bloodborne gameplay nor a full game launch.
 
 ## Still missing
