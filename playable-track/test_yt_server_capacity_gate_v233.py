@@ -42,6 +42,27 @@ def main():
         bad=dict(faster, udp_buffer_drops=2, refused=1)
         b.write_text(json.dumps(bad))
         assert not gate.compare(base,gate.read_one(b))['all_gates_pass']
+        # V237: overall VPS saturation, login stalls and loss can regress
+        # while the main relay thread and outbound bandwidth improve.
+        cpu_regressed=dict(faster, server_cpu_avg=80.0)
+        assert not gate.compare(base,cpu_regressed)['gates']['total_server_cpu_within_budget']
+        join_regressed=dict(faster, welcome_ms_p99=490.0)
+        assert not gate.compare(base,join_regressed)['gates']['join_p99_within_budget']
+        lost=dict(faster, packets_lost=1000)
+        assert not gate.compare(base,lost)['gates']['packet_loss_rate_within_budget']
+        # Normalize by generated packet volume: equal ratios are comparable.
+        same_ratio=dict(faster, packets_sent=60000, packets_received=59998,
+                        packets_lost=2)
+        assert gate.compare(base,same_ratio)['gates']['packet_loss_rate_within_budget']
+        for malformed in (dict(faster, packets_sent=0),
+                          dict(faster, packets_lost=40000)):
+            b.write_text(json.dumps(malformed))
+            try:
+                gate.read_one(b)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('invalid loss denominator/count accepted')
         uneven=dict(faster, players=150)
         try:
             gate.compare(base,uneven)
