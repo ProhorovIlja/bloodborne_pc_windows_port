@@ -1,0 +1,47 @@
+name: YT V233 server relay capacity regression gate
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - 'playable-track/yt_server_capacity_gate_v233.py'
+      - 'playable-track/test_yt_server_capacity_gate_v233.py'
+      - '.github/workflows/yt-v233-server-capacity-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-shadnet-measurement-validation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: original-yt131
+          persist-credentials: false
+          submodules: false
+      - name: Confirm original published server workload output schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original-yt131 rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('original-yt131/server/loadtest/run_load.py').read_text()
+          required=['"main_thread_cpu_avg"', '"server_out_mbit"',
+                    '"relay_ms_p99"', '"udp_buffer_drops"',
+                    '"playing"', '"refused"', '"server_rss_mb_max"']
+          assert all(v in p for v in required), 'upstream changed loadtest schema'
+          print('SHYT_V233_REAL_YT131_LOADTEST_SCHEMA_PIN_PASS')
+          PY
+          python -m py_compile playable-track/yt_server_capacity_gate_v233.py playable-track/test_yt_server_capacity_gate_v233.py
+          python playable-track/test_yt_server_capacity_gate_v233.py
+          echo 'Synthetic fixture only. No original private game or live server contact.'
