@@ -53,7 +53,7 @@ int main() {
     PeerCryptoDatagramsV241 wrong_party(different,false,ba,ab);
     assert(!wrong_party.OpenMovement(*third));
     LinkAuth::Key another=ba;another[0]^=0x55;
-    PeerCryptoDatagramsV241 wrong_key(scope(),false,another,ab);
+    PeerCryptoDatagramsV241 wrong_key(scope(),false,ba,another);
     assert(!wrong_key.OpenMovement(*third));
 
     auto invalid=plain; invalid.sender="hunter-C";
