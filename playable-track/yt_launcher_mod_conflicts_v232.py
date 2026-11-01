@@ -54,6 +54,30 @@ def canonical(game_relative: Path) -> tuple[str, bool]:
         raise ValueError("executable/system replacement unsupported")
     return "/".join(folded), folded[1] in GAMEPLAY_DIRS
 
+def checked_layer_source(layer_root: Path, source: Path) -> None:
+    """Reject sources outside their layer and symlinks in ANY path component.
+
+    A regular-looking leaf may live under a symlinked parent; checking only
+    source.is_symlink() misses this. Inspect only; never modify the layer.
+    """
+    try:
+        pieces = source.absolute().relative_to(layer_root.absolute()).parts
+    except ValueError as exc:
+        raise ValueError("mod source escapes its selected layer") from exc
+    if not pieces or any(part in (".", "..") for part in pieces):
+        raise ValueError("invalid mod source relative path")
+    current = layer_root.absolute()
+    for part in pieces:
+        current /= part
+        if current.is_symlink():
+            raise ValueError("symlink inside mod layer is not supported")
+    if not current.is_file():
+        raise ValueError("upstream yielded a missing/non-file mod source")
+    try:
+        current.resolve(strict=True).relative_to(layer_root.resolve(strict=True))
+    except ValueError as exc:
+        raise ValueError("resolved mod source escapes its selected layer") from exc
+
 
 def inspect(upstream, mods_dir: Path, config: Path | None = None,
             base_overlay: Path | None = None, fingerprint_gameplay: bool = False) -> dict:
@@ -78,16 +102,16 @@ def inspect(upstream, mods_dir: Path, config: Path | None = None,
             raise ValueError("enabled mod directory invalid")
         ordered.append((name, directory))
     seen: dict[str, tuple[str, bool]] = {}
-    effective_gameplay: dict[str, Path] = {}
+    effective_gameplay: dict[str, tuple[Path, Path]] = {}
     rows: list[dict] = []
     replaced_mod_files = 0
+    critical_conflicts = 0
     file_count = 0
     per_mod = defaultdict(int)
     for name, folder in ordered:
         current: set[str] = set()
         for game_path, source in upstream.mod_files(folder):
-            if source.is_symlink() or not source.is_file():
-                raise ValueError("upstream yielded an unsafe source file")
+            checked_layer_source(folder, source)
             key, gameplay = canonical(game_path)
             file_count += 1
             if file_count > MAX_FILES:
@@ -100,6 +124,8 @@ def inspect(upstream, mods_dir: Path, config: Path | None = None,
             if previous:
                 prior_name, prior_gameplay = previous
                 replaced_mod_files += 1
+                if gameplay or prior_gameplay:
+                    critical_conflicts += 1
                 if len(rows) < MAX_CONFLICTS:
                     rows.append({
                         "game_path": key,
@@ -110,8 +136,7 @@ def inspect(upstream, mods_dir: Path, config: Path | None = None,
                     })
             seen[key] = (name, gameplay)
             if gameplay:
-                effective_gameplay[key] = source
-    high = sum(x["severity"] == "gameplay-critical" for x in rows)
+                effective_gameplay[key] = (source, folder)
     conflicts_truncated = replaced_mod_files > len(rows)
     gameplay_digest = None
     if fingerprint_gameplay:
@@ -119,9 +144,8 @@ def inspect(upstream, mods_dir: Path, config: Path | None = None,
         # Compare only alongside matching base game/build/patches/protocol.
         combined = hashlib.sha256(b"SHYT-YT131-GAMEPLAY-OVERRIDES-V1\0")
         total_bytes = 0
-        for key, source in sorted(effective_gameplay.items()):
-            if source.is_symlink() or not source.is_file():
-                raise ValueError("unsafe gameplay mod source while hashing")
+        for key, (source, layer_root) in sorted(effective_gameplay.items()):
+            checked_layer_source(layer_root, source)
             before = source.stat()
             if before.st_size > MAX_FINGERPRINT_BYTES - total_bytes:
                 raise ValueError("gameplay fingerprint exceeds bounded I/O budget")
@@ -154,7 +178,7 @@ def inspect(upstream, mods_dir: Path, config: Path | None = None,
         "distinct_game_targets": len(seen),
         "file_replacements_between_mod_layers": replaced_mod_files,
         "reported_conflicts": rows,
-        "reported_gameplay_critical_conflicts": high,
+        "reported_gameplay_critical_conflicts": critical_conflicts,
         "conflicts_truncated": conflicts_truncated,
         "per_mod_target_counts": dict(sorted(per_mod.items())),
         "has_unresolved_collisions": replaced_mod_files > 0,
