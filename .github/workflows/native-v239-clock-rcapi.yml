@@ -17,6 +17,10 @@ on:
       - 'native/source-port/recomp-v194/native_aot_direct_link_v259.h'
       - 'native/source-port/recomp-v194/test_native_aot_direct_link_v259.c'
       - 'native/source-port/recomp-v194/test_native_aot_services_bootstrap_v245.c'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v239-clock-rcapi.yml'
+      - 'native/source-port/recomp-v194/**'
   workflow_dispatch:
 permissions:
   contents: read
