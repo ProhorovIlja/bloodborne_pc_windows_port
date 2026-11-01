@@ -80,7 +80,10 @@ def patch(source:str)->str:
     // This is a separate authenticated wire route, not SendInternal's
     // shadNet SHAD port. Never send plaintext or unknown peer datagrams.
     int SendVerifiedMovement(const void* data,u32 len,u32 ip,u16 port) {
-        if (!data || !LinkWelcomed() || !IsReady()) return -1;
+        if (!data || !ip || !port || !LinkWelcomed() || !IsReady() ||
+            len < BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::WireHeader.size()+32+24+1 ||
+            len > BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::MaxWire)
+            return -1;
         const auto bytes=std::span<const u8>{static_cast<const u8*>(data),len};
         const auto now=P2PNowMs();
         std::lock_guard guard(verified_direct_mutex);
@@ -95,6 +98,10 @@ def patch(source:str)->str:
     }
 
     int ReadVerifiedMovement(void* out,u32 max,u32* ip,u16* port) {
+        // Never let generic ReceiveInternal truncate an authenticated
+        // SHDP ciphertext. GameLink needs the ENTIRE AEAD frame or none.
+        if (!out || max < BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::MaxWire)
+            return -1;
         return ReceiveInternal(InternalChannel::VerifiedDirectMovement,
                                out,max,ip,port);
     }
