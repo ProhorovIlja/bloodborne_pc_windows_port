@@ -166,3 +166,40 @@ dependency may be silently relabeled native.
 
 This branch belongs to its own Draft PR; do not merge without
 playtest and server/client compatibility checks.
+
+
+## V232–V233: launcher and server improvement work, not duplicated UI
+
+- `yt_launcher_mod_conflicts_v232.py`: read-only preflight against the
+  actual YT v1.3.1 `bbport/scripts/mods.py`, respecting existing
+  `mods.json` order, adjacent `CUSA03173-mods` overlay and the
+  original file-layout logic. Flags competing whole-file mod overrides,
+  especially gameplay-critical param/event/map/script modifications,
+  and optionally computes a bounded SHA-256 of final gameplay winners.
+  Existing Mods UI is retained; this module is a **candidate JSON
+  provider for it**, not yet wired to production. Source documentation:
+  [V232](V232_YT_LAUNCHER_MOD_COMPAT_AND_UPSTREAM_PLAN.md).
+- `yt_server_capacity_gate_v233.py`: accepts two compact JSON
+  summaries from the *existing* YT `server/loadtest/run_load.py`,
+  rejects incompatible simulated player populations, and checks
+  explicit CPU, p99 relay latency, outbound bandwidth, refused
+  sessions and buffer-drop budgets. It DOES NOT start a real
+  server or claim any observed live performance gain.
+  Source documentation: [V233](V233_YT_SERVER_LOAD_CAPACITY_ACCEPTANCE.md).
+- Source-backed parallel candidates include
+  `visy/bloodborne_pc_windows_port` documented direct UDP, reliable
+  host control, NAT, network simulation, session identity and save
+  protection, plus BBHost renderer/online logic. **None is
+  demonstrated interoperable with YT**, and GPLv3 reuse must
+  respect license constraints. No CLS nonpublic material published.
+
+CI with exactly the released YT v1.3.1 scripts and invented game data:
+V232 https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41333733614
+(Windows/Ubuntu PASS);
+V233 https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41334107718
+(Windows/Ubuntu PASS).
+
+Before shipping, finish actual launcher integration, exact game/patch/
+mod/hook handshake, authenticated P2P UDP & safe fallback, real five
+player world/entity tests, staging load benchmarks, backup/rollback,
+and a production runbook. Fornex remains unchanged.
