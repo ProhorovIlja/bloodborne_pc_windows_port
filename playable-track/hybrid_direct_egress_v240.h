@@ -55,8 +55,13 @@ EgressResult SendExistingGameFrameV240(
     const auto relay = [&]() -> EgressResult {
         return server_send(frame) ? EgressResult::Server : EgressResult::Failed;
     };
-    if (frame.sender.empty() || !frame.instance || !frame.peer_instance)
+    if (frame.sender.empty() || !frame.instance)
         return EgressResult::Failed;  // invalid source identity: fail closed
+    // V253: YT GameLinkPeer::Header() intentionally uses peer_instance=0
+    // until the sender has heard from its recipient. This is a VALID
+    // initial/reconnection frame that MUST travel over the original server
+    // link rather than being silently dropped by an experimental P2P route.
+    if (!frame.peer_instance) return relay();
     const bool eligible = identity.secure_peer_datagram_sender_installed &&
         identity.local_instance == frame.instance &&
         identity.remote_instance == frame.peer_instance &&
