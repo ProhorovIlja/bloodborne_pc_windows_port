@@ -32,11 +32,13 @@ At continuation start: **34** real Win64 AMD64 COFF objects, each SHA
 verified. Before cache change: 4 more original C modules compiled.
 After change: 4 additional distinct original game modules built, a
 second identical invocation **reused 4/4** without recompiling, then
-4 more original source modules compiled.
+4 more original source modules compiled, followed by another verified
+4-module real-original batch.
 
-**Total in private manifest now: 46 / 384 COFF modules, no observed
-SHA-256, size or AMD64 machine-format mismatches.** Eight COFF objects
-have the new dependency key; 38 are historical verified byte blobs
+**Total in private manifest now: 50 / 384 COFF modules, 239,249,549
+bytes (228.17 MiB), zero observed SHA-256, size or AMD64 machine-format
+mismatches.** Twelve COFF objects have the new dependency key; 38 are
+historical verified byte blobs
 that lack a V219 dependency-proof key. This count is NOT a game
 completion percentage: these COFF files can still refer to a large
 guest CPU runtime. True Windows link, renderer/audio, ABI closure and
@@ -55,11 +57,16 @@ Local synthetic with actual pinned public headers and compiler:
 The cross-platform public workflow
 `.github/workflows/native-v217-private-cross-coff.yml` includes
 Windows/Linux parser tests and Linux compiler+cache invalidation.
-The first upstream CI run of the new integration test failed while the
-same test passed locally. A bounded public-only failure phase/artifact
-was added to triage that runner difference **without fetching full
-GitHub Actions logs**. Do not mark this new integration test as PASS
-until its latest run succeeds.
+The first upstream CI runs of the new integration test failed while the
+same test passed locally. A **bounded 235-byte synthetic-only artifact**
+identified a `NameError: name 'build' is not defined`: the private-local
+copy used a `build` recipe dict, but the public GitHub V217 source used
+`spec_base`. Fixed the GitHub code to call `spec_base.update(...)`,
+without changing or bypassing the dependency gate. No full GitHub logs
+were downloaded. After this fix, **Windows + Ubuntu selftests and actual
+public pinned upstream Win64 COFF compile/reuse/header invalidation all
+PASSED**:
+https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41321750728 .
 
 ## Follow-up
 
