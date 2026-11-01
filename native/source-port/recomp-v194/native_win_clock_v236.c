@@ -22,8 +22,17 @@ int shyt_clock_scale_ticks_v236(uint64_t counter_delta, uint64_t source_hz,
     /* Evaluate quotients separately; no floating-point drift at long uptime. */
     if (seconds > UINT64_MAX / target_hz) return -1;
     whole = seconds * target_hz;
+    /* On Clang/GCC, use the full 128-bit product. A 64-bit intermediate
+     * incorrectly rejects high-frequency clocks even when the exact
+     * quotient is representable (e.g. 30 GHz -> nanoseconds). */
+#if defined(__clang__) || defined(__GNUC__)
+    fraction = (uint64_t)(((unsigned __int128)remainder * target_hz) / source_hz);
+#else
+    /* Conservative fallback for compilers without 128-bit integer support.
+     * Reject rather than produce an incorrect wrapped timestamp. */
     if (remainder && target_hz > UINT64_MAX / remainder) return -1;
     fraction = (remainder * target_hz) / source_hz;
+#endif
     if (whole > UINT64_MAX - fraction) return -1;
     *result = whole + fraction;
     return 0;
