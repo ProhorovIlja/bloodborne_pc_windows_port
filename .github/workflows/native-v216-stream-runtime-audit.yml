@@ -1,0 +1,56 @@
+name: Native V216 bounded real-original guest-runtime callback auditor
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v216-stream-runtime-audit.yml'
+      - 'native/source-port/recomp-v194/audit_native_runtime_stream_v216.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lexical-audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate stream lexer against original strict lexical audit (invented C only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile native/source-port/recomp-v194/audit_native_runtime_stream_v216.py
+          python native/source-port/recomp-v194/audit_native_runtime_stream_v216.py --self-test
+          python - <<'PY'
+          import sys
+          import tempfile
+          from pathlib import Path
+          sys.path.insert(0,'native/source-port/recomp-v194')
+          import audit_native_runtime_stream_v216 as stream
+          import audit_native_runtime_v202 as original
+          samples=[
+            '/* rc->call(a); */\nrc -> call (a); rc->bail(c);\n',
+            'char*s="rc->step(a)"; /* rc->tail(c) */\nrc->tail(a);\n',
+            'rc/* comment */->step(c); rc->trace(c, r, a);\n',
+          ]
+          with tempfile.TemporaryDirectory() as tmp:
+              src=Path(tmp)
+              for i,source in enumerate(samples):
+                  path=src/('recomp.c' if i==0 else f'recomp_{i:05x}.c')
+                  path.write_text(source)
+                  a=stream.count_file(path)
+                  b=original.CALLBACK.findall(original.executable_tokens(source))
+                  for kind in stream.NAMES:
+                      assert a[kind]==b.count(kind)
+              report=stream.audit(src)
+              assert report['generated_c_files']==3
+              assert report['callback_total']==6
+              assert not report['strict_native_runtime_ready']
+          print('SHYT_V216_STREAM_STRICT_LEXER_PARITY_CI_PASS')
+          PY
+          echo 'No retail game C/ELF, original addresses or private logs in CI.'
