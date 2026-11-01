@@ -17,7 +17,7 @@ class DirectAckCoalescerV251 {
 public:
     static constexpr s64 AckRefreshMs = 750;
     struct Scope {
-        std::string party, sender, receiver;
+        std::string_view party, sender, receiver;
         u32 sender_instance = 0;
         u32 receiver_instance = 0;
         u64 epoch = 0;
@@ -27,7 +27,9 @@ public:
     // Never call Reset() or access an instance concurrently with a Send:
     // caller owns exactly one tracker per ordered peer pair/connection thread.
     void Reset() {
-        scope_ = {};
+        saved_party_.clear();
+        saved_sender_.clear();
+        saved_receiver_.clear();
         valid_ = false;
         sent_ = false;
         last_ack_ = 0;
@@ -40,7 +42,12 @@ public:
             scope.receiver.empty() || !scope.sender_instance ||
             !scope.receiver_instance || !scope.epoch || now_ms < 0)
             return true;
-        if (!valid_ || scope != scope_ || !sent_ ||
+        if (!valid_ || scope.party != saved_party_ ||
+            scope.sender != saved_sender_ ||
+            scope.receiver != saved_receiver_ ||
+            scope.sender_instance != sender_instance_ ||
+            scope.receiver_instance != receiver_instance_ ||
+            scope.epoch != epoch_ || !sent_ ||
             ack != last_ack_ || now_ms < last_sent_ms_ ||
             now_ms - last_sent_ms_ >= AckRefreshMs)
             return true;
@@ -54,7 +61,12 @@ public:
             Reset();
             return;
         }
-        scope_ = scope;
+        if (!valid_ || scope.party != saved_party_) saved_party_ = scope.party;
+        if (!valid_ || scope.sender != saved_sender_) saved_sender_ = scope.sender;
+        if (!valid_ || scope.receiver != saved_receiver_) saved_receiver_ = scope.receiver;
+        sender_instance_ = scope.sender_instance;
+        receiver_instance_ = scope.receiver_instance;
+        epoch_ = scope.epoch;
         valid_ = true;
         sent_ = true;
         last_ack_ = ack;
@@ -62,7 +74,9 @@ public:
     }
 
 private:
-    Scope scope_{};
+    std::string saved_party_, saved_sender_, saved_receiver_;
+    u32 sender_instance_ = 0, receiver_instance_ = 0;
+    u64 epoch_ = 0;
     bool valid_ = false;
     bool sent_ = false;
     u32 last_ack_ = 0;
@@ -81,9 +95,9 @@ EgressResult SendExistingGameFrameV251(
     ExistingServerSend&& existing_server_send)
 {
     const DirectAckCoalescerV251::Scope scope{
-        std::string(lease.granted_party_session_id),
-        std::string(lease.granted_sender_id),
-        std::string(lease.granted_receiver_id),
+        lease.granted_party_session_id,
+        lease.granted_sender_id,
+        lease.granted_receiver_id,
         lease.granted_sender_instance,
         lease.granted_receiver_instance,
         lease.authority_epoch
