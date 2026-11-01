@@ -79,3 +79,19 @@ jobs:
           & $exe
           if ($LASTEXITCODE -ne 0) { throw 'Native V239 guarded runtime failed' }
           'No retail Bloodborne files, imported runtime EBOOT, or live game.'
+          # V242: combine original validated math and clock call chains,
+          # not just test each intercept in isolation.
+          $chain=Join-Path $env:RUNNER_TEMP 'native-v242-math-clock-chain.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/I$src" "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/native_math_shim_v222.c" `
+            "$src/native_math_guest_bridge_v223.c" `
+            "$src/native_math_import_dispatch_v224.c" `
+            "$src/native_math_rcapi_route_v226.c" `
+            "$src/native_win_clock_v236.c" `
+            "$src/native_clock_rcapi_route_v239.c" `
+            "$src/test_native_math_clock_chain_v242.c" "/Fe:$chain"
+          if ($LASTEXITCODE -ne 0) { throw 'V242 combined native RcApi build failed' }
+          & $chain
+          if ($LASTEXITCODE -ne 0) { throw 'V242 combined native math/clock RcApi runtime failed' }
+          'V242 real Win64 math + clock RcApi routing tested without game files'
