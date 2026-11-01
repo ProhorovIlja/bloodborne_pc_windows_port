@@ -57,6 +57,23 @@ int main() {
     assert(direct_calls==1 && server_calls==0);
     assert(receiver.Receive(frame,lease.now_ms).empty()); // fallback/dedup identity
 
+    // V253: original YT emits peer_instance=0 while the new peer is
+    // unknown/reconnecting. The real YT server must see this frame to
+    // complete initial session establishment; direct must NOT consume it.
+    auto startup=game(77); startup.peer_instance=0;
+    const int before_startup_server=server_calls;
+    const int before_startup_direct=direct_calls;
+    assert(SendExistingGameFrameV240(startup,endpoints,lease,id,direct,server)
+           ==EgressResult::Server);
+    assert(server_calls==before_startup_server+1 &&
+           direct_calls==before_startup_direct);
+    // Invalid zero SOURCE instance still fails closed rather than
+    // forging an anonymous game connection.
+    startup.instance=0;
+    assert(SendExistingGameFrameV240(startup,endpoints,lease,id,direct,server)
+           ==EgressResult::Failed);
+    assert(server_calls==before_startup_server+1);
+
     // ACKs stay on the original server link, movement uses the direct one.
     frame=game(2); frame.ack=11;
     int ack_only=0;
@@ -76,12 +93,12 @@ int main() {
     id.secure_peer_datagram_sender_installed=false;
     assert(SendExistingGameFrameV240(frame,endpoints,lease,id,direct,server)==
            EgressResult::Server);
-    assert(server_calls==2 && direct_calls==2);
+    assert(server_calls==3 && direct_calls==2);
     id.secure_peer_datagram_sender_installed=true;
     auto broken=[&](const GameFrame&) { ++direct_calls; return false; };
     assert(SendExistingGameFrameV240(frame,endpoints,lease,id,broken,server)==
            EgressResult::Server);
-    assert(server_calls==3 && direct_calls==3);
+    assert(server_calls==4 && direct_calls==3);
 
     // Expiration, wrong party, wrong sender, reliable packets, mixed entries,
     // wrong native packet size all refuse the direct carrier.
