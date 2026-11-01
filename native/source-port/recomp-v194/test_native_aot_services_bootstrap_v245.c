@@ -170,6 +170,14 @@ int main(void) {
     cpu.r[RSP]=original_rsp;
     native_direct_slot(&cpu); /* actual AOT-style C -> C direct call */
     assert(g_fallbacks==0 && g_pins==6 && g_leaves==6);
+    /* V268: revoke without trusting a previously supplied verifier.
+     * No game workers run in the fixture, so resetting direct slots is safe. */
+    assert(shyt_aot_services_revoke_direct_v268(&services,&stats));
+    assert(stats.direct==0 && stats.kept_indirect==1 &&
+           native_direct_slot==NULL);
+    assert(shyt_aot_services_link_direct_v261(
+        &services,exact_guest_function_attestation,(void *)&base,&stats));
+    assert(stats.direct==1 && native_direct_slot==generated_entry);
     direct_granted=0;
     assert(shyt_aot_services_link_direct_v261(
         &services,exact_guest_function_attestation,(void *)&base,&stats));
