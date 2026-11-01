@@ -87,10 +87,14 @@ jobs:
           import os,sys,pathlib
           sys.path.insert(0,'native/source-port/recomp-v194')
           import compile_private_win64_coff_v217 as v
+          import verify_coff_dependencies_v219 as deps
+          import shutil
           temp=pathlib.Path(os.environ['RUNNER_TEMP'])
           try:
               v.prerequisites(temp/'fictional',pathlib.Path('upstream'),
                               temp/'public-win64-sdk',temp/'coff')
+              deps.input_fingerprint(pathlib.Path('upstream'),
+                                     temp/'public-win64-sdk',shutil.which('clang'))
           except Exception as exc:
               (temp/'v219-preflight-error.txt').write_text(
                   type(exc).__name__+': '+str(exc)[:170]+'\n')
