@@ -1,0 +1,29 @@
+name: YT CLS 1.3.1 source parity and multi-guest join review
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - 'playable-track/yt_join_source_parity.py'
+      - '.github/workflows/yt-join-source-parity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cls-upstream-source-parity:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Synthetic source fixture regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile playable-track/yt_join_source_parity.py
+          python playable-track/yt_join_source_parity.py --self-test
+          echo 'Synthetic sources only. No private game or CLS material in CI.'
