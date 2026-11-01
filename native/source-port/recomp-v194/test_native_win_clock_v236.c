@@ -28,6 +28,16 @@ static void scale_test(void) {
     assert(shyt_clock_scale_ticks_v236(UINT64_MAX, 1, UINT64_MAX,
                                       &value) != 0);
     assert(shyt_clock_scale_ticks_v236(1, 1, 1000000000, 0) != 0);
+    /* V238: QPC-like source frequencies above 18.4 GHz require a
+     * wide intermediate, not rejection or a wrapped conversion. */
+#if defined(__clang__) || defined(__GNUC__)
+    assert(shyt_clock_scale_ticks_v236(UINT64_C(29999999999),
+              UINT64_C(30000000000), UINT64_C(1000000000), &value) == 0);
+    assert(value == UINT64_C(999999999));
+    assert(shyt_clock_scale_ticks_v236(UINT64_MAX - 1, UINT64_MAX,
+                                      UINT64_MAX, &value) == 0);
+    assert(value == UINT64_MAX - 1);
+#endif
     /* Refuse overflow rather than wrapping into apparently valid time. */
     assert(shyt_clock_scale_ticks_v236(UINT64_MAX, UINT64_MAX,
                                       UINT64_MAX, &value) == 0);
