@@ -30,7 +30,7 @@ int shyt_math_import_table_v224_init(ShytMathImportTable *table, uint64_t base,
 int shyt_math_import_v224_try_call_checked(const ShytMathImportTable *table,
           BbCpu *cpu, uint64_t target, uint64_t next,
           ShytGuestMemoryPermit permit, void *permit_ctx) {
-    if (!table || !cpu || !target || !next || !permit) return 0;
+    if (!table || !target) return 0;
     ShytGuestMathFn fn = NULL;
     for (size_t i=0; i<23; ++i)
         if (table->entries[i].fn &&
@@ -39,7 +39,8 @@ int shyt_math_import_v224_try_call_checked(const ShytMathImportTable *table,
             break;
         }
     if (!fn) return 0;
-    if (cpu->r[RSP] < 8) return -1;
+    /* Recognized target must never route to legacy code on bad context. */
+    if (!cpu || !next || !permit || cpu->r[RSP] < 8) return -1;
     const uint64_t slot = cpu->r[RSP] - 8;
     if (!permit(permit_ctx, slot, 8, 1)) return -1;
     if (fn == shyt_guest_math_v223_find("frexp") ||
