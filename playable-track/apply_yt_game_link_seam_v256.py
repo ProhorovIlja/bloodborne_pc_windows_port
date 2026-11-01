@@ -34,10 +34,11 @@ ORIGINAL_FRAME_LOOP = """                for (const GameFrame& frame : peer.Flus
                     bytes.insert(bytes.end(), payload.begin(), payload.end());
                     out.emplace_back(address->second, std::move(bytes));
                 }"""
-REPLACEMENT_FRAME_LOOP = """                for (const GameFrame& frame : peer.Flush(now_ms)) {
-                    // Preserve the original YT peer, seq/ack and flush order.
-                    // No socket operations occur while game_link.mutex is held.
-                    out.push_back({member, address->second, frame});
+REPLACEMENT_FRAME_LOOP = """                for (GameFrame& frame : peer.Flush(now_ms)) {
+                    // Preserve original YT sequence/ACK; move, do not COPY,
+                    // the (potentially large) GameFrame out of the lock.
+                    // All socket I/O happens after game_link.mutex unlocks.
+                    out.push_back({member, address->second, std::move(frame)});
                 }"""
 ORIGINAL_SEND = """        for (const auto& [address, bytes] : out) {
             Libraries::Net::P2PCoopSendTo(bytes.data(), static_cast<u32>(bytes.size()),
