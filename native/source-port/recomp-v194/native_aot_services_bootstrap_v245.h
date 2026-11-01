@@ -7,6 +7,7 @@
 #define SHYT_NATIVE_AOT_SERVICES_BOOTSTRAP_V245_H
 #include "native_math_rcapi_route_v226.h"
 #include "native_clock_rcapi_route_v239.h"
+#include "native_aot_direct_link_v259.h"
 #include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +37,16 @@ int shyt_aot_services_bootstrap_v245(
     ShytMathFatalGuestMemory fault, void *fault_ctx,
     ShytMathMemoryPinEnter pin_enter, ShytMathMemoryPinLeave pin_leave,
     void *pin_ctx, RcInit real_recompiled_init);
+
+/* V261: optional genuine AOT-to-AOT fastpath AFTER successful
+ * shyt_aot_services_bootstrap_v245 and BEFORE game threads. Only the
+ * owner's trusted exact-code attester can permit direct slots; all
+ * unknown/patched functions remain indirect (NULL slot). NEVER use
+ * a mock always-true callback against actual game functions. */
+int shyt_aot_services_link_direct_v261(
+    ShytAotServicesV245 *services,
+    ShytDirectFunctionAttestV259 attester, void *attest_ctx,
+    ShytDirectStatsV259 *stats);
 #ifdef __cplusplus
 }
 #endif
