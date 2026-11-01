@@ -45,6 +45,10 @@ inline bool AcceptAuthenticatedDirectMovement(
         frame.sender != identity.server_authorized_remote_id ||
         frame.instance != identity.server_authorized_remote_instance ||
         frame.peer_instance != identity.local_instance ||
+        // A direct movement-only frame must NOT carry an ACK for a
+        // server-managed reliable stream. Otherwise a valid direct
+        // datagram could spuriously acknowledge reliable world data.
+        frame.ack != 0 ||
         frame.entries.empty() || frame.entries.size() > 8)
         return false;
     for (const GameFrameEntry& entry : frame.entries) {
