@@ -3,6 +3,7 @@
  * initializer, no compatibility host and no retail executable in CI.
  */
 #include "native_aot_services_bootstrap_v245.h"
+#include "native_aot_table_audit_v257.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,7 +77,13 @@ int shyt_aot_services_bootstrap_v245(
     size_t count=0;
     const RcFunction *functions = real_recompiled_init(
         services->published_api, &count);
-    if (!functions || !count || count > 1000000u) abort();
+    /* V257: a nonempty count is not sufficient: a corrupt function table
+     * may contain null executable targets, wrapped offsets, duplicate
+     * function entrypoints, or zero-sized generated code. In this process-
+     * lifetime irreversible bootstrap, trap before publishing any table. */
+    if (!shyt_aot_table_valid_v257(
+            functions, count, native_platform_api->image_base))
+        abort();
     services->functions=functions;
     services->function_count=count;
     return 1;
