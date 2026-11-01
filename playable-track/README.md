@@ -6,7 +6,10 @@ to Fornex, or presented as a shipped mod feature.
 
 ## Playable today, independently of the future true native source-port
 
-Public Yharnam Together v1.3.0:
+Public **released and actually playable** Yharnam Together v1.3.1 (published 2026-10-31, exact official commit `5d2305ee611ef1e03be39ff925f0da75c9a70393`):
+- Exact release: https://github.com/lKaniel/bloodborne-server/releases/tag/v1.3.1
+- Setup and portable ZIP are both published and signed with SHA-256 checksums in the release notes.
+- New in v1.3.1: friends, open teams/join modes, host handoff, optional boss tempo, launcher portability/diagnostics, boss AI and performance fixes. **These are in the release already, do not reimplement them.**
 - Releases: https://github.com/lKaniel/bloodborne-server/releases
 - Install guide: https://bloodborne.seamlesscoop.dev/docs/install
 - Game team guide: https://bloodborne.seamlesscoop.dev/docs/play
@@ -22,11 +25,15 @@ user's separate goal remains a FULL Windows game without original
 PS4 EBOOT/code loaded at runtime. The published current compatibility
 implementation does NOT meet that stronger requirement.
 
-Do not tell players that five hunters or hybrid P2P work in v1.3.0.
+Do not tell players that five hunters or hybrid P2P work in v1.3.1.
 A room cannot exceed the game's actual remote entity slots simply by
 changing a server const. The hosted service must not replace or be
 upgraded over the Fornex production BBSC server without a dry run and
 explicit permission.
+
+## v1.3.1 integration priorities from the full GitHub/forks/PR sweep (2026-11-01)
+
+The latest main branch is the same commit as v1.3.1, but numerous **open PR heads** contain post-release candidate code. These are NOT shipped and must be tested as separate changes against the pinned release. Details and cross-repository priorities: [UPSTREAM_WATCH_20261101.md](UPSTREAM_WATCH_20261101.md).
 
 ## V1 safe hybrid direct/relay transport EXPERIMENT
 
@@ -89,7 +96,7 @@ client/server and 2/3/4/5-player tests prove it.
 
 ## Delivery order
 
-**Now:** play with existing tested v1.3.0, preserving original saves
+**Now:** play with existing tested v1.3.1, preserving original saves
 and avoiding live experimental server upgrades.
 **Next:** implement negotiated, cryptographically authenticated peer
 path with relay default, full packet sequence/dedup and failover tests.
