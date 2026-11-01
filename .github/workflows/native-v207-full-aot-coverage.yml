@@ -39,6 +39,34 @@ jobs:
               "static const RcFunction table[] = {\n"
               "  {0x1, 2, 0x3ull, f_1, &d_1},\n"
               "};\n", 2)["functions_not_in_aot_table"] == 1
+          import tempfile
+          with tempfile.TemporaryDirectory() as temp:
+              index = pathlib.Path(temp) / 'functions.tsv'
+              generated = pathlib.Path(temp) / 'recomp.c'
+              index.write_text('address\\tsize\\tinstructions\\tundecodable\\n'
+                               '0x1\\t2\\t1\\t0\\n'
+                               '0x2\\t4\\t1\\t0\\n')
+              generated.write_text('static const RcFunction table[] = {\\n'
+                                   '  {0x1, 2, 0x3ull, f_1, &d_1},\\n'
+                                   '};\\n')
+              actual = cov.inspect_file(generated, 2, index)
+              assert actual["aot_functions_registered"] == 1
+              # AOT row size must match EXACT original scan entry.
+              generated.write_text(generated.read_text().replace(
+                  '0x1, 2,', '0x1, 3,'))
+              try:
+                  cov.inspect_file(generated, 2, index)
+              except ValueError:
+                  pass
+              else:
+                  raise AssertionError('AOT mismatched original function size')
+              index.write_text(index.read_text().replace('0x2\\t4','0x2\\t0'))
+              try:
+                  cov.scan_index(index)
+              except ValueError:
+                  pass
+              else:
+                  raise AssertionError('bad original scanner row accepted')
           assert prep.PIN == win.PIN
           assert callable(prep.prepare) and callable(win.build)
           print("SHYT_NATIVE_V207_PRIVATE_PREPARER_AND_WIN64_COMPILER_CONTRACT_PASS")
