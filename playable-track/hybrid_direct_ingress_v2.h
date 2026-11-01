@@ -24,6 +24,7 @@ struct DirectIngressIdentity {
     u32 server_authorized_remote_instance = 0;
     u32 local_instance = 0;
     size_t max_native_movement_bytes = 1100;
+    std::string_view server_authorized_local_id;
 };
 
 // Route and identity validation is deliberately separate from the original
@@ -40,7 +41,13 @@ inline bool AcceptAuthenticatedDirectMovement(
 {
     if (ChooseNativePacketCarrier(0x06, ends, lease) != Carrier::DirectPeer)
         return false;
+    // Explicitly bind the server-granted transport lease to BOTH parties.
+    // The UDP sender and the receiver session must not borrow another
+    // peer-pair lease after a join, host handoff or connection restart.
     if (identity.server_authorized_remote_id.empty() ||
+        identity.server_authorized_local_id.empty() ||
+        lease.granted_sender_id != identity.server_authorized_remote_id ||
+        lease.granted_receiver_id != identity.server_authorized_local_id ||
         !identity.server_authorized_remote_instance || !identity.local_instance ||
         frame.sender != identity.server_authorized_remote_id ||
         frame.instance != identity.server_authorized_remote_instance ||
