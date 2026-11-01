@@ -89,41 +89,52 @@ int main() {
         ++direct;
         return true;
     };
-    pending.frame=Movement(4,11);
-    assert(DispatchYtFrameV255(pending,&active,original_send,direct_send)
-           ==EgressResult::Direct);
-    assert(direct==1 && original_relay==2);
-    // Piggybacked *same* reliable ACK no longer sends an ACK-only
-    // server datagram every movement frame. It refreshes periodically.
     pending.frame=Movement(3,11);
     assert(DispatchYtFrameV255(pending,&active,original_send,direct_send)
            ==EgressResult::Direct);
-    assert(direct==2 && original_relay==2);
-    active.lease.now_ms+=DirectAckCoalescerV251::AckRefreshMs;
-    active.lease.last_authenticated_direct_probe_ms=active.lease.now_ms;
+    assert(direct==1 && original_relay==3);
+    // Piggybacked *same* ACK no longer sends a server datagram each frame.
     pending.frame=Movement(4,11);
     assert(DispatchYtFrameV255(pending,&active,original_send,direct_send)
            ==EgressResult::Direct);
-    assert(direct==3 && original_relay==3);
-
-    // Failure of direct peer socket must relay ORIGINAL GameFrame, same
-    // source sequence, no player reordering or new GameLinkPeer.
+    assert(direct==2 && original_relay==3);
+    active.lease.now_ms+=DirectAckCoalescerV251::AckRefreshMs;
+    active.lease.last_authenticated_direct_probe_ms=active.lease.now_ms;
     pending.frame=Movement(5,11);
+    assert(DispatchYtFrameV255(pending,&active,original_send,direct_send)
+           ==EgressResult::Direct);
+    assert(direct==3 && original_relay==4); // periodic lost-ACK recovery
+
+    // Failure of secure peer socket relays ORIGINAL frame, same sequence.
+    pending.frame=Movement(6,11);
     auto failed_peer=[&](std::string_view,std::span<const u8>) { return false; };
     assert(DispatchYtFrameV255(pending,&active,original_send,failed_peer)
            ==EgressResult::Server);
-    assert(original_relay==4 && direct==3);
-    // Initial YT peer_instance=0 never drops; always sends to server.
-    pending.frame=Movement(6);
-    pending.frame.peer_instance=0;
-    assert(DispatchYtFrameV255(pending,&active,original_send,failed_peer)
-           ==EgressResult::Server);
-    assert(original_relay==5);
-    // Wrong peer id or stale lease returns unchanged server route.
-    pending.member="not-granted";
+    assert(original_relay==5 && direct==3);
+
+    // V258: a grant for a NEW world epoch must never re-use old Noise
+    // keys even if the server-provided direct-enabled flags are still set.
+    active.lease.authority_epoch=43;
+    active.lease.local_world_epoch=43;
     pending.frame=Movement(7);
     assert(DispatchYtFrameV255(pending,&active,original_send,illegal_direct)
            ==EgressResult::Server);
     assert(original_relay==6 && unexpected_server==0);
+    active.lease.authority_epoch=42;
+    active.lease.local_world_epoch=42;
+
+    // Original YT peer_instance=0 is valid at join/reconnect.
+    pending.frame=Movement(8);
+    pending.frame.peer_instance=0;
+    assert(DispatchYtFrameV255(pending,&active,original_send,failed_peer)
+           ==EgressResult::Server);
+    assert(original_relay==7);
+
+    // Wrong peer id returns the unmodified original server route.
+    pending.member="not-granted";
+    pending.frame=Movement(9);
+    assert(DispatchYtFrameV255(pending,&active,original_send,illegal_direct)
+           ==EgressResult::Server);
+    assert(original_relay==8 && unexpected_server==0);
     puts("SHYT_V255_ORIGINAL_YT_GAME_LINK_SOURCE_SEAM_PASS");
 }
