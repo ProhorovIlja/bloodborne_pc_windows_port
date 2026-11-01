@@ -157,7 +157,44 @@ jobs:
           python -m py_compile native/source-port/recomp-v194/prepare_private_full_game_v204.py native/source-port/recomp-v194/compile_private_full_game_v204.py
           mkdir -p "$RUNNER_TEMP/v204-synthetic-contract/generated"
           cp "$RUNNER_TEMP/v203-upstream-artifact"/recomp*.c "$RUNNER_TEMP/v204-synthetic-contract/generated/"
-          python -c 'import hashlib,json,os,pathlib,sys; sys.path.insert(0,"native/source-port/recomp-v194"); import prepare_private_full_game_v204 as m; p=pathlib.Path(os.environ["RUNNER_TEMP"],"v204-synthetic-contract"); fs=sorted((p/"generated").glob("recomp*.c")); data={"format":m.STAMP,"upstream":m.PIN,"input_sha256":"0"*64,"original_size_bytes":0,"version_109_verified":False,"functions_scanned":5,"c_hashes":{f.name:m.sha(f) for f in fs},"fallback_calls":1,"strict_no_guest_runtime":False,"native_game_boot_proven":False}; (p/"full-original-preparation.json").write_text(json.dumps(data))'
+          # New V207 integrity gate needs the genuine generated function table
+          # and a matching SCANNER INDEX, even for invented public fixtures.
+          # Do not bypass V207 to make V203 green.
+          python - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, "native/source-port/recomp-v194")
+          import prepare_private_full_game_v204 as m
+          import verify_generated_coverage_v207 as v
+          p = pathlib.Path(os.environ["RUNNER_TEMP"], "v204-synthetic-contract")
+          src = (p / "generated" / "recomp.c").read_text()
+          if src.count("static const RcFunction table[] = {") != 1:
+              raise AssertionError("upstream generated AOT function table missing")
+          body = src.split("static const RcFunction table[] = {", 1)[1].split("};", 1)[0]
+          entries = [v.ENTRY.fullmatch(line) for line in body.splitlines() if line.strip()]
+          if not entries or any(x is None for x in entries):
+              raise AssertionError("upstream AOT candidate table format drift")
+          scan = p / "scan"
+          scan.mkdir()
+          tsv = scan / "functions.tsv"
+          tsv.write_text(
+              "address\tsize\tinstructions\tundecodable\n" +
+              "".join(f"0x{int(e.group(1), 16):x}\t{int(e.group(2))}\t1\t0\n"
+                      for e in entries)
+          )
+          registration = v.inspect_file(p / "generated" / "recomp.c", len(entries), tsv)
+          fs = sorted((p / "generated").glob("recomp*.c"))
+          data = {
+              "format": m.STAMP, "upstream": m.PIN,
+              "input_sha256": "0" * 64, "original_size_bytes": 0,
+              "version_109_verified": False,
+              **registration,
+              "scanner_index_sha256": m.sha(tsv),
+              "c_hashes": {f.name: m.sha(f) for f in fs},
+              "fallback_calls": 1, "strict_no_guest_runtime": False,
+              "native_game_boot_proven": False,
+          }
+          (p / "full-original-preparation.json").write_text(json.dumps(data))
+          PY
           # The REAL full-game private tool must reject legacy callbacks
           # under default strict mode, even with an apparently valid manifest.
           set +e
