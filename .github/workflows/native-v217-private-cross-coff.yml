@@ -80,12 +80,14 @@ jobs:
           mkdir -p "$SRC"
           printf '#include "recomp/rc.h"\nunsigned long long synthetic(void) { return 7ULL; }\n' > "$SRC/recomp.c"
           BASE=native/source-port/recomp-v194/compile_private_win64_coff_v217.py
+          echo initial-build > "$RUNNER_TEMP/v219-phase"
           python "$BASE" --generated-dir "$SRC" --upstream upstream \
             --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
             --file recomp.c > "$RUNNER_TEMP/run1.json"
           python "$BASE" --generated-dir "$SRC" --upstream upstream \
             --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
             --file recomp.c > "$RUNNER_TEMP/run2.json"
+          echo cache-reuse-completed > "$RUNNER_TEMP/v219-phase"
           # Verify an otherwise unused SDK header change invalidates a
           # previously compiled original-source cache entry.
           printf '#define V219_UNRELATED_HEADER_CHANGED 1\n' \
@@ -93,6 +95,8 @@ jobs:
           python "$BASE" --generated-dir "$SRC" --upstream upstream \
             --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
             --file recomp.c > "$RUNNER_TEMP/run3.json"
+          echo header-invalidation-completed > "$RUNNER_TEMP/v219-phase"
+          echo result-assertions > "$RUNNER_TEMP/v219-phase"
           python - <<'PY'
           import json,os,pathlib,struct
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
@@ -108,3 +112,23 @@ jobs:
           print('SHYT_NATIVE_V217_PUBLIC_SOURCE_FAKE_GAME_COFF_REUSE_PASS')
           PY
           echo 'No proprietary EBOOT, original C/COFF, addresses, game assets or private logs in CI.'
+
+      - name: Preserve bounded synthetic failure diagnostic (not CI logs)
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/v219-public-only-error.txt"
+          printf 'synthetic_phase=%s\n' "$(head -c 40 "$RUNNER_TEMP/v219-phase" 2>/dev/null || echo pre-test)" > "$OUT"
+          if [[ -d "$RUNNER_TEMP/coff/logs" ]]; then
+            grep -h -m1 -E 'fatal error:|error:' "$RUNNER_TEMP/coff/logs/"*.log 2>/dev/null |
+              head -n 2 | cut -c1-160 >> "$OUT" || true
+          fi
+          test "$(wc -c < "$OUT")" -lt 550
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-v219-public-fixture-bounded-failure
+          path: ${{ runner.temp }}/v219-public-only-error.txt
+          if-no-files-found: error
+          retention-days: 1
