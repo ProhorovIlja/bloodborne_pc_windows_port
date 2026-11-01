@@ -1,0 +1,39 @@
+name: YT V232 original v1.3.1 mods launcher preflight and collision safety
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - 'playable-track/yt_launcher_mod_conflicts_v232.py'
+      - 'playable-track/test_yt_launcher_mod_conflicts_v232.py'
+      - '.github/workflows/yt-v232-launcher-mod-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-upstream-mod-loader:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: yt131-public
+          persist-credentials: false
+          submodules: false
+      - name: Verify exact release and actual mod loader API against invented files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C yt131-public rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test -s yt131-public/bbport/scripts/mods.py
+          python -m py_compile playable-track/yt_launcher_mod_conflicts_v232.py playable-track/test_yt_launcher_mod_conflicts_v232.py
+          python playable-track/test_yt_launcher_mod_conflicts_v232.py yt131-public/bbport/scripts/mods.py
+          echo "No user-owned retail game, mods, private patches or save files in this workflow."
