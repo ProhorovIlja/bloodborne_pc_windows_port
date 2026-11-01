@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/native-v217-private-cross-coff.yml'
       - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
+      - 'native/source-port/recomp-v194/verify_coff_dependencies_v219.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,7 +26,8 @@ jobs:
         run: |
           set -euo pipefail
           BASE=native/source-port/recomp-v194
-          python -m py_compile "$BASE/compile_private_win64_coff_v217.py" "$BASE/bounded_private_subprocess_v210.py"
+          python -m py_compile "$BASE/compile_private_win64_coff_v217.py" "$BASE/bounded_private_subprocess_v210.py" "$BASE/verify_coff_dependencies_v219.py"
+          python "$BASE/verify_coff_dependencies_v219.py"
           python "$BASE/compile_private_win64_coff_v217.py" --self-test
   real-public-toolchain-invented-c:
     runs-on: ubuntu-24.04
@@ -84,13 +86,23 @@ jobs:
           python "$BASE" --generated-dir "$SRC" --upstream upstream \
             --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
             --file recomp.c > "$RUNNER_TEMP/run2.json"
+          # Verify an otherwise unused SDK header change invalidates a
+          # previously compiled original-source cache entry.
+          printf '#define V219_UNRELATED_HEADER_CHANGED 1\n' \
+            > "$RUNNER_TEMP/public-win64-sdk/include/v219-test-header.h"
+          python "$BASE" --generated-dir "$SRC" --upstream upstream \
+            --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
+            --file recomp.c > "$RUNNER_TEMP/run3.json"
           python - <<'PY'
           import json,os,pathlib,struct
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
           first=json.loads((root/'run1.json').read_text())
           second=json.loads((root/'run2.json').read_text())
+          third=json.loads((root/'run3.json').read_text())
           assert first['new_coff_objects']==1
           assert second['reused_verified_coff_objects']==1
+          assert third['new_coff_objects']==1
+          assert third['reused_verified_coff_objects']==0
           data=(root/'coff/recomp.obj').read_bytes()
           assert struct.unpack_from('<H',data)[0]==0x8664
           print('SHYT_NATIVE_V217_PUBLIC_SOURCE_FAKE_GAME_COFF_REUSE_PASS')
