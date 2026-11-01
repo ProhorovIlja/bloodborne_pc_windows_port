@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import audit_native_runtime_v202 as auditor
+import verify_generated_coverage_v207 as coverage
 
 PIN="8f31ec7c41f252730c6325d52647046baef7549f"
 STAMP="SHYT_PRIVATE_FULL_IMAGE_V204"
@@ -100,12 +101,15 @@ def prepare(root,eboot,work):
          "BB_RECOMP_ANNOTATIONS":str(annotations)}
     run([root/"out/recomp/bbrecomp",elf,tab,gen/"recomp.c",
          "@"+str(scan/"all.txt")],"full original function generation",env)
+    # The upstream generator excludes import stubs and setjmp callers.
+    # Scanner rows are NOT the same as registered natively compiled functions.
+    registration=coverage.inspect_file(gen/"recomp.c",count)
     hashes={p.name:sha(p) for p in auditor.sources(gen)}
     audit=auditor.audit(gen)
     metadata={"format":STAMP,"upstream":PIN,
               "input_sha256":sha(original),"original_size_bytes":size,
               "version_109_verified":False,
-              "functions_scanned":count,"c_hashes":hashes,
+              **registration,"c_hashes":hashes,
               "fallback_calls":audit["callback_total"],
               "strict_no_guest_runtime":audit["strict_native_runtime_ready"],
               "native_game_boot_proven":False}
@@ -113,7 +117,7 @@ def prepare(root,eboot,work):
     stage.write_text(json.dumps(metadata,sort_keys=True,indent=2)+"\n")
     os.replace(stage,work/"full-original-preparation.json")
     elf.unlink()
-    return {"functions_scanned":count,"generated_c_modules":len(hashes),
+    return {**registration,"generated_c_modules":len(hashes),
             "fallback_calls":audit["callback_total"],
             "strict_no_guest_runtime":audit["strict_native_runtime_ready"],
             "version_109_verified":False,"game_boot_proven":False}
