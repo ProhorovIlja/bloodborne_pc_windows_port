@@ -101,9 +101,23 @@ jobs:
               raise SystemExit(1)
           PY
           echo initial-build > "$RUNNER_TEMP/v219-phase"
-          python "$BASE" --generated-dir "$SRC" --upstream upstream \
-            --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
-            --file recomp.c > "$RUNNER_TEMP/run1.json"
+          # Invoke public-only fixture directly so a pre-compiler Python
+          # exception can be diagnosed without fetching complete logs.
+          python - <<'PY' > "$RUNNER_TEMP/run1.json"
+          import json,os,pathlib,sys
+          sys.path.insert(0,'native/source-port/recomp-v194')
+          from compile_private_win64_coff_v217 import compile_sources
+          temp=pathlib.Path(os.environ['RUNNER_TEMP'])
+          try:
+              value=compile_sources(temp/'fictional',pathlib.Path('upstream'),
+                                    temp/'public-win64-sdk',temp/'coff',
+                                    ['recomp.c'],0,45)
+              print(json.dumps(value))
+          except Exception as exc:
+              (temp/'v219-preflight-error.txt').write_text(
+                  type(exc).__name__+': '+str(exc)[:170]+'\\n')
+              raise SystemExit(1)
+          PY
           python "$BASE" --generated-dir "$SRC" --upstream upstream \
             --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
             --file recomp.c > "$RUNNER_TEMP/run2.json"
