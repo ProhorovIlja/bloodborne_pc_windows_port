@@ -50,3 +50,25 @@ reports its actual native registration coverage rather than inflating
 a progress metric.
 
 Draft PR #84 only. No PR merges, production updates, or Fornex changes.
+
+## 2026-11-01: original scanner index parity, not just counts
+
+The first V207 version checked the count/order of generated RcFunction
+rows. The strengthened version also independently parses the **private real**
+scan/functions.tsv and requires that **every registered AOT function**
+corresponds to the exact scanner function address **and byte size**.
+It refuses duplicate/out-of-order/nonpositive scanner entries, unknown
+AOT addresses, mismatched sizes, a missing file, or stale scanner metadata.
+
+- Private V204 preparation now records SHA-256 of scan/functions.tsv, and
+  validates AOT entries against it before emitting a manifest.
+- Native Windows V204 compilation checks the same original scanner file
+  SHA-256 and revalidates every row before invoking clang-cl.
+- CI: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41298203881
+  runs adversarial invented TSV/CPP table tests on Ubuntu and Windows.
+  Both jobs passed at commit 16c2c640. This remains a synthetic
+  contract test, not an actual full-game native build.
+
+The original game's decrypted EBOOT exists in private CUSA03173. A true
+full-original-image scan and Win64 compilation still need execution
+with the source-pinned upstream generator in a private build environment.
