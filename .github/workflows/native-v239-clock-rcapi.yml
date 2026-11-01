@@ -1,0 +1,81 @@
+name: Native V239 real Windows RcApi clock imports
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v239-clock-rcapi.yml'
+      - 'native/source-port/recomp-v194/native_clock_rcapi_route_v239.*'
+      - 'native/source-port/recomp-v194/native_win_clock_v236.*'
+      - 'native/source-port/recomp-v194/test_native_clock_rcapi_v239.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-public-upstream-headers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Generate pinned public dependency headers, no game
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream
+          if ! (cd public-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/native-v239-build.log" 2>&1; then
+            echo '::error title=Native V239::Public dependency preparation failed'
+            exit 1
+          fi
+          test -s public-upstream/deps/include/Zydis/Zydis.h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v239-public-dependency-headers
+          path: public-upstream/deps/include/
+          retention-days: 1
+  win64-real-rcapi-call:
+    needs: build-public-upstream-headers
+    runs-on: windows-2022
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v239-public-dependency-headers
+          path: public-upstream/deps/include
+      - name: Build and execute actual Win64 AOT RcApi clock interceptor
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $src='native/source-port/recomp-v194'
+          $exe=Join-Path $env:RUNNER_TEMP 'native-v239-clock-rcapi.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/I$src" "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/native_win_clock_v236.c" `
+            "$src/native_clock_rcapi_route_v239.c" `
+            "$src/test_native_clock_rcapi_v239.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Native V239 compile failed' }
+          $raw=[IO.File]::ReadAllBytes($exe)
+          if ($raw.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($raw,0,2) -ne 'MZ') {
+            throw 'Native V239 not a real Windows PE'
+          }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native V239 guarded runtime failed' }
+          'No retail Bloodborne files, imported runtime EBOOT, or live game.'
