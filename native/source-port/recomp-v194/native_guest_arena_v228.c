@@ -7,7 +7,13 @@
 #include <string.h>
 
 /* Win64 compiler TLS: a pin can be released only by the owning thread. */
+#if defined(__MINGW32__) || (defined(__GNUC__) && !defined(_MSC_VER))
+/* clang --target=...-windows-gnu does not accept __declspec(thread). */
+static __thread ShytGuestArenaV228 *g_current_pin;
+#else
+/* clang-cl/MSVC Windows ABI uses its native TLS storage class. */
 static __declspec(thread) ShytGuestArenaV228 *g_current_pin;
+#endif
 
 int shyt_guest_arena_v228_create(ShytGuestArenaV228 *a, size_t bytes) {
     if (!a || a->initialized || a->live || a->base || a->size)
