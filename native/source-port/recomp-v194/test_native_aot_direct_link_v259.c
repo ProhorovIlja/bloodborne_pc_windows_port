@@ -69,5 +69,16 @@ int main(void) {
     assert(!shyt_aot_activate_direct_slots_v259(
         functions,3,base,exact_hash,&ctx,&stats));
     assert(ctx.checks==before && direct_a==generated_a);
+    // V269: two AOT entries must NEVER share one generated direct slot.
+    // Otherwise the final entry could silently change the other's call.
+    functions[1].offset=0x200;
+    functions[1].direct=functions[0].direct;
+    assert(!shyt_aot_activate_direct_slots_v259(
+        functions,3,base,exact_hash,&ctx,&stats));
+    assert(!shyt_aot_revoke_direct_slots_v268(functions,3,base,&stats));
+    assert(ctx.checks==before && direct_a==generated_a);
+    functions[1].direct=&direct_b;
+    assert(shyt_aot_direct_slots_unique_v269(functions,3));
+
     puts("SHYT_V259_REAL_AOT_DIRECT_FUNCTION_LINK_ATTESTATION_PASS");
 }
