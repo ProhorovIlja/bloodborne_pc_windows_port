@@ -53,16 +53,29 @@ def run(upstream_mods_py: pathlib.Path):
         assert "Doll" not in json.dumps(report)
 
         # Malformed/unsafe layouts must stop preflight, not silently apply.
-        put(mods / "E Alone", "dvdroot_ps4/sound/NEW_SOUND.BND")
+        # Windows filesystems usually collapse upper/lower-case paths.
+        # Inject a duplicated *enumeration* of the real public loader's
+        # existing source instead of depending on filesystem case support.
+        actual_mod_files = upstream.mod_files
+        def case_duplicate(folder):
+            rows = list(actual_mod_files(folder))
+            for row in rows:
+                yield row
+            if folder.name == "E Alone":
+                assert len(rows) == 1
+                yield (pathlib.Path("DVDROOT_PS4/SOUND/NEW_SOUND.BND"), rows[0][1])
+        upstream.mod_files = case_duplicate
         try:
-            inspect(upstream, mods, profile, base)
-        except ValueError as exc:
-            assert "duplicate target" in str(exc), str(exc)
-        else:
-            raise AssertionError("casefold collision within same mod passed")
+            try:
+                inspect(upstream, mods, profile, base)
+            except ValueError as exc:
+                assert "duplicate target" in str(exc), str(exc)
+            else:
+                raise AssertionError("casefold collision within same mod passed")
+        finally:
+            upstream.mod_files = actual_mod_files
 
         # Disabling the cosmetic mod should remove its layer.
-        (mods / "E Alone" / "dvdroot_ps4/sound/NEW_SOUND.BND").unlink()
         profile.write_text(json.dumps({"order": ["A Cosmetic"], "disabled": [
             "B Cosmetic", "D Gameplay", "C Gameplay", "Disabled"]}))
         selected_report = inspect(upstream, mods, profile)
