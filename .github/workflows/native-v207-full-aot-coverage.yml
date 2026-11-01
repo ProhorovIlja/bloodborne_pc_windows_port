@@ -1,0 +1,47 @@
+name: V207 full-original-game native AOT coverage contract (synthetic only)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v207-full-aot-coverage.yml'
+      - 'native/source-port/recomp-v194/verify_generated_coverage_v207.py'
+      - 'native/source-port/recomp-v194/prepare_private_full_game_v204.py'
+      - 'native/source-port/recomp-v194/compile_private_full_game_v204.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audited-registration-coverage:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Native full-game AOT registration accounting (invented C only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=native/source-port/recomp-v194
+          python -m py_compile "$BASE/verify_generated_coverage_v207.py" "$BASE/prepare_private_full_game_v204.py" "$BASE/compile_private_full_game_v204.py"
+          python "$BASE/verify_generated_coverage_v207.py" --self-test
+          python - <<'PY'
+          import pathlib, sys
+          sys.path.insert(0, 'native/source-port/recomp-v194')
+          import prepare_private_full_game_v204 as prep
+          import compile_private_full_game_v204 as win
+          import verify_generated_coverage_v207 as cov
+          assert cov.count_table(
+              "static const RcFunction table[] = {\n"
+              "  {0x1, 2, 0x3ull, f_1, &d_1},\n"
+              "};\n", 2)["functions_not_in_aot_table"] == 1
+          assert prep.PIN == win.PIN
+          assert callable(prep.prepare) and callable(win.build)
+          print("SHYT_NATIVE_V207_PRIVATE_PREPARER_AND_WIN64_COMPILER_CONTRACT_PASS")
+          PY
+          test ! -e eboot.bin
+          test ! -e eboot.bin-decrypted
