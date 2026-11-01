@@ -1,0 +1,103 @@
+# Playable track: Yharnam Together while true Windows-native AOT develops
+
+**Separate experimental branch from the independent native-port PR #84.** Nothing
+here was linked into the current Yharnam Together client or server, deployed
+to Fornex, or presented as a shipped mod feature.
+
+## Playable today, independently of the future true native source-port
+
+Public Yharnam Together v1.3.0:
+- Releases: https://github.com/lKaniel/bloodborne-server/releases
+- Install guide: https://bloodborne.seamlesscoop.dev/docs/install
+- Game team guide: https://bloodborne.seamlesscoop.dev/docs/play
+- Official server protocol/source used to compile the experiments:
+  https://github.com/lKaniel/bloodborne-server/tree/5d2305ee611ef1e03be39ff925f0da75c9a70393/server/coop
+
+**Exact published constraints:** current upstream team lobby still
+`TeamSize = 4`, and upstream invasions have
+`InvasionMaxPlayers = 4`. Its server routes game's native network packets
+through the server; it does not implement direct P2P yet. Even if some
+existing port documentation calls its Windows game a native port, the
+user's separate goal remains a FULL Windows game without original
+PS4 EBOOT/code loaded at runtime. The published current compatibility
+implementation does NOT meet that stronger requirement.
+
+Do not tell players that five hunters or hybrid P2P work in v1.3.0.
+A room cannot exceed the game's actual remote entity slots simply by
+changing a server const. The hosted service must not replace or be
+upgraded over the Fornex production BBSC server without a dry run and
+explicit permission.
+
+## V1 safe hybrid direct/relay transport EXPERIMENT
+
+`hybrid_transport_policy_v1.h` uses the **exact actual upstream's
+`coop/packet_routes.h`**, inheriting its native channel policy.
+`ChooseNativePacketCarrier`:
+
+1. Applies upstream `RoutesNativePacket` first. Its SameMap, Ours,
+   Drop, owner/follower and native channel rules are NEVER skipped.
+2. Defaults every eligible packet to `Server` (or the original
+   `Drop`). Reliable channel 7+ stays server, as do all world log,
+   membership, inventories, RPC, invitations and invasion channels.
+3. Only `0x06` unreliable player movement in **the same known map**
+   is a direct candidate. Direct requires both users opting in,
+   matched protocol, authenticated current party session and peer,
+   successful authenticated UDP path verification, and a
+   server-authoritative per-map route lease.
+4. The route grant must belong to the current game/world epoch,
+   neither endpoint is an invader, and the signed-in peer's direct
+   heartbeat is fresh within 2500 ms. NAT failure, lost path,
+   map change, epoch mismatch, grant expiry or feature mismatch
+   immediately reverts to server.
+5. All other channels and unrecognised channels use exactly the
+   ordinary server transport and existing filtering rules.
+
+The C++20 tests use the real public YT upstream `GameLinkPeer`
+and `RoutesNativePacket` definitions, testing positive and
+negative cases for all individual safety gates, dropped world
+channels, other native data channels, expiry, hostile peers, and
+map transitions. The GitHub Actions job pins the *actual upstream*
+commit and also verifies that the published original four-player
+limits are still in place.
+
+**NOT implemented or validated:** authenticated peer key exchange,
+NAT traversal, integration into game's actual send/receive path,
+server lease issuing, switch-over sequence continuity,
+dedup across server/direct carriers, real five-player client entity
+slots, game visuals, PvP, and traffic/performance improvements.
+Enabling direct from this header alone would not work and is not
+recommended. Any direct mode must remain off by default until end-to-end
+client/server and 2/3/4/5-player tests prove it.
+
+### Minimum test matrix before turning P2P on
+
+- Two to four hunters (upstream supported) on one map, two maps,
+  Hunter's Dream, boss fog and chalices.
+- Network jitter, packet reordering, UDP loss, symmetric NAT,
+  Radmin/VPN and no VPN; peer path dies mid-boss.
+- Host changes maps, leaves, loses internet, invader joins,
+  world epoch resets, respawn/DBNO, team wipe, reload.
+- Reliable game packets remain ordered exactly once, with native
+  channel drop rules, without stale/replayed packets after P2P
+  to relay failover.
+- CPU/bandwidth per session compared against current relay-only
+  with the **same scenario** and counters. No 200-player
+  scalability claim without a reproduced load test.
+- Five total-player configurations must be separately implemented
+  and proved in both game and server, including combinations of
+  cooperators and invaders. A server max setting alone is not enough.
+
+## Delivery order
+
+**Now:** play with existing tested v1.3.0, preserving original saves
+and avoiding live experimental server upgrades.
+**Next:** implement negotiated, cryptographically authenticated peer
+path with relay default, full packet sequence/dedup and failover tests.
+**Then:** validate native client remote slots and extend team+invasion
+capacity to five with authoritative regression tests.
+**Parallel native game:** PR #84 continues original full
+Bloodborne 1.09 AOT/gameplay/Windows engine; no guest-runtime
+dependency may be silently relabeled native.
+
+This branch belongs to its own Draft PR; do not merge without
+playtest and server/client compatibility checks.
