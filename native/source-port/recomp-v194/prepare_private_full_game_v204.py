@@ -103,13 +103,14 @@ def prepare(root,eboot,work):
          "@"+str(scan/"all.txt")],"full original function generation",env)
     # The upstream generator excludes import stubs and setjmp callers.
     # Scanner rows are NOT the same as registered natively compiled functions.
-    registration=coverage.inspect_file(gen/"recomp.c",count)
+    registration=coverage.inspect_file(gen/"recomp.c",count,tab)
     hashes={p.name:sha(p) for p in auditor.sources(gen)}
     audit=auditor.audit(gen)
     metadata={"format":STAMP,"upstream":PIN,
               "input_sha256":sha(original),"original_size_bytes":size,
               "version_109_verified":False,
               **registration,"c_hashes":hashes,
+              "scanner_index_sha256":sha(tab),
               "fallback_calls":audit["callback_total"],
               "strict_no_guest_runtime":audit["strict_native_runtime_ready"],
               "native_game_boot_proven":False}
