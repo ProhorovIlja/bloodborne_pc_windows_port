@@ -10,6 +10,7 @@
 #include "native_aot_table_audit_v257.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 /* Trusted owner-provided build-time / mapped-native-code attestation.
  * Return 1 ONLY if the function's bytes match the pinned per-function
@@ -27,6 +28,40 @@ typedef struct {
     size_t no_slot;
 } ShytDirectStatsV259;
 
+/* Reject duplicate/unaligned generated direct slots before modifying
+ * ANY slot. A corrupted table with aliases could otherwise turn calls
+ * to one AOT function into calls to a different function. O(n log n)
+ * time, O(n) temporary memory, only during single-threaded boot. */
+static int shyt_direct_slot_compare_v269(const void *a,const void *b) {
+    const uintptr_t aa=*(const uintptr_t *)a;
+    const uintptr_t bb=*(const uintptr_t *)b;
+    return (aa>bb)-(aa<bb);
+}
+static inline int shyt_aot_direct_slots_unique_v269(
+    const RcFunction *functions,size_t count) {
+    if (!functions || !count || count>SIZE_MAX/sizeof(uintptr_t))
+        return 0;
+    uintptr_t *addresses=(uintptr_t*)malloc(count*sizeof(*addresses));
+    if(!addresses) return 0;
+    size_t used=0;
+    for(size_t i=0;i<count;++i) {
+        if(!functions[i].direct) continue;
+        const uintptr_t slot=(uintptr_t)functions[i].direct;
+        if(!slot || slot%_Alignof(RcFn)!=0) {
+            free(addresses);
+            return 0;
+        }
+        addresses[used++]=slot;
+    }
+    qsort(addresses,used,sizeof(*addresses),shyt_direct_slot_compare_v269);
+    int valid=1;
+    for(size_t i=1;i<used;++i) {
+        if(addresses[i]==addresses[i-1]) { valid=0;break; }
+    }
+    free(addresses);
+    return valid;
+}
+
 /* V268: safe explicit revocation, for a host that loses its original-code
  * attestation or is restarting before game workers begin. This is NOT a
  * concurrent hot-unload; no running guest thread may hold these pointers.
@@ -35,7 +70,8 @@ static inline int shyt_aot_revoke_direct_slots_v268(
     const RcFunction *functions, size_t count, uint64_t image_base,
     ShytDirectStatsV259 *stats)
 {
-    if (!stats || !shyt_aot_table_valid_v257(functions,count,image_base))
+    if (!stats || (!shyt_aot_table_valid_v257(functions,count,image_base) ||
+         !shyt_aot_direct_slots_unique_v269(functions,count)))
         return 0;
     ShytDirectStatsV259 result={0};
     for(size_t i=0;i<count;++i) {
@@ -59,7 +95,8 @@ static inline int shyt_aot_activate_direct_slots_v259(
     ShytDirectStatsV259 *stats)
 {
     if (!attest || !stats ||
-        !shyt_aot_table_valid_v257(functions,count,image_base))
+        (!shyt_aot_table_valid_v257(functions,count,image_base) ||
+         !shyt_aot_direct_slots_unique_v269(functions,count)))
         return 0;
     ShytDirectStatsV259 result={0};
     for (size_t i=0; i<count; ++i) {
