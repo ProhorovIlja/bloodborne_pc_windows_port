@@ -27,6 +27,29 @@ typedef struct {
     size_t no_slot;
 } ShytDirectStatsV259;
 
+/* V268: safe explicit revocation, for a host that loses its original-code
+ * attestation or is restarting before game workers begin. This is NOT a
+ * concurrent hot-unload; no running guest thread may hold these pointers.
+ * A valid table is required before writing its module-owned RcFn slots. */
+static inline int shyt_aot_revoke_direct_slots_v268(
+    const RcFunction *functions, size_t count, uint64_t image_base,
+    ShytDirectStatsV259 *stats)
+{
+    if (!stats || !shyt_aot_table_valid_v257(functions,count,image_base))
+        return 0;
+    ShytDirectStatsV259 result={0};
+    for(size_t i=0;i<count;++i) {
+        if(functions[i].direct) {
+            *functions[i].direct=NULL;
+            ++result.kept_indirect;
+        } else {
+            ++result.no_slot;
+        }
+    }
+    *stats=result;
+    return 1;
+}
+
 /* Call once before starting any game threads with trusted, writable
  * module-owned RcFn slots. The runtime owns their lifetime; do not
  * call after gameplay starts. No allocation or guest executable reader. */
