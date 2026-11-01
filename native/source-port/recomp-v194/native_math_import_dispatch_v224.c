@@ -27,19 +27,38 @@ int shyt_math_import_table_v224_init(ShytMathImportTable *table, uint64_t base,
     *table=candidate;
     return 1;
 }
-int shyt_math_import_v224_try_call(const ShytMathImportTable *table,
-                                  BbCpu *cpu, uint64_t target, uint64_t next) {
-    if (!table || !cpu || !target || !next) return 0;
-    ShytGuestMathFn fn=NULL;
-    for (size_t i=0;i<23;++i)
-        if (table->image_base + table->entries[i].offset == target) {
+int shyt_math_import_v224_try_call_checked(const ShytMathImportTable *table,
+          BbCpu *cpu, uint64_t target, uint64_t next,
+          ShytGuestMemoryPermit permit, void *permit_ctx) {
+    if (!table || !cpu || !target || !next || !permit) return 0;
+    ShytGuestMathFn fn = NULL;
+    for (size_t i=0; i<23; ++i)
+        if (table->entries[i].fn &&
+            table->image_base + table->entries[i].offset == target) {
             fn=table->entries[i].fn;
             break;
         }
-    if (!fn || cpu->r[RSP]<8) return 0;
-    /* RcApi.call receives an as-yet-unpushed next/return address. */
-    cpu->r[RSP]-=8;
-    memcpy((void *)(uintptr_t)cpu->r[RSP],&next,8);
+    if (!fn) return 0;
+    if (cpu->r[RSP] < 8) return -1;
+    const uint64_t slot = cpu->r[RSP] - 8;
+    if (!permit(permit_ctx, slot, 8, 1)) return -1;
+    if (fn == shyt_guest_math_v223_find("frexp") ||
+        fn == shyt_guest_math_v223_find("frexpf")) {
+        const uint64_t out = cpu->r[RDI];
+        if (out > UINT64_MAX - sizeof(int) ||
+            !permit(permit_ctx, out, sizeof(int), 1)) return -1;
+        /* A frexp output pointer must not overwrite the guest return. */
+        if (out < slot + 8 && slot < out + sizeof(int)) return -1;
+    }
+    /* Only now is it safe to alter any guest register or memory. */
+    cpu->r[RSP] = slot;
+    memcpy((void *)(uintptr_t)slot, &next, sizeof(next));
     fn(cpu);
     return 1;
+}
+/* Old unvalidated entry is not safe for production use; fail closed. */
+int shyt_math_import_v224_try_call(const ShytMathImportTable *table,
+                                  BbCpu *cpu, uint64_t target, uint64_t next) {
+    (void)table; (void)cpu; (void)target; (void)next;
+    return 0;
 }
