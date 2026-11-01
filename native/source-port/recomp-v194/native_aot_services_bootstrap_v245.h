@@ -47,6 +47,12 @@ int shyt_aot_services_link_direct_v261(
     ShytAotServicesV245 *services,
     ShytDirectFunctionAttestV259 attester, void *attest_ctx,
     ShytDirectStatsV259 *stats);
+
+/* Call only before/after worker threads, not during a running guest
+ * function. Invalid or missing credentials must never leave stale
+ * optimized AOT pointers active across a private build change. */
+int shyt_aot_services_revoke_direct_v268(
+    ShytAotServicesV245 *services, ShytDirectStatsV259 *stats);
 #ifdef __cplusplus
 }
 #endif
