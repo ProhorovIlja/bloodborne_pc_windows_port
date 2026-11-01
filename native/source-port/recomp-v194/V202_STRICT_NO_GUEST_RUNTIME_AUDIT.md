@@ -95,8 +95,11 @@ The next real code work is to remove or explicitly convert the
 remaining tail/bail/step/call paths, establish imports and native
 function coverage over the **full private original 1.09 executable**,
 and implement *game-engine-level* native Windows graphics/audio/input/
-save/thread/asset streaming. The private Drive currently exposes game
-assets, but a root `eboot.bin` was not discoverable in its index.
+save/thread/asset streaming. **2026-11-01 CORRECTION:** direct Drive
+folder inspection found the genuine decrypted PS4 ELF in CUSA03173;
+the Drive search index omitted the file. The user also has matching
+APP_VER 01.09 package metadata. Real private whole-game AOT has not
+yet run, but the executable is available for analysis.
 
 ## Upstream update sweep (2026-11-01)
 
