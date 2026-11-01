@@ -1,0 +1,90 @@
+name: Native V217 private original Win64 COFF resume gate (synthetic CI)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v217-private-cross-coff.yml'
+      - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable-coff-selftest:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify COFF target identification and Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=native/source-port/recomp-v194
+          python -m py_compile "$BASE/compile_private_win64_coff_v217.py" "$BASE/bounded_private_subprocess_v210.py"
+          python "$BASE/compile_private_win64_coff_v217.py" --self-test
+  real-public-toolchain-invented-c:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: upstream
+          submodules: false
+          persist-credentials: false
+      - name: Prepare portable public header SDK (never original game)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq > /dev/null 2>&1
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq mingw-w64-common mingw-w64-x86-64-dev > /dev/null 2>&1
+          python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout upstream
+          SDK="$RUNNER_TEMP/public-win64-sdk"
+          mkdir -p "$SDK/include"
+          cp -aL /usr/x86_64-w64-mingw32/include/. "$SDK/include/"
+          test -s "$SDK/include/assert.h"
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path('upstream')
+          sdk=pathlib.Path(os.environ['RUNNER_TEMP'])/'public-win64-sdk'
+          (sdk/'manifest.json').write_text(json.dumps({
+            'format':'SHYT_V214_PUBLIC_WIN64_CROSS_HEADERS',
+            'upstream':'8f31ec7c41f252730c6325d52647046baef7549f',
+            'patched_rc_sha256':hashlib.sha256((root/'src/recomp/rc.h').read_bytes()).hexdigest()
+          }))
+          PY
+      - name: Compile and REUSE one invented C function as actual Win64 COFF
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/fictional"
+          mkdir -p "$SRC"
+          printf '#include "recomp/rc.h"\nunsigned long long synthetic(void) { return 7ULL; }\n' > "$SRC/recomp.c"
+          BASE=native/source-port/recomp-v194/compile_private_win64_coff_v217.py
+          python "$BASE" --generated-dir "$SRC" --upstream upstream \
+            --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
+            --file recomp.c > "$RUNNER_TEMP/run1.json"
+          python "$BASE" --generated-dir "$SRC" --upstream upstream \
+            --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
+            --file recomp.c > "$RUNNER_TEMP/run2.json"
+          python - <<'PY'
+          import json,os,pathlib,struct
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          first=json.loads((root/'run1.json').read_text())
+          second=json.loads((root/'run2.json').read_text())
+          assert first['new_coff_objects']==1
+          assert second['reused_verified_coff_objects']==1
+          data=(root/'coff/recomp.obj').read_bytes()
+          assert struct.unpack_from('<H',data)[0]==0x8664
+          print('SHYT_NATIVE_V217_PUBLIC_SOURCE_FAKE_GAME_COFF_REUSE_PASS')
+          PY
+          echo 'No proprietary EBOOT, original C/COFF, addresses, game assets or private logs in CI.'
