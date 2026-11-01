@@ -2,6 +2,7 @@
 // V247: actual Linux kernel UDP sockets, original YT 1.3.1 Noise/AEAD,
 // and original GameLinkPeer delivery. LOCAL LOOPBACK ONLY, NO REAL NAT.
 #include "hybrid_peer_noise_v244.h"
+#include "hybrid_direct_ack_coalescer_v251.h"
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -121,6 +122,7 @@ int main() {
     PeerRouteLease lease=Lease();
     const PacketEnds ends{0x101,0x101,EnemyPart::None,EnemyPart::None};
     unsigned direct=0,through_server=0;
+    DirectAckCoalescerV251 ack_tracker;
     auto send_direct=[&](const GameFrame& frame) -> bool {
         const auto sealed=cipher_a.SealMovement(frame);
         if(!sealed) return false;
@@ -153,18 +155,27 @@ int main() {
         ++through_server;
         return true;
     };
-    assert(SendExistingGameFrameV240(Movement(1,42),ends,lease,outgoing,
-              send_direct,server_send)==EgressResult::Direct);
+    assert(SendExistingGameFrameV251(Movement(1,42),ends,lease,outgoing,
+              ack_tracker,send_direct,server_send)==EgressResult::Direct);
     assert(direct==1 && through_server==0);
     // A reliable ACK on a movement frame MUST still traverse server relay.
-    assert(SendExistingGameFrameV240(Movement(2,43,99),ends,lease,outgoing,
-              send_direct,server_send)==EgressResult::Direct);
+    assert(SendExistingGameFrameV251(Movement(2,43,99),ends,lease,outgoing,
+              ack_tracker,send_direct,server_send)==EgressResult::Direct);
     assert(direct==2 && through_server==1);
+    // V251: same cumulative reliable ACK is NOT forwarded again with
+    // every 0x06 movement frame. The kernel sees one fewer relay UDP.
+    assert(SendExistingGameFrameV251(Movement(3,44,99),ends,lease,outgoing,
+              ack_tracker,send_direct,server_send)==EgressResult::Direct);
+    assert(direct==3 && through_server==1);
+    // A later ACK change still traverses actual UDP server path.
+    assert(SendExistingGameFrameV251(Movement(4,45,100),ends,lease,outgoing,
+              ack_tracker,send_direct,server_send)==EgressResult::Direct);
+    assert(direct==4 && through_server==2);
     // After losing P2P eligibility, relay uses same original GameLinkPeer.
     lease.lease_expiry_ms=lease.now_ms;
-    assert(SendExistingGameFrameV240(Movement(3,44),ends,lease,outgoing,
-              send_direct,server_send)==EgressResult::Server);
-    assert(direct==2 && through_server==2);
+    assert(SendExistingGameFrameV251(Movement(5,46),ends,lease,outgoing,
+              ack_tracker,send_direct,server_send)==EgressResult::Server);
+    assert(direct==4 && through_server==3);
     // Out-of-order direct frame can be authenticated but not re-delivered.
     auto late=cipher_a.SealMovement(Movement(2,43));
     assert(late);
