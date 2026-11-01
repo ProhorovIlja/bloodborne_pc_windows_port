@@ -8,6 +8,8 @@ on:
       - 'native/source-port/recomp-v194/native_win_clock_v236.*'
       - 'native/source-port/recomp-v194/test_native_clock_rcapi_v239.c'
       - 'native/source-port/recomp-v194/test_native_math_clock_chain_v242.c'
+      - 'native/source-port/recomp-v194/native_aot_services_bootstrap_v245.*'
+      - 'native/source-port/recomp-v194/test_native_aot_services_bootstrap_v245.c'
   workflow_dispatch:
 permissions:
   contents: read
@@ -96,3 +98,20 @@ jobs:
           & $chain
           if ($LASTEXITCODE -ne 0) { throw 'V242 combined native math/clock RcApi runtime failed' }
           'V242 real Win64 math + clock RcApi routing tested without game files'
+          # V245: actual native AOT function registration with final
+          # chained RcApi.call for math and Windows clocks.
+          $bootstrap=Join-Path $env:RUNNER_TEMP 'native-v245-aot-service-bootstrap.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/I$src" "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/native_math_shim_v222.c" `
+            "$src/native_math_guest_bridge_v223.c" `
+            "$src/native_math_import_dispatch_v224.c" `
+            "$src/native_math_rcapi_route_v226.c" `
+            "$src/native_win_clock_v236.c" `
+            "$src/native_clock_rcapi_route_v239.c" `
+            "$src/native_aot_services_bootstrap_v245.c" `
+            "$src/test_native_aot_services_bootstrap_v245.c" "/Fe:$bootstrap"
+          if ($LASTEXITCODE -ne 0) { throw 'V245 AOT bootstrap compile failed' }
+          & $bootstrap
+          if ($LASTEXITCODE -ne 0) { throw 'V245 registered native AOT function failed' }
+          'V245 registered AOT code through native Win64 math+clock callbacks'
