@@ -16,6 +16,7 @@ static PeerRouteLease lease() {
     l.same_party_session=true;l.session_authenticated=true;
     l.peer_authenticated=true;l.direct_datagram_verified=true;
     l.server_route_granted=true;l.has_common_protocol=true;
+    l.granted_sender_id="hunter-A";l.granted_receiver_id="hunter-B";
     l.authority_epoch=42;l.local_world_epoch=42;
     l.approved_sender_map=0x101;l.approved_target_map=0x101;
     l.now_ms=10000;l.lease_expiry_ms=12000;
@@ -34,7 +35,7 @@ static GameFrame make_frame(u32 seq,u8 value) {
 }
 int main() {
     auto l=lease();
-    DirectIngressIdentity id{"hunter-A",17,29,1100};
+    DirectIngressIdentity id{"hunter-A",17,29,1100,"hunter-B"};
     GameLinkPeer receiver("hunter-B",29);
     const auto ingest=[&](const GameFrame& f,bool direct) {
         if (direct && !AcceptAuthenticatedDirectMovement(f,map,l,id))
@@ -97,6 +98,15 @@ int main() {
     assert(!AcceptAuthenticatedDirectMovement(bad,map,l,no_id));
     no_id=id;no_id.server_authorized_remote_instance=0;
     assert(!AcceptAuthenticatedDirectMovement(bad,map,l,no_id));
+    no_id=id;no_id.server_authorized_local_id={};
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,l,no_id));
+    no_id=id;no_id.server_authorized_local_id="hunter-C";
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,l,no_id));
+    auto wrong_peer_lease=l;
+    wrong_peer_lease.granted_sender_id="hunter-C";
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,wrong_peer_lease,id));
+    wrong_peer_lease=l;wrong_peer_lease.granted_receiver_id="hunter-C";
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,wrong_peer_lease,id));
     auto other_map=map;other_map.target_map=0x102;
     assert(!AcceptAuthenticatedDirectMovement(bad,other_map,l,id));
     l.authority_epoch++;
