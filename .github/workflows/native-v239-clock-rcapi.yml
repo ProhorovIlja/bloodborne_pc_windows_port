@@ -8,6 +8,7 @@ on:
       - 'native/source-port/recomp-v194/native_win_rc_time_v270.h'
       - 'native/source-port/recomp-v194/test_native_win_rc_time_v270.c'
       - 'native/source-port/recomp-v194/native_win_clock_v236.*'
+      - 'native/source-port/recomp-v194/test_native_win_clock_v236.c'
       - 'native/source-port/recomp-v194/test_native_clock_rcapi_v239.c'
       - 'native/source-port/recomp-v194/test_native_math_clock_chain_v242.c'
       - 'native/source-port/recomp-v194/native_math_rcapi_route_v226.c'
@@ -96,6 +97,18 @@ jobs:
           & $exe
           if ($LASTEXITCODE -ne 0) { throw 'Native V239 guarded runtime failed' }
           'No retail Bloodborne files, imported runtime EBOOT, or live game.'
+          # V271: prove exact QPC arithmetic with large 64-bit
+          # frequencies. No __udivti3 or other compiler-rt library.
+          $clockmath=Join-Path $env:RUNNER_TEMP 'native-v271-clock-scale.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/FI$src/native_win_rc_time_v270.h" `
+            "/I$src" `
+            "$src/native_win_clock_v236.c" `
+            "$src/test_native_win_clock_v236.c" "/Fe:$clockmath"
+          if ($LASTEXITCODE -ne 0) { throw 'V271 host QPC arithmetic build failed' }
+          & $clockmath
+          if ($LASTEXITCODE -ne 0) { throw 'V271 exact 64-bit clock scaling failed' }
+          'V271 portable exact clock scaling works without __udivti3'
           # V270: Windows-native QPC implementation of upstream rc_tsc
           # without altering the pinned public recomp/rc.h source.
           $clocktest=Join-Path $env:RUNNER_TEMP 'native-v270-rc-qpc.exe'
