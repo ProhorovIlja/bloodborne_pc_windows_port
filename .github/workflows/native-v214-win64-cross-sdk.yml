@@ -81,7 +81,16 @@ jobs:
           set -euo pipefail
           OUT="$RUNNER_TEMP/public-win64-sdk"
           mkdir -p "$OUT/include" "$OUT/patches" "$OUT/licenses"
-          cp -a /usr/x86_64-w64-mingw32/include/. "$OUT/include/"
+          # The CI sysroot contains symlinks into /usr/share/mingw-w64.
+          # Dereference them so the artifact works OFF the GitHub runner.
+          cp -aL /usr/x86_64-w64-mingw32/include/. "$OUT/include/"
+          if find "$OUT/include" -type l -print -quit | grep -q .; then
+            echo "::error title=V214::Symlinks must not escape portable SDK package"
+            exit 1
+          fi
+          test -s "$OUT/include/assert.h"
+          test -s "$OUT/include/stdint.h"
+          test "$(find "$OUT/include" -type f | wc -l)" -gt 1000
           cp upstream/src/recomp/rc.h "$OUT/patches/patched_rc.h"
           cp -a /usr/share/doc/mingw-w64-common/copyright "$OUT/licenses/" || true
           cp -a /usr/share/doc/mingw-w64-x86-64-dev/copyright "$OUT/licenses/" || true
