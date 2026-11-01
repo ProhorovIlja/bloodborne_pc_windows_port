@@ -15,6 +15,7 @@ import subprocess
 import sys
 import audit_native_runtime_v202 as audit
 import build_incremental_coff_v198 as coff
+import verify_generated_coverage_v207 as coverage
 from prepare_private_full_game_v204 import PIN,STAMP,sha,private
 
 def build(root:Path,work:Path,jobs:int,research:bool)->dict:
@@ -36,6 +37,13 @@ def build(root:Path,work:Path,jobs:int,research:bool)->dict:
         raise ValueError("original code generator source pin mismatch")
     generated=private(work/"generated")
     files=audit.sources(generated)
+    # Verify actual native registrations independently of metadata.
+    # An incomplete/stale table must never be counted as full AOT.
+    registration=coverage.inspect_file(generated/"recomp.c",
+                                      manifest.get("functions_scanned"))
+    for key,value in registration.items():
+        if manifest.get(key)!=value:
+            raise ValueError("original-game AOT registration manifest mismatch")
     hashes={p.name:sha(p) for p in files}
     if hashes!=manifest.get("c_hashes"):
         raise ValueError("full original-game generated C differs from manifest")
@@ -50,7 +58,9 @@ def build(root:Path,work:Path,jobs:int,research:bool)->dict:
                        require_no_guest_runtime=not research)
     return {"scope":"entire private prepared original executable",
             "research_only":research,
-            "functions_scanned":manifest["functions_scanned"],
+            "functions_scanned":registration["functions_scanned"],
+            "aot_functions_registered":registration["aot_functions_registered"],
+            "functions_not_in_aot_table":registration["functions_not_in_aot_table"],
             "windows_amd64_coff_objects":results["source_count"],
             "objects_compiled":results["compiled"],
             "objects_reused":results["reused"],
