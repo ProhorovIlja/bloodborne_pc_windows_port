@@ -13,6 +13,25 @@ static void math_first_call(BbCpu *cpu, uint64_t target, uint64_t next) {
     ShytMathRcApiRoute *route =
         atomic_load_explicit(&g_active, memory_order_acquire);
     if (!route) return; /* API cannot be published before install */
+    /* V252: this callback receives ALL AOT imported calls, not only math.
+     * Never acquire a guest allocation pin or fault a NON-math import.
+     * The original code pinned on every call and wrongly aborted on lock
+     * contention even for targets that do not read guest memory here.
+     * Route table is immutable and process-lifetime-pinned after install. */
+    int recognized = 0;
+    for (size_t i=0; i<23; ++i) {
+        if (route->table.entries[i].fn &&
+            route->table.entries[i].offset <=
+                UINT64_MAX - route->table.image_base &&
+            route->table.image_base + route->table.entries[i].offset == target) {
+            recognized = 1;
+            break;
+        }
+    }
+    if (!recognized) {
+        route->original.call(cpu, target, next);
+        return;
+    }
     if (!route->pin_enter(route->pin_ctx)) {
         route->fault(cpu, target, next, route->fault_ctx);
         abort();
