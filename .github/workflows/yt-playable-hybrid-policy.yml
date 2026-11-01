@@ -65,6 +65,14 @@ jobs:
             actual-yharnam-upstream/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-hybrid-encrypted-roundtrip-v243"
           "$RUNNER_TEMP/yt-hybrid-encrypted-roundtrip-v243"
+          # V244: two-message peer Noise NK with original YT primitives.
+          # Only deterministic synthetic private keys are used in CI.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_peer_noise_v244.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-peer-noise-v244"
+          "$RUNNER_TEMP/yt-hybrid-peer-noise-v244"
       - name: Offline v1.3.1 official installer and portable SHA integrity regression suite
         shell: bash
         run: |
