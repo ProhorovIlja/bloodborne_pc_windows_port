@@ -108,6 +108,50 @@ def run(upstream_mods_py: pathlib.Path):
                 pass
             else:
                 raise AssertionError(f"accepted unsafe file name {filename}")
+
+        # V234: a crafted upstream enumeration must not read outside its layer.
+        external_file = root / "external-private-file.bin"
+        external_file.write_bytes(b"never a valid mod layer source")
+        original_mod_files = upstream.mod_files
+        def escaped_source(folder):
+            for game_path, source in original_mod_files(folder):
+                yield game_path, (external_file if folder.name == "E Alone" else source)
+        upstream.mod_files = escaped_source
+        try:
+            try:
+                inspect(upstream, mods, profile)
+            except ValueError as exc:
+                assert "escapes its selected layer" in str(exc), str(exc)
+            else:
+                raise AssertionError("upstream escaped-source scan succeeded")
+        finally:
+            upstream.mod_files = original_mod_files
+
+        # V234: collision details may be capped, but the critical COUNT must
+        # always cover all targets, not just the first 4000 displayed rows.
+        profile.write_text(json.dumps({
+            "order": ["A Cosmetic", "B Cosmetic"],
+            "disabled": ["C Gameplay", "D Gameplay", "Disabled"]
+        }))
+        def crowded_collision_files(folder):
+            if folder.name in ("A Cosmetic", "B Cosmetic"):
+                original_rows = list(original_mod_files(folder))
+                assert original_rows
+                for idx in range(4002):
+                    yield (pathlib.Path(f"dvdroot_ps4/param/collision_{idx}.dcx"),
+                           original_rows[0][1])
+            else:
+                yield from original_mod_files(folder)
+        upstream.mod_files = crowded_collision_files
+        try:
+            crowded = inspect(upstream, mods, profile)
+            assert crowded["file_replacements_between_mod_layers"] == 4002
+            assert crowded["reported_gameplay_critical_conflicts"] == 4002
+            assert crowded["conflicts_truncated"] is True
+            assert len(crowded["reported_conflicts"]) == 4000
+        finally:
+            upstream.mod_files = original_mod_files
+
     print("SHYT_V232_REAL_YT131_MOD_LOADER_CONFLICT_PREFLIGHT_PASS")
 
 
