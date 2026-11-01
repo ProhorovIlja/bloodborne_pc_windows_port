@@ -43,6 +43,18 @@ int shyt_aot_services_bootstrap_v245(
             math_imports->entries[i].offset == clock_imports->read_tsc_offset ||
             math_imports->entries[i].offset == clock_imports->get_tsc_frequency_offset)
             return 0;
+        /* V267: an imported offset cannot name two different shims.
+         * Equally, one math handler cannot claim multiple original
+         * imports: the real V224 importer enforces both invariants.
+         * Recheck here so an unchecked/corrupted private table cannot
+         * bypass the single irreversible process-lifetime bootstrap. */
+        for (size_t j = 0; j < i; ++j) {
+            if (math_imports->entries[i].offset ==
+                    math_imports->entries[j].offset ||
+                math_imports->entries[i].fn ==
+                    math_imports->entries[j].fn)
+                return 0;
+        }
     }
 
     /* Clock initialization is checked before installing the immutable math
