@@ -14,6 +14,8 @@ on:
       - 'native/source-port/recomp-v194/test_generated_aot_imports_v249.c'
       - 'native/source-port/recomp-v194/native_aot_services_bootstrap_v245.*'
       - 'native/source-port/recomp-v194/native_aot_table_audit_v257.h'
+      - 'native/source-port/recomp-v194/native_aot_direct_link_v259.h'
+      - 'native/source-port/recomp-v194/test_native_aot_direct_link_v259.c'
       - 'native/source-port/recomp-v194/test_native_aot_services_bootstrap_v245.c'
   workflow_dispatch:
 permissions:
@@ -165,3 +167,13 @@ jobs:
           & $fastpath
           if ($LASTEXITCODE -ne 0) { throw 'V252 pin/fault regression failed' }
           'V252 unknown imported calls no longer pin or fault'
+          # V259: wire genuine public upstream RcFunction.direct slots
+          # only after exact-code hash attestation; deny patched functions.
+          $directexe=Join-Path $env:RUNNER_TEMP 'native-v259-attested-direct-call.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/I$src" "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/test_native_aot_direct_link_v259.c" "/Fe:$directexe"
+          if ($LASTEXITCODE -ne 0) { throw 'V259 native direct linker compile failed' }
+          & $directexe
+          if ($LASTEXITCODE -ne 0) { throw 'V259 original RcFunction direct-call tests failed' }
+          'V259 real native RcFn direct slots require trusted hash attestation'
