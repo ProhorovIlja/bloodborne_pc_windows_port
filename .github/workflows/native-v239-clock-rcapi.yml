@@ -8,6 +8,8 @@ on:
       - 'native/source-port/recomp-v194/native_win_clock_v236.*'
       - 'native/source-port/recomp-v194/test_native_clock_rcapi_v239.c'
       - 'native/source-port/recomp-v194/test_native_math_clock_chain_v242.c'
+      - 'native/source-port/recomp-v194/build_private_aot_imports_v248.py'
+      - 'native/source-port/recomp-v194/test_generated_aot_imports_v249.c'
       - 'native/source-port/recomp-v194/native_aot_services_bootstrap_v245.*'
       - 'native/source-port/recomp-v194/test_native_aot_services_bootstrap_v245.c'
   workflow_dispatch:
@@ -115,3 +117,34 @@ jobs:
           & $bootstrap
           if ($LASTEXITCODE -ne 0) { throw 'V245 registered native AOT function failed' }
           'V245 registered AOT code through native Win64 math+clock callbacks'
+          # V249: the actual V248 generated C must COMPILE and link against
+          # the pinned public upstream RcApi/BbCpu and real V224 dispatcher.
+          # All 25 import offsets here are disposable invented CI fixtures.
+          $syntheticImports=Join-Path $env:RUNNER_TEMP 'v249-fixture-imports.tsv'
+          $generatedC=Join-Path $env:RUNNER_TEMP 'v249-generated-imports.c'
+          $names=@('acos','acosf','asin','asinf','atan','atan2',
+            'atan2f','atanf','exp','exp2','exp2f','expf','fmod',
+            'fmodf','frexp','frexpf','ldexp','ldexpf','pow',
+            'powf','tan','tanf','tanhf',
+            'sceKernelReadTsc','sceKernelGetTscFrequency')
+          $rows=[Collections.Generic.List[string]]::new()
+          $rows.Add("stub`tname")
+          for ($i=0; $i -lt $names.Length; $i++) {
+            $rows.Add(("0x{0:x}`t{1}" -f (256+16*$i),$names[$i]))
+          }
+          [IO.File]::WriteAllLines($syntheticImports,$rows,[Text.UTF8Encoding]::new($false))
+          & python "$src/build_private_aot_imports_v248.py" `
+            --original-imports $syntheticImports --private-output $generatedC
+          if ($LASTEXITCODE -ne 0) { throw 'V248 private C fixture generation failed' }
+          $genexe=Join-Path $env:RUNNER_TEMP 'native-v249-generated-imports.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/I$src" "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/native_math_shim_v222.c" `
+            "$src/native_math_guest_bridge_v223.c" `
+            "$src/native_math_import_dispatch_v224.c" `
+            "$generatedC" `
+            "$src/test_generated_aot_imports_v249.c" "/Fe:$genexe"
+          if ($LASTEXITCODE -ne 0) { throw 'V249 generated Win64 C linkage failed' }
+          & $genexe
+          if ($LASTEXITCODE -ne 0) { throw 'V249 generated import Win64 runtime failed' }
+          'V249 actual V248 generated C linked with original public AOT importer'
