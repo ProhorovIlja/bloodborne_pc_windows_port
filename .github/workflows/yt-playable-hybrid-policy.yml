@@ -105,6 +105,12 @@ jobs:
             actual-yharnam-upstream/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-authenticated-direct-ingress-v262"
           "$RUNNER_TEMP/yt-authenticated-direct-ingress-v262"
+          # V264: exact SHDP ciphertext-only physical transport gate,
+          # four peers maximum, revoked/expired route refusal.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iplayable-track playable-track/test_hybrid_direct_physical_gate_v264.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-physical-gate-v264"
+          "$RUNNER_TEMP/yt-hybrid-physical-gate-v264"
           # V256: verify original EXACT pinned 1.3.1 game runtime source
           # route anchors before applying any source overlay. This is a
           # disposable GitHub Actions checkout, not a production install.
@@ -115,6 +121,15 @@ jobs:
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_game_link_runtime_bridge_v255.h
           grep -Fq 'BloodborneCoop::SHYTHybrid::DispatchYtFrameV255(' \
             actual-yharnam-upstream/emulator/src/core/bloodborne_patches.cpp
+          # V265 applies only to the same pinned upstream physical socket.
+          # Production peer endpoint admission remains unconfigured/disabled.
+          python playable-track/apply_yt_direct_physical_v265.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_direct_physical_v265.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/hybrid_direct_physical_gate_v264.h
+          grep -Fq 'InternalChannel::VerifiedDirectMovement' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
       - name: Offline v1.3.1 official installer and portable SHA integrity regression suite
         shell: bash
         run: |
