@@ -71,6 +71,14 @@ int main() {
     active.endpoints={0x101,0x101,EnemyPart::None,EnemyPart::None};
     active.peer_crypto=&sender;
     active.ack_tracker=&tracker;
+    // V258: a configured key/lease does not prove the remote game has
+    // installed the matching direct receiver. Stay on server until then.
+    pending.frame=Movement(2);
+    const int before_ingress_relay=original_relay;
+    assert(DispatchYtFrameV255(pending,&active,original_send,illegal_direct)
+           ==EgressResult::Server);
+    assert(original_relay==before_ingress_relay+1 && unexpected_server==0);
+    active.same_peer_ingress_installed=true;
     auto direct_send=[&](std::string_view member, std::span<const u8> bytes) {
         assert(member=="hunter-B");
         const auto frame=receiver.OpenMovement(bytes);
@@ -81,7 +89,7 @@ int main() {
         ++direct;
         return true;
     };
-    pending.frame=Movement(2,11);
+    pending.frame=Movement(4,11);
     assert(DispatchYtFrameV255(pending,&active,original_send,direct_send)
            ==EgressResult::Direct);
     assert(direct==1 && original_relay==2);
