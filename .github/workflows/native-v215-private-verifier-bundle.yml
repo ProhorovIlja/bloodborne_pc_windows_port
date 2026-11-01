@@ -26,8 +26,8 @@ jobs:
             "$SRC/bounded_private_subprocess_v210.py" \
             "$SRC/private_pipeline_status_v211.py" \
             "$SRC/private_original_preflight_v212.py"
-          tar -C "$SRC" -czf "$OUT/v215-public-python-aot-tools.tar.gz" \
-            --exclude=__pycache__ --exclude='*.pyc' --wildcards '*.py'
+          find "$SRC" -maxdepth 1 -type f -name '*.py' -printf '%f\n' \
+            | tar -C "$SRC" -czf "$OUT/v215-public-python-aot-tools.tar.gz" -T -
           sha256sum "$OUT/v215-public-python-aot-tools.tar.gz" > "$OUT/v215-public-python-aot-tools.tar.gz.sha256"
           test "$(stat -c %s "$OUT/v215-public-python-aot-tools.tar.gz")" -lt 1048576
           echo SHYT_V215_PUBLIC_PRIVATE_AOT_VERIFIER_PACKAGE_PASS
