@@ -35,6 +35,35 @@ explicit permission.
 
 The latest main branch is the same commit as v1.3.1, but numerous **open PR heads** contain post-release candidate code. These are NOT shipped and must be tested as separate changes against the pinned release. Details and cross-repository priorities: [UPSTREAM_WATCH_20261101.md](UPSTREAM_WATCH_20261101.md).
 
+## Safe v1.3.1 launcher download check (source-only utility)
+
+`verify_yt_v131_release.py` is a standalone, **read-only offline**
+check for the official v1.3.1 Windows setup EXE / portable ZIP. Its
+allowlist includes the exact names, byte sizes and SHA-256 hashes
+published by the official 2026-10-31 release (no binary mirrored).
+Use `python3 playable-track/verify_yt_v131_release.py PATH_TO_DOWNLOADED_FILE`
+before running an installer if you want an extra manual integrity check.
+It rejects truncated, modified or wrong-version assets, unknown names
+and symlinks. CI tests the verification logic with invented fixture
+bytes and checks that the embedded official hashes match the release.
+It is **not yet embedded into YT's own updater** and cannot guarantee
+that an upstream maintainer's account or HTTPS distribution is secure.
+
+## Actual real-source v1.3.1 hybrid transport work
+
+`hybrid_direct_ingress_v2.h` validates an already authenticated
+direct-peer `GameFrame` before passing it to the original
+`GameLinkPeer` that both relay and direct paths MUST share. Checks
+source identity/instance, current local session, exact native
+movement envelope, and refuses to carry reliable-world ACKs inside
+direct movement-only packets. A real C++20 test compiles the
+**published v1.3.1** `coop/game_link.h`, delivers movement first
+direct then through relay, deliberately injects duplicate, replay,
+out-of-order and spoofed packets, checks server fallback and verifies
+reliable messages still arrive exactly once on the original stream.
+This is still a POLICY+INGRESS PROTOTYPE, not working direct UDP
+transport or P2P player support in shipping YT.
+
 ## V1 safe hybrid direct/relay transport EXPERIMENT
 
 `hybrid_transport_policy_v1.h` uses the **exact actual upstream's
