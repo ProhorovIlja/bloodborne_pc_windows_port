@@ -5,6 +5,10 @@ on:
     paths:
       - '.github/workflows/yt-playable-hybrid-policy.yml'
       - 'playable-track/**'
+  pull_request:
+    paths:
+      - '.github/workflows/yt-playable-hybrid-policy.yml'
+      - 'playable-track/**'
   workflow_dispatch:
 permissions:
   contents: read
