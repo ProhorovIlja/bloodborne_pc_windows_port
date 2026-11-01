@@ -61,3 +61,20 @@ character rendered. No full log should ever be sent into ChatGPT or CI.
 First compare clean v1.3.1 with the exact CLS merged commit. Keep
 Fornex unchanged until two-PC, dual-instance, Hunter's Dream, in-world
 hot-join and multi-player regressions pass.
+
+## 2026-11-01: cloned-instance identity ambiguity
+
+The experimental pinned-source join candidate now also sorts the known
+online IDs and fails closed if two board participants resolve to the
+**same online ID**. When a single-PC multi-instance test reuses one
+identity, the session cannot safely infer which body a given member's
+pending join task belongs to. We prefer waiting/diagnosing to
+creating the wrong person's remote actor. Synthetic tests cover
+five distinct IDs, a duplicate among five, and two identical IDs.
+
+This is intentionally conservative and is NOT a complete solution for
+legitimate multi-instance testing. A correct future implementation
+needs a server-authorized session-instance identity **in addition** to
+online ID and slot, plus a life-cycle reset and a two-PC game test.
+The patch remains source-only on a clean upstream checkout; no
+shipping player build or Fornex server was changed.
