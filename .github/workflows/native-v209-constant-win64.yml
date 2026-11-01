@@ -1,0 +1,32 @@
+name: Native V209 original constant-return function Win64 no-ICF PE contract
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v209-constant-win64.yml'
+      - 'native/source-port/recomp-v194/build_private_constant_aot_v209.py'
+      - 'native/source-port/recomp-v194/audit_private_original_fde_v208.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  invented-constant-return-win64:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Synthetic-only original-function AOT / PE validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile native/source-port/recomp-v194/audit_private_original_fde_v208.py
+          python -m py_compile native/source-port/recomp-v194/build_private_constant_aot_v209.py
+          python native/source-port/recomp-v194/audit_private_original_fde_v208.py --self-test
+          python native/source-port/recomp-v194/build_private_constant_aot_v209.py --self-test
+          echo 'Real original PS4 ELF, generated private C, COFF, DLL and function offsets NEVER uploaded to public CI.'
