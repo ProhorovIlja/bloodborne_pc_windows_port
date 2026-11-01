@@ -1,0 +1,41 @@
+name: Native V215 public local private-AOT verification scripts (NO GAME)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths: ['.github/workflows/native-v215-private-verifier-bundle.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package-safe-aot-verifiers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Package public Python preparation/audit/checkpoint scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP"
+          SRC=native/source-port/recomp-v194
+          python -m py_compile "$SRC/prepare_private_full_game_v204.py" \
+            "$SRC/audit_native_runtime_v202.py" \
+            "$SRC/verify_generated_coverage_v207.py" \
+            "$SRC/bounded_private_subprocess_v210.py" \
+            "$SRC/private_pipeline_status_v211.py" \
+            "$SRC/private_original_preflight_v212.py"
+          tar -C "$SRC" -czf "$OUT/v215-public-python-aot-tools.tar.gz" \
+            --exclude=__pycache__ --exclude='*.pyc' --wildcards '*.py'
+          sha256sum "$OUT/v215-public-python-aot-tools.tar.gz" > "$OUT/v215-public-python-aot-tools.tar.gz.sha256"
+          test "$(stat -c %s "$OUT/v215-public-python-aot-tools.tar.gz")" -lt 1048576
+          echo SHYT_V215_PUBLIC_PRIVATE_AOT_VERIFIER_PACKAGE_PASS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v215-public-python-aot-tools-no-game
+          path: |
+            ${{ runner.temp }}/v215-public-python-aot-tools.tar.gz
+            ${{ runner.temp }}/v215-public-python-aot-tools.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
