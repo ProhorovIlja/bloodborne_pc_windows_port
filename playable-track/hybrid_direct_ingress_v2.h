@@ -25,6 +25,7 @@ struct DirectIngressIdentity {
     u32 local_instance = 0;
     size_t max_native_movement_bytes = 1100;
     std::string_view server_authorized_local_id;
+    std::string_view server_authorized_party_session_id;
 };
 
 // Route and identity validation is deliberately separate from the original
@@ -48,6 +49,12 @@ inline bool AcceptAuthenticatedDirectMovement(
         identity.server_authorized_local_id.empty() ||
         lease.granted_sender_id != identity.server_authorized_remote_id ||
         lease.granted_receiver_id != identity.server_authorized_local_id ||
+        identity.server_authorized_party_session_id.empty() ||
+        identity.server_authorized_party_session_id !=
+            lease.granted_party_session_id ||
+        identity.server_authorized_remote_instance !=
+            lease.granted_sender_instance ||
+        identity.local_instance != lease.granted_receiver_instance ||
         !identity.server_authorized_remote_instance || !identity.local_instance ||
         frame.sender != identity.server_authorized_remote_id ||
         frame.instance != identity.server_authorized_remote_instance ||
