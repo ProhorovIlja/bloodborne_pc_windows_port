@@ -33,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout upstream
           sha256sum upstream/src/recomp/rc.h > "$RUNNER_TEMP/rc-before.sha256"
           python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout upstream
           git -C upstream diff --check
