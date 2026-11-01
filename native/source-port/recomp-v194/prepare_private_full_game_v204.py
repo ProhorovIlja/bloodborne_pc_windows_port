@@ -81,7 +81,7 @@ def prepare(root,eboot,work):
     tab=scan/"functions.tsv"
     count=0;prev=-1
     with tab.open(encoding="utf-8") as f, (scan/"all.txt").open("w") as out:
-        if f.readline().strip()!="start\tsize\tinsns\tundecodable":
+        if f.readline().strip()!="address\tsize\tinstructions\tundecodable":
             raise ValueError("original full scanner's function format changed")
         for line in f:
             row=line.strip().split("\t")
