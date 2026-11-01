@@ -27,7 +27,7 @@ static GameFrame Movement(u32 seq,u32 ack=0) {
     return f;
 }
 int main() {
-    PendingYtFrameV255 pending{"hunter-B",{0x0100007f,htons(41234)},Movement(1)};
+    PendingYtFrameV255 pending{"hunter-B",{0x0100007f,41234},Movement(1)};
     int original_relay=0, direct=0, unexpected_server=0;
     GameLinkPeer original_receiver("hunter-B",8);
     auto original_send=[&](const std::pair<u32,u16>& addr,
