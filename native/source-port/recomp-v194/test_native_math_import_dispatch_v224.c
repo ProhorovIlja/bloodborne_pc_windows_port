@@ -41,7 +41,11 @@ int main(void) {
     assert(shyt_math_import_v224_try_call_checked(
         &table, &cpu, 0xdeadbeef, 0x500000, permitted, &bound) == 0);
     assert(shyt_math_import_v224_try_call_checked(
-        &table, &cpu, pow_target, 0, permitted, &bound) == 0);
+        &table, &cpu, pow_target, 0, permitted, &bound) == -1);
+    assert(shyt_math_import_v224_try_call_checked(
+        &table, &cpu, pow_target, 0x500000, NULL, &bound) == -1);
+    assert(shyt_math_import_v224_try_call_checked(
+        &table, NULL, pow_target, 0x500000, permitted, &bound) == -1);
     bound.deny = 1;
     assert(shyt_math_import_v224_try_call_checked(
         &table, &cpu, pow_target, 0x500000, permitted, &bound) == -1);
