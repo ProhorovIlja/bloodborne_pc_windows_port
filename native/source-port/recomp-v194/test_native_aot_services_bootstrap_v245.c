@@ -4,6 +4,7 @@
  * Synthetic code only; no retail game bytes or runtime PS4 ELF.
  */
 #include "native_aot_services_bootstrap_v245.h"
+#include "native_aot_table_audit_v257.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -81,6 +82,31 @@ int main(void) {
     uint64_t stack[16]={0};
     Bounds bounds={(uint64_t)(uintptr_t)&stack[0],
                    (uint64_t)(uintptr_t)&stack[16]};
+    /* V257: validate the registry before irreversible RcApi bootstrap.
+     * These are entirely synthetic addresses/targets, no original game. */
+    RcFunction audit[2]={{0x100,16,1,generated_entry,NULL},
+                         {0x200,16,2,generated_entry,NULL}};
+    assert(shyt_aot_table_valid_v257(audit,2,base));
+    assert(!shyt_aot_table_valid_v257(NULL,2,base));
+    assert(!shyt_aot_table_valid_v257(audit,0,base));
+    assert(!shyt_aot_table_valid_v257(audit,1000001u,base));
+    assert(!shyt_aot_table_valid_v257(audit,2,0));
+    audit[0].fn=NULL;
+    assert(!shyt_aot_table_valid_v257(audit,2,base));
+    audit[0].fn=generated_entry;
+    audit[0].size=0;
+    assert(!shyt_aot_table_valid_v257(audit,2,base));
+    audit[0].size=16;
+    audit[1].offset=audit[0].offset;
+    assert(!shyt_aot_table_valid_v257(audit,2,base));
+    audit[1].offset=0x200;
+    audit[0].offset=UINT64_MAX;
+    assert(!shyt_aot_table_valid_v257(audit,2,base));
+    audit[0].offset=0x100;
+    audit[1].size=UINT64_MAX;
+    assert(!shyt_aot_table_valid_v257(audit,2,base));
+    audit[1].size=16;
+    assert(shyt_aot_table_valid_v257(audit,2,base));
     ShytAotServicesV245 services={0};
     /* Invalid overlap is rejected WITHOUT installing either route. */
     ShytClockTargetsV239 bad={base,descs[18].offset,0x3020};
