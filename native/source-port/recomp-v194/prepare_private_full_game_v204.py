@@ -15,6 +15,7 @@ import sys
 import audit_native_runtime_v202 as auditor
 import verify_generated_coverage_v207 as coverage
 from bounded_private_subprocess_v210 import run_stage
+import private_original_preflight_v212 as preflight
 
 PIN="8f31ec7c41f252730c6325d52647046baef7549f"
 STAMP="SHYT_PRIVATE_FULL_IMAGE_V204"
@@ -60,6 +61,9 @@ def prepare(root,eboot,work):
     root=upstream(root)
     eboot=private(eboot)
     work=private(work)
+    # Reject incorrect original image, an unbuilt/stale patched generator,
+    # or inadequate private workspace before spending hours on a full scan.
+    preflight.check(eboot,work,root,16)
     if not eboot.is_file():raise ValueError("decrypted original eboot.bin missing")
     size=eboot.stat().st_size
     if not 1000000<=size<=512*1024*1024:
