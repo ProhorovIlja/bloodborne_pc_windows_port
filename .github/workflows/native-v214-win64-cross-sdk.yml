@@ -36,6 +36,15 @@ jobs:
           sha256sum upstream/src/recomp/rc.h > "$RUNNER_TEMP/rc-before.sha256"
           python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout upstream
           git -C upstream diff --check
+      - name: Build pinned public Zydis/Zycore headers before cross-compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! (cd upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v214-upstream-build.log" 2>&1; then
+            echo '::error title=V214::Pinned public upstream Zydis dependency build failed'
+            exit 1
+          fi
+          test -f upstream/deps/include/Zydis/Zydis.h
       - name: Compile the genuine public CPU header for Win64 COFF
         shell: bash
         run: |
