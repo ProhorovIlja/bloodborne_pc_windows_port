@@ -35,7 +35,7 @@ jobs:
             playable-track/test_hybrid_transport_policy_v1.cpp \
             -o "$RUNNER_TEMP/yt-hybrid-route-policy"
           "$RUNNER_TEMP/yt-hybrid-route-policy"
-      - name: Static official release compatibility guard: do not pretend to support 5
+      - name: Verify official release still has four-player limit
         shell: bash
         run: |
           set -euo pipefail
