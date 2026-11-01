@@ -1,0 +1,63 @@
+name: Native V221 actual BBHost registered HLE vs original import names
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v221-bbhost-hle-coverage.yml'
+      - 'native/source-port/recomp-v194/compare_private_imports_bbhost_hle_v221.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  invented-import-registry-parser:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Synthetic-only registration names/aliases/comments comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile native/source-port/recomp-v194/compare_private_imports_bbhost_hle_v221.py
+          python native/source-port/recomp-v194/compare_private_imports_bbhost_hle_v221.py --self-test
+          echo 'No original Bloodborne, hidden source, game offsets or player data in CI'
+  actual-public-registry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          path: public-bbhost
+          persist-credentials: false
+          submodules: false
+      - name: Extract pinned PUBLIC registered HLE names, not private import list
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-bbhost rev-parse HEAD)" = 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          mkdir -p "$RUNNER_TEMP/bbhost-public-hle"
+          python native/source-port/recomp-v194/compare_private_imports_bbhost_hle_v221.py \
+            --bbhost-source public-bbhost \
+            --emit-public-registered "$RUNNER_TEMP/bbhost-public-hle/registered_hle_public.tsv"
+          cp public-bbhost/LICENSE "$RUNNER_TEMP/bbhost-public-hle/BBHOST-GPL-3.0"
+          echo 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd \
+            > "$RUNNER_TEMP/bbhost-public-hle/PINNED_PUBLIC_UPSTREAM_COMMIT"
+          test "$(stat -c %s "$RUNNER_TEMP/bbhost-public-hle/registered_hle_public.tsv")" -lt 65536
+          echo 'Public GPL HLE symbol registry only; no proprietary game names'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v221-bbhost-public-registered-hle
+          path: ${{ runner.temp }}/bbhost-public-hle/
+          if-no-files-found: error
+          retention-days: 7
