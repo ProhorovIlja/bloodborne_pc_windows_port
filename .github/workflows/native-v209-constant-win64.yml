@@ -21,12 +21,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Synthetic-only original-function AOT / PE validation
+      - name: Synthetic-only ELF and constant-return decoding
         shell: bash
         run: |
           set -euo pipefail
           python -m py_compile native/source-port/recomp-v194/audit_private_original_fde_v208.py
           python -m py_compile native/source-port/recomp-v194/build_private_constant_aot_v209.py
           python native/source-port/recomp-v194/audit_private_original_fde_v208.py --self-test
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, 'native/source-port/recomp-v194')
+          from build_private_constant_aot_v209 import classify
+          assert classify(b'\x31\xc0\xc3') == ('zero',0)
+          assert classify(b'\xb8\x01\x00\x00\x00\xc3') == ('u32',1)
+          assert classify(b'\x48\xb8' + b'\x09'*8 + b'\xc3') == ('u64',0x0909090909090909)
+          assert classify(b'\xc3') is None
+          print('SHYT_NATIVE_V209_CLASSIFICATION_SYNTHETIC_PASS')
+          PY
+      - name: Compile and verify real Win64 PE machine code from invented functions
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
           python native/source-port/recomp-v194/build_private_constant_aot_v209.py --self-test
-          echo 'Real original PS4 ELF, generated private C, COFF, DLL and function offsets NEVER uploaded to public CI.'
+          echo 'No proprietary ELF, addresses, generated game C or game DLL in CI.'
