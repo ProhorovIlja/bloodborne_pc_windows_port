@@ -17,6 +17,8 @@ static PeerRouteLease lease() {
     l.peer_authenticated=true;l.direct_datagram_verified=true;
     l.server_route_granted=true;l.has_common_protocol=true;
     l.granted_sender_id="hunter-A";l.granted_receiver_id="hunter-B";
+    l.granted_party_session_id="team-five-world-42";
+    l.granted_sender_instance=17;l.granted_receiver_instance=29;
     l.authority_epoch=42;l.local_world_epoch=42;
     l.approved_sender_map=0x101;l.approved_target_map=0x101;
     l.now_ms=10000;l.lease_expiry_ms=12000;
@@ -35,7 +37,7 @@ static GameFrame make_frame(u32 seq,u8 value) {
 }
 int main() {
     auto l=lease();
-    DirectIngressIdentity id{"hunter-A",17,29,1100,"hunter-B"};
+    DirectIngressIdentity id{"hunter-A",17,29,1100,"hunter-B","team-five-world-42"};
     GameLinkPeer receiver("hunter-B",29);
     const auto ingest=[&](const GameFrame& f,bool direct) {
         if (direct && !AcceptAuthenticatedDirectMovement(f,map,l,id))
@@ -107,6 +109,23 @@ int main() {
     assert(!AcceptAuthenticatedDirectMovement(bad,map,wrong_peer_lease,id));
     wrong_peer_lease=l;wrong_peer_lease.granted_receiver_id="hunter-C";
     assert(!AcceptAuthenticatedDirectMovement(bad,map,wrong_peer_lease,id));
+    // Same display ID and apparent board slot on a cloned client is NOT
+    // enough to reuse a lease after a party restart or fifth-seat reuse.
+    auto stale_session=id;
+    stale_session.server_authorized_party_session_id="previous-party";
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,l,stale_session));
+    stale_session=id;
+    stale_session.server_authorized_party_session_id={};
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,l,stale_session));
+    auto reused_slot=l;
+    reused_slot.granted_party_session_id="previous-party";
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,reused_slot,id));
+    reused_slot=l;
+    reused_slot.granted_sender_instance=99;
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,reused_slot,id));
+    reused_slot=l;
+    reused_slot.granted_receiver_instance=33;
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,reused_slot,id));
     auto other_map=map;other_map.target_map=0x102;
     assert(!AcceptAuthenticatedDirectMovement(bad,other_map,l,id));
     l.authority_epoch++;
