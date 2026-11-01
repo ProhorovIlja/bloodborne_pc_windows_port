@@ -40,15 +40,28 @@ struct Udp {
               reinterpret_cast<const sockaddr*>(&target),sizeof(target))==
               static_cast<ssize_t>(bytes.size()));
     }
-    std::vector<u8> Take() const {
-        std::array<u8,1201> b{};
-        sockaddr_in from{};
-        socklen_t len=sizeof(from);
-        ssize_t count=::recvfrom(fd,b.data(),b.size(),0,
-                          reinterpret_cast<sockaddr*>(&from),&len);
-        assert(count>0 && count<=1200);
-        assert(from.sin_addr.s_addr==htonl(INADDR_LOOPBACK));
-        return {b.begin(),b.begin()+count};
+    mutable unsigned rejected_endpoint_packets=0;
+    std::vector<u8> TakeFrom(const sockaddr_in& authorized) const {
+        // V250: even a loopback UDP fixture must not accept any sender
+        // merely because its address is 127.0.0.1. Real runtime needs
+        // server-approved endpoint binding and rebinding before AEAD.
+        for (unsigned attempt=0;attempt<4;++attempt) {
+            std::array<u8,1201> b{};
+            sockaddr_in from{};
+            socklen_t len=sizeof(from);
+            ssize_t count=::recvfrom(fd,b.data(),b.size(),0,
+                              reinterpret_cast<sockaddr*>(&from),&len);
+            assert(count>0 && count<=1200);
+            if (from.sin_family!=authorized.sin_family ||
+                from.sin_port!=authorized.sin_port ||
+                from.sin_addr.s_addr!=authorized.sin_addr.s_addr) {
+                ++rejected_endpoint_packets;
+                continue;
+            }
+            return {b.begin(),b.begin()+count};
+        }
+        assert(false && "unapproved UDP sources exhausted bounded receive");
+        return {};
     }
 };
 Key Secret(u8 start) {
@@ -87,12 +100,16 @@ int main() {
     Responder responder(scope,server_pinned_b);
     auto hello=initiator.Start(Secret(44));
     assert(hello);
+    // Spoofed endpoint must be dropped, even when it carries plausible
+    // handshake bytes. Do not rely on 127.0.0.1 alone as peer identity.
+    server_relay_fixture.Send(hunter_b.address,*hello);
     hunter_a.Send(hunter_b.address,*hello);
-    const auto received_hello=hunter_b.Take();
+    const auto received_hello=hunter_b.TakeFrom(hunter_a.address);
+    assert(hunter_b.rejected_endpoint_packets==1);
     const auto answer=responder.Answer(received_hello,Secret(101));
     assert(answer);
     hunter_b.Send(hunter_a.address,answer->answer);
-    const auto arrived_answer=hunter_a.Take();
+    const auto arrived_answer=hunter_a.TakeFrom(hunter_b.address);
     const auto keys=initiator.Finish(arrived_answer);
     assert(keys && *keys==answer->keys);
     PeerCryptoDatagramsV241 cipher_a(scope,true,keys->first,keys->second);
@@ -108,7 +125,7 @@ int main() {
         const auto sealed=cipher_a.SealMovement(frame);
         if(!sealed) return false;
         hunter_a.Send(hunter_b.address,*sealed);
-        auto wire=hunter_b.Take();
+        auto wire=hunter_b.TakeFrom(hunter_a.address);
         const auto clear=cipher_b.OpenMovement(wire);
         assert(clear && AcceptAuthenticatedDirectMovement(*clear,ends,lease,incoming));
         auto delivered=receiver.Receive(*clear,lease.now_ms);
@@ -123,11 +140,11 @@ int main() {
     auto server_send=[&](const GameFrame& frame) -> bool {
         auto serialized=EncodeGameFrame(frame);
         hunter_a.Send(server_relay_fixture.address,serialized);
-        auto received=server_relay_fixture.Take();
+        auto received=server_relay_fixture.TakeFrom(hunter_a.address);
         auto decoded=DecodeGameFrame(received);
         assert(decoded && *decoded==frame);
         server_relay_fixture.Send(hunter_b.address,received);
-        auto delivered_wire=hunter_b.Take();
+        auto delivered_wire=hunter_b.TakeFrom(server_relay_fixture.address);
         auto forwarded=DecodeGameFrame(delivered_wire);
         assert(forwarded && *forwarded==frame);
         auto delivered=receiver.Receive(*forwarded,lease.now_ms);
@@ -152,7 +169,7 @@ int main() {
     auto late=cipher_a.SealMovement(Movement(2,43));
     assert(late);
     hunter_a.Send(hunter_b.address,*late);
-    auto opened=cipher_b.OpenMovement(hunter_b.Take());
+    auto opened=cipher_b.OpenMovement(hunter_b.TakeFrom(hunter_a.address));
     assert(opened && receiver.Receive(*opened,lease.now_ms).empty());
     std::puts("SHYT_V247_REAL_LOCAL_UDP_NOISE_GAMEFRAME_FALLBACK_PASS");
 }
