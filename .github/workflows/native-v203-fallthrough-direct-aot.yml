@@ -13,6 +13,8 @@ on:
       - 'native/source-port/recomp-v194/patch_upstream_indirect_call_v200.py'
       - 'native/source-port/recomp-v194/patch_upstream_indirect_jump_v201.py'
       - 'native/source-port/recomp-v194/patch_upstream_fallthrough_v203.py'
+      - 'native/source-port/recomp-v194/prepare_private_full_game_v204.py'
+      - 'native/source-port/recomp-v194/compile_private_full_game_v204.py'
       - 'native/source-port/recomp-v194/audit_native_runtime_v202.py'
       - 'native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py'
   workflow_dispatch:
@@ -42,6 +44,7 @@ jobs:
           python3 native/source-port/recomp-v194/patch_upstream_indirect_call_v200.py --upstream-checkout public-upstream-recomp
           python3 native/source-port/recomp-v194/patch_upstream_indirect_jump_v201.py --upstream-checkout public-upstream-recomp
           python3 native/source-port/recomp-v194/patch_upstream_fallthrough_v203.py --upstream-checkout public-upstream-recomp
+          python3 -m py_compile native/source-port/recomp-v194/prepare_private_full_game_v204.py native/source-port/recomp-v194/compile_private_full_game_v204.py
           if ! (cd public-upstream-recomp && CC=clang ./build.sh) > "$RUNNER_TEMP/v203-upstream.log" 2>&1; then
             echo "::error title=V203 full generator::public original bbrecomp Linux compiler failed"
             grep -m1 -E 'error:|fatal error:|FAILED:|Error|undefined reference' "$RUNNER_TEMP/v203-upstream.log" | cut -c1-300 || true
@@ -69,6 +72,17 @@ jobs:
             exit 1
           fi
           echo SHYT_NATIVE_V203_REAL_OUTPUT_STRICT_UNRESOLVED_FALLBACK_REJECTED
+          # V204 preflight must refuse real-game preparation without user
+          # owned original executable: no fake original in public CI.
+          set +e
+          python3 native/source-port/recomp-v194/prepare_private_full_game_v204.py --upstream public-upstream-recomp --eboot "$RUNNER_TEMP/original-game-eboot-not-published.bin" --work "$RUNNER_TEMP/v204-private" > "$RUNNER_TEMP/v204-no-game.log" 2>&1
+          missing_status=$?
+          set -e
+          if [[ "$missing_status" -ne 2 ]] || ! grep -q 'decrypted original eboot.bin missing' "$RUNNER_TEMP/v204-no-game.log"; then
+            echo "::error::V204 full-game private ingestion incorrectly accepted absent original executable"
+            exit 1
+          fi
+          echo SHYT_NATIVE_V204_PRIVATE_REAL_GAME_INPUT_REQUIRED_PASS
       - name: Link the real multi-function C shard into native Linux executable
         shell: bash
         run: |
@@ -137,4 +151,28 @@ jobs:
           python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"v203-corrupted.json").read_text().splitlines()[-1]); assert (r["compiled"],r["reused"],r["source_count"])==(1,1,2),r'
           echo SHYT_NATIVE_COFF_CACHE_CORRUPTION_AUTO_REBUILD_PASS
           echo SHYT_NATIVE_V203_ORIGINAL_NATIVE_FUNCTION_FALLTHROUGH_WIN64_PASS
+          # Contract test ONLY: stage metadata around original-generated
+          # INVENTED V203 C, NOT around any genuine copyrighted game data.
+          # The real user's private prepare phase has not run.
+          python -m py_compile native/source-port/recomp-v194/prepare_private_full_game_v204.py native/source-port/recomp-v194/compile_private_full_game_v204.py
+          mkdir -p "$RUNNER_TEMP/v204-synthetic-contract/generated"
+          cp "$RUNNER_TEMP/v203-upstream-artifact"/recomp*.c "$RUNNER_TEMP/v204-synthetic-contract/generated/"
+          python -c 'import hashlib,json,os,pathlib,sys; sys.path.insert(0,"native/source-port/recomp-v194"); import prepare_private_full_game_v204 as m; p=pathlib.Path(os.environ["RUNNER_TEMP"],"v204-synthetic-contract"); fs=sorted((p/"generated").glob("recomp*.c")); data={"format":m.STAMP,"upstream":m.PIN,"input_sha256":"0"*64,"original_size_bytes":0,"version_109_verified":False,"functions_scanned":5,"c_hashes":{f.name:m.sha(f) for f in fs},"fallback_calls":1,"strict_no_guest_runtime":False,"native_game_boot_proven":False}; (p/"full-original-preparation.json").write_text(json.dumps(data))'
+          # The REAL full-game private tool must reject legacy callbacks
+          # under default strict mode, even with an apparently valid manifest.
+          set +e
+          python native/source-port/recomp-v194/compile_private_full_game_v204.py --upstream public-upstream-recomp --work "$RUNNER_TEMP/v204-synthetic-contract" --jobs 2 > "$RUNNER_TEMP/v204-strict.log" 2>&1
+          blocked=$?
+          set -e
+          if [[ "$blocked" -ne 2 ]] || ! grep -q 'STRICT native Windows build blocked' "$RUNNER_TEMP/v204-strict.log"; then
+            echo "::error::V204 full-game strict no-guest-runtime compiler was bypassed"
+            exit 1
+          fi
+          # RESEARCH ONLY compiles the ORIGINAL GENERATOR'S invented-function
+          # C to genuine native Win64 COFF, never a playable game EXE.
+          python native/source-port/recomp-v194/compile_private_full_game_v204.py --upstream public-upstream-recomp --work "$RUNNER_TEMP/v204-synthetic-contract" --jobs 2 --research-only > "$RUNNER_TEMP/v204-research.json"
+          python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"v204-research.json").read_text().splitlines()[-1]); assert (r["objects_compiled"],r["windows_amd64_coff_objects"],r["game_boot_proven"])==(2,2,False),r'
+          python native/source-port/recomp-v194/compile_private_full_game_v204.py --upstream public-upstream-recomp --work "$RUNNER_TEMP/v204-synthetic-contract" --jobs 2 --research-only > "$RUNNER_TEMP/v204-reuse.json"
+          python -c 'import json,os,pathlib; r=json.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"v204-reuse.json").read_text().splitlines()[-1]); assert (r["objects_compiled"],r["objects_reused"])==(0,2),r'
+          echo SHYT_NATIVE_V204_REAL_PRIVATE_FULL_IMAGE_PIPELINE_CONTRACT_TEST_PASS
           echo 'No game data, ELF at runtime, emulator or PS4 kernel; synthetic function-only test'
