@@ -36,7 +36,15 @@ int main() {
     assert(!alice.Start(a_secret)); // ephemeral must not be reused
     const auto answer=bob.Answer(*hello,b_secret);
     assert(answer && answer->answer.size()==WireBytes);
-    assert(!bob.Answer(*hello,b_secret)); // one-time state
+    // A lost UDP answer is retransmitted byte-identically. Passing a
+    // DIFFERENT ephemeral secret must never re-encrypt under old state.
+    const Key different_ephemeral=filled(173);
+    const auto retried=bob.Answer(*hello,different_ephemeral);
+    assert(retried && retried->answer==answer->answer &&
+           retried->keys==answer->keys);
+    auto changed_hello=*hello;
+    changed_hello[5]^=1;
+    assert(!bob.Answer(changed_hello,b_secret));
     const auto client_keys=alice.Finish(answer->answer);
     assert(client_keys && *client_keys==answer->keys);
     assert(!alice.Finish(answer->answer)); // no second key derivation
