@@ -64,6 +64,15 @@ reliable messages still arrive exactly once on the original stream.
 This is still a POLICY+INGRESS PROTOTYPE, not working direct UDP
 transport or P2P player support in shipping YT.
 
+**Pair-bound lease safety (2026-11-01):** A server-granted DirectPeer
+route must now identify a nonempty ordered sender/receiver pair.
+Ingress checks that the authenticated sender and local account match
+**that exact lease**, rejecting a grant borrowed from another hunter
+or another receiver after handoff/rejoin. Added C++20 negative tests
+for mismatched sender, receiver, and missing account identity. This
+prevents policy-level cross-peer lease reuse but does NOT implement
+cryptographic UDP authentication, server lease issuance or NAT traversal.
+
 ## V1 safe hybrid direct/relay transport EXPERIMENT
 
 `hybrid_transport_policy_v1.h` uses the **exact actual upstream's
