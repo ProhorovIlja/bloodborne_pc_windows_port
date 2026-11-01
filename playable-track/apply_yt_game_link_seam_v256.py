@@ -27,7 +27,7 @@ NEW_INCLUDE = '#include "core/shyt_hybrid/yt_game_link_runtime_bridge_v255.h"'
 ORIGINAL_QUEUE = (
     "std::vector<std::pair<std::pair<u32, u16>, std::vector<u8>>> out;"
 )
-REPLACEMENT_QUEUE = "std::vector<SHYTHybrid::PendingYtFrameV255> out;"
+REPLACEMENT_QUEUE = "std::vector<BloodborneCoop::SHYTHybrid::PendingYtFrameV255> out;"
 ORIGINAL_FRAME_LOOP = """                for (const GameFrame& frame : peer.Flush(now_ms)) {
                     std::vector<u8> bytes{'S', 'H', 'A', 'D', GamePacketsType};
                     const auto payload = EncodeGameFrame(frame);
@@ -48,7 +48,7 @@ REPLACEMENT_SEND = """        for (const auto& queued : out) {
             // The null trusted route means ORIGINAL authenticated shadNet
             // server transport, with the exact original SHAD wire envelope.
             // Never pass a fabricated lease or trust a bare UDP endpoint.
-            SHYTHybrid::DispatchYtFrameV255(
+            BloodborneCoop::SHYTHybrid::DispatchYtFrameV255(
                 queued, nullptr,
                 [](const std::pair<u32, u16>& address, std::span<const u8> bytes) {
                     return Libraries::Net::P2PCoopSendTo(
