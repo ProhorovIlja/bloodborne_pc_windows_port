@@ -49,6 +49,26 @@ bytes and checks that the embedded official hashes match the release.
 It is **not yet embedded into YT's own updater** and cannot guarantee
 that an upstream maintainer's account or HTTPS distribution is secure.
 
+## Upstream 1.3.2 five-player candidate: do not duplicate it
+
+As of 2026-11-01, the released YT version is **1.3.1**, but maintainer
+Draft PR https://github.com/lKaniel/bloodborne-server/pull/484
+already introduces five seats in server, emulator, HUD, portraits and
+game/client structs. New Draft #486 adds a real five-game rig scenario,
+while #485 covers Global quick match. These are NOT yet a published
+integrated release or proof of five successful gaming PCs.
+
+Our read-only source and actual original C++ HUD/portrait checks against
+the exact #484 commit run on Linux and Windows in
+.github/workflows/yt132-pr484-five-seats-source.yml. The fixture validates
+four other hunters' visible portrait slots and five across team UI
+alongside source contracts; it does not launch five games. Keep our
+earlier independent V194/V195 patches as historical/research references,
+NOT blindly stacked over this upstream branch. This is separate from
+our still-unfinished authenticated hybrid Direct P2P integration.
+
+See UPSTREAM_WATCH_20261101.md for the #477-486 PR prioritization.
+
 ## Actual real-source v1.3.1 hybrid transport work
 
 `hybrid_direct_ingress_v2.h` validates an already authenticated
