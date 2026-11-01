@@ -76,3 +76,20 @@ execution time. Prioritize reduction/removal of the separately measured
 1,468,066 static guest callback sites before representing the generated
 function table as a complete native engine. Keep PR #84 Draft and
 Fornex unchanged.
+
+## Upstream reconciliation: the 790 excluded original functions
+
+The upstream static-recompiler status page (updated 2026-10-28) states
+the deliberately non-recompiled categories include **660 import stubs**
+and **130 functions calling setjmp**. Their sum is **790**, exactly
+matching our private `241,821 scanned - 241,031 AOT registered`.
+This is strong consistency evidence, not proof of per-function
+classification; the private address lists still need category checking.
+Do **not** treat all 790 as arbitrary generator bugs or claim to have
+replaced the original PS4 imports. Reference:
+https://github-wiki-see.page/m/bloodborne-native/bloodborne-recomp/wiki/Recompilation-status
+
+The upstream macOS runtime also reports its recompiled functions
+running in-game, but that **does not prove** a full EBOOT-independent
+Windows port exists in this project. Our 1,468,066 static `RcApi`
+callback sites remain a separate measured blocker.
