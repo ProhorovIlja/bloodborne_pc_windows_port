@@ -65,7 +65,34 @@ public:
                             const LinkAuth::Key& receive_key)
         : scope_(std::move(scope)), local_is_a_(local_is_a),
           binding_(PeerBindingV241(scope_)), cipher_(send_key, receive_key),
-          valid_(ValidPeerCryptoScopeV241(scope_) && send_key != receive_key) {}
+          valid_(ValidPeerCryptoScopeV241(scope_) && send_key != receive_key &&
+              std::any_of(send_key.begin(),send_key.end(),[](u8 b){return b!=0;}) &&
+              std::any_of(receive_key.begin(),receive_key.end(),[](u8 b){return b!=0;})) {}
+
+    // V258: a correctly encrypted datagram is NOT enough if it belongs
+    // to a prior world epoch/session. Revalidate the live server-issued
+    // ordered pair grant against the key exchange's pinned crypto scope.
+    bool MatchesOutgoingGrantV258(const PeerRouteLease& lease,
+                                  const DirectEgressIdentity& identity,
+                                  const PacketEnds& ends) const {
+        const auto& me=local_is_a_ ? scope_.hunter_a : scope_.hunter_b;
+        const auto& other=local_is_a_ ? scope_.hunter_b : scope_.hunter_a;
+        const u32 mine=local_is_a_ ? scope_.a_instance : scope_.b_instance;
+        const u32 theirs=local_is_a_ ? scope_.b_instance : scope_.a_instance;
+        return valid_ && identity.server_authorized_local_id==me &&
+            identity.server_authorized_remote_id==other &&
+            identity.server_authorized_party_session_id==scope_.party_session &&
+            identity.local_instance==mine && identity.remote_instance==theirs &&
+            lease.granted_sender_id==me && lease.granted_receiver_id==other &&
+            lease.granted_sender_instance==mine &&
+            lease.granted_receiver_instance==theirs &&
+            lease.granted_party_session_id==scope_.party_session &&
+            lease.authority_epoch==scope_.world_epoch &&
+            lease.local_world_epoch==scope_.world_epoch &&
+            lease.approved_sender_map==scope_.map &&
+            lease.approved_target_map==scope_.map &&
+            ends.sender_map==scope_.map && ends.target_map==scope_.map;
+    }
 
     static constexpr size_t MaxDatagram = 1200;
     static constexpr size_t HeaderSize = LinkAuth::HeaderBytes;
