@@ -14,6 +14,10 @@
  */
 typedef void (*ShytMathFatalGuestMemory)(BbCpu *cpu, uint64_t target,
                                         uint64_t next, void *ctx);
+/* Callback holding a verified host guest-allocation lease; its lifetime
+ * must span the entire math import. Fault handlers run AFTER release. */
+typedef int (*ShytMathMemoryPinEnter)(void *ctx);
+typedef void (*ShytMathMemoryPinLeave)(void *ctx);
 typedef struct {
     RcApi api;
     RcApi original;
@@ -22,6 +26,9 @@ typedef struct {
     void *permit_ctx;
     ShytMathFatalGuestMemory fault;
     void *fault_ctx;
+    ShytMathMemoryPinEnter pin_enter;
+    ShytMathMemoryPinLeave pin_leave;
+    void *pin_ctx;
 } ShytMathRcApiRoute;
 
 /* Exactly one immutable route per process, installed single-threaded before
@@ -31,6 +38,16 @@ int shyt_math_rcapi_route_v226_install(ShytMathRcApiRoute *route,
        const RcApi *upstream, const ShytMathImportTable *table,
        ShytGuestMemoryPermit permit, void *permit_ctx,
        ShytMathFatalGuestMemory fault, void *fault_ctx);
+/* V229: requires pin callbacks even in synthetic fixtures. The V226
+ * unpinned installer is disabled and always returns 0.
+ * PIN MUST exclude VirtualFree/VirtualProtect until LEAVE. If enter fails,
+ * a mandatory guest fault handler is invoked, never the old callback. */
+int shyt_math_rcapi_route_v226_install_pinned(ShytMathRcApiRoute *route,
+       const RcApi *upstream, const ShytMathImportTable *table,
+       ShytGuestMemoryPermit permit, void *permit_ctx,
+       ShytMathFatalGuestMemory fault, void *fault_ctx,
+       ShytMathMemoryPinEnter pin_enter, ShytMathMemoryPinLeave pin_leave,
+       void *pin_ctx);
 /* Pass this API to the recompiled game's bb_recomp_init only after install. */
 const RcApi *shyt_math_rcapi_route_v226_api(const ShytMathRcApiRoute *route);
 #endif
