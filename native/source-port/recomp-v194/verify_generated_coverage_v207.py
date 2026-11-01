@@ -123,7 +123,7 @@ def selftest() -> None:
     assert count_table(table(unit(1), unit(2)), 2)["complete_scanner_to_aot_registration"]
     assert count_table(table(unit(1), unit(2)), 3,
                        {1: 3, 2: 3, 3: 4})["functions_not_in_aot_table"] == 1
-    for invalid in ({1: 4, 2: 3, 3: 4}, {1: 3, 2: 3, 5: 3}, {1: 3}):
+    for invalid in ({1: 4, 2: 3, 3: 4}, {1: 3, 4: 3, 5: 3}, {1: 3}):
         try:
             count_table(table(unit(1), unit(2)), 3, invalid)
         except ValueError:
