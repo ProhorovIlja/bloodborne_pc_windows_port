@@ -156,16 +156,17 @@ int main(void) {
     /* V261: native AOT direct-call slot is absent until owner-attested.
      * The no-game fixture deliberately denies, then grants, then revokes. */
     ShytDirectStatsV259 stats={0};
+    uint64_t attestation_base=base; /* callback takes a mutable void* context */
     assert(native_direct_slot==NULL);
     assert(!shyt_aot_services_link_direct_v261(
         &services,NULL,&base,&stats));
     assert(shyt_aot_services_link_direct_v261(
-        &services,exact_guest_function_attestation,(void *)&base,&stats));
+        &services,exact_guest_function_attestation,&attestation_base,&stats));
     assert(stats.direct==0 && stats.kept_indirect==1 &&
            native_direct_slot==NULL);
     direct_granted=1;
     assert(shyt_aot_services_link_direct_v261(
-        &services,exact_guest_function_attestation,(void *)&base,&stats));
+        &services,exact_guest_function_attestation,&attestation_base,&stats));
     assert(stats.direct==1 && native_direct_slot==generated_entry);
     cpu.r[RSP]=original_rsp;
     native_direct_slot(&cpu); /* actual AOT-style C -> C direct call */
@@ -176,11 +177,11 @@ int main(void) {
     assert(stats.direct==0 && stats.kept_indirect==1 &&
            native_direct_slot==NULL);
     assert(shyt_aot_services_link_direct_v261(
-        &services,exact_guest_function_attestation,(void *)&base,&stats));
+        &services,exact_guest_function_attestation,&attestation_base,&stats));
     assert(stats.direct==1 && native_direct_slot==generated_entry);
     direct_granted=0;
     assert(shyt_aot_services_link_direct_v261(
-        &services,exact_guest_function_attestation,(void *)&base,&stats));
+        &services,exact_guest_function_attestation,&attestation_base,&stats));
     assert(stats.kept_indirect==1 && native_direct_slot==NULL);
 #endif
     puts("SHYT_V245_REAL_RCAPI_NATIVE_AOT_BOOTSTRAP_SYNTHETIC_PASS");
