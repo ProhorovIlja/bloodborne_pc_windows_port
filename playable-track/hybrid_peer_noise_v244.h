@@ -109,12 +109,18 @@ public:
         std::vector<u8> answer;
         Keys keys;
     };
-    // Reject repeat handshakes on one responder state. Exact retransmission
-    // handling and handshake replay cache must be implemented by transport.
+    // UDP retries retransmit EXACT ciphertext and exactly the same keys.
+    // A different Hello may never reuse this instance's key/nonce state.
     std::optional<Result> Answer(std::span<const u8> first,
                                   const Key& fresh_ephemeral) {
-        if(!valid_ || completed_ || !Prefix(first) ||
-           !Nonzero(fresh_ephemeral)) return std::nullopt;
+        if(!valid_ || !Prefix(first)) return std::nullopt;
+        if(completed_) {
+            if (!last_result_ ||
+                !std::equal(first.begin(),first.end(),first_hello_.begin()))
+                return std::nullopt;
+            return *last_result_; // no re-encryption, no nonce reuse
+        }
+        if(!Nonzero(fresh_ephemeral)) return std::nullopt;
         Key peer_ephemeral{};
         std::memcpy(peer_ephemeral.data(),first.data()+Magic.size(),
                     peer_ephemeral.size());
@@ -137,12 +143,16 @@ public:
         state.EncryptAndHash(std::span<u8>{answer}.subspan(
             Magic.size()+LinkAuth::KeyBytes),tag.data());
         answer.insert(answer.end(),tag.begin(),tag.end());
+        std::copy(first.begin(),first.end(),first_hello_.begin());
+        last_result_=Result{std::move(answer),state.Split()};
         completed_=true;
-        return Result{std::move(answer),state.Split()};
+        return *last_result_;
     }
 private:
     std::array<u8,32> binding_;
     Key static_secret_{},static_public_{};
+    std::array<u8,WireBytes> first_hello_{};
+    std::optional<Result> last_result_;
     bool valid_=false,completed_=false;
 };
 } // namespace PeerNoiseV244
