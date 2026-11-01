@@ -80,3 +80,25 @@ Our YT PR #85 is Draft; policies and ingress tests remain
 #484 and #486 were still Draft when checked. Do not redeploy Fornex.
 No private Discord screenshots, unreleased source, or interpersonal
 claims are to be published from this research.
+
+## Additional source evidence for optional launcher/gameplay features
+
+- Public BBHost `src/engine/rebirth.h`: its opt-in Altar of Despair
+  respec requires Yharnam Stone, rolls a hunter back to origin
+  attributes, returns the spent echoes, and offers a commit-or-undo
+  confirmation. It rewrites talk scripts and uses a frame-tick
+  handshake. **Do not copy its runtime offset patch blindly into YT**:
+  save mutation, Doll leveling and multiplayer state have to be
+  synchronized, with rollback and a save backup. This gives a useful
+  transactional design reference for the user's requested respec.
+- Public BBHost `src/engine/five_players.h`: adds two invaders in
+  certain late areas by rewriting maidens' events; the doc explicitly
+  says **all participants must enable it** since event flags/SpEffects
+  can terminate the host event. YT must use its own verified five-seat
+  party/instance architecture, not assume this is equivalent to five
+  friends in co-op.
+- Both files are GPLv3. Any direct code reuse requires license
+  compatibility, attribution and review, rather than a paste from
+  competing engines. The more portable concepts are save transaction
+  confirmation, per-session mod compatibility fingerprints and a
+  host-authoritative configuration negotiated with every member.
