@@ -29,6 +29,13 @@ NEW = '''    // A second, unrelated teammate standing on this map must not cause
             }
         }
     }
+    // Duplicate online IDs arise in cloned-instance tests and cannot be
+    // mapped uniquely back to distinct session-member character tasks.
+    // Do not borrow another player's identity to create this character.
+    std::ranges::sort(online_ids);
+    if (std::adjacent_find(online_ids.begin(), online_ids.end()) != online_ids.end()) {
+        online_ids.clear();  // ambiguous: wait instead of misbinding actors
+    }
     const u32 here_map = PlayingMap();
     const s64 now = SteadyMilliseconds();
 '''
