@@ -13,6 +13,7 @@ on:
       - 'native/source-port/recomp-v194/build_private_aot_imports_v248.py'
       - 'native/source-port/recomp-v194/test_generated_aot_imports_v249.c'
       - 'native/source-port/recomp-v194/native_aot_services_bootstrap_v245.*'
+      - 'native/source-port/recomp-v194/native_aot_table_audit_v257.h'
       - 'native/source-port/recomp-v194/test_native_aot_services_bootstrap_v245.c'
   workflow_dispatch:
 permissions:
