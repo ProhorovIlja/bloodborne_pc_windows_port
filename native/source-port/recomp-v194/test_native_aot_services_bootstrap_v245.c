@@ -159,7 +159,7 @@ int main(void) {
     uint64_t attestation_base=base; /* callback takes a mutable void* context */
     assert(native_direct_slot==NULL);
     assert(!shyt_aot_services_link_direct_v261(
-        &services,NULL,&base,&stats));
+        &services,NULL,&attestation_base,&stats));
     assert(shyt_aot_services_link_direct_v261(
         &services,exact_guest_function_attestation,&attestation_base,&stats));
     assert(stats.direct==0 && stats.kept_indirect==1 &&
