@@ -74,6 +74,8 @@ int main() {
     assert(!AcceptAuthenticatedDirectMovement(bad,map,l,id));
     bad=make_frame(5,46);bad.peer_instance=0;
     assert(!AcceptAuthenticatedDirectMovement(bad,map,l,id));
+    bad=make_frame(5,46);bad.ack=0xffffffffu;
+    assert(!AcceptAuthenticatedDirectMovement(bad,map,l,id));
     bad=make_frame(5,46);bad.entries.clear();
     assert(!AcceptAuthenticatedDirectMovement(bad,map,l,id));
     bad=make_frame(5,46);bad.entries[0].packet_class=PacketClass::Reliable;
