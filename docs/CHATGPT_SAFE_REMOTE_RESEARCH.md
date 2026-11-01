@@ -22,3 +22,22 @@ Applies to every future Bloodborne / Yharnam Together continuation, PR #84, PR #
 
 ## Limitations
 This is a persisted operational rule for the assistant, not a platform-enforced cap on the GitHub/Drive tool implementations. Tool-side fetching may still occur internally; avoid asking for large resources in the first place. No claim that this alone fixes underlying UI/tool timeouts. Never claim an unexecuted build or gameplay test succeeded.
+
+## 2026-11-01 infrastructure / large-output mitigation
+
+`Error in input stream` can be caused by ChatGPT backend, network,
+WebSocket/browser behavior, or tools. There is no evidence all occurrences
+come from GitHub or huge CI logs. Current host cannot fix platform streaming.
+
+Native branch now has `bounded_private_subprocess_v210.py`, used by the
+original V204 five-stage scanner/generator. It drains instead of buffering
+whole subprocess output, keeps only bounded private head/tail logs, and
+records failures/timeouts without emitting secrets into chat. New
+`private_pipeline_status_v211.py --work <PRIVATE_DIR>` outputs concise
+checkpoint metadata after a failed or interrupted chat. Synthetic tests:
+https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41308752559
+and https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41308942452 .
+No full original-game scan was run or proved by these CI results.
+
+OpenAI's own help: https://help.openai.com/en/articles/7996703-troubleshooting-chatgpt-error-messages .
+Never fetch full logs/PR diffs, never push private game or original logs.
