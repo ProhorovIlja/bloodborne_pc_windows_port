@@ -106,3 +106,46 @@ https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41326929
 runtime harness, with guest stack range checks, differential numeric
 tests, and no original EBOOT loader at launch. Independently implement
 6 timing imports and FIOS sync.
+
+## V225: actual *full original game* direct call-site target parity
+
+2026-11-01, owner-private local full V213 AOT scan. New bounded
+`audit_private_math_calls_v225.py` cross-checks actual source
+direct-call targets in every `recomp*.c` file against the
+private `scan/imports.tsv` and the exact 23 V223/V224 names.
+No function offsets, original code, private paths or guest bytes
+are printed or committed to GitHub.
+
+| Fully private original-game check | Observed |
+| --- | ---: |
+| Real generated original C files scanned | **384** |
+| Static direct math import calls with named targets | **1,089** |
+| Guest target expressed as image base + import offset | **1,089** |
+| Of 23 supported math import names encountered | **23** |
+| Target mismatches against the REAL scanned import offsets | **0** |
+| Unsupported/non-direct cases among these named math calls | **0** |
+
+This is a direct source-level demonstration that the V224 import
+offset table agrees with ALL **1,089 statically identifiable,
+direct, named math import calls** in the full AOT output. It is
+not a count of runtime call frequency, nor evidence for indirect
+calls that cannot be annotated statically. No original game code
+was added to public source/CI.
+
+A private 23-row original-derived C table also compiled locally as
+**1,308-byte AMD64 Windows COFF**. V223 math bridge compiled as
+**7,117-byte AMD64 COFF** and V224 import dispatch as
+**1,778-byte AMD64 COFF**. The original-derived source/object
+remains private. All 23 import addresses were present and distinct
+in the real original scan.
+
+Public Windows/Ubuntu V225 CI validates parser invariants against
+invented source and corrupted offsets ONLY:
+https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41327412501
+
+**Still NOT installed in actual `RcApi.call` game runtime**;
+target and memory safety must be proven before real gameplay,
+especially a validated writable guest stack. No game boot,
+renderer, audio, saves or full no-guest-runtime claim follows.
+The 1,468,066 static callback-site count from V216 is unchanged
+by adding these source-only bridge components.
