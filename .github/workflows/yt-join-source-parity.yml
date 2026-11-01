@@ -4,6 +4,7 @@ on:
     branches: [feature/yt-playable-hybrid-policy-v1-20261101]
     paths:
       - 'playable-track/yt_join_source_parity.py'
+      - 'playable-track/yt_join_log_triage.py'
       - '.github/workflows/yt-join-source-parity.yml'
   workflow_dispatch:
 permissions:
@@ -26,4 +27,6 @@ jobs:
           set -euo pipefail
           python -m py_compile playable-track/yt_join_source_parity.py
           python playable-track/yt_join_source_parity.py --self-test
+          python -m py_compile playable-track/yt_join_log_triage.py
+          python playable-track/yt_join_log_triage.py --self-test
           echo 'Synthetic sources only. No private game or CLS material in CI.'
