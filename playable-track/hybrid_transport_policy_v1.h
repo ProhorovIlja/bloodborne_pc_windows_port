@@ -39,6 +39,13 @@ struct PeerRouteLease {
     std::string_view granted_sender_id{};
     std::string_view granted_receiver_id{};
 
+    // A new five-hunter party/session gets a fresh server-issued identity.
+    // Ordered participant IDs alone are insufficient after a cloned-client
+    // reconnect, member-slot reuse or leader restart.
+    std::string_view granted_party_session_id{};
+    u32 granted_sender_instance = 0;
+    u32 granted_receiver_instance = 0;
+
     // Server grants only a specific sender/receiver and map, for the
     // current party-world epoch. Rejoin/load/teleport revokes the lease.
     u64 authority_epoch = 0;
@@ -73,7 +80,9 @@ constexpr Carrier ChooseNativePacketCarrier(
         !link.peer_authenticated || !link.direct_datagram_verified ||
         !link.server_route_granted || link.sender_or_receiver_hostile ||
         !link.has_common_protocol || link.granted_sender_id.empty() ||
-        link.granted_receiver_id.empty())
+        link.granted_receiver_id.empty() ||
+        link.granted_party_session_id.empty() ||
+        !link.granted_sender_instance || !link.granted_receiver_instance)
         return Carrier::Server;
 
     if (!link.authority_epoch ||
