@@ -9,6 +9,7 @@ JSON source for the existing launcher UI, not yet wired into production.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 from collections import defaultdict
 import importlib.util
 import json
@@ -19,6 +20,7 @@ MAX_MODS = 256
 MAX_FILES = 160000
 MAX_CONFLICTS = 4000
 MAX_PATH = 260
+MAX_FINGERPRINT_BYTES = 2 * 1024**3
 GAMEPLAY_DIRS = frozenset({"param", "event", "script", "map"})
 PROTECTED = frozenset({"eboot.bin", "sce_module", "sce_sys"})
 
@@ -54,7 +56,7 @@ def canonical(game_relative: Path) -> tuple[str, bool]:
 
 
 def inspect(upstream, mods_dir: Path, config: Path | None = None,
-            base_overlay: Path | None = None) -> dict:
+            base_overlay: Path | None = None, fingerprint_gameplay: bool = False) -> dict:
     if mods_dir.is_symlink() or not mods_dir.is_dir():
         raise ValueError("mod folder missing or symlinked")
     if config and (config.is_symlink() or
@@ -76,6 +78,7 @@ def inspect(upstream, mods_dir: Path, config: Path | None = None,
             raise ValueError("enabled mod directory invalid")
         ordered.append((name, directory))
     seen: dict[str, tuple[str, bool]] = {}
+    effective_gameplay: dict[str, Path] = {}
     rows: list[dict] = []
     replaced_mod_files = 0
     file_count = 0
@@ -106,9 +109,43 @@ def inspect(upstream, mods_dir: Path, config: Path | None = None,
                         "reason": "whole-file replacement; binary/DCX/BND contents are not merged"
                     })
             seen[key] = (name, gameplay)
+            if gameplay:
+                effective_gameplay[key] = source
     high = sum(x["severity"] == "gameplay-critical" for x in rows)
     conflicts_truncated = replaced_mod_files > len(rows)
+    gameplay_digest = None
+    if fingerprint_gameplay:
+        # Hash final winners, not every intermediate conflicting mod.
+        # Compare only alongside matching base game/build/patches/protocol.
+        combined = hashlib.sha256(b"SHYT-YT131-GAMEPLAY-OVERRIDES-V1\0")
+        total_bytes = 0
+        for key, source in sorted(effective_gameplay.items()):
+            if source.is_symlink() or not source.is_file():
+                raise ValueError("unsafe gameplay mod source while hashing")
+            before = source.stat()
+            if before.st_size > MAX_FINGERPRINT_BYTES - total_bytes:
+                raise ValueError("gameplay fingerprint exceeds bounded I/O budget")
+            inner = hashlib.sha256()
+            with source.open("rb") as fd:
+                while True:
+                    chunk = fd.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    inner.update(chunk)
+                    total_bytes += len(chunk)
+            after = source.stat()
+            if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                raise ValueError("gameplay mod changed during fingerprint")
+            encoded = key.encode("utf-8")
+            combined.update(len(encoded).to_bytes(4, "little"))
+            combined.update(encoded)
+            combined.update(before.st_size.to_bytes(8, "little"))
+            combined.update(inner.digest())
+        gameplay_digest = combined.hexdigest()
     return {
+        "effective_gameplay_override_fingerprint_sha256": gameplay_digest,
+        "gameplay_fingerprint_is_opt_in": True,
+        "gameplay_fingerprint_excludes_game_baseline_patches_and_protocol": True,
         "format": "SHYT_V232_YT131_READONLY_MOD_PREFLIGHT",
         "upstream_mod_layout_used": True,
         "mod_precedence": [name for name, _ in ordered],
@@ -134,11 +171,13 @@ def main() -> int:
     ap.add_argument("--mods-dir", required=True, type=Path)
     ap.add_argument("--profile", type=Path)
     ap.add_argument("--base-overlay", type=Path)
+    ap.add_argument("--fingerprint-gameplay", action="store_true")
     ap.add_argument("--output", type=Path)
     args = ap.parse_args()
     try:
         report = inspect(load_upstream(args.upstream_mods_script),
-                         args.mods_dir, args.profile, args.base_overlay)
+                         args.mods_dir, args.profile, args.base_overlay,
+                         args.fingerprint_gameplay)
         encoded = json.dumps(report, ensure_ascii=False, indent=2)
         if args.output:
             if args.output.is_symlink() or not args.output.parent.is_dir():
