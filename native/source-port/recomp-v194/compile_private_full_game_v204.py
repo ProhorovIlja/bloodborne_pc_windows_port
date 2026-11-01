@@ -39,8 +39,13 @@ def build(root:Path,work:Path,jobs:int,research:bool)->dict:
     files=audit.sources(generated)
     # Verify actual native registrations independently of metadata.
     # An incomplete/stale table must never be counted as full AOT.
+    scanner_index=private(work/"scan"/"functions.tsv")
+    if not scanner_index.is_file() or scanner_index.is_symlink() or (
+            sha(scanner_index)!=manifest.get("scanner_index_sha256")):
+        raise ValueError("original scanner index modified since private AOT generation")
     registration=coverage.inspect_file(generated/"recomp.c",
-                                      manifest.get("functions_scanned"))
+                                      manifest.get("functions_scanned"),
+                                      scanner_index)
     for key,value in registration.items():
         if manifest.get(key)!=value:
             raise ValueError("original-game AOT registration manifest mismatch")
