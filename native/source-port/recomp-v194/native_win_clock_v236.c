@@ -22,17 +22,42 @@ int shyt_clock_scale_ticks_v236(uint64_t counter_delta, uint64_t source_hz,
     /* Evaluate quotients separately; no floating-point drift at long uptime. */
     if (seconds > UINT64_MAX / target_hz) return -1;
     whole = seconds * target_hz;
-    /* On Clang/GCC, use the full 128-bit product. A 64-bit intermediate
-     * incorrectly rejects high-frequency clocks even when the exact
-     * quotient is representable (e.g. 30 GHz -> nanoseconds). */
-#if defined(__clang__) || defined(__GNUC__)
-    fraction = (uint64_t)(((unsigned __int128)remainder * target_hz) / source_hz);
-#else
-    /* Conservative fallback for compilers without 128-bit integer support.
-     * Reject rather than produce an incorrect wrapped timestamp. */
-    if (remainder && target_hz > UINT64_MAX / remainder) return -1;
-    fraction = (remainder * target_hz) / source_hz;
-#endif
+    /* V271: exact floor(remainder*target_hz/source_hz), *without*
+     * 128-bit division. clang-cl + MSVC linker does not supply
+     * __udivti3. Normal Win32 QPC frequencies take the fast 64-bit
+     * path; exotic >18GHz clocks use a portable bounded 64-step
+     * quotient/remainder division. No rounding or float drift. */
+    if (!remainder) {
+        fraction = 0;
+    } else if (remainder <= UINT64_MAX / target_hz) {
+        fraction = (remainder * target_hz) / source_hz;
+    } else {
+        uint64_t quotient = 0, rest = 0;
+        for (int bit = 63; bit >= 0; --bit) {
+            uint64_t high = rest >> 63;
+            uint64_t low = rest << 1;
+            if ((target_hz >> bit) & UINT64_C(1)) {
+                const uint64_t before = low;
+                low += remainder;
+                high += (low < before);
+            }
+            /* 2*rest + (bit ? remainder : 0) < 3*source_hz.
+             * Therefore two subtractions suffice and no quotient
+             * bit can overflow the final uint64_t result. */
+            uint64_t increment = 0;
+            while (high || low >= source_hz) {
+                const uint64_t before = low;
+                low -= source_hz;
+                high -= (before < source_hz);
+                if (++increment > 2) return -1; /* invariant violation */
+            }
+            if (quotient > (UINT64_MAX - increment) / 2)
+                return -1;
+            quotient = quotient * 2 + increment;
+            rest = low;
+        }
+        fraction = quotient;
+    }
     if (whole > UINT64_MAX - fraction) return -1;
     *result = whole + fraction;
     return 0;
