@@ -80,6 +80,22 @@ jobs:
           mkdir -p "$SRC"
           printf '#include "recomp/rc.h"\nunsigned long long synthetic(void) { return 7ULL; }\n' > "$SRC/recomp.c"
           BASE=native/source-port/recomp-v194/compile_private_win64_coff_v217.py
+
+          # Only public/invented inputs in this job. Write at most one
+          # sanitized failure reason, no full logs.
+          python - <<'PY'
+          import os,sys,pathlib
+          sys.path.insert(0,'native/source-port/recomp-v194')
+          import compile_private_win64_coff_v217 as v
+          temp=pathlib.Path(os.environ['RUNNER_TEMP'])
+          try:
+              v.prerequisites(temp/'fictional',pathlib.Path('upstream'),
+                              temp/'public-win64-sdk',temp/'coff')
+          except Exception as exc:
+              (temp/'v219-preflight-error.txt').write_text(
+                  type(exc).__name__+': '+str(exc)[:170]+'\n')
+              raise SystemExit(1)
+          PY
           echo initial-build > "$RUNNER_TEMP/v219-phase"
           python "$BASE" --generated-dir "$SRC" --upstream upstream \
             --sdk "$RUNNER_TEMP/public-win64-sdk" --output-dir "$RUNNER_TEMP/coff" \
@@ -123,6 +139,9 @@ jobs:
           if [[ -d "$RUNNER_TEMP/coff/logs" ]]; then
             grep -h -m1 -E 'fatal error:|error:' "$RUNNER_TEMP/coff/logs/"*.log 2>/dev/null |
               head -n 2 | cut -c1-160 >> "$OUT" || true
+          fi
+          if [[ -s "$RUNNER_TEMP/v219-preflight-error.txt" ]]; then
+            head -c 180 "$RUNNER_TEMP/v219-preflight-error.txt" >> "$OUT"
           fi
           test "$(wc -c < "$OUT")" -lt 550
       - uses: actions/upload-artifact@v4
