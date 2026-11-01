@@ -1,0 +1,53 @@
+name: Native V236 host Win32 clock and scaling safety
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v236-win-clock.yml'
+      - 'native/source-port/recomp-v194/native_win_clock_v236.h'
+      - 'native/source-port/recomp-v194/native_win_clock_v236.c'
+      - 'native/source-port/recomp-v194/test_native_win_clock_v236.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-arithmetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test host-independent overflow-safe tick scaling
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=native/source-port/recomp-v194
+          clang -std=c11 -O2 -Wall -Wextra -Werror -I"$base" \
+            "$base/native_win_clock_v236.c" "$base/test_native_win_clock_v236.c" \
+            -o "$RUNNER_TEMP/v236-clock-test"
+          "$RUNNER_TEMP/v236-clock-test"
+  windows-real-qpc:
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and execute actual Win64 QPC and wall clock
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src='native/source-port/recomp-v194'
+          $exe=Join-Path $env:RUNNER_TEMP 'v236-clock-win64.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/I$src" "$src/native_win_clock_v236.c" `
+            "$src/test_native_win_clock_v236.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Win64 QPC clock compile failed' }
+          $raw=[IO.File]::ReadAllBytes($exe)
+          if ($raw.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($raw,0,2) -ne 'MZ') {
+            throw 'Expected native Windows PE'
+          }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native clock QPC tests failed' }
+          'Win64 clock module is NOT yet wired to original Bloodborne imports.'
