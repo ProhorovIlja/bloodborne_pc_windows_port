@@ -226,7 +226,11 @@ def source(src:str)->str:
             authoritative.map,authoritative.world_epoch};
         if (!signed_scope || !Grant::Verify(
                 *signed_scope,direct_peer_authority_pub,live,
-                QDateTime::currentMSecsSinceEpoch()))
+                QDateTime::currentMSecsSinceEpoch()) ||
+            !std::equal(signed_scope->scope.responder_noise_pub.begin(),
+                        signed_scope->scope.responder_noise_pub.end(),
+                        reinterpret_cast<const u8*>(
+                            previous.noise_static_public_key().data())))
             return;
         const auto& reverse_body=issued_reverse->direct_peer_grant();
         const auto* reverse_key=reinterpret_cast<const std::uint8_t*>(
@@ -244,7 +248,11 @@ def source(src:str)->str:
             reverse.map,reverse.world_epoch};
         if (!reverse_signed || !Grant::Verify(
                 *reverse_signed,direct_peer_authority_pub,reverse_live,
-                QDateTime::currentMSecsSinceEpoch()))
+                QDateTime::currentMSecsSinceEpoch()) ||
+            !std::equal(reverse_signed->scope.responder_noise_pub.begin(),
+                        reverse_signed->scope.responder_noise_pub.end(),
+                        reinterpret_cast<const u8*>(
+                            request.noise_static_public_key().data())))
             return;
         // V295: each player receives their own ordered-pair grant in
         // the original authenticated reliable Coop stream only after
