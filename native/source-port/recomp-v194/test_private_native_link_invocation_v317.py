@@ -32,8 +32,8 @@ def main()->None:
         root=Path(folder)
         names=['recomp.c','recomp_00000.c']
         for file,body in [
-            ('recomp.c','int bb_recomp_init(void) {return 17;}\\n'),
-            ('recomp_00000.c','int bb_recomp_body(void) {return 29;}\\n'),
+            ('recomp.c','int bb_recomp_init(void) {return 17;}\n'),
+            ('recomp_00000.c','int bb_recomp_body(void) {return 29;}\n'),
         ]:
             source=root/file
             source.write_text(body,encoding='ascii')
