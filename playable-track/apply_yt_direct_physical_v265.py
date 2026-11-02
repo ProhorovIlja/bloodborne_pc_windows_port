@@ -133,10 +133,23 @@ def patch(source:str)->str:
             return -1;
         // Never let generic ReceiveInternal truncate an authenticated
         // SHDP ciphertext. GameLink needs the ENTIRE AEAD frame or none.
-        if (!out || max < BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::MaxWire)
+        if (!out || !ip || !port ||
+            max < BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::MaxWire)
             return -1;
-        return ReceiveInternal(InternalChannel::VerifiedDirectMovement,
-                               out,max,ip,port);
+        // V307: admission at ENQUEUE time is not enough. An encrypted
+        // frame buffered before a signed lease expires could otherwise
+        // be delivered after expiry/revocation. Recheck the source and
+        // exact SHDP wire under the same mutex at actual DEQUEUE time.
+        const int received=ReceiveInternal(
+            InternalChannel::VerifiedDirectMovement,out,max,ip,port);
+        if (received<=0)
+            return received;
+        const auto packet=std::span<const u8>{
+            static_cast<const u8*>(out),static_cast<std::size_t>(received)};
+        if (!verified_direct_gate.Allows(
+                {*ip,*port,0},P2PNowMs(),packet))
+            return -1;
+        return received;
     }
 
     void RevokeVerifiedMovementEndpoints() {
