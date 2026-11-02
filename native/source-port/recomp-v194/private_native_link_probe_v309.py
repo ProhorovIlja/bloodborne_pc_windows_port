@@ -171,6 +171,16 @@ def private_aggregate_import_audit_v322(
         'duplicates':report['duplicate_external_names_across_objects'],
         'weak':report['weak_external_symbols'],
         'dependency_edges':report['direct_object_dependency_edges'],
+        'unresolved_sites':
+            report['unresolved_reference_sites_across_objects'],
+        'blocked_objects':
+            report['object_modules_blocked_by_host_imports'],
+        'self_contained_objects':
+            report['object_modules_self_contained_against_external_imports'],
+        'max_imports_one_object':
+            report['max_unresolved_imports_in_one_object'],
+        'single_object_import_symbols':
+            report['unresolved_symbols_needed_by_exactly_one_object'],
     }
 
 def guard_private_link_target_v315(output:Path)->Path:
