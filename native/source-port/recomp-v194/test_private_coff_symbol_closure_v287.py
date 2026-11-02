@@ -58,6 +58,13 @@ def main()->None:
         assert closed['external_references']==3
         assert closed['external_references_unresolved_in_game_objects']==1
         assert closed['duplicate_external_names_across_objects']==0
+        # V328: the missing CRT import blocks only object A; B's
+        # externally referenced symbol is resolved by object A.
+        assert closed['unresolved_reference_sites_across_objects']==1
+        assert closed['object_modules_blocked_by_host_imports']==1
+        assert closed['object_modules_self_contained_against_external_imports']==1
+        assert closed['max_unresolved_imports_in_one_object']==1
+        assert closed['unresolved_symbols_needed_by_exactly_one_object']==1
         # V290: A -> B and B -> A form one strongly connected
         # native link component; CRT remains an unresolved external.
         assert closed['direct_object_dependency_edges']==2
@@ -97,6 +104,21 @@ def main()->None:
         assert report['cyclic_object_components']==1
         assert report['largest_cyclic_or_single_component']==2
         assert report['direct_object_dependency_edges']==2
+        assert report['object_modules_blocked_by_host_imports']==1
+        # A fourth module needs the same CRT symbol PLUS a new
+        # unrelated host import: count unique names vs reference sites.
+        d=root/'d.obj'
+        d.write_bytes(object_blob([
+            (b'crt_call',0,0,2,0),
+            (b'gpu_shim',0,0,2,0),
+        ]))
+        wider=verify_external_symbol_closure([a,b,c,d])
+        assert wider['external_references_unresolved_in_game_objects']==2
+        assert wider['unresolved_reference_sites_across_objects']==3
+        assert wider['object_modules_blocked_by_host_imports']==2
+        assert wider['object_modules_self_contained_against_external_imports']==2
+        assert wider['max_unresolved_imports_in_one_object']==2
+        assert wider['unresolved_symbols_needed_by_exactly_one_object']==1
     print('SHYT_V287_V290_SYNTHETIC_WIN64_COFF_SYMBOL_DEPENDENCY_SCC_PASS')
 
 if __name__=='__main__':
