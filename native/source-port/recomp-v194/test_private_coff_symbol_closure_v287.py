@@ -58,6 +58,12 @@ def main()->None:
         assert closed['external_references']==3
         assert closed['external_references_unresolved_in_game_objects']==1
         assert closed['duplicate_external_names_across_objects']==0
+        # V290: A -> B and B -> A form one strongly connected
+        # native link component; CRT remains an unresolved external.
+        assert closed['direct_object_dependency_edges']==2
+        assert closed['strongly_connected_object_components']==1
+        assert closed['cyclic_object_components']==1
+        assert closed['largest_cyclic_or_single_component']==2
         assert not closed['native_pe_link_complete']
         assert not closed['guest_runtime_removed']
         assert not closed['windows_crt_import_resolution_done']
@@ -82,7 +88,16 @@ def main()->None:
         refused(lambda:symbols_in_object(a))
         a.write_bytes(original)
         assert verify_external_symbol_closure([a,b])['coff_symbols_inspected']==6
-    print('SHYT_V287_SYNTHETIC_WIN64_COFF_EXTERNAL_SYMBOL_CLOSURE_PASS')
+        # A third independent object forms its own SCC, while the two
+        # mutually dependent modules remain one group.
+        c=root/'c.obj'
+        c.write_bytes(object_blob([(b'solo',0,1,2,0)]))
+        report=verify_external_symbol_closure([a,b,c])
+        assert report['strongly_connected_object_components']==2
+        assert report['cyclic_object_components']==1
+        assert report['largest_cyclic_or_single_component']==2
+        assert report['direct_object_dependency_edges']==2
+    print('SHYT_V287_V290_SYNTHETIC_WIN64_COFF_SYMBOL_DEPENDENCY_SCC_PASS')
 
 if __name__=='__main__':
     main()
