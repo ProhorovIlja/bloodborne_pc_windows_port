@@ -32,7 +32,8 @@ def main()->None:
         root=Path(folder)
         names=['recomp.c','recomp_00000.c']
         for file,body in [
-            ('recomp.c','int bb_recomp_init(void) {return 17;}\n'),
+            ('recomp.c','int bb_recomp_body(void); '
+             'int bb_recomp_init(void) {return bb_recomp_body()+17;}\n'),
             ('recomp_00000.c','int bb_recomp_body(void) {return 29;}\n'),
         ]:
             source=root/file
@@ -41,20 +42,39 @@ def main()->None:
                  '-O0','-ffreestanding','-fno-stack-protector',
                  '-c',str(source),'-o',
                  str(root/(source.stem+'.obj'))])
+        # V319: force the synthetic generated registry to import
+        # a function defined ONLY in the separate gameplay object.
+        # This catches linker false passes from empty no-entry DLLs.
         response=probe.object_response_v309(root,names)
+        response+='/INCLUDE:bb_recomp_init\n'
         target=probe.guard_private_link_target_v315(root)
         rsp=root/'synthetic_link.rsp'
         probe.save_exclusive_v309(rsp,response)
         run([linker,'@'+str(rsp)])
         assert target.is_file()
         assert probe.verify_private_pe_dll_v312(target)
+        # With the second COFF genuinely missing, lld-link MUST
+        # report unresolved bb_recomp_body, not "success".
+        negative=root/'negative-link.rsp'
+        bad_output=root/'negative-link.dll'
+        missing_body=response.replace(
+            '"'+str(root/'recomp_00000.obj')+'"','').replace(
+            '/OUT:"'+str(target)+'"',
+            '/OUT:"'+str(bad_output)+'"')
+        assert missing_body!=response
+        probe.save_exclusive_v309(negative,missing_body)
+        bad=subprocess.run([linker,'@'+str(negative)],
+                           stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                           timeout=45,text=True,errors='replace')
+        assert bad.returncode!=0, 'missing dependency linked successfully'
+        assert not probe.verify_private_pe_dll_v312(bad_output)
         rejects=False
         try:
             probe.guard_private_link_target_v315(root)
         except ValueError:
             rejects=True
         assert rejects, 'stale PE output allowed'
-    print('SHYT_V317_REAL_SYNTHETIC_LLD_LINK_PE32_PLUS_AMD64_PASS')
+    print('SHYT_V319_REAL_SYNTHETIC_CROSS_COFF_LINK_AND_UNRESOLVED_IMPORT_DENIAL_PASS')
 
 if __name__=='__main__':
     main()
