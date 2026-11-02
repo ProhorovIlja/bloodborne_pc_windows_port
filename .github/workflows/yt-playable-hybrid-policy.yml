@@ -10,6 +10,11 @@ on:
       - '.github/workflows/yt-playable-hybrid-policy.yml'
       - 'playable-track/**'
   workflow_dispatch:
+# Keep only the newest regression run per branch across push and PR
+# events. Distinct PRs/branches never cancel one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
