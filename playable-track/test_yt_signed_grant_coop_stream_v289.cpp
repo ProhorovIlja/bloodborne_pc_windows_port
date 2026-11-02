@@ -56,6 +56,12 @@ int main(){
         noise_scope,s.responder_noise_pub,s.issued_unix_ms);
     assert(valid && valid->scope==s);
     assert(!Bridge::ServerIssue(members,s,"B",4,signing,authority));
+    // V291: server key rotation/configuration error must not send a
+    // signed envelope bearing the wrong public authority key.
+    auto bogus_public=authority;
+    bogus_public[0]^=0x11;
+    assert(!Bridge::ServerIssue(
+        members,s,"A",4,signing,bogus_public));
     members.players[0].current=0; // offline authoritative player
     assert(!Bridge::ServerIssue(members,s,"A",4,signing,authority));
     members.players[0].current=2;
