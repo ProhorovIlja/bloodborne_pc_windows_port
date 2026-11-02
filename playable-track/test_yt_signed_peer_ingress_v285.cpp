@@ -2,9 +2,12 @@
 // V285: real original YT LinkAuth/Monocypher signature + peer crypto
 // cannot be replaced with a caller's 'verified=true' socket flag.
 #include "yt_signed_peer_ingress_v285.h"
+#include "yt_client_authority_pin_v318.h"
 #include "yt_direct_physical_api_v264.h"
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 using namespace BloodborneCoop;
 using namespace BloodborneCoop::SHYTHybrid;
 namespace Grant=BloodborneCoop::SHYTHybrid::SignedPeerGrantV279;
@@ -28,6 +31,35 @@ int main() {
     std::array<u8,32> seed{};
     for(size_t i=0;i<32;++i) seed[i]=static_cast<u8>(20+i);
     LinkMonocypher::crypto_eddsa_key_pair(key.data(),pub.data(),seed.data());
+    // V318: a signed server-supplied "authority_public_key" is not
+    // sufficient for opening the *physical* OS UDP socket. Require an
+    // independent exact pin handed to the game by its trusted launcher.
+    assert(::unsetenv("SHYT_P2P_AUTHORITY_PUB_HEX")==0);
+    assert(!MatchesLauncherAuthorityV318(pub));
+    const char* digits="0123456789abcdef";
+    std::string trusted_hex;
+    for(const u8 byte:pub) {
+        trusted_hex+=digits[byte>>4];
+        trusted_hex+=digits[byte&15];
+    }
+    assert(trusted_hex.size()==64);
+    const auto parsed=ParseClientAuthorityPinV318(trusted_hex);
+    assert(parsed && *parsed==pub);
+    assert(!ParseClientAuthorityPinV318(trusted_hex+"0"));
+    assert(!ParseClientAuthorityPinV318(trusted_hex.substr(1)));
+    assert(!ParseClientAuthorityPinV318(std::string(64,'0')));
+    std::string invalid=trusted_hex;
+    invalid[33]='g';
+    assert(!ParseClientAuthorityPinV318(invalid));
+    assert(::setenv("SHYT_P2P_AUTHORITY_PUB_HEX",invalid.c_str(),1)==0);
+    assert(!MatchesLauncherAuthorityV318(pub));
+    assert(::setenv("SHYT_P2P_AUTHORITY_PUB_HEX",trusted_hex.c_str(),1)==0);
+    assert(MatchesLauncherAuthorityV318(pub));
+    auto forged=pub;
+    forged[0]^=1;
+    assert(!MatchesLauncherAuthorityV318(forged));
+    assert(::unsetenv("SHYT_P2P_AUTHORITY_PUB_HEX")==0);
+    assert(!MatchesLauncherAuthorityV318(pub));
     PeerCryptoScopeV241 noise_scope{"world:42","A","B",17,29,42,0x101};
     LinkAuth::Key ab{},ba{};
     for(size_t i=0;i<ab.size();++i) {
