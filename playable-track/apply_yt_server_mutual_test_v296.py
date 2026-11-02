@@ -17,7 +17,8 @@ def once(s,a,b):
 def patched(s):
     s=once(s, '#include "bloodborne_world.h"',
            '#include "bloodborne_world.h"\n'
-           '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"')
+           '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"\n'
+           '#include <QtEndian>')
     s=once(s, '''    } else if (envelope.has_team_start()) {
       starts.push_back(envelope.team_start());
 ''','''    } else if (envelope.has_team_start()) {
@@ -91,6 +92,7 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   LinkMonocypher::crypto_eddsa_key_pair(
       secret.data(),pub.data(),seed.data());
   int signed_calls=0;
+  bool corrupt_signed_endpoint=false;
   service.SetDirectPeerIssuer(
       [&](const Service::DirectPairSource& src,
           const bbcoop::DirectPeerRequest&) ->std::optional<bbcoop::Envelope>{
@@ -103,12 +105,23 @@ int ServerRequiresMutualDirectPeerConsentV296() {
         scope.map=src.map;scope.world_epoch=src.world_epoch;
         scope.issued_unix_ms=QDateTime::currentMSecsSinceEpoch();
         scope.expires_unix_ms=scope.issued_unix_ms+20000;
-        scope.sender_ip_nbo=0x0100007f;
-        scope.receiver_ip_nbo=0x0200007f;
-        scope.sender_port_nbo=30001;
-        scope.receiver_port_nbo=30002;
-        const char wanted=src.receiver==a.name?'A':'B';
-        scope.responder_noise_pub.fill(static_cast<u8>(wanted));
+        // V308: the server issuer MUST use authenticated LinkAuth
+        // endpoint records, not synthetic guesswork or peer claims.
+        scope.sender_ip_nbo=qToBigEndian(src.sender_link.ipv4);
+        scope.receiver_ip_nbo=qToBigEndian(src.receiver_link.ipv4);
+        scope.sender_port_nbo=qToBigEndian(src.sender_link.port);
+        scope.receiver_port_nbo=qToBigEndian(src.receiver_link.port);
+        CHECK(src.sender_link==(
+            src.sender==a.name?a.endpoint:b.endpoint));
+        CHECK(src.receiver_link==(
+            src.receiver==a.name?a.endpoint:b.endpoint));
+        CHECK(src.responder_noise_static_key.size()==32);
+        std::copy(src.responder_noise_static_key.begin(),
+                  src.responder_noise_static_key.end(),
+                  scope.responder_noise_pub.begin());
+        // V308 negative case: even a VALID EdDSA signature cannot
+        // redirect a peer toward a server-unobserved port.
+        if(corrupt_signed_endpoint) scope.sender_port_nbo^=1;
         scope.grant_nonce.fill(static_cast<u8>(signed_calls));
         const auto grant=Grant::Sign(scope,secret);
         if(!grant) return std::nullopt;
@@ -166,6 +179,14 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   const Grant::Expect expect_b{
       current_team->id(),expected_party,b.name,a.name,
       29,17,0x18010000,signed_b->scope.world_epoch};
+  CHECK(signed_a->scope.sender_ip_nbo==qToBigEndian(a.endpoint.ipv4));
+  CHECK(signed_a->scope.receiver_ip_nbo==qToBigEndian(b.endpoint.ipv4));
+  CHECK(signed_a->scope.sender_port_nbo==qToBigEndian(a.endpoint.port));
+  CHECK(signed_a->scope.receiver_port_nbo==qToBigEndian(b.endpoint.port));
+  CHECK(signed_b->scope.sender_ip_nbo==qToBigEndian(b.endpoint.ipv4));
+  CHECK(signed_b->scope.receiver_ip_nbo==qToBigEndian(a.endpoint.ipv4));
+  CHECK(signed_b->scope.sender_port_nbo==qToBigEndian(b.endpoint.port));
+  CHECK(signed_b->scope.receiver_port_nbo==qToBigEndian(a.endpoint.port));
   CHECK(signed_a->scope.team==current_team->id());
   CHECK(signed_a->scope.party==party.toStdString());
   CHECK(signed_a->scope.sender==a.name);
@@ -217,6 +238,15 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   request(a,b,'A');
   request(b,a,'B');
   CHECK(signed_calls==4);
+  CHECK(a.direct_grants.size()==2);
+  CHECK(b.direct_grants.size()==2);
+  // V308: callback may sign a forged endpoint with correct private
+  // EdDSA key; Service itself must reject BOTH sides of the pair.
+  corrupt_signed_endpoint=true;
+  now+=1300;
+  request(a,b,'A','E');
+  request(b,a,'B','F');
+  CHECK(signed_calls==6);
   CHECK(a.direct_grants.size()==2);
   CHECK(b.direct_grants.size()==2);
   return 0;
