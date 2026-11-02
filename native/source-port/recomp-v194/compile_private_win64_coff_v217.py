@@ -39,12 +39,57 @@ def private(path: Path) -> Path:
     return p
 
 def coff_ok(path: Path) -> bool:
-    if not path.is_file() or path.is_symlink() or path.stat().st_size < 20:
+    """V281: structural AMD64 COFF object check, not four-byte magic.
+
+    A valid-looking machine+section prefix alone is insufficient:
+    truncated objects would previously be counted as successful
+    original-game AOT modules. Validate all section extents, relocations,
+    symbol entries and string table *without* reading private code.
+    This checks structural closure, not relocatable symbol resolution.
+    """
+    if (path.is_symlink() or not path.is_file() or
+            not 82 <= path.stat().st_size <= 256*1024**2):
         return False
-    with path.open('rb') as f:
-        header = f.read(20)
-    machine, sections = struct.unpack_from('<HH', header)
-    return machine == 0x8664 and 1 <= sections <= 32767
+    size=path.stat().st_size
+    try:
+        with path.open('rb') as stream:
+            header=stream.read(20)
+            if len(header)!=20:
+                return False
+            machine,sections,_,symbols,nsyms,optional,_=struct.unpack(
+                '<HHLLLHH',header)
+            # Compiled COFF .obj, NOT linked PE/EXE (which has MZ header).
+            if (machine!=0x8664 or not 1<=sections<=32767 or
+                    optional!=0 or symbols<20+40*sections or
+                    nsyms<1 or nsyms>(size-symbols)//18):
+                return False
+            section_end=20+40*sections
+            if section_end>size:
+                return False
+            stream.seek(20)
+            for _ in range(sections):
+                data=stream.read(40)
+                if len(data)!=40:
+                    return False
+                raw_size,raw_at,reloc_at,_,nreloc,_=struct.unpack_from(
+                    '<LLLLHH',data,16)
+                if raw_size and (raw_at<section_end or
+                                 raw_at>size or raw_size>size-raw_at):
+                    return False
+                if nreloc and (reloc_at<section_end or
+                               reloc_at>size or nreloc>(size-reloc_at)//10):
+                    return False
+            string_at=symbols+nsyms*18
+            if string_at>size-4:
+                return False
+            stream.seek(string_at)
+            string_bytes=stream.read(4)
+            if len(string_bytes)!=4:
+                return False
+            string_size=struct.unpack('<L',string_bytes)[0]
+            return 4<=string_size<=size-string_at
+    except (OSError,ValueError,struct.error,OverflowError):
+        return False
 
 def prerequisites(generated: Path, upstream: Path, sdk_root: Path,
                   output: Path) -> tuple[Path, str, str]:
