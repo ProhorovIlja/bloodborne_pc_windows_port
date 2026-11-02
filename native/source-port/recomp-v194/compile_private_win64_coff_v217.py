@@ -257,10 +257,23 @@ def selftest() -> None:
     assert not coff_ok(Path('/no-such-file'))
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / 'sample.obj'
-        path.write_bytes(struct.pack('<HH', 0x8664, 3) + bytes(16))
+        # V297: the former self-test used only 20 fake header bytes.
+        # V281/V293 correctly reject that as truncated COFF. Build one
+        # complete synthetic AMD64 object, no original-game bytes.
+        header = struct.pack('<HHLLLHH',0x8664,1,0,60,1,0,0)
+        section = struct.pack('<8sLLLLLLHHL',
+                              b'.text\0\0\0',0,0,0,0,0,0,0,0,0)
+        symbol = struct.pack('<8sLhHBB',b'fixture\0',0,1,0x20,2,0)
+        valid = header+section+symbol+struct.pack('<L',4)
+        assert len(valid)==82
+        path.write_bytes(valid)
         assert coff_ok(path)
-        path.write_bytes(struct.pack('<HH', 0x14c, 3) + bytes(16))
+        path.write_bytes(valid[:20])
         assert not coff_ok(path)
+        path.write_bytes(struct.pack('<H',0x14c)+valid[2:])
+        assert not coff_ok(path)
+        path.write_bytes(valid)
+        assert coff_ok(path)
     # V218 rejects oversized and overlong interactive batches BEFORE preflight.
     for names, budget in [(['recomp.c'] * 5, 45), (['recomp.c'], 5)]:
         try:
