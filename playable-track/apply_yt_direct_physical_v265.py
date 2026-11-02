@@ -101,6 +101,10 @@ def patch(source:str)->str:
         // V276: previously admitted peer ciphertext must not outlive
         // the ORIGINAL server-authenticated link's welcome state.
         // The live V262 world/party lease is rechecked again by game ingress.
+        // V277: revocation also takes verified_direct_mutex BEFORE
+        // internal_mutex. Holding both through dequeue makes revoke
+        // atomic with reading queued peer ciphertext; no stale dequeues.
+        std::lock_guard guard(verified_direct_mutex);
         if (!LinkWelcomed() || !IsReady())
             return -1;
         // Never let generic ReceiveInternal truncate an authenticated
@@ -173,16 +177,17 @@ def patch(source:str)->str:
                 if (!BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::CorrectWire(datagram))
                     continue;
                 const auto now=P2PNowMs();
-                bool permitted=false;
+                // V277: check + enqueue MUST be atomic with
+                // RevokeVerifiedMovementEndpoints(). Otherwise a peer
+                // datagram can slip into queue after a map/party revoke.
                 {
                     std::lock_guard guard(verified_direct_mutex);
-                    permitted=verified_direct_gate.Allows(
-                        {from.sin_addr.s_addr,from.sin_port,0},now,datagram);
-                }
-                if (permitted && LinkWelcomed()) {
-                    PushInternal(InternalChannel::VerifiedDirectMovement,
-                                 from.sin_addr.s_addr,from.sin_port,
-                                 datagram.data(),datagram.size());
+                    if (LinkWelcomed() && verified_direct_gate.Allows(
+                            {from.sin_addr.s_addr,from.sin_port,0},now,datagram)) {
+                        PushInternal(InternalChannel::VerifiedDirectMovement,
+                                     from.sin_addr.s_addr,from.sin_port,
+                                     datagram.data(),datagram.size());
+                    }
                 }
                 continue; // never fall through to normal shadNet SHAD
             }
