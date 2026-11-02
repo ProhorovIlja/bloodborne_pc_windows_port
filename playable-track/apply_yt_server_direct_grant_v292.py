@@ -58,8 +58,10 @@ def header(src:str)->str:
         "        bool quiet = false;       // its link is quiet (the hub's)\n"
         "        qint64 last_direct_peer_request_ms = 0; // V292 rate limit")
     marker="    BloodborneCoop::TeamLobby lobby;"
-    src=once(src,marker,"    DirectPeerIssuer direct_peer_issuer; // V292 deliberately unset by default
-    std::array<std::uint8_t,32> direct_peer_authority_pub{};\n"+marker)
+    src=once(src,marker,
+        "    DirectPeerIssuer direct_peer_issuer; // V292 unset by default\n"
+        "    std::array<std::uint8_t,32> direct_peer_authority_pub{};\n"
+        +marker)
     return src
 
 def source(src:str)->str:
