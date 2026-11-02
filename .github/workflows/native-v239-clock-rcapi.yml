@@ -19,6 +19,8 @@ on:
       - 'native/source-port/recomp-v194/native_aot_table_audit_v257.h'
       - 'native/source-port/recomp-v194/native_aot_direct_link_v259.h'
       - 'native/source-port/recomp-v194/test_native_aot_direct_link_v259.c'
+      - 'native/source-port/recomp-v194/private_coff_batch_runner_v273.py'
+      - 'native/source-port/recomp-v194/test_private_coff_batch_runner_v273.py'
       - 'native/source-port/recomp-v194/test_native_aot_services_bootstrap_v245.c'
   pull_request:
     paths:
@@ -213,3 +215,8 @@ jobs:
           & $directexe
           if ($LASTEXITCODE -ne 0) { throw 'V259 original RcFunction direct-call tests failed' }
           'V259 real native RcFn direct slots require trusted hash attestation'
+          # V273: resume from any number of authentic private AOT
+          # COFF checkpoints without sending proprietary source to CI.
+          python "$src/test_private_coff_batch_runner_v273.py"
+          if ($LASTEXITCODE -ne 0) { throw 'V273 resumable COFF planning regression failed' }
+          'V273 bounded original-game COFF scheduler synthetic tests pass'
