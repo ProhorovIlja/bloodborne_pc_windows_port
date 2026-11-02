@@ -43,6 +43,40 @@ int main() {
     auto signed_grant=Sign(grant,server_secret);
     assert(signed_grant);
     const auto good=signed_grant.value();
+    // V282: the complete grant is now a bounded, canonical signed
+    // SERVER control payload, NOT a self-authorizing peer UDP datagram.
+    const auto signed_wire=EncodeWire(good);
+    assert(signed_wire.size()>150 && signed_wire.size()<=512);
+    const auto decoded=DecodeWire(signed_wire);
+    assert(decoded && decoded->scope==good.scope &&
+           decoded->signature==good.signature);
+    assert(Verify(*decoded,server_pub,expected,grant.issued_unix_ms));
+    auto malformed=signed_wire;
+    malformed[4]=2; // protocol version
+    assert(!DecodeWire(malformed));
+    malformed=signed_wire;
+    malformed[5]=0xff;malformed[6]=0xff; // oversize first string
+    assert(!DecodeWire(malformed));
+    malformed=signed_wire;
+    malformed.push_back(0); // trailing byte after original signature
+    assert(!DecodeWire(malformed));
+    malformed=signed_wire;
+    malformed.resize(22);
+    assert(!DecodeWire(malformed));
+    malformed=signed_wire;
+    malformed[malformed.size()-1]^=0x80; // parser may parse, verifier must reject
+    const auto forged_decoded=DecodeWire(malformed);
+    assert(forged_decoded);
+    assert(!Verify(*forged_decoded,server_pub,expected,grant.issued_unix_ms));
+    malformed=signed_wire;
+    malformed[11]^=0x01; // changes signed team text, not MAC
+    auto altered_decoded=DecodeWire(malformed);
+    assert(altered_decoded);
+    assert(!Verify(*altered_decoded,server_pub,expected,grant.issued_unix_ms));
+    // Noncanonical grant with embedded NUL must be rejected by parser.
+    malformed=signed_wire;
+    malformed[7]=0;
+    assert(!DecodeWire(malformed));
     const BloodborneCoop::SHYTHybrid::PeerCryptoScopeV241 noise_scope{
         "world:old-yharnam","hunter-A","hunter-B",17,29,42,0x101};
     assert(AuthorizesNoiseScope(good,server_pub,expected,
