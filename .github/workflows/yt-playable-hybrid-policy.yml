@@ -180,6 +180,18 @@ jobs:
             --upstream-checkout actual-yharnam-upstream --mode check
           python playable-track/apply_yt_direct_physical_v265.py \
             --upstream-checkout actual-yharnam-upstream --mode apply
+          # V324: original authenticated game UDP socket uses a
+          # separate optional, CSPRNG-transaction STUN discovery path.
+          # A discovered reflexive address cannot open SHDP peer gate.
+          python playable-track/apply_yt_reflexive_udp_v324.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_reflexive_udp_v324.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_reflexive_stun_v321.h
+          grep -Fq 'P2PBeginReflexiveDiscovery(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'reflexive_probe.Take(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           # V320: source-lock the actual Windows Tk launcher, pass only
           # the locally confirmed public EdDSA authority to the game.
           python playable-track/apply_yt_launcher_authority_pin_v320.py \
