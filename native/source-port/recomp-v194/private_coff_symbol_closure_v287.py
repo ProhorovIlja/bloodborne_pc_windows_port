@@ -77,16 +77,61 @@ def verify_external_symbol_closure(object_files:list[Path])->dict:
     defined:set[bytes]=set()
     undefined:set[bytes]=set()
     total_symbols=weak=duplicate_definitions=0
-    for object_file in object_files:
+    # V290: a bounded object dependency graph highlights strongly
+    # connected native recomp modules that must be linked together.
+    # Full original symbol bytes remain private and never leave memory.
+    all_objects:list[tuple[set[bytes],set[bytes]]]=[]
+    symbol_owners:dict[bytes,set[int]]={}
+    for object_id,object_file in enumerate(object_files):
         defs,needs,count,w=symbols_in_object(object_file)
         total_symbols+=count
         if total_symbols>MAX_TOTAL_SYMBOLS:
             raise ValueError('original-game symbol budget exceeded')
         duplicate_definitions+=len(defined.intersection(defs))
+        for name in defs:
+            symbol_owners.setdefault(name,set()).add(object_id)
+        all_objects.append((defs,needs))
         defined.update(defs)
         undefined.update(needs)
         weak+=w
     unresolved=undefined.difference(defined)
+    dependencies:list[set[int]]=[set() for _ in object_files]
+    for object_id,(_,needs) in enumerate(all_objects):
+        for name in needs:
+            for owner in symbol_owners.get(name,()):
+                if owner!=object_id:
+                    dependencies[object_id].add(owner)
+    # Tarjan SCC, bounded by MAX_OBJECTS=512, well under default
+    # Python recursion depth. A cycle means these objects cannot be
+    # independently analyzed as link-ready modules.
+    serial=0
+    indices=[-1]*len(object_files)
+    lows=[0]*len(object_files)
+    on_stack=[False]*len(object_files)
+    stack:list[int]=[]
+    component_sizes:list[int]=[]
+    def visit(node:int)->None:
+        nonlocal serial
+        indices[node]=lows[node]=serial
+        serial+=1
+        stack.append(node)
+        on_stack[node]=True
+        for nxt in dependencies[node]:
+            if indices[nxt]==-1:
+                visit(nxt)
+                lows[node]=min(lows[node],lows[nxt])
+            elif on_stack[nxt]:
+                lows[node]=min(lows[node],indices[nxt])
+        if lows[node]==indices[node]:
+            count=0
+            while True:
+                last=stack.pop()
+                on_stack[last]=False
+                count+=1
+                if last==node:break
+            component_sizes.append(count)
+    for node in range(len(object_files)):
+        if indices[node]==-1:visit(node)
     # Aggregate counts ONLY, no names, imports, private addresses or hashes.
     return {
         'verified_amd64_coff_objects':len(object_files),
@@ -96,6 +141,10 @@ def verify_external_symbol_closure(object_files:list[Path])->dict:
         'duplicate_external_names_across_objects':duplicate_definitions,
         'weak_external_symbols':weak,
         'coff_symbols_inspected':total_symbols,
+        'direct_object_dependency_edges':sum(map(len,dependencies)),
+        'strongly_connected_object_components':len(component_sizes),
+        'cyclic_object_components':sum(n>1 for n in component_sizes),
+        'largest_cyclic_or_single_component':max(component_sizes),
         'windows_crt_import_resolution_done':False,
         'native_pe_link_complete':False,
         'guest_runtime_removed':False,
