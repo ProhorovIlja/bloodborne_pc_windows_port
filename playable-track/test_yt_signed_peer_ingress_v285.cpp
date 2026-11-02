@@ -2,6 +2,7 @@
 // V285: real original YT LinkAuth/Monocypher signature + peer crypto
 // cannot be replaced with a caller's 'verified=true' socket flag.
 #include "yt_signed_peer_ingress_v285.h"
+#include "yt_direct_physical_api_v264.h"
 #include <cassert>
 #include <cstdio>
 using namespace BloodborneCoop;
