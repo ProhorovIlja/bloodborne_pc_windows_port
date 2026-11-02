@@ -17,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+  issues: write
 jobs:
   original-linux-game-client:
     name: Fully compile real patched YT original shadPS4 host
@@ -69,6 +70,27 @@ jobs:
           fi
           test -x "$RUNNER_TEMP/yt-original-client-build/shadps4"
           echo SHYT_FULL_ORIGINAL_YT_PATCHED_GAME_CLIENT_COMPILE_PASS
+      - name: Publish tiny error-only original-game build diagnosis on PR 85
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          diag="$RUNNER_TEMP/yt-game-client-brief-error.txt"
+          {
+            echo "V337 original YT Linux whole-client build failure (run ${{ github.run_id }}, head ${{ github.sha }}). No game assets or private symbols."
+            for stage in configure build; do
+              log="$RUNNER_TEMP/yt-original-client-${stage}.log"
+              if [ -f "$log" ]; then
+                echo "STAGE=${stage}"
+                grep -E '(^|:) error:|fatal error:|FAILED:|CMake Error:|not found|Could NOT find|No rule to make' "$log" | tail -8 | cut -c1-190 || true
+              fi
+            done
+          } >"$diag"
+          head -c 1900 "$diag" > "$diag.short"
+          gh api --method POST "repos/${{ github.repository }}/issues/85/comments" -F "body=@$diag.short" >/dev/null
+          echo SHYT_CLIENT_BUILD_FAILURE_REPORT_POSTED_BOUNDED
       - name: Store game-client executable candidate without proprietary assets
         uses: actions/upload-artifact@v4
         with:
