@@ -30,6 +30,7 @@ message DirectPeerRequest {
     string recipient = 1;
     bytes noise_static_public_key = 2; // exactly 32 authenticated bytes
     bytes request_nonce = 3;            // exactly 16 fresh CSPRNG bytes
+    uint32 game_link_instance = 4;      // live authenticated sender GameLinkPeer instance, nonzero
 }
 
 // shadNet -> game over the same authenticated Coop stream (never peer UDP).
