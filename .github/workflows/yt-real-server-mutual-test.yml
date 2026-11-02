@@ -84,6 +84,18 @@ jobs:
             $(pkg-config --libs Qt6Core Qt6Network Qt6Sql Qt6Concurrent) \
             -lprotobuf -pthread \
             -o "$RUNNER_TEMP/yt-v296-real-world-tests"
+          # V316: compile the ACTUAL LinkServer.cpp unit whose
+          # constructor installs the operator seed signer. Prior V313
+          # tests only compiled the helper from a world-test include,
+          # which could miss LinkServer-specific source integration.
+          # This single C++ translation unit does not link or deploy.
+          printf '#pragma once\\n#define BB_SCM_REV "synthetic-ci"\\n' \\
+            > "$RUNNER_TEMP/yt-v296-proto/bbcoop_revision.h"
+          g++ -std=c++20 -fPIC -O0 -g0 -fsyntax-only \\
+            -I"$src/src" -I"$src" -I"$RUNNER_TEMP/yt-v296-proto" \\
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6Concurrent) \\
+            "$src/src/link_server.cpp"
+          echo SHYT_V316_REAL_LINK_SERVER_SIGNER_TU_COMPILED
           "$RUNNER_TEMP/yt-v296-real-world-tests" >"$RUNNER_TEMP/yt-v296-test-results.txt"
           grep -Fq 'PASS ServerRequiresMutualDirectPeerConsentV296' \
             "$RUNNER_TEMP/yt-v296-test-results.txt"
