@@ -37,17 +37,17 @@ def main()->None:
         f=home/'shyt-p2p-authority.pub'
         assert read_pin() is None
         candidate='0123456789aBcDeF'*4
-        f.write_bytes(candidate.encode('ascii')+b'\\r\\n')
+        f.write_bytes(candidate.encode('ascii')+b'\r\n')
         assert read_pin()==candidate.lower()
         f.write_text('0'*64,encoding='ascii')
         assert read_pin() is None
         f.write_text('Z'+candidate[1:],encoding='ascii')
         assert read_pin() is None
-        f.write_bytes(candidate.encode('ascii')+b' '+b'\\n')
+        f.write_bytes(candidate.encode('ascii')+b' '+b'\n')
         assert read_pin() is None
         f.write_bytes(candidate.encode('ascii')+b'X'*100)
         assert read_pin() is None
-        f.write_bytes(b'\\xff'*64)
+        f.write_bytes(b'\xff'*64)
         assert read_pin() is None
         f.unlink()
         if hasattr(f,'symlink_to'):
