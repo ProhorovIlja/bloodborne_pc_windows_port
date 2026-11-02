@@ -138,6 +138,32 @@ def patch(source:str)->str:
         "        RevokeVerifiedMovementEndpoints(); // V266: shutdown revoke\n"
         "        if (!running.exchange(false, std::memory_order_acq_rel)) {")
 
+    # V276: the game may replace its build without changing its server
+    # address/key. This re-hello invalidates prior peer pair grants too.
+    src=replace_once(src,
+        "    void SetLinkBuild(std::string build) {\\n"
+        "        std::lock_guard lock(link_mutex);\\n"
+        "        if (Link::SaysHelloAgainForBuild(link_build, build)) {\\n"
+        "            link_welcomed = false;\\n"
+        "            link_hello_ms.reset();\\n"
+        "        }\\n"
+        "        link_build = std::move(build);\\n"
+        "    }",
+        "    void SetLinkBuild(std::string build) {\\n"
+        "        bool reset_peer_grant = false;\\n"
+        "        {\\n"
+        "            std::lock_guard lock(link_mutex);\\n"
+        "            if (Link::SaysHelloAgainForBuild(link_build, build)) {\\n"
+        "                link_welcomed = false;\\n"
+        "                link_hello_ms.reset();\\n"
+        "                reset_peer_grant = true;\\n"
+        "            }\\n"
+        "            link_build = std::move(build);\\n"
+        "        }\\n"
+        "        if (reset_peer_grant)\\n"
+        "            RevokeVerifiedMovementEndpoints(); // V276: build reauth\\n"
+        "    }")
+
     gate="""            // V265: a separately typed, encrypted SHDP packet from a
             // verified peer endpoint. Never place it into original shadNet
             // signaling, GamePackets or direct guest socket queues.
