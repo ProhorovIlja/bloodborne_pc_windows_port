@@ -40,11 +40,13 @@ def main()->None:
         check(changed(8,struct.pack('<L',0)),False)    # no COFF symbol table
         check(changed(8,struct.pack('<L',0xffffffff)),False)
         check(changed(12,struct.pack('<L',0xffffffff)),False)
-        check(changed(60+16,struct.pack('<L',32)),False) # corrupt .text raw-size
-        check(changed(60+20,struct.pack('<L',25)),False) # offset without bytes not meaningful
-        check(changed(20+16,struct.pack('<L',5)),False) # nonempty raw section missing pointer
-        check(changed(20+16,struct.pack('<L',4))[:20+20]+b'',False) if False else None
-        check(changed(20+16,struct.pack('<L',5)),False)
+        check(changed(20+16,struct.pack('<L',32)),False) # raw size without pointer
+        check(changed(20+20,struct.pack('<L',25)),True) # zero raw size: pointer unused
+        check(changed(20+16,struct.pack('<L',5)),False) # unbacked section data
+        # Data or relocations must not overlap the symbol table at 60.
+        overlapping=changed(20+16,struct.pack('<L',5))
+        overlapping=overlapping[:20+20]+struct.pack('<L',58)+overlapping[20+24:]
+        check(overlapping,False)
         check(changed(20+24,struct.pack('<L',1000)),True) # no relocs => pointer ignored
         check(changed(20+24,struct.pack('<L',1000))[:20+32]+
               struct.pack('<H',1)+original[20+34:],False)
