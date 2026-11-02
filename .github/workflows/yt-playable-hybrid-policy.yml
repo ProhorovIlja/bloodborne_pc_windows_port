@@ -176,6 +176,12 @@ jobs:
             --upstream-checkout actual-yharnam-upstream --mode apply
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/hybrid_direct_physical_gate_v264.h
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_signed_peer_ingress_v285.h
+          # V307: buffered ciphertext must re-verify the physical grant
+          # at dequeue time, even if enqueue predated its expiry.
+          grep -Fq 'const int received=ReceiveInternal(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq '{*ip,*port,0},P2PNowMs(),packet' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'SetHandleInformation(reinterpret_cast<HANDLE>(socket),' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'Hybrid::BoundedPhysicalPeerExpiryV304(' \
