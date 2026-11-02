@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// V327: actual kernel UDP 3-message original YT Noise NK connectivity
+// V330: actual kernel UDP four-message original YT Noise NK connectivity
 // against exact server-signed endpoint and authenticated AEAD finish.
 // This proves local reachability, NOT Internet NAT punching or game boot.
 #include "yt_signed_connectivity_v327.h"
@@ -122,7 +122,7 @@ int main(){
     const auto ready=initiator.OnAnswer(frame.from,frame.bytes,
                                         unix_now+5,1005);
     assert(ready && ready->confirm.size()==Proof::ConfirmWireBytes);
-    assert(initiator.ReadyForDirect() && !responder.ReadyForDirect());
+    assert(!initiator.ReadyForDirect() && !responder.ReadyForDirect());
     attacker.Send(b,ready->confirm);
     frame=b.Recv();
     assert(!responder.OnFinish(frame.from,frame.bytes,unix_now+6,1006));
@@ -133,9 +133,27 @@ int main(){
     assert(!responder.OnFinish(frame.from,frame.bytes,unix_now+7,1007));
     a.Send(b,ready->confirm);
     frame=b.Recv();
-    assert(responder.OnFinish(frame.from,frame.bytes,unix_now+8,1008));
-    assert(responder.ReadyForDirect());
+    const auto ack=responder.OnFinish(frame.from,frame.bytes,unix_now+8,1008);
+    assert(ack && ack->size()==Proof::AckWireBytes);
+    assert(responder.ReadyForDirect() && !initiator.ReadyForDirect());
     assert(!responder.OnFinish(frame.from,frame.bytes,unix_now+9,1009));
+    attacker.Send(a,*ack);
+    frame=a.Recv();
+    assert(!initiator.OnAcknowledge(frame.from,frame.bytes,
+                                    unix_now+10,1010));
+    auto bad_ack=*ack;
+    bad_ack.back()^=0x80;
+    b.Send(a,bad_ack);
+    frame=a.Recv();
+    assert(!initiator.OnAcknowledge(frame.from,frame.bytes,
+                                    unix_now+11,1011));
+    b.Send(a,*ack);
+    frame=a.Recv();
+    assert(initiator.OnAcknowledge(frame.from,frame.bytes,
+                                   unix_now+12,1012));
+    assert(initiator.ReadyForDirect() && responder.ReadyForDirect());
+    assert(!initiator.OnAcknowledge(frame.from,frame.bytes,
+                                    unix_now+13,1013));
 
     // Bad pin, expired signed grant and stale steady clock must deny.
     auto wrong_pub=pub;wrong_pub[0]^=1;
@@ -150,5 +168,5 @@ int main(){
     no_reply.Reset();
     assert(!no_reply.ReadyForDirect());
 
-    std::puts("SHYT_V327_REAL_UDP_SIGNED_NOISE_THREE_WAY_CONNECTIVITY_PASS");
+    std::puts("SHYT_V330_REAL_UDP_SIGNED_NOISE_FOUR_WAY_CONNECTIVITY_PASS");
 }
