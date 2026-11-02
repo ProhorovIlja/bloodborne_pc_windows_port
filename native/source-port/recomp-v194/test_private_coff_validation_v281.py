@@ -64,6 +64,23 @@ def main()->None:
             return bytes(head)+rows+original[60:]
         valid=struct.pack('<LLH',0,0,4) # REL32 to first external
         check(relocated(valid,1),True)
+        # V300: a relocation to an in-range COFF AUXILIARY symbol
+        # ordinal must fail before link. Primary symbol index 0 is fine.
+        def with_aux(target:int)->bytes:
+            head=bytearray(original[:60])
+            reloc=struct.pack('<LLH',0,target,4)
+            struct.pack_into('<L',head,8,70)   # symbols after relocation
+            struct.pack_into('<L',head,12,2)   # primary + one auxiliary
+            struct.pack_into('<L',head,20+24,60)
+            struct.pack_into('<H',head,20+32,1)
+            primary=bytearray(original[60:78])
+            primary[17]=1
+            return (bytes(head)+reloc+bytes(primary)+
+                    bytes(18)+struct.pack('<L',4))
+        check(with_aux(0),True)
+        check(with_aux(1),False)
+        # Auxiliary count may not step beyond the COFF symbol table.
+        check(changed(60+17,bytes([1])),False)
         check(relocated(struct.pack('<LLH',0,1,4),1),False)
         check(relocated(struct.pack('<LLH',0,0,17),1),False)
         check(relocated(valid[:9],1),False)
