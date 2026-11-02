@@ -7,6 +7,7 @@ on:
       - 'native/source-port/recomp-v194/private_coff_*'
       - 'native/source-port/recomp-v194/private_native_link_probe_v309.py'
       - 'native/source-port/recomp-v194/test_private_native_link_probe_v309.py'
+      - 'native/source-port/recomp-v194/test_private_native_link_invocation_v317.py'
       - 'native/source-port/recomp-v194/test_private_coff_*'
       - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
       - 'native/source-port/recomp-v194/verify_coff_dependencies_v219.py'
@@ -16,6 +17,7 @@ on:
       - 'native/source-port/recomp-v194/private_coff_*'
       - 'native/source-port/recomp-v194/private_native_link_probe_v309.py'
       - 'native/source-port/recomp-v194/test_private_native_link_probe_v309.py'
+      - 'native/source-port/recomp-v194/test_private_native_link_invocation_v317.py'
       - 'native/source-port/recomp-v194/test_private_coff_*'
       - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
       - 'native/source-port/recomp-v194/verify_coff_dependencies_v219.py'
@@ -51,4 +53,7 @@ jobs:
           python native/source-port/recomp-v194/test_private_coff_batch_runner_v273.py
           python -m py_compile native/source-port/recomp-v194/private_native_link_probe_v309.py
           python native/source-port/recomp-v194/test_private_native_link_probe_v309.py
+          # V317: real LLVM lld-link invocation on disposable synthetic
+          # COFF objects; does not use or link game binary contents.
+          python native/source-port/recomp-v194/test_private_native_link_invocation_v317.py
           echo SHYT_V287_PRIVATE_COFF_PRELINK_FAST_PASS
