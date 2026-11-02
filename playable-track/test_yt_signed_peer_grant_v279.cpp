@@ -43,6 +43,26 @@ int main() {
     auto signed_grant=Sign(grant,server_secret);
     assert(signed_grant);
     const auto good=signed_grant.value();
+    const BloodborneCoop::SHYTHybrid::PeerCryptoScopeV241 noise_scope{
+        "world:old-yharnam","hunter-A","hunter-B",17,29,42,0x101};
+    assert(AuthorizesNoiseScope(good,server_pub,expected,
+        grant.issued_unix_ms,noise_scope,grant.responder_noise_pub));
+    auto other_noise=noise_scope;
+    other_noise.world_epoch=43;
+    assert(!AuthorizesNoiseScope(good,server_pub,expected,
+        grant.issued_unix_ms,other_noise,grant.responder_noise_pub));
+    other_noise=noise_scope;
+    other_noise.hunter_b="hunter-C";
+    assert(!AuthorizesNoiseScope(good,server_pub,expected,
+        grant.issued_unix_ms,other_noise,grant.responder_noise_pub));
+    other_noise=noise_scope;
+    other_noise.b_instance++;
+    assert(!AuthorizesNoiseScope(good,server_pub,expected,
+        grant.issued_unix_ms,other_noise,grant.responder_noise_pub));
+    auto malicious_pub=grant.responder_noise_pub;
+    malicious_pub[7]^=0x40;
+    assert(!AuthorizesNoiseScope(good,server_pub,expected,
+        grant.issued_unix_ms,noise_scope,malicious_pub));
     assert(Verify(good,server_pub,expected,grant.issued_unix_ms));
     assert(Verify(good,server_pub,expected,grant.expires_unix_ms-1));
     assert(!Verify(good,server_pub,expected,grant.expires_unix_ms));
