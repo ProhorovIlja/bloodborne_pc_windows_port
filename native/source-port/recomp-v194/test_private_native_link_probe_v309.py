@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """V309: synthetic-only private Windows PE linker response validation."""
 from pathlib import Path
+import os
 import struct
 import tempfile
 from unittest.mock import patch
@@ -41,15 +42,36 @@ def main():
         # V312: a linker exit code 0 without a real AMD64 PE DLL
         # is never a successful symbol-closure probe.
         pefile=root/'private-native-link-probe-v309.dll'
+        assert probe.guard_private_link_target_v315(root)==pefile
         assert not probe.verify_private_pe_dll_v312(pefile)
-        pe=bytearray(512)
+        pe=bytearray(1024)
         pe[:2]=b'MZ'
         struct.pack_into('<I',pe,0x3c,0x80)
         pe[0x80:0x84]=b'PE\0\0'
         struct.pack_into('<HHLLLHH',pe,0x84,
                          0x8664,1,0,0,0,0xf0,0x2000)
         struct.pack_into('<H',pe,0x98,0x20b)
+        struct.pack_into('<I',pe,0x98+0x20,0x1000)
+        struct.pack_into('<I',pe,0x98+0x24,0x200)
         struct.pack_into('<I',pe,0x98+0x38,0x2000)
+        struct.pack_into('<I',pe,0x98+0x3c,0x200)
+        # One real bounded .text section (image body is synthetic only).
+        pe[0x188:0x18d]=b'.text'
+        struct.pack_into('<LLLL',pe,0x188+8,
+                         0x180,0x1000,0x200,0x200)
+        pe[0x200:0x400]=b'\x90'*512
+        pefile.write_bytes(pe)
+        assert probe.verify_private_pe_dll_v312(pefile)
+        rejects(lambda:probe.guard_private_link_target_v315(root))
+        # A mere genuine-looking header without backed sections
+        # cannot be a successful Windows PE link.
+        pefile.write_bytes(pe[:512])
+        assert not probe.verify_private_pe_dll_v312(pefile)
+        pefile.write_bytes(pe)
+        struct.pack_into('<I',pe,0x188+8+12,0x3000)
+        pefile.write_bytes(pe)
+        assert not probe.verify_private_pe_dll_v312(pefile)
+        struct.pack_into('<I',pe,0x188+8+12,0x200)
         pefile.write_bytes(pe)
         assert probe.verify_private_pe_dll_v312(pefile)
         saved=pe[0]
@@ -69,6 +91,11 @@ def main():
         pefile.write_bytes(pe)
         assert not probe.verify_private_pe_dll_v312(pefile)
         pefile.unlink()
+        assert probe.guard_private_link_target_v315(root)==pefile
+        if os.name!='nt':
+            pefile.symlink_to(plan)
+            rejects(lambda:probe.guard_private_link_target_v315(root))
+            pefile.unlink()
         # V311: prevent complete synthetic objects and a claimed
         # manifest from becoming a retail game link candidate unless
         # both original preparation AND link inventory verified 1.09.
