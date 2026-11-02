@@ -22,6 +22,8 @@ on:
       - 'native/source-port/recomp-v194/private_coff_batch_runner_v273.py'
       - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
       - 'native/source-port/recomp-v194/test_private_coff_validation_v281.py'
+      - 'native/source-port/recomp-v194/private_coff_symbol_closure_v287.py'
+      - 'native/source-port/recomp-v194/test_private_coff_symbol_closure_v287.py'
       - 'native/source-port/recomp-v194/test_private_coff_batch_runner_v273.py'
       - 'native/source-port/recomp-v194/test_native_aot_services_bootstrap_v245.c'
   pull_request:
@@ -226,6 +228,10 @@ jobs:
           # COFF checkpoints without sending proprietary source to CI.
           python "$src/test_private_coff_validation_v281.py"
           if ($LASTEXITCODE -ne 0) { throw 'V281 real COFF structural validation failed' }
+          # V287: private object symbol closure audit, synthetic only.
+          # No retail COFFs, paths, symbol names or AOT addresses.
+          python "$src/test_private_coff_symbol_closure_v287.py"
+          if ($LASTEXITCODE -ne 0) { throw 'V287 COFF symbol closure security test failed' }
           python "$src/test_private_coff_batch_runner_v273.py"
           if ($LASTEXITCODE -ne 0) { throw 'V273 resumable COFF planning regression failed' }
           'V273 bounded original-game COFF scheduler synthetic tests pass'
