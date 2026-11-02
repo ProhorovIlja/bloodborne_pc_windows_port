@@ -1,0 +1,81 @@
+name: YT pinned original full shadNet container candidate smoke
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt-original-server-container-candidate.yml'
+      - 'playable-track/apply_yt_signed_grant_proto_v288.py'
+      - 'playable-track/apply_yt_server_direct_grant_v292.py'
+      - 'playable-track/apply_yt_server_link_signer_v313.py'
+      - 'playable-track/yt_operator_peer_signer_v313.h'
+      - 'playable-track/yt_server_direct_signer_v310.h'
+      - 'playable-track/yt_signed_peer_grant_v279.h'
+  workflow_dispatch:
+concurrency:
+  group: original-server-build-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  real-shadnet-container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout source-only integration
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout original playable YT 1.3.1 with protobuf
+        uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: actual-yt
+          persist-credentials: false
+          submodules: false
+      - name: Verify pinned original game server source and overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C actual-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          python -m py_compile playable-track/apply_yt_signed_grant_proto_v288.py playable-track/apply_yt_server_direct_grant_v292.py playable-track/apply_yt_server_link_signer_v313.py
+          python playable-track/apply_yt_signed_grant_proto_v288.py --upstream-checkout actual-yt --mode apply
+          python playable-track/apply_yt_server_direct_grant_v292.py --upstream-checkout actual-yt --mode apply
+          python playable-track/apply_yt_server_link_signer_v313.py --upstream-checkout actual-yt --mode apply
+          grep -Fq 'InstallFromEnvironment(m_world);' actual-yt/server/src/link_server.cpp
+          # No operator seed in CI. Real shadNet must retain server relay by default.
+          test ! -e actual-yt/server/operator_peer_seed.bin
+          git -C actual-yt submodule update --init --depth 1 --quiet server/externals/protobuf
+          test -f actual-yt/server/externals/protobuf/CMakeLists.txt
+          echo SHYT_ORIGINAL_SERVER_CANDIDATE_SOURCE_PINNED_AND_DEFAULT_OFF
+      - name: Build ACTUAL complete modified shadNet Docker runtime image, not a syntax-only fixture
+        shell: bash
+        working-directory: actual-yt
+        run: |
+          set -euo pipefail
+          # The original server Dockerfile manages Qt>=6.8, protobuf and build deps.
+          # BuildKit keeps output bounded, never push or touch live Fornex.
+          DOCKER_BUILDKIT=1 docker build --progress=quiet \
+            --build-arg BUILD_JOBS=2 \
+            --target runtime \
+            -f server/hosting/Dockerfile \
+            -t shyt-yt131-server-candidate:local .
+          echo SHYT_ACTUAL_COMPLETE_ORIGINAL_YT_SHADNET_RUNTIME_IMAGE_BUILT
+      - name: Start complete server and verify admin socket, no operator signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f yt-candidate >/dev/null 2>&1 || true' EXIT
+          docker run -d --name yt-candidate shyt-yt131-server-candidate:local >/dev/null
+          ready=0
+          for i in $(seq 1 30); do
+            if docker exec yt-candidate shadnet --admin stats >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" = 1
+          docker exec yt-candidate test -s /data/link_key.bin
+          docker exec yt-candidate test ! -e /data/operator_peer_seed.bin
+          echo SHYT_ORIGINAL_MODIFIED_SHADNET_FULL_CONTAINER_ADMIN_READY_DEFAULT_RELAY
