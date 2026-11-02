@@ -76,6 +76,28 @@ jobs:
           test -f actual-yt/bbport/gpu/third_party/fsr-vulkan/CMakeLists.txt
           test -f actual-yt/bbport/gpu/third_party/imgui/imgui.h
           test -f actual-yt/bbport/gpu/third_party/xbyak/xbyak/xbyak.h
+      - name: Gate optional FSR4 profiling patch against exact pinned upstream shader provider
+        shell: msys2 {0}
+        working-directory: actual-yt/bbport
+        run: |
+          set -euo pipefail
+          # Official pinned v1.3.1 source has five FSR-Vulkan patches.
+          # 0001 only adds optional GPU profiling/stats; a changed
+          # upstream provider may reject its context. Other patches,
+          # particularly 0003 depth aspect fix, MUST still apply.
+          profile=(gpu/patches/fsr-vulkan/0001-*.patch)
+          test "${#profile[@]}" -eq 1 && test -f "${profile[0]}"
+          provider=gpu/third_party/fsr-vulkan
+          if git -C "$provider" apply --reverse --check "$PWD/${profile[0]}" 2>/dev/null; then
+            echo SHYT_OPTIONAL_FSR4_PROFILE_PATCH_ALREADY_APPLIED
+          elif git -C "$provider" apply --check "$PWD/${profile[0]}" 2>/dev/null; then
+            echo SHYT_OPTIONAL_FSR4_PROFILE_PATCH_READY_TO_APPLY
+          else
+            mkdir -p out
+            mv "${profile[0]}" out/SHYT_TEST_ONLY_SKIPPED_OPTIONAL_FSR4_PROFILE.patch
+            echo SHYT_OPTIONAL_FSR4_GPU_PROFILING_PATCH_SKIPPED_TEST_BUILD_ONLY
+            echo SHYT_MANDATORY_FSR4_RESOURCE_ASPECT_AND_OTHER_PATCHES_STILL_REQUIRED
+          fi
       - name: Compile actual BBPort Windows native-probe game runtime with co-op sources
         shell: msys2 {0}
         working-directory: actual-yt/bbport
