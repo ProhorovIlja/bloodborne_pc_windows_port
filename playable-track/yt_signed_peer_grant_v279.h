@@ -134,6 +134,84 @@ inline bool Verify(const Signed& signed_grant, const PubKey& trusted_authority,
             signed_grant.signature.data(),trusted_authority.data(),
             bytes.data(),bytes.size())==0;
 }
+// V282: exact capped canonical on-wire form for delivering one signed
+// grant via shadNet's EXISTING authenticated server->game Coop stream.
+// The frame is NOT meant to arrive from a peer UDP socket, and parsing
+// it never activates a P2P route. Verify() is still mandatory.
+inline std::vector<u8> EncodeWire(const Signed& signed_grant) {
+    auto payload=EncodeScope(signed_grant.scope);
+    if (payload.empty()) return {};
+    payload.insert(payload.end(),signed_grant.signature.begin(),
+                   signed_grant.signature.end());
+    return payload.size()<=512?std::move(payload):std::vector<u8>{};
+}
+
+inline std::optional<Signed> DecodeWire(std::span<const u8> bytes) {
+    if (bytes.size()<5+8+12+24+8+4+32+16+64 ||
+        bytes.size()>512 || bytes[0]!='S' || bytes[1]!='H' ||
+        bytes[2]!='G' || bytes[3]!='P' || bytes[4]!=1)
+        return std::nullopt;
+    const size_t end=bytes.size()-64;
+    size_t at=5;
+    const auto number=[&](u64& out,unsigned width)->bool {
+        if (at>end || width>8 || width>end-at) return false;
+        out=0;
+        for(unsigned i=0;i<width;++i)
+            out|=(u64)bytes[at++]<<(i*8);
+        return true;
+    };
+    const auto name=[&](std::string& out,size_t max)->bool {
+        u64 length=0;
+        if(!number(length,2) || !length || length>max ||
+           at>end || length>end-at)
+            return false;
+        out.assign(reinterpret_cast<const char*>(bytes.data()+at),
+                   static_cast<size_t>(length));
+        at+=static_cast<size_t>(length);
+        return true;
+    };
+    Signed value{};
+    Scope& g=value.scope;
+    if(!name(g.team,80) || !name(g.party,96) ||
+       !name(g.sender,64) || !name(g.receiver,64))
+        return std::nullopt;
+    u64 tmp=0;
+    if(!number(tmp,4))return std::nullopt;
+    g.sender_instance=static_cast<u32>(tmp);
+    if(!number(tmp,4))return std::nullopt;
+    g.receiver_instance=static_cast<u32>(tmp);
+    if(!number(tmp,4))return std::nullopt;
+    g.map=static_cast<u32>(tmp);
+    if(!number(g.world_epoch,8))return std::nullopt;
+    if(!number(tmp,8) || tmp>static_cast<u64>(INT64_MAX))
+        return std::nullopt;
+    g.issued_unix_ms=static_cast<s64>(tmp);
+    if(!number(tmp,8) || tmp>static_cast<u64>(INT64_MAX))
+        return std::nullopt;
+    g.expires_unix_ms=static_cast<s64>(tmp);
+    if(!number(tmp,4))return std::nullopt;
+    g.sender_ip_nbo=static_cast<u32>(tmp);
+    if(!number(tmp,4))return std::nullopt;
+    g.receiver_ip_nbo=static_cast<u32>(tmp);
+    if(!number(tmp,2))return std::nullopt;
+    g.sender_port_nbo=static_cast<u16>(tmp);
+    if(!number(tmp,2))return std::nullopt;
+    g.receiver_port_nbo=static_cast<u16>(tmp);
+    if (at>end || 48>end-at) return std::nullopt;
+    std::copy_n(bytes.begin()+at,32,g.responder_noise_pub.begin());
+    at+=32;
+    std::copy_n(bytes.begin()+at,16,g.grant_nonce.begin());
+    at+=16;
+    if(at!=end || !Valid(g))return std::nullopt;
+    std::copy_n(bytes.begin()+end,64,value.signature.begin());
+    // Reject noncanonical/trailing/ambiguous representations.
+    const auto encoded=EncodeScope(g);
+    if(encoded.size()!=end ||
+       !std::equal(encoded.begin(),encoded.end(),bytes.begin()))
+        return std::nullopt;
+    return value;
+}
+
 // V280: signed permission is not a Noise key. Both MUST bind to the
 // exact same original YT sender/receiver, world run and responder
 // static X25519 public key before a direct channel is even considered.
