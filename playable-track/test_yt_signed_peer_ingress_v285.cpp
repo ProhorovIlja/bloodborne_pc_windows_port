@@ -62,6 +62,34 @@ int main() {
     authorization.now_unix_ms=s.issued_unix_ms;
     assert(ValidateSignedPeerIngressV285(authorization));
 
+    // V304: original lease is only 2s; the physical socket cannot
+    // outlive it even though the signed authorization lasts 15s.
+    const auto short_lease=BoundedPhysicalPeerExpiryV304(
+        authorization,10000,s.issued_unix_ms);
+    assert(short_lease && *short_lease==12000);
+    // A longer GameLink lease must NOT extend the signature's 15s.
+    auto long_lease=authorization;
+    long_lease.receiver.lease.lease_expiry_ms=200000;
+    const auto capped=BoundedPhysicalPeerExpiryV304(
+        long_lease,10000,s.issued_unix_ms);
+    assert(capped && *capped==25000);
+    // Re-evaluate REAL time at admission, not the stale proof timestamp.
+    assert(!BoundedPhysicalPeerExpiryV304(
+        long_lease,10000,s.expires_unix_ms));
+    const auto refreshed=BoundedPhysicalPeerExpiryV304(
+        long_lease,22000,s.issued_unix_ms+12000);
+    assert(refreshed && *refreshed==25000);
+    assert(!BoundedPhysicalPeerExpiryV304(
+        long_lease,26000,s.expires_unix_ms+1));
+    // A stale original lease or a monotonic overflow refuses admission.
+    long_lease.receiver.lease.lease_expiry_ms=9000;
+    assert(!BoundedPhysicalPeerExpiryV304(
+        long_lease,10000,s.issued_unix_ms));
+    long_lease.receiver.lease.lease_expiry_ms=200000;
+    assert(!BoundedPhysicalPeerExpiryV304(
+        long_lease,std::numeric_limits<s64>::max()-100,
+        s.issued_unix_ms));
+
     auto x=authorization;
     x.receiver.approved_endpoint.second++;
     assert(!ValidateSignedPeerIngressV285(x));
