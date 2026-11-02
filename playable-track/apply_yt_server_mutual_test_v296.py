@@ -111,11 +111,12 @@ int ServerRequiresMutualDirectPeerConsentV296() {
         scope.receiver_ip_nbo=qToBigEndian(src.receiver_link.ipv4);
         scope.sender_port_nbo=qToBigEndian(src.sender_link.port);
         scope.receiver_port_nbo=qToBigEndian(src.receiver_link.port);
-        CHECK(src.sender_link==(
-            src.sender==a.name?a.endpoint:b.endpoint));
-        CHECK(src.receiver_link==(
-            src.receiver==a.name?a.endpoint:b.endpoint));
-        CHECK(src.responder_noise_static_key.size()==32);
+        if (src.sender_link!=(
+                src.sender==a.name?a.endpoint:b.endpoint) ||
+            src.receiver_link!=(
+                src.receiver==a.name?a.endpoint:b.endpoint) ||
+            src.responder_noise_static_key.size()!=32)
+          return std::nullopt;
         std::copy(src.responder_noise_static_key.begin(),
                   src.responder_noise_static_key.end(),
                   scope.responder_noise_pub.begin());
