@@ -66,6 +66,28 @@ def coff_ok(path: Path) -> bool:
             section_end=20+40*sections
             if section_end>size:
                 return False
+            # V300: COFF relocations must reference PRIMARY symbol entries.
+            # An index into an 18-byte auxiliary record is in range but
+            # cannot be linked. Track only auxiliary ordinals in a compact
+            # bitset, without reading or logging private symbol names.
+            symbol_end=symbols+nsyms*18
+            if symbol_end>size-4:
+                return False
+            auxiliary_slots=bytearray((nsyms+7)//8)
+            stream.seek(symbols)
+            ordinal=0
+            while ordinal<nsyms:
+                entry=stream.read(18)
+                if len(entry)!=18:
+                    return False
+                extra=entry[17]
+                if ordinal+extra>=nsyms:
+                    return False
+                for aux_ordinal in range(ordinal+1,ordinal+extra+1):
+                    auxiliary_slots[aux_ordinal>>3]|=1<<(aux_ordinal&7)
+                if extra:
+                    stream.seek(extra*18,1)
+                ordinal+=extra+1
             stream.seek(20)
             for _ in range(sections):
                 data=stream.read(40)
@@ -114,7 +136,9 @@ def coff_ok(path: Path) -> bool:
                         if len(raw)!=10:
                             return False
                         _,symbol_index,rel_type=struct.unpack('<LLH',raw)
-                        if symbol_index>=nsyms or rel_type>0x10:
+                        if (symbol_index>=nsyms or rel_type>0x10 or
+                                auxiliary_slots[symbol_index>>3] &
+                                (1<<(symbol_index&7))):
                             return False
                     stream.seek(pos)
             string_at=symbols+nsyms*18
