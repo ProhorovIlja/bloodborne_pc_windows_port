@@ -134,15 +134,6 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   CHECK(signed_calls==0);
   CHECK(a.direct_grants.empty() && b.direct_grants.empty());
   request(b,a,'B');
-  std::cerr<<"V296_DIAG count="<<signed_calls
-    <<" a_grants="<<a.direct_grants.size()
-    <<" b_grants="<<b.direct_grants.size()
-    <<" a_team="<<a.lobby.team().id()
-    <<" b_team="<<b.lobby.team().id()
-    <<" a_map="<<(service.PlaceOf(a.endpoint) ? service.PlaceOf(a.endpoint)->map : 0)
-    <<" b_map="<<(service.PlaceOf(b.endpoint) ? service.PlaceOf(b.endpoint)->map : 0)
-    <<" player_status="<<a.lobby.team().members(0).state()
-    <<"/"<<b.lobby.team().members(1).state()<<'\n';
   CHECK(signed_calls==2);
   CHECK(a.direct_grants.size()==1);
   CHECK(b.direct_grants.size()==1);
@@ -183,45 +174,6 @@ def main():
     content=patched(path.read_text(encoding="utf-8"))
     if x.mode=="apply":
         path.write_text(content,encoding="utf-8")
-        # V296 diagnostics ONLY in disposable functional test build.
-        # Production server patch remains silent and private.
-        server=root/"server/src/bloodborne_world.cpp"
-        body=server.read_text(encoding="utf-8")
-        body=once(body,'#include "bloodborne_world.h"',
-             '#include "bloodborne_world.h"\n#include <cstdio>')
-        stages=[
-          ('    if (envelope.has_direct_peer_request()) {',
-           '    if (envelope.has_direct_peer_request()) {\n'
-           '        std::fprintf(stderr,"V296_GATE_RECEIVED\\n");'),
-          ('        // Charge requester BEFORE any costly signing work',
-           '        std::fprintf(stderr,"V296_GATE_BASIC_PASS\\n");\n'
-           '        // Charge requester BEFORE any costly signing work'),
-          ('        // Original YT TeamMember::PLAYING=2.',
-           '        std::fprintf(stderr,"V296_GATE_TEAM_PASS\\n");\n'
-           '        // Original YT TeamMember::PLAYING=2.'),
-          ('        if (sender_playing!=1 || recipient_playing!=1)',
-           '        std::fprintf(stderr,"V296_ROSTER sender=%d recipient=%d total=%d\n",'
-           'sender_playing,recipient_playing,team->members_size());\n'
-           '        for(const auto& seat:team->members())'
-           ' std::fprintf(stderr,"V296_SEAT status=%d eq_sender=%d eq_receiver=%d\n",'
-           'static_cast<int>(seat.state()),seat.member()==member.name,'
-           'seat.member()==request.recipient());\n'
-           '        if (sender_playing!=1 || recipient_playing!=1)'),
-          ('        const auto world=worlds.find(member.party);',
-           '        std::fprintf(stderr,"V296_GATE_PLAYING_PASS\\n");\n'
-           '        const auto world=worlds.find(member.party);'),
-          ('        Member* recipient=nullptr;',
-           '        std::fprintf(stderr,"V296_GATE_WORLD_PASS\\n");\n'
-           '        Member* recipient=nullptr;'),
-          ('        if (!recipient) return;',
-           '        if (!recipient) return;\n'
-           '        std::fprintf(stderr,"V296_GATE_RECIPIENT_PASS\\n");'),
-          ('        if (!reciprocal) {',
-           '        std::fprintf(stderr,"V296_GATE_RECIPROCAL=%d\\n",reciprocal);\n'
-           '        if (!reciprocal) {'),
-        ]
-        for a,b in stages:body=once(body,a,b)
-        server.write_text(body,encoding="utf-8")
         print("SHYT_V296_YT_ORIGINAL_SERVER_MUTUAL_CONSENT_TEST_APPLIED")
     else:
         print("SHYT_V296_YT_ORIGINAL_SERVER_TEST_ANCHORS_PASS")
