@@ -106,11 +106,18 @@ def source(src:str)->str:
             team->members_size()<2 ||
             team->members_size()>static_cast<int>(TeamSize))
             return;
-        // Original YT TeamMember::PLAYING=2. A team row may still
-        // contain players who are at TITLE/OFFLINE, not eligible for
-        // any direct UDP session despite retaining team membership.
+        // V296: CRITICAL original YT TeamLobby contract:
+        // TeamOf() returns the canonical team, whose TeamMember.state
+        // is NOT dynamically refreshed. StateFor() explicitly populates
+        // PLAYING/TITLE/OFFLINE in its server-authored lobby snapshot.
+        // Never trust the stale state in canonical TeamOf() here.
+        const bbcoop::LobbyState live_roster=lobby.StateFor(member.name);
+        if (!live_roster.has_team() ||
+            live_roster.team().id()!=team->id() ||
+            live_roster.team().party()!=team->party())
+            return;
         int sender_playing=0, recipient_playing=0;
-        for (const auto& seat:team->members()) {
+        for (const auto& seat:live_roster.team().members()) {
             if (seat.member()==member.name &&
                 seat.state()==bbcoop::LobbyPlayer::PLAYING)
                 ++sender_playing;
