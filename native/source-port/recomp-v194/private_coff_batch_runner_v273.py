@@ -23,6 +23,11 @@ import compile_private_win64_coff_v217 as coff
 MAX_SHARDS=512
 MAX_BATCHES=16
 MAX_MANIFEST=2*1024*1024
+# V303: original scan/functions.tsv has one line for EACH of the
+# 241,821 inspected functions. It is not the small JSON manifest.
+# A 2 MiB cap wrongly rejects a genuine full-game scan before COFF
+# compilation; keep a separate conservative 64 MiB bound.
+MAX_SCAN_INDEX=64*1024*1024
 
 def enumerate_shards(generated:Path)->list[str]:
     path=coff.private(generated)
@@ -54,7 +59,7 @@ def verify_original_preparation(generated:Path,names:list[str])->bool:
     if (metadata.is_symlink() or not metadata.is_file() or
             metadata.stat().st_size>MAX_MANIFEST or
             scanner.is_symlink() or not scanner.is_file() or
-            scanner.stat().st_size>MAX_MANIFEST):
+            not 1<=scanner.stat().st_size<=MAX_SCAN_INDEX):
         raise ValueError("missing protected original-game AOT provenance")
     parsed=json.loads(metadata.read_text(encoding='utf-8'))
     if (parsed.get('format')!='SHYT_PRIVATE_FULL_IMAGE_V204' or
