@@ -156,11 +156,14 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   CHECK(b.direct_grants.front().authority_public_key()==authority);
   const auto& current_team=service.Lobby().TeamOf(a.name);
   CHECK(current_team && current_team==service.Lobby().TeamOf(b.name));
+  // Expect stores string_view: never bind it to a temporary
+  // QByteArray::toStdString() result (dangling view after statement).
+  const std::string expected_party=party.toStdString();
   const Grant::Expect expect_a{
-      current_team->id(),party.toStdString(),a.name,b.name,
+      current_team->id(),expected_party,a.name,b.name,
       17,29,0x18010000,signed_a->scope.world_epoch};
   const Grant::Expect expect_b{
-      current_team->id(),party.toStdString(),b.name,a.name,
+      current_team->id(),expected_party,b.name,a.name,
       29,17,0x18010000,signed_b->scope.world_epoch};
   CHECK(signed_a->scope.team==current_team->id());
   CHECK(signed_a->scope.party==party.toStdString());
