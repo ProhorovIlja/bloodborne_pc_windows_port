@@ -29,6 +29,21 @@ def patch(source:str)->str:
     src=replace_once(source,SOURCE_HEADER,
         SOURCE_HEADER+'\n#include "core/shyt_hybrid/yt_direct_physical_api_v264.h"\n'
         '#include "core/shyt_hybrid/hybrid_direct_physical_gate_v264.h"')
+    # V306: Windows restarts must NOT inherit the actual UDP socket
+    # (or the readiness pair). A stale inherited server link can keep
+    # the old session alive and break the new game's authentication.
+    # The original P2P transport calls this for every created OS socket.
+    src=replace_once(src,
+        "bool SetSocketNonBlocking(net_socket socket) {\n"
+        "#ifdef _WIN32\n"
+        "    u_long enabled = 1;",
+        "bool SetSocketNonBlocking(net_socket socket) {\n"
+        "#ifdef _WIN32\n"
+        "    // V306: suppress cross-process socket inheritance on restart.\n"
+        "    if (!::SetHandleInformation(reinterpret_cast<HANDLE>(socket),\n"
+        "                                HANDLE_FLAG_INHERIT,0))\n"
+        "        return false;\n"
+        "    u_long enabled = 1;")
     src=replace_once(src,
         "    GamePackets,\n    // Our messages with the server itself",
         "    GamePackets,\n    VerifiedDirectMovement, // SHDP only, NEVER SHAD\n"
