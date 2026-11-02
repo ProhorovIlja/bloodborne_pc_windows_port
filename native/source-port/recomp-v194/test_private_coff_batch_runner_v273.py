@@ -48,6 +48,23 @@ def run()->None:
         provenance_file=root/'full-original-preparation.json'
         provenance_file.write_text(json.dumps(provenance),encoding='utf-8')
         assert not batch.verify_original_preparation(source,names)
+        # V303: a real 241k-function scan index is necessarily much
+        # larger than the 2 MiB JSON manifest cap. Test a harmless
+        # synthetic >2 MiB scanner without weakening manifest bounds.
+        long_index=(b'address\\tsize\\tinstructions\\tundecodable\\n'
+                    +b'0000000000000000\\t1\\t1\\t0\\n'*100000)
+        scan_file=scanner/'functions.tsv'
+        scan_file.write_bytes(long_index)
+        assert batch.MAX_MANIFEST<scan_file.stat().st_size<=batch.MAX_SCAN_INDEX
+        provenance['scanner_index_sha256']=coff.digest(scan_file)
+        provenance_file.write_text(json.dumps(provenance),encoding='utf-8')
+        assert batch.verify_original_preparation(source,names) is False
+        # A manifest may not smuggle the larger scanner budget into
+        # arbitrary JSON inputs. The original small manifest stays capped.
+        scan_file.write_text('synthetic-only\\n')
+        provenance['scanner_index_sha256']=coff.digest(scan_file)
+        provenance_file.write_text(json.dumps(provenance),encoding='utf-8')
+        assert batch.verify_original_preparation(source,names) is False
         (source/names[0]).write_text('changed synthetic source')
         rejected(lambda:batch.verify_original_preparation(source,names))
         (source/names[0]).write_bytes(b'/* synthetic never derived from game */\n')
