@@ -19,6 +19,7 @@ def patched(s):
            '#include "bloodborne_world.h"\n'
            '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"\n'
            '#include "shyt_hybrid/yt_server_direct_signer_v310.h"\n'
+           '#include "shyt_hybrid/yt_operator_peer_signer_v313.h"\\n'
            '#include <QtEndian>')
     s=once(s, '''    } else if (envelope.has_team_start()) {
       starts.push_back(envelope.team_start());
@@ -35,6 +36,28 @@ def patched(s):
 // original bbcoop::Envelope. No Fornex credentials or original game.
 int ServerRequiresMutualDirectPeerConsentV296() {
   namespace Grant=BloodborneCoop::SHYTHybrid::SignedPeerGrantV279;
+  // V313: real original LinkServer operator opt-in is disabled by
+  // default; a privately permissioned Linux file enables the signer.
+  qunsetenv("SHYT_P2P_EDDSA_SEED_FILE");
+  {
+    Service configured{{}};
+    CHECK(!BloodborneCoop::SHYTHybrid::OperatorPeerSignerV313::
+          InstallFromEnvironment(configured));
+    QTemporaryDir private_dir;
+    CHECK(private_dir.isValid());
+    const QString seed_path=private_dir.filePath("signer-32.bin");
+    QFile local_seed(seed_path);
+    CHECK(local_seed.open(QIODevice::WriteOnly|QIODevice::NewOnly));
+    CHECK(local_seed.write(QByteArray(32,'K'))==32);
+    local_seed.close();
+    CHECK(local_seed.setPermissions(
+          QFileDevice::ReadOwner|QFileDevice::WriteOwner));
+    CHECK(qputenv("SHYT_P2P_EDDSA_SEED_FILE",
+                  QFile::encodeName(seed_path)));
+    CHECK(BloodborneCoop::SHYTHybrid::OperatorPeerSignerV313::
+          InstallFromEnvironment(configured));
+    qunsetenv("SHYT_P2P_EDDSA_SEED_FILE");
+  }
   Service service{{}};
   BloodborneWorld::HostedRules hosted;
   hosted.enabled=true;
