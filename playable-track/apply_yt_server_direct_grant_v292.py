@@ -40,6 +40,7 @@ def header(src:str)->str:
         std::string receiver;
         quint32 sender_run=0, receiver_run=0, map=0;
         quint64 world_epoch=0;
+        quint32 sender_game_link_instance=0, receiver_game_link_instance=0;
     };
     using DirectPeerIssuer = std::function<std::optional<bbcoop::Envelope>(
         const DirectPairSource&, const bbcoop::DirectPeerRequest&)>;
@@ -95,6 +96,7 @@ def source(src:str)->str:
             request.recipient().size()>64 ||
             request.noise_static_public_key().size()!=32 ||
             request.request_nonce().size()!=16 ||
+            request.game_link_instance()==0 ||
             (member.last_direct_peer_request_ms &&
              now_ms-member.last_direct_peer_request_ms<1000))
             return;
@@ -156,6 +158,7 @@ def source(src:str)->str:
             recipient->peer_intent.recipient()==member.name &&
             recipient->peer_intent.noise_static_public_key().size()==32 &&
             recipient->peer_intent.request_nonce().size()==16 &&
+            recipient->peer_intent.game_link_instance()!=0 &&
             recipient->peer_intent_party==member.party &&
             recipient->peer_intent_epoch==world_epoch &&
             recipient->peer_intent_map==member.map &&
@@ -189,7 +192,8 @@ def source(src:str)->str:
         member.peer_intent_ms=0;
         DirectPairSource authoritative{
             team->id(),team->party(),member.name,recipient->name,
-            member.run,recipient->run,member.map,world_epoch};
+            member.run,recipient->run,member.map,world_epoch,
+            request.game_link_instance(),previous.game_link_instance()};
         // Caller must create signed V279 grant and derive actual peer
         // UDP endpoints and responder Noise identity from its trusted
         // server-side authenticated link registry, not from request.
@@ -199,7 +203,9 @@ def source(src:str)->str:
             authoritative.team,authoritative.party,
             authoritative.receiver,authoritative.sender,
             authoritative.receiver_run,authoritative.sender_run,
-            authoritative.map,authoritative.world_epoch};
+            authoritative.map,authoritative.world_epoch,
+            authoritative.receiver_game_link_instance,
+            authoritative.sender_game_link_instance};
         const auto issued_reverse=direct_peer_issuer(reverse,previous);
         const auto valid_envelope=[](const std::optional<bbcoop::Envelope>& e) {
             return e && e->has_direct_peer_grant() &&
@@ -229,7 +235,8 @@ def source(src:str)->str:
         const Grant::Expect live{
             authoritative.team,authoritative.party,
             authoritative.sender,authoritative.receiver,
-            authoritative.sender_run,authoritative.receiver_run,
+            authoritative.sender_game_link_instance,
+            authoritative.receiver_game_link_instance,
             authoritative.map,authoritative.world_epoch};
         if (!signed_scope || !Grant::Verify(
                 *signed_scope,direct_peer_authority_pub,live,
@@ -251,7 +258,8 @@ def source(src:str)->str:
             std::span<const u8>(reverse_data,reverse_body.signed_grant().size()));
         const Grant::Expect reverse_live{
             reverse.team,reverse.party,reverse.sender,reverse.receiver,
-            reverse.sender_run,reverse.receiver_run,
+            reverse.sender_game_link_instance,
+            reverse.receiver_game_link_instance,
             reverse.map,reverse.world_epoch};
         if (!reverse_signed || !Grant::Verify(
                 *reverse_signed,direct_peer_authority_pub,reverse_live,
