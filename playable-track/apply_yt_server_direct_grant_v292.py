@@ -56,7 +56,12 @@ def header(src:str)->str:
     src=once(src,anchor,change)
     src=once(src,"        bool quiet = false;       // its link is quiet (the hub's)",
         "        bool quiet = false;       // its link is quiet (the hub's)\n"
-        "        qint64 last_direct_peer_request_ms = 0; // V292 rate limit")
+        "        qint64 last_direct_peer_request_ms = 0; // V292 rate limit\n"
+        "        bbcoop::DirectPeerRequest peer_intent; // V295 bounded mutual opt-in\n"
+        "        QString peer_intent_party;\n"
+        "        quint64 peer_intent_epoch = 0;\n"
+        "        quint32 peer_intent_map = 0, peer_intent_run = 0;\n"
+        "        qint64 peer_intent_ms = 0;")
     marker="    BloodborneCoop::TeamLobby lobby;"
     src=once(src,marker,
         "    DirectPeerIssuer direct_peer_issuer; // V292 unset by default\n"
@@ -120,8 +125,8 @@ def source(src:str)->str:
             world->second.logs==0 || world->second.team_world_id.empty() ||
             team->party()!="world:"+world->second.team_world_id)
             return;
-        const Member* recipient=nullptr;
-        for (const auto& [key,other]:members) {
+        Member* recipient=nullptr;
+        for (auto& [key,other]:members) {
             if (other.name==request.recipient() &&
                 other.party==member.party && !other.hostile && !other.quiet &&
                 other.run && other.map==member.map &&
@@ -134,20 +139,69 @@ def source(src:str)->str:
             }
         }
         if (!recipient) return;
+        // V295: BOTH players must explicitly opt in through the
+        // original authenticated shadNet Coop stream, within 12s,
+        // for this exact world, epoch, map, run and reciprocal peer.
+        // A solo request is never evidence of recipient consent.
+        const quint64 world_epoch=
+            WorldLogEpoch(world->second.world,world->second.logs);
+        const bool reciprocal=
+            recipient->peer_intent.recipient()==member.name &&
+            recipient->peer_intent.noise_static_public_key().size()==32 &&
+            recipient->peer_intent.request_nonce().size()==16 &&
+            recipient->peer_intent_party==member.party &&
+            recipient->peer_intent_epoch==world_epoch &&
+            recipient->peer_intent_map==member.map &&
+            recipient->peer_intent_run==recipient->run &&
+            recipient->peer_intent_ms>0 &&
+            now_ms>=recipient->peer_intent_ms &&
+            now_ms-recipient->peer_intent_ms<=12'000 &&
+            recipient->peer_intent.noise_static_public_key()!=
+                request.noise_static_public_key() &&
+            recipient->peer_intent.request_nonce()!=request.request_nonce();
+        if (!reciprocal) {
+            member.peer_intent=request;
+            member.peer_intent_party=member.party;
+            member.peer_intent_epoch=world_epoch;
+            member.peer_intent_map=member.map;
+            member.peer_intent_run=member.run;
+            member.peer_intent_ms=now_ms;
+            return; // no issued peer grant until reciprocal request
+        }
+        // V295: consume the earlier player's consent BEFORE invoking
+        // the external issuer. Replayed/duplicated requests cannot
+        // reuse old consent or trigger a second grant.
+        const bbcoop::DirectPeerRequest previous=recipient->peer_intent;
+        recipient->peer_intent.Clear();
+        recipient->peer_intent_party.clear();
+        recipient->peer_intent_epoch=0;
+        recipient->peer_intent_ms=0;
+        member.peer_intent.Clear();
+        member.peer_intent_party.clear();
+        member.peer_intent_epoch=0;
+        member.peer_intent_ms=0;
         DirectPairSource authoritative{
             team->id(),team->party(),member.name,recipient->name,
-            member.run,recipient->run,member.map,
-            WorldLogEpoch(world->second.world,world->second.logs)};
+            member.run,recipient->run,member.map,world_epoch};
         // Caller must create signed V279 grant and derive actual peer
         // UDP endpoints and responder Noise identity from its trusted
         // server-side authenticated link registry, not from request.
         // Callback must refuse unregistered keys/nonce replay.
         const auto issued=direct_peer_issuer(authoritative,request);
-        if (!issued || !issued->has_direct_peer_grant() ||
-            issued->direct_peer_grant().signed_grant().empty() ||
-            issued->direct_peer_grant().signed_grant().size()>512 ||
-            issued->direct_peer_grant().authority_public_key().size()!=32)
-            return;
+        const DirectPairSource reverse{
+            authoritative.team,authoritative.party,
+            authoritative.receiver,authoritative.sender,
+            authoritative.receiver_run,authoritative.sender_run,
+            authoritative.map,authoritative.world_epoch};
+        const auto issued_reverse=direct_peer_issuer(reverse,previous);
+        const auto valid_envelope=[](const std::optional<bbcoop::Envelope>& e) {
+            return e && e->has_direct_peer_grant() &&
+                !e->direct_peer_grant().signed_grant().empty() &&
+                e->direct_peer_grant().signed_grant().size()<=512 &&
+                e->direct_peer_grant().authority_public_key().size()==32;
+        };
+        if (!valid_envelope(issued) || !valid_envelope(issued_reverse))
+            return; // neither participant receives a one-sided grant
         // V294: even an operator-supplied issuer callback is not
         // permitted to redirect the player to a different signed pair,
         // map, world epoch or EdDSA authority. Verify the actual signed
@@ -174,7 +228,29 @@ def source(src:str)->str:
                 *signed_scope,direct_peer_authority_pub,live,
                 QDateTime::currentMSecsSinceEpoch()))
             return;
-        SendTo(member,*issued,now_ms); // ORIGINAL CoopStream reliable link
+        const auto& reverse_body=issued_reverse->direct_peer_grant();
+        const auto* reverse_key=reinterpret_cast<const std::uint8_t*>(
+            reverse_body.authority_public_key().data());
+        if (!std::equal(direct_peer_authority_pub.begin(),
+                        direct_peer_authority_pub.end(),reverse_key))
+            return;
+        const auto* reverse_data=reinterpret_cast<const u8*>(
+            reverse_body.signed_grant().data());
+        const auto reverse_signed=Grant::DecodeWire(
+            std::span<const u8>(reverse_data,reverse_body.signed_grant().size()));
+        const Grant::Expect reverse_live{
+            reverse.team,reverse.party,reverse.sender,reverse.receiver,
+            reverse.sender_run,reverse.receiver_run,
+            reverse.map,reverse.world_epoch};
+        if (!reverse_signed || !Grant::Verify(
+                *reverse_signed,direct_peer_authority_pub,reverse_live,
+                QDateTime::currentMSecsSinceEpoch()))
+            return;
+        // V295: each player receives their own ordered-pair grant in
+        // the original authenticated reliable Coop stream only after
+        // BOTH independent server-checked opt-ins.
+        SendTo(member,*issued,now_ms);
+        SendTo(*recipient,*issued_reverse,now_ms);
         return;
     }
 """
