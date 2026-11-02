@@ -108,12 +108,54 @@ def verify_private_pe_dll_v312(path:Path)->bool:
             if len(option)!=optional or struct.unpack_from(
                     '<H',option,0)[0]!=0x20b:
                 return False
-            # Explicit /NOENTRY must have AddressOfEntryPoint=0.
+            # V315: a synthetic MZ/PE header alone must not qualify
+            # as a link result. Check real section extents and retain
+            # at least one raw code/data section. This still does NOT
+            # verify execution semantics or missing native game APIs.
             entry=struct.unpack_from('<I',option,0x10)[0]
             image_size=struct.unpack_from('<I',option,0x38)[0]
-            return entry==0 and image_size>0
+            header_size=struct.unpack_from('<I',option,0x3c)[0]
+            section_alignment=struct.unpack_from('<I',option,0x20)[0]
+            file_alignment=struct.unpack_from('<I',option,0x24)[0]
+            section_headers_end=at+24+optional+sections*40
+            if (entry!=0 or not 0<image_size<=0x7fffffff or
+                    not 0<header_size<=size or
+                    header_size<section_headers_end or
+                    not 512<=section_alignment<=65536 or
+                    not 512<=file_alignment<=65536 or
+                    image_size%section_alignment):
+                return False
+            real_sections=0
+            for _ in range(sections):
+                section=stream.read(40)
+                if len(section)!=40:
+                    return False
+                virtual_size,virtual_at,raw_size,raw_at=struct.unpack_from(
+                    '<LLLL',section,8)
+                if not virtual_at or virtual_at%section_alignment or (
+                        virtual_size and virtual_at+virtual_size>image_size):
+                    return False
+                if raw_size:
+                    if (raw_at<header_size or raw_at>size or
+                            raw_size>size-raw_at or
+                            raw_at%file_alignment):
+                        return False
+                    real_sections+=1
+            return real_sections>0
     except (OSError,ValueError,struct.error,OverflowError):
         return False
+
+def guard_private_link_target_v315(output:Path)->Path:
+    """Refuse any pre-existing PE probe output, including symlink/reparse.
+
+    Prevent stale DLL artifacts from being misreported if a later
+    linker exits successfully without writing its intended output.
+    Do not delete or overwrite an owner's prior private diagnostic.
+    """
+    path=coff.private(output)/'private-native-link-probe-v309.dll'
+    if path.exists() or path.is_symlink():
+        raise ValueError('old private PE probe must be examined explicitly')
+    return path
 
 def save_exclusive_v309(path:Path,content:str)->None:
     target=coff.private(path)
@@ -140,6 +182,7 @@ def main()->int:
         response,count=prepare_private_link_probe_v309(
             args.generated_dir,args.upstream,args.sdk,args.output_dir,args.opt)
         output=coff.private(args.output_dir).resolve(strict=True)
+        guard_private_link_target_v315(output)
         target=output/'private-native-link-probe-v309.rsp'
         save_exclusive_v309(target,response)
         print('SHYT_V309_VERIFIED_PRIVATE_FULL_COFF_LINK_PLAN objects='+str(count))
