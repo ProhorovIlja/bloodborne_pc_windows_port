@@ -125,6 +125,36 @@ def pending_shards(generated:Path,output:Path,names:list[str],
             remaining.append(name)
     return remaining
 
+def verify_link_inventory_v275(generated:Path, output:Path,
+                               names:list[str], manifest:dict,
+                               expected:dict)->dict:
+    """No linker is invoked. Exact private source/COFF closure only.
+
+    V275 refuses to advertise link readiness on an incomplete, stale or
+    mismatched COFF cache. Each shard must match V204 preparation and
+    the pinned V217 compiler/include/SDK fingerprint. The compiled
+    original game still has PS4 guest callbacks and no finished Windows
+    graphics/audio/game subsystems.
+    """
+    verified_109=verify_original_preparation(generated,names)
+    if (manifest.get('format')!='SHYT_PRIVATE_ORIGINAL_COFF_V217' or
+            not isinstance(manifest.get('objects'),dict)):
+        raise ValueError("invalid private compiled COFF manifest")
+    leftovers=pending_shards(generated,output,names,manifest,expected)
+    compiled=len(names)-len(leftovers)
+    # A successful *inventory* is not proof of a native PE linker or
+    # absence of PS4-shaped interpreter callbacks.
+    return {
+        'expected_original_shards':len(names),
+        'verified_private_win64_coff':compiled,
+        'missing_or_stale_coff':len(leftovers),
+        'full_coff_set_verified':len(leftovers)==0,
+        'private_original_109_verified':verified_109,
+        'native_pe_linked':False,
+        'runtime_guest_callbacks_eliminated':False,
+        'game_boot_proven':False,
+    }
+
 def run(args:argparse.Namespace)->dict:
     if not 0<=args.opt<=2 or not 1<=args.max_batches<=MAX_BATCHES or not (
             45<=args.budget_seconds<=3600):
@@ -154,6 +184,9 @@ def run(args:argparse.Namespace)->dict:
         'private_original_109_verified':verified_109,
     }
     if args.preview or not pending:
+        if args.verify_link_inventory:
+            result['link_inventory']=verify_link_inventory_v275(
+                generated,output,names,manifest,base)
         return result
     started=time.monotonic()
     for i in range(0,len(pending),4):
@@ -177,6 +210,9 @@ def run(args:argparse.Namespace)->dict:
     check=pending_shards(generated,output,names,manifest_for(output),base)
     result['still_pending']=len(check)
     result['verified_cached_shards']=len(names)-len(check)
+    if args.verify_link_inventory:
+        result['link_inventory']=verify_link_inventory_v275(
+            generated,output,names,manifest_for(output),base)
     return result
 
 def main()->None:
@@ -189,6 +225,8 @@ def main()->None:
     p.add_argument('--max-batches',type=int,default=8)
     p.add_argument('--budget-seconds',type=int,default=180)
     p.add_argument('--preview',action='store_true')
+    p.add_argument('--verify-link-inventory',action='store_true',
+                   help='SHA-verify every original COFF without linking or publishing it')
     args=p.parse_args()
     try:
         report=run(args)
