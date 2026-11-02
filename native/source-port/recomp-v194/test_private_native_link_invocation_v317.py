@@ -53,6 +53,11 @@ def main()->None:
         run([linker,'@'+str(rsp)])
         assert target.is_file()
         assert probe.verify_private_pe_dll_v312(target)
+        # V322: the private symbol accountant must agree with the
+        # REAL successful LLVM linker: no unresolved original externs.
+        full=probe.private_aggregate_import_audit_v322(root,names)
+        assert full['objects']==2 and full['unresolved']==0
+        assert full['dependency_edges']>=1
         # With the second COFF genuinely missing, lld-link MUST
         # report unresolved bb_recomp_body, not "success".
         negative=root/'negative-link.rsp'
@@ -77,6 +82,19 @@ def main()->None:
                            timeout=45,text=True,errors='replace')
         assert bad.returncode!=0, 'missing dependency linked successfully'
         assert not probe.verify_private_pe_dll_v312(bad_output)
+        # The same incomplete dependency is detectable BEFORE invoking
+        # lld-link, without printing any private original symbol names.
+        source=root/'recomp_00000.c'
+        original_object=(root/'recomp_00000.obj').read_bytes()
+        source.write_text('int unrelated_synthetic(void){return 3;}\n',
+                          encoding='ascii')
+        run([compiler,'--target=x86_64-pc-windows-msvc',
+             '-O0','-ffreestanding','-fno-stack-protector',
+             '-c',str(source),'-o',str(root/'recomp_00000.obj')])
+        incomplete=probe.private_aggregate_import_audit_v322(root,names)
+        assert incomplete['unresolved']>=1
+        (root/'recomp_00000.obj').write_bytes(original_object)
+        assert probe.private_aggregate_import_audit_v322(root,names)['unresolved']==0
         rejects=False
         try:
             probe.guard_private_link_target_v315(root)
