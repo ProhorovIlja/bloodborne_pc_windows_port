@@ -91,6 +91,11 @@ jobs:
           # This single C++ translation unit does not link or deploy.
           printf '#pragma once\n#define BB_SCM_REV "synthetic-ci"\n' \
             > "$RUNNER_TEMP/yt-v296-proto/bbcoop_revision.h"
+          # LinkServer includes the real shadNet protobuf client/account
+          # types; the standalone world test only needed coop.pb.h.
+          protoc -I"$src/src" \
+            --cpp_out="$RUNNER_TEMP/yt-v296-proto" \
+            "$src/src/shadnet.proto"
           g++ -std=c++20 -fPIC -O0 -g0 -fsyntax-only \
             -I"$src/src" -I"$src" -I"$RUNNER_TEMP/yt-v296-proto" \
             $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6Concurrent) \
