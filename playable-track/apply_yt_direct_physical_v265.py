@@ -64,7 +64,16 @@ def patch(source:str)->str:
         // this socket. Require a real signed EdDSA server grant, bound to
         // the pinned authority, the original YT Noise scope, exact epoch,
         // authenticated peer IP:port and game-level lease.
-        if (!LinkWelcomed() || !Hybrid::ValidateSignedPeerIngressV285(proof))
+        // V304: the *real OS socket*, not just a caller-supplied
+        // lease snapshot, checks fresh wall-clock signature expiry
+        // and converts the ticket lifetime to its steady-clock domain.
+        const auto socket_now=P2PNowMs();
+        const auto unix_now=std::chrono::duration_cast<
+            std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+        const auto expires=Hybrid::BoundedPhysicalPeerExpiryV304(
+            proof,socket_now,unix_now);
+        if (!LinkWelcomed() || !expires)
             return false;
         const auto& entry=proof.receiver;
         const auto [address,port]=entry.approved_endpoint;
@@ -74,7 +83,7 @@ def patch(source:str)->str:
             return false;
         std::lock_guard guard(verified_direct_mutex);
         return verified_direct_gate.InstallAuthenticatedEndpoint(
-            {address,port,entry.lease.lease_expiry_ms},entry.lease.now_ms);
+            {address,port,*expires},socket_now);
     }
 
     // This is a separate authenticated wire route, not SendInternal's
