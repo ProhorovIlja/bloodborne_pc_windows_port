@@ -93,7 +93,10 @@ int main() {
     auto direct_send=[&](std::string_view member, std::span<const u8> bytes) {
         assert(member=="hunter-B");
         inbound.lease=active.lease;
-        const auto delivered=ReceiveDirectYtFrameV262(
+        // V286: our real physical sender now supplies SHDP-framed
+        // ciphertext. The original YT receiver sees ONLY unwrapped AEAD.
+        assert(ShdpWireV286::OpenEnvelope(bytes));
+        const auto delivered=ReceivePhysicalDirectYtFrameV286(
             original_receiver,inbound,inbound.approved_endpoint,bytes);
         assert(delivered.size()==1);
         ++direct;
