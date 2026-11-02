@@ -14,6 +14,15 @@
 #include <cstring>
 #include <optional>
 #include <span>
+#ifdef __linux__
+#include <cerrno>
+#include <sys/random.h>
+#elif defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace BloodborneCoop::SHYTHybrid::ReflexiveStunV321 {
 using u8=std::uint8_t;
@@ -23,6 +32,33 @@ struct Endpoint {
     std::uint16_t port_nbo=0;
     friend bool operator==(const Endpoint&,const Endpoint&)=default;
 };
+// V323: trusted OS entropy, never a client/signer supplied nonce.
+// If the OS source is unavailable the STUN discovery is disabled.
+inline bool FreshTransactionIdV323(std::array<u8,12>& out) {
+#ifdef __linux__
+    std::size_t done=0;
+    while(done<out.size()) {
+        const ssize_t n=::getrandom(out.data()+done,out.size()-done,0);
+        if(n<0 && errno==EINTR)continue;
+        if(n<=0)return false;
+        done+=static_cast<std::size_t>(n);
+    }
+#elif defined(_WIN32)
+    HMODULE library=::LoadLibraryW(L"advapi32.dll");
+    if(!library)return false;
+    using RngFn=BOOLEAN (WINAPI*)(void*,ULONG);
+    auto* rng=reinterpret_cast<RngFn>(
+        ::GetProcAddress(library,"SystemFunction036"));
+    const bool okay=rng && rng(out.data(),static_cast<ULONG>(out.size()));
+    ::FreeLibrary(library);
+    if(!okay)return false;
+#else
+    (void)out;
+    return false;
+#endif
+    return std::any_of(out.begin(),out.end(),[](u8 b){return b!=0;});
+}
+
 class Binding {
 public:
     static constexpr std::size_t RequestBytes=20;
