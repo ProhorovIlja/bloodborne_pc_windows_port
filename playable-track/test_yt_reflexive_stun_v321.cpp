@@ -56,8 +56,9 @@ int main() {
     assert(!binding.Take(server,altered,2000));
     altered=r;altered[2]=1;
     assert(!binding.Take(server,altered,2000));
-    altered=r;altered[31]=0;
-    assert(!binding.Take(server,altered,2000));
+    altered=r;
+    for(int i=0;i<4;++i)altered[28+i]=Binding::Cookie[i];
+    assert(!binding.Take(server,altered,2000)); // zero mapped IPv4
     altered=r;altered[25]=2;
     assert(!binding.Take(server,altered,2000));
     altered=r;altered.resize(31);
