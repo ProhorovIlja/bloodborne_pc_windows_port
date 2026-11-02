@@ -64,7 +64,7 @@ def header(src:str)->str:
 
 def source(src:str)->str:
     src=once(src,'#include "bloodborne_world.h"',
-             '#include "bloodborne_world.h"\\n'
+             '#include "bloodborne_world.h"\n'
              '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"')
     marker="""    if (envelope.has_invade_request()) {
         OnInvadeRequest(member, envelope.invade_request(), now_ms, result);
