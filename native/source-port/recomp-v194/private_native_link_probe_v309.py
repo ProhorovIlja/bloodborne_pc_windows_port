@@ -95,7 +95,7 @@ def verify_private_pe_dll_v312(path:Path)->bool:
                 return False
             stream.seek(at)
             header=stream.read(24)
-            if len(header)!=24 or header[:4]!=b'PE\\0\\0':
+            if len(header)!=24 or header[:4]!=b'PE\0\0':
                 return False
             machine,sections,_,_,_,optional,flags=struct.unpack_from(
                 '<HHLLLHH',header,4)
