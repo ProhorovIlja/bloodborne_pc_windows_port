@@ -28,7 +28,7 @@ def once(data:str,before:str,after:str)->str:
     return data.replace(before,after,1)
 
 def header(src:str)->str:
-    src=once(src,"#include <deque>","#include <functional>\n#include <utility>\n#include <deque>")
+    src=once(src,"#include <deque>","#include <functional>\n#include <array>\n#include <cstdint>\n#include <utility>\n#include <deque>")
     anchor="    void SetHosted(const HostedRules& rules);"
     change="""    // V292: production server ONLY. Default is no issuer => no P2P.
     // All fields come from currently authenticated shadNet membership,
@@ -43,8 +43,13 @@ def header(src:str)->str:
     };
     using DirectPeerIssuer = std::function<std::optional<bbcoop::Envelope>(
         const DirectPairSource&, const bbcoop::DirectPeerRequest&)>;
-    void SetDirectPeerIssuer(DirectPeerIssuer issuer) {
+    // Server operator must provision BOTH a trusted pinned EdDSA
+    // authority pubkey and a signer. Neither comes from peer traffic.
+    void SetDirectPeerIssuer(
+        DirectPeerIssuer issuer,
+        const std::array<std::uint8_t,32>& authority_pub) {
         direct_peer_issuer=std::move(issuer);
+        direct_peer_authority_pub=authority_pub;
     }
 
 """+anchor
@@ -53,10 +58,14 @@ def header(src:str)->str:
         "        bool quiet = false;       // its link is quiet (the hub's)\n"
         "        qint64 last_direct_peer_request_ms = 0; // V292 rate limit")
     marker="    BloodborneCoop::TeamLobby lobby;"
-    src=once(src,marker,"    DirectPeerIssuer direct_peer_issuer; // V292 deliberately unset by default\n"+marker)
+    src=once(src,marker,"    DirectPeerIssuer direct_peer_issuer; // V292 deliberately unset by default
+    std::array<std::uint8_t,32> direct_peer_authority_pub{};\n"+marker)
     return src
 
 def source(src:str)->str:
+    src=once(src,'#include "bloodborne_world.h"',
+             '#include "bloodborne_world.h"\\n'
+             '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"')
     marker="""    if (envelope.has_invade_request()) {
         OnInvadeRequest(member, envelope.invade_request(), now_ms, result);
         return;
@@ -65,7 +74,10 @@ def source(src:str)->str:
         // V292: real source-level gate BEFORE hostile/world dispatch.
         // No callback and no authenticated hosted link => no Direct P2P.
         const auto& request=envelope.direct_peer_request();
-        if (!direct_peer_issuer || !require_authenticated_identity ||
+        if (!direct_peer_issuer ||
+            !BloodborneCoop::SHYTHybrid::SignedPeerGrantV279::NonZero(
+                direct_peer_authority_pub) ||
+            !require_authenticated_identity ||
             !hosted.enabled || member.hostile || member.quiet ||
             member.name.empty() || member.lobby!=member.name ||
             member.run==0 ||
@@ -134,6 +146,29 @@ def source(src:str)->str:
             issued->direct_peer_grant().signed_grant().size()>512 ||
             issued->direct_peer_grant().authority_public_key().size()!=32)
             return;
+        // V294: even an operator-supplied issuer callback is not
+        // permitted to redirect the player to a different signed pair,
+        // map, world epoch or EdDSA authority. Verify the actual signed
+        // bytes with the server's independently pinned authority key.
+        namespace Grant=BloodborneCoop::SHYTHybrid::SignedPeerGrantV279;
+        const auto& sent=issued->direct_peer_grant();
+        if (!std::equal(direct_peer_authority_pub.begin(),
+                        direct_peer_authority_pub.end(),
+                        sent.authority_public_key().begin()))
+            return;
+        const auto* payload=reinterpret_cast<const u8*>(
+            sent.signed_grant().data());
+        const auto signed_scope=Grant::DecodeWire(
+            std::span<const u8>(payload,sent.signed_grant().size()));
+        const Grant::Expect live{
+            authoritative.team,authoritative.party,
+            authoritative.sender,authoritative.receiver,
+            authoritative.sender_run,authoritative.receiver_run,
+            authoritative.map,authoritative.world_epoch};
+        if (!signed_scope || !Grant::Verify(
+                *signed_scope,direct_peer_authority_pub,live,
+                QDateTime::currentMSecsSinceEpoch()))
+            return;
         SendTo(member,*issued,now_ms); // ORIGINAL CoopStream reliable link
         return;
     }
@@ -164,6 +199,26 @@ def main()->None:
         planned.append((source_file,modify(
             source_file.read_text(encoding="utf-8"))))
     if args.mode=="apply":
+        # Preserve header dependency closure in the disposable server
+        # checkout; never require global mutable include directories.
+        source_dir=Path(__file__).resolve().parent
+        destination=root/"server/src/shyt_hybrid"
+        if destination.is_symlink() or destination.exists():
+            raise ValueError("refusing overwrite of prior peer source overlay")
+        dependencies=(
+            "hybrid_transport_policy_v1.h",
+            "hybrid_direct_ingress_v2.h",
+            "hybrid_direct_egress_v240.h",
+            "hybrid_peer_crypto_v241.h",
+            "yt_signed_peer_grant_v279.h",
+        )
+        for filename in dependencies:
+            src=source_dir/filename
+            if src.is_symlink() or not src.is_file():
+                raise ValueError("missing signed grant verification source")
+        destination.mkdir()
+        for filename in dependencies:
+            (destination/filename).write_bytes((source_dir/filename).read_bytes())
         for path,body in planned:
             path.write_text(body,encoding="utf-8")
         print("SHYT_V292_AUTHENTICATED_TEAM_WORLD_SERVER_GRANT_SEAM_DEFAULT_OFF")
