@@ -98,8 +98,8 @@ int ServerRequiresMutualDirectPeerConsentV296() {
         Grant::Scope scope{};
         scope.team=src.team;scope.party=src.party;
         scope.sender=src.sender;scope.receiver=src.receiver;
-        scope.sender_instance=src.sender_run;
-        scope.receiver_instance=src.receiver_run;
+        scope.sender_instance=src.sender_game_link_instance;
+        scope.receiver_instance=src.receiver_game_link_instance;
         scope.map=src.map;scope.world_epoch=src.world_epoch;
         scope.issued_unix_ms=QDateTime::currentMSecsSinceEpoch();
         scope.expires_unix_ms=scope.issued_unix_ms+20000;
@@ -127,6 +127,7 @@ int ServerRequiresMutualDirectPeerConsentV296() {
       intent->set_recipient(to.name);
       intent->set_noise_static_public_key(std::string(32,key));
       intent->set_request_nonce(std::string(16,key));
+      intent->set_game_link_instance(from.name==a.name?17:29);
       from.Send(msg,now);
       step();
   };
