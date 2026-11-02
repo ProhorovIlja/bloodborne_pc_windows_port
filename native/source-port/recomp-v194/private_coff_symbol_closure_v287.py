@@ -105,9 +105,14 @@ def verify_external_symbol_closure(object_files:list[Path])->dict:
     unresolved_sites=sum(unresolved_by_object)
     blocked_objects=sum(bool(n) for n in unresolved_by_object)
     max_per_object=max(unresolved_by_object)
-    single_owner_unresolved=sum(
-        sum(1 for _,needs in all_objects if name in needs)==1
-        for name in unresolved)
+    # V328: count only unresolved reference sites in linear time.
+    # Avoid O(unique imports * every original module) on 9k+ shards.
+    unresolved_users={name:0 for name in unresolved}
+    for _,needs in all_objects:
+        for name in needs.intersection(unresolved):
+            unresolved_users[name]+=1
+    single_owner_unresolved=sum(count==1
+                                for count in unresolved_users.values())
     dependencies:list[set[int]]=[set() for _ in object_files]
     for object_id,(_,needs) in enumerate(all_objects):
         for name in needs:
