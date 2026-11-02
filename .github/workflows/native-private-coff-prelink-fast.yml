@@ -39,6 +39,9 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile             native/source-port/recomp-v194/compile_private_win64_coff_v217.py             native/source-port/recomp-v194/private_coff_batch_runner_v273.py             native/source-port/recomp-v194/private_coff_symbol_closure_v287.py
+          # V297: retain coverage for the ORIGINAL V217 compiler CLI
+          # self-test, not just later standalone COFF parsing fixtures.
+          python native/source-port/recomp-v194/compile_private_win64_coff_v217.py --self-test
           python native/source-port/recomp-v194/test_private_coff_validation_v281.py
           python native/source-port/recomp-v194/test_private_coff_symbol_closure_v287.py
           python native/source-port/recomp-v194/test_private_coff_batch_runner_v273.py
