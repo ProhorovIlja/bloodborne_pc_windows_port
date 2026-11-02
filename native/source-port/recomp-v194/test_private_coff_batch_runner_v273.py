@@ -86,6 +86,42 @@ def run()->None:
         rejected(lambda:batch.manifest_for(dest))
         state.unlink()
         assert not batch.manifest_for(dest)['objects']
+        # V275: do not claim a link-ready private game when even ONE
+        # Win64 COFF object is missing or stale. All test source and
+        # object bytes below are synthetic and disposable.
+        incomplete=batch.verify_link_inventory_v275(
+            source,dest,names,manifest,expected)
+        assert incomplete['expected_original_shards']==4
+        assert incomplete['verified_private_win64_coff']==1
+        assert incomplete['missing_or_stale_coff']==3
+        assert not incomplete['full_coff_set_verified']
+        assert not incomplete['native_pe_linked']
+        assert not incomplete['game_boot_proven']
+        for name in names[1:]:
+            origin=source/name
+            obj_file=dest/(origin.stem+'.obj')
+            obj_file.write_bytes(struct.pack('<HH',0x8664,2)+bytes(16))
+            manifest['objects'][name]={
+                'spec':{**expected,'source_sha256':coff.digest(origin)},
+                'object_sha256':coff.digest(obj_file)}
+        complete=batch.verify_link_inventory_v275(
+            source,dest,names,manifest,expected)
+        assert complete['verified_private_win64_coff']==4
+        assert complete['missing_or_stale_coff']==0
+        assert complete['full_coff_set_verified']
+        assert not complete['private_original_109_verified']
+        assert not complete['native_pe_linked']
+        assert not complete['runtime_guest_callbacks_eliminated']
+        assert not complete['game_boot_proven']
+        changed_obj=dest/(Path(names[-1]).stem+'.obj')
+        changed_obj.write_bytes(b'changed invalid COFF')
+        drift=batch.verify_link_inventory_v275(
+            source,dest,names,manifest,expected)
+        assert drift['missing_or_stale_coff']==1
+        assert not drift['full_coff_set_verified']
+        # Do not permit private game metadata to be silently relabelled
+        # as verified retail 1.09 without real owner-produced evidence.
+        # This synthetic fixture has the original V204 false flag.
         # No unsafe out-of-tree C shard or potential path traversal.
         (source/'recomp_abcde.c').write_bytes(b'')
         rejected(lambda:batch.enumerate_shards(source))
