@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import struct
 import sys
 
 import private_coff_batch_runner_v273 as batch
@@ -72,6 +73,48 @@ def prepare_private_link_probe_v309(
     response=object_response_v309(output,names)
     return response,len(names)
 
+def verify_private_pe_dll_v312(path:Path)->bool:
+    """Validate linker-produced real AMD64 PE DLL, not just exit code.
+
+    A successful fake/no-op linker could otherwise report "PE linked"
+    without emitting ANY file. This is only a structural PE inspection;
+    it does NOT establish original-game boot or working native imports.
+    """
+    file=coff.private(path)
+    if (file.is_symlink() or not file.is_file() or
+            not 512<=file.stat().st_size<=8*1024**3):
+        return False
+    size=file.stat().st_size
+    try:
+        with file.open('rb') as stream:
+            dos=stream.read(64)
+            if len(dos)!=64 or dos[:2]!=b'MZ':
+                return False
+            at=struct.unpack_from('<I',dos,0x3c)[0]
+            if at<64 or at>4096 or at+24+2>size:
+                return False
+            stream.seek(at)
+            header=stream.read(24)
+            if len(header)!=24 or header[:4]!=b'PE\\0\\0':
+                return False
+            machine,sections,_,_,_,optional,flags=struct.unpack_from(
+                '<HHLLLHH',header,4)
+            if (machine!=0x8664 or not 1<=sections<=96 or
+                    optional<0x70 or optional>4096 or
+                    not flags & 0x2000 or
+                    at+24+optional+sections*40>size):
+                return False
+            option=stream.read(optional)
+            if len(option)!=optional or struct.unpack_from(
+                    '<H',option,0)[0]!=0x20b:
+                return False
+            # Explicit /NOENTRY must have AddressOfEntryPoint=0.
+            entry=struct.unpack_from('<I',option,0x10)[0]
+            image_size=struct.unpack_from('<I',option,0x38)[0]
+            return entry==0 and image_size>0
+    except (OSError,ValueError,struct.error,OverflowError):
+        return False
+
 def save_exclusive_v309(path:Path,content:str)->None:
     target=coff.private(path)
     if target.is_symlink() or target.exists() or not target.parent.is_dir():
@@ -111,6 +154,11 @@ def main()->int:
                 print('SHYT_V309_PRIVATE_LINK_UNRESOLVED_OR_FAILED '
                       'inspect PRIVATE bounded logs')
                 return 2
+            # V312: a zero linker return code is NOT proof of PE.
+            # Verify the file's executable format and architecture.
+            if not verify_private_pe_dll_v312(
+                    output/'private-native-link-probe-v309.dll'):
+                raise ValueError('linker claimed success without genuine AMD64 PE DLL')
             # A PE DLL symbol closure probe is NOT native game boot.
             print('SHYT_V309_PRIVATE_PE_DLL_PROBE_LINKED '
                   'native_game_executable=false game_boot=false')
