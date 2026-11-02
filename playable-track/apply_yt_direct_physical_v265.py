@@ -168,6 +168,26 @@ def patch(source:str)->str:
         "            RevokeVerifiedMovementEndpoints(); // V276: build reauth\n"
         "    }")
 
+    # V278: authenticated server Member(Quiet/Gone) event is a trusted
+    # negative admission decision. Discard that peer's physical endpoint
+    # AND its buffered ciphertext, even if the old lease has not expired.
+    src=replace_once(src,
+        "    void OnMember(const Link::Member& member) {\n"
+        "        const u32 addr = ntohl(member.addr_nbo);",
+        "    void OnMember(const Link::Member& member) {\n"
+        "        if (member.state == Link::MemberState::Quiet ||\n"
+        "            member.state == Link::MemberState::Gone) {\n"
+        "            std::lock_guard guard(verified_direct_mutex);\n"
+        "            verified_direct_gate.Revoke(\n"
+        "                {member.addr_nbo,member.port_nbo,0});\n"
+        "            std::lock_guard queue_guard(internal_mutex);\n"
+        "            std::erase_if(verified_direct_queue, [&](const QueuedPacket& p) {\n"
+        "                return p.source_addr == member.addr_nbo &&\n"
+        "                       p.source_port == member.port_nbo;\n"
+        "            });\n"
+        "        }\n"
+        "        const u32 addr = ntohl(member.addr_nbo);")
+
     gate="""            // V265: a separately typed, encrypted SHDP packet from a
             // verified peer endpoint. Never place it into original shadNet
             // signaling, GamePackets or direct guest socket queues.
