@@ -19,7 +19,7 @@ def patched(s):
            '#include "bloodborne_world.h"\n'
            '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"\n'
            '#include "shyt_hybrid/yt_server_direct_signer_v310.h"\n'
-           '#include "shyt_hybrid/yt_operator_peer_signer_v313.h"\\n'
+           '#include "shyt_hybrid/yt_operator_peer_signer_v313.h"\n'
            '#include <QtEndian>')
     s=once(s, '''    } else if (envelope.has_team_start()) {
       starts.push_back(envelope.team_start());
