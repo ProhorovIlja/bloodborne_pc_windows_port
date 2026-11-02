@@ -67,7 +67,8 @@ def source(src:str)->str:
         const auto& request=envelope.direct_peer_request();
         if (!direct_peer_issuer || !require_authenticated_identity ||
             !hosted.enabled || member.hostile || member.quiet ||
-            member.name.empty() || member.lobby.empty() || member.run==0 ||
+            member.name.empty() || member.lobby!=member.name ||
+            member.run==0 ||
             member.map==0 || member.party.isEmpty() ||
             member.name != AuthenticatedMember(member.online_id) ||
             !OwnName(member,member.name) ||
@@ -86,6 +87,20 @@ def source(src:str)->str:
             team->members_size()<2 ||
             team->members_size()>static_cast<int>(TeamSize))
             return;
+        // Original YT TeamMember::PLAYING=2. A team row may still
+        // contain players who are at TITLE/OFFLINE, not eligible for
+        // any direct UDP session despite retaining team membership.
+        int sender_playing=0, recipient_playing=0;
+        for (const auto& seat:team->members()) {
+            if (seat.member()==member.name &&
+                seat.state()==bbcoop::TeamMember::PLAYING)
+                ++sender_playing;
+            if (seat.member()==request.recipient() &&
+                seat.state()==bbcoop::TeamMember::PLAYING)
+                ++recipient_playing;
+        }
+        if (sender_playing!=1 || recipient_playing!=1)
+            return;
         const auto world=worlds.find(member.party);
         if (world==worlds.end() || world->second.world==0 ||
             world->second.logs==0 || world->second.team_world_id.empty() ||
@@ -96,6 +111,7 @@ def source(src:str)->str:
             if (other.name==request.recipient() &&
                 other.party==member.party && !other.hostile && !other.quiet &&
                 other.run && other.map==member.map &&
+                other.lobby==other.name &&
                 other.cut_from.isEmpty() &&
                 other.name==AuthenticatedMember(other.online_id) &&
                 lobby.TeamOf(other.name)==team) {
