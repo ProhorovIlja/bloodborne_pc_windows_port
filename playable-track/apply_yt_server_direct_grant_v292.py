@@ -57,7 +57,7 @@ def header(src:str)->str:
     src=once(src,anchor,change)
     src=once(src,"        bool quiet = false;       // its link is quiet (the hub's)",
         "        bool quiet = false;       // its link is quiet (the hub's)\n"
-        "        qint64 last_direct_peer_request_ms = 0; // V292 rate limit\n"
+        "        qint64 last_direct_peer_request_ms = 0; // V292 rate limit\n        // V302: last 2 minutes of spent request nonces; one per\n        // authenticated Member, bounded at 128 by the 1/s rate limit.\n        std::deque<std::pair<std::string,qint64>> spent_peer_nonces;\n"
         "        bbcoop::DirectPeerRequest peer_intent; // V295 bounded mutual opt-in\n"
         "        QString peer_intent_party;\n"
         "        quint64 peer_intent_epoch = 0;\n"
@@ -82,6 +82,18 @@ def source(src:str)->str:
         // V292: real source-level gate BEFORE hostile/world dispatch.
         // No callback and no authenticated hosted link => no Direct P2P.
         const auto& request=envelope.direct_peer_request();
+        // V302: mutual consent is not enough if the exact pair of
+        // previously accepted client nonces can be replayed 1s later.
+        // Retain bounded nonce history for at least the grant lifetime.
+        const auto nonce_spent=[&](const Member& m,
+                                   const std::string& n) {
+            return std::any_of(m.spent_peer_nonces.begin(),
+                m.spent_peer_nonces.end(),
+                [&](const auto& entry) {
+                    return entry.first==n && now_ms>=entry.second &&
+                           now_ms-entry.second<=120'000;
+                });
+        };
         if (!direct_peer_issuer ||
             !BloodborneCoop::SHYTHybrid::SignedPeerGrantV279::NonZero(
                 direct_peer_authority_pub) ||
@@ -96,6 +108,7 @@ def source(src:str)->str:
             request.recipient().size()>64 ||
             request.noise_static_public_key().size()!=32 ||
             request.request_nonce().size()!=16 ||
+            nonce_spent(member,request.request_nonce()) ||
             request.game_link_instance()==0 ||
             (member.last_direct_peer_request_ms &&
              now_ms-member.last_direct_peer_request_ms<1000))
@@ -182,6 +195,21 @@ def source(src:str)->str:
         // the external issuer. Replayed/duplicated requests cannot
         // reuse old consent or trigger a second grant.
         const bbcoop::DirectPeerRequest previous=recipient->peer_intent;
+        if (nonce_spent(*recipient,previous.request_nonce()))
+            return;
+        // Spend both nonces BEFORE calling the external signer, including
+        // unsuccessful signing attempts. Bound memory even on busy hubs.
+        const auto spend=[&](Member& target,const std::string& nonce) {
+            auto& entries=target.spent_peer_nonces;
+            while(!entries.empty() &&
+                  (now_ms<entries.front().second ||
+                   now_ms-entries.front().second>120'000))
+                entries.pop_front();
+            if(entries.size()==128) entries.pop_front();
+            entries.emplace_back(nonce,now_ms);
+        };
+        spend(member,request.request_nonce());
+        spend(*recipient,previous.request_nonce());
         recipient->peer_intent.Clear();
         recipient->peer_intent_party.clear();
         recipient->peer_intent_epoch=0;
