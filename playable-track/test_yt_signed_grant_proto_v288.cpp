@@ -13,6 +13,7 @@ int main() {
     want->set_recipient("hunter-B");
     want->set_noise_static_public_key(std::string(32,'K'));
     want->set_request_nonce(std::string(16,'R'));
+    want->set_game_link_instance(17);
     assert(request.body_case()==bbcoop::Envelope::kDirectPeerRequest);
     std::string wire{};
     assert(request.SerializeToString(&wire) && wire.size()<512);
@@ -22,6 +23,7 @@ int main() {
     assert(received.direct_peer_request().recipient()=="hunter-B");
     assert(received.direct_peer_request().noise_static_public_key().size()==32);
     assert(received.direct_peer_request().request_nonce().size()==16);
+    assert(received.direct_peer_request().game_link_instance()==17);
 
     bbcoop::Envelope issued{};
     auto* signed_msg=issued.mutable_direct_peer_grant();
