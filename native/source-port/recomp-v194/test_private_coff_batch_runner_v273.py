@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """V273: synthetic ONLY, no original CUSA03173 code or COFF objects."""
 from __future__ import annotations
+import argparse
 from pathlib import Path
 import json
 import struct
@@ -114,12 +115,30 @@ def run()->None:
         assert not complete['native_pe_linked']
         assert not complete['runtime_guest_callbacks_eliminated']
         assert not complete['game_boot_proven']
+        # V287: the optional prelink stage must inspect ONLY a complete,
+        # unchanged, SHA-verified owner COFF set; it exposes aggregate
+        # symbol counts, never private exported function names.
+        opts=argparse.Namespace(verify_link_inventory=False,
+                                verify_symbol_closure=True)
+        aggregate={}
+        batch.attach_link_preflight_v287(
+            aggregate,opts,source,dest,names,manifest,expected)
+        assert aggregate['link_inventory']['full_coff_set_verified']
+        report=aggregate['symbol_closure']
+        assert report['external_definitions']==1
+        assert report['duplicate_external_names_across_objects']==3
+        assert report['external_references_unresolved_in_game_objects']==0
+        assert not report['native_pe_link_complete']
         changed_obj=dest/(Path(names[-1]).stem+'.obj')
         changed_obj.write_bytes(b'changed invalid COFF')
         drift=batch.verify_link_inventory_v275(
             source,dest,names,manifest,expected)
         assert drift['missing_or_stale_coff']==1
         assert not drift['full_coff_set_verified']
+        partial={}
+        batch.attach_link_preflight_v287(
+            partial,opts,source,dest,names,manifest,expected)
+        assert partial['symbol_closure']['status']=='blocked_incomplete_coff_set'
         # Do not permit private game metadata to be silently relabelled
         # as verified retail 1.09 without real owner-produced evidence.
         # This synthetic fixture has the original V204 false flag.
