@@ -37,7 +37,8 @@ def modified(s:str)->str:
     BloodborneCoop::SHYTHybrid::ReflexiveStunV321::Binding reflexive_probe;
     std::optional<BloodborneCoop::SHYTHybrid::ReflexiveStunV321::Endpoint>
         reflexive_mapped;
-    s64 last_reflexive_start_ms = -30000;""")
+    s64 last_reflexive_start_ms = -30000;
+    s64 reflexive_mapped_ms = -1;""")
     methods="""    // V324: the *original physical host_socket* does the STUN request,
     // so the resulting NAT mapping is from the same UDP port the game's
     // other traffic uses. It is untrusted advisory candidate metadata.
@@ -80,10 +81,18 @@ def modified(s:str)->str:
         if(!ip_nbo || !port_nbo || !LinkWelcomed() || !IsReady())
             return false;
         std::lock_guard lock(reflexive_mutex);
-        if(!reflexive_mapped)return false;
+        // V326: NAT mappings may change. Never report a stale address.
+        const s64 now=P2PNowMs();
+        if(!reflexive_mapped || reflexive_mapped_ms<0 ||
+           now<reflexive_mapped_ms ||
+           now-reflexive_mapped_ms>10000) {
+            reflexive_mapped.reset();
+            return false;
+        }
         *ip_nbo=reflexive_mapped->address_nbo;
         *port_nbo=reflexive_mapped->port_nbo;
         reflexive_mapped.reset();
+        reflexive_mapped_ms=-1;
         return true;
     }
 
@@ -92,6 +101,7 @@ def modified(s:str)->str:
         reflexive_probe.Revoke();
         reflexive_mapped.reset();
         last_reflexive_start_ms=-30000;
+        reflexive_mapped_ms=-1;
     }
 
 """
@@ -118,6 +128,7 @@ def modified(s:str)->str:
                 if(auto address=reflexive_probe.Take(
                        from_stun,datagram,P2PNowMs())) {
                     reflexive_mapped=address;
+                    reflexive_mapped_ms=P2PNowMs();
                     continue;
                 }
             }
