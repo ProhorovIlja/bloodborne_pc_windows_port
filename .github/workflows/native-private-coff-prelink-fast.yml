@@ -1,0 +1,45 @@
+name: Native V287 private COFF prelink fast checks
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-private-coff-prelink-fast.yml'
+      - 'native/source-port/recomp-v194/private_coff_*'
+      - 'native/source-port/recomp-v194/test_private_coff_*'
+      - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
+      - 'native/source-port/recomp-v194/verify_coff_dependencies_v219.py'
+  pull_request:
+    paths:
+      - '.github/workflows/native-private-coff-prelink-fast.yml'
+      - 'native/source-port/recomp-v194/private_coff_*'
+      - 'native/source-port/recomp-v194/test_private_coff_*'
+      - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
+      - 'native/source-port/recomp-v194/verify_coff_dependencies_v219.py'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  python-coff-prelink:
+    name: Original COFF safety fixtures (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Synthetic private original-game COFF safety checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile             native/source-port/recomp-v194/compile_private_win64_coff_v217.py             native/source-port/recomp-v194/private_coff_batch_runner_v273.py             native/source-port/recomp-v194/private_coff_symbol_closure_v287.py
+          python native/source-port/recomp-v194/test_private_coff_validation_v281.py
+          python native/source-port/recomp-v194/test_private_coff_symbol_closure_v287.py
+          python native/source-port/recomp-v194/test_private_coff_batch_runner_v273.py
+          echo SHYT_V287_PRIVATE_COFF_PRELINK_FAST_PASS
