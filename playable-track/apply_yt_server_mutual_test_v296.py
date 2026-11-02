@@ -199,6 +199,14 @@ def main():
           ('        // Original YT TeamMember::PLAYING=2.',
            '        std::fprintf(stderr,"V296_GATE_TEAM_PASS\\n");\n'
            '        // Original YT TeamMember::PLAYING=2.'),
+          ('        if (sender_playing!=1 || recipient_playing!=1)',
+           '        std::fprintf(stderr,"V296_ROSTER sender=%d recipient=%d total=%d\n",'
+           'sender_playing,recipient_playing,team->members_size());\n'
+           '        for(const auto& seat:team->members())'
+           ' std::fprintf(stderr,"V296_SEAT status=%d eq_sender=%d eq_receiver=%d\n",'
+           'static_cast<int>(seat.state()),seat.member()==member.name,'
+           'seat.member()==request.recipient());\n'
+           '        if (sender_playing!=1 || recipient_playing!=1)'),
           ('        const auto world=worlds.find(member.party);',
            '        std::fprintf(stderr,"V296_GATE_PLAYING_PASS\\n");\n'
            '        const auto world=worlds.find(member.party);'),
