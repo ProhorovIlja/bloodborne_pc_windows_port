@@ -1,0 +1,74 @@
+name: YT pinned original Windows shadPS4 game-client build candidate
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt-original-windows-game-client-build.yml'
+      - 'playable-track/apply_yt_game_link_seam_v256.py'
+      - 'playable-track/apply_yt_direct_physical_v265.py'
+      - 'playable-track/apply_yt_reflexive_udp_v324.py'
+  workflow_dispatch:
+concurrency:
+  group: original-windows-game-client-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  original-windows-shadps4:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: actual-yt
+          persist-credentials: false
+          submodules: false
+      - name: Apply REAL original YT game runtime and UDP overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C actual-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          python playable-track/apply_yt_game_link_seam_v256.py --upstream-checkout actual-yt --mode apply
+          python playable-track/apply_yt_direct_physical_v265.py --upstream-checkout actual-yt --mode apply
+          python playable-track/apply_yt_reflexive_udp_v324.py --upstream-checkout actual-yt --mode apply
+          echo SHYT_REAL_ORIGINAL_WINDOWS_GAME_SOURCE_PATCHED
+      - name: Install Qt host desktop runtime, original GUI dependency
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+      - name: Fetch exact original emulator pinned submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C actual-yt submodule update --init --recursive --depth 1 --quiet emulator/externals
+          test -f actual-yt/emulator/externals/fmt/CMakeLists.txt
+      - name: Configure and compile actual modified Windows shadPS4 executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = "$env:RUNNER_TEMP\yt-game-windows"
+          $qt = "$env:QT_ROOT_DIR"
+          if (-not $qt) { throw 'Qt desktop SDK is missing' }
+          cmake -S actual-yt/emulator -B $sdk -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$qt" -DENABLE_TESTS=OFF -DENABLE_UPDATER=OFF -DENABLE_DISCORD_RPC=OFF *> "$env:RUNNER_TEMP\yt-game-configure.log"
+          if ($LASTEXITCODE -ne 0) { Get-Content "$env:RUNNER_TEMP\yt-game-configure.log" -Tail 25; exit 1 }
+          cmake --build $sdk --config Release --target shadps4 --parallel 2 *> "$env:RUNNER_TEMP\yt-game-build.log"
+          if ($LASTEXITCODE -ne 0) { Select-String -Path "$env:RUNNER_TEMP\yt-game-build.log" -Pattern 'error C[0-9]+:|fatal error|error:|FAILED:|CMake Error:' | Select-Object -Last 12; exit 1 }
+          $exe = Get-ChildItem -Path $sdk -Filter shadps4.exe -Recurse -File | Select-Object -First 1
+          if (-not $exe -or $exe.Length -lt 100000) { throw 'Missing actual Windows game runtime PE' }
+          Write-Output 'SHYT_FULL_ORIGINAL_WINDOWS_YT_MODIFIED_GAME_CLIENT_PE_BUILT'
+      - name: Upload actual Windows game-host executable, no private assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-v131-modified-Windows-shadPS4-test-only
+          path: ${{ runner.temp }}/yt-game-windows/Release/shadps4.exe
+          if-no-files-found: error
+          retention-days: 7
