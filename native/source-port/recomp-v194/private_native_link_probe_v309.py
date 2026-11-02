@@ -38,7 +38,7 @@ def object_response_v309(output:Path,names:list[str])->str:
     if any(not p.is_file() or p.is_symlink() or not coff.coff_ok(p)
            for p in paths):
         raise ValueError('missing or malformed full original COFF')
-    if any('"' in str(p) or '\\n' in str(p) or '\\r' in str(p)
+    if any('"' in str(p) or '\n' in str(p) or '\r' in str(p)
            for p in [dll,*paths]):
         raise ValueError('unsafe linker response file quoting')
     # /OPT:NOREF prevents a no-entry DLL from dead-stripping original
@@ -46,7 +46,7 @@ def object_response_v309(output:Path,names:list[str])->str:
     lines=['/MACHINE:X64','/DLL','/NOENTRY','/NODEFAULTLIB',
            '/OPT:NOREF','/OPT:NOICF',f'/OUT:"{dll}"']
     lines.extend(f'"{p}"' for p in paths)
-    text='\\n'.join(lines)+'\\n'
+    text='\n'.join(lines)+'\n'
     if len(text.encode('utf-8'))>MAX_RESPONSE_BYTES:
         raise ValueError('unsafe linker response size')
     return text
@@ -72,7 +72,7 @@ def save_exclusive_v309(path:Path,content:str)->None:
     if target.is_symlink() or target.exists() or not target.parent.is_dir():
         raise ValueError('link probe response already exists or unsafe')
     fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    with os.fdopen(fd,'w',encoding='utf-8',newline='\\n') as f:
+    with os.fdopen(fd,'w',encoding='utf-8',newline='\n') as f:
         f.write(content)
 
 def main()->int:
