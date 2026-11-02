@@ -1,0 +1,30 @@
+name: YT V235 BBHost/BBPort comparable benchmark evidence gate
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - 'playable-track/compare_runtime_evidence_v235.py'
+      - 'playable-track/test_compare_runtime_evidence_v235.py'
+      - '.github/workflows/yt-v235-runtime-evidence-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  comparable-evidence:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run fail-closed synthetic runtime comparisons (no game data)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile playable-track/compare_runtime_evidence_v235.py playable-track/test_compare_runtime_evidence_v235.py
+          python playable-track/test_compare_runtime_evidence_v235.py
+          echo "No claim of real BBHost FPS, NAT behavior, or migration approval."

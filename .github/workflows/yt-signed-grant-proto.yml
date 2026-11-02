@@ -1,0 +1,105 @@
+name: YT V288 genuine shadNet Coop grant protobuf
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt-signed-grant-proto.yml'
+      - 'playable-track/apply_yt_signed_grant_proto_v288.py'
+      - 'playable-track/test_yt_signed_grant_proto_v288.cpp'
+      - 'playable-track/yt_signed_grant_coop_stream_v289.h'
+      - 'playable-track/test_yt_signed_grant_coop_stream_v289.cpp'
+      - 'playable-track/apply_yt_server_direct_grant_v292.py'
+  pull_request:
+    paths:
+      - '.github/workflows/yt-signed-grant-proto.yml'
+      - 'playable-track/apply_yt_signed_grant_proto_v288.py'
+      - 'playable-track/test_yt_signed_grant_proto_v288.cpp'
+      - 'playable-track/yt_signed_grant_coop_stream_v289.h'
+      - 'playable-track/test_yt_signed_grant_coop_stream_v289.cpp'
+      - 'playable-track/apply_yt_server_direct_grant_v292.py'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  original-protoc:
+    name: Pinned YT v1.3.1 C++ protobuf grant wire
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: actual-yharnam-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Compile exact original Coop protobuf with new default-off grant control
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile playable-track/apply_yt_signed_grant_proto_v288.py
+          python playable-track/apply_yt_signed_grant_proto_v288.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_signed_grant_proto_v288.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          # V292: patch exactly the original shadNet game SERVER
+          # Service::Take() admission, never from arbitrary client UDP.
+          # Default server issuer callback absent: fail closed.
+          python -m py_compile playable-track/apply_yt_server_direct_grant_v292.py
+          python playable-track/apply_yt_server_direct_grant_v292.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_server_direct_grant_v292.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          grep -Fq 'if (envelope.has_direct_peer_request())' \
+            actual-yharnam-upstream/server/src/bloodborne_world.cpp
+          grep -Fq 'WorldLogEpoch(world->second.world,world->second.logs)' \
+            actual-yharnam-upstream/server/src/bloodborne_world.cpp
+          grep -Fq 'DirectPeerIssuer direct_peer_issuer;' \
+            actual-yharnam-upstream/server/src/bloodborne_world.h
+          # No prebuilt generated files or retail game assets are committed.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
+          mkdir -p "$RUNNER_TEMP/yt-grant-proto"
+          protoc -Iactual-yharnam-upstream/server/coop \
+            --cpp_out="$RUNNER_TEMP/yt-grant-proto" \
+            actual-yharnam-upstream/server/coop/coop.proto
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -I"$RUNNER_TEMP/yt-grant-proto" \
+            "$RUNNER_TEMP/yt-grant-proto/coop.pb.cc" \
+            playable-track/test_yt_signed_grant_proto_v288.cpp \
+            -lprotobuf-lite -pthread \
+            -o "$RUNNER_TEMP/yt-v288-real-protoc"
+          "$RUNNER_TEMP/yt-v288-real-protoc"
+          # V289: real original generated bbcoop::Envelope and YT
+          # Monocypher authenticated signing, team eligibility and
+          # client pinning after the server Coop wire round-trip.
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -I"$RUNNER_TEMP/yt-grant-proto" \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            "$RUNNER_TEMP/yt-grant-proto/coop.pb.cc" \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            playable-track/test_yt_signed_grant_coop_stream_v289.cpp \
+            -lprotobuf-lite -pthread \
+            -o "$RUNNER_TEMP/yt-v289-real-proto-signature"
+          "$RUNNER_TEMP/yt-v289-real-proto-signature"
+          # V292: COMPILE the actual modified YT server world
+          # (~3.5k lines), not merely grep for a source hook.
+          # Protoc generates both real coop.proto and shadnet.proto types.
+          sudo apt-get install -y -qq qt6-base-dev pkg-config
+          protoc -Iactual-yharnam-upstream/server/src \
+            --cpp_out="$RUNNER_TEMP/yt-grant-proto" \
+            actual-yharnam-upstream/server/src/shadnet.proto
+          g++ -std=c++20 -fPIC -fsyntax-only -O0 \
+            -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server/src \
+            -Iactual-yharnam-upstream/server \
+            -I"$RUNNER_TEMP/yt-grant-proto" \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6Concurrent) \
+            actual-yharnam-upstream/server/src/bloodborne_world.cpp
+          echo SHYT_V292_AUTHENTIC_YT_WORLD_CPP_SYNTAX_PASS

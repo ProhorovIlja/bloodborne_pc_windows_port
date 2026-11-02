@@ -1,0 +1,107 @@
+name: YT V296 actual authenticated server mutual P2P consent
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt-real-server-mutual-test.yml'
+      - 'playable-track/apply_yt_server_mutual_test_v296.py'
+      - 'playable-track/apply_yt_server_direct_grant_v292.py'
+      - 'playable-track/apply_yt_signed_grant_proto_v288.py'
+      - 'playable-track/yt_signed_peer_grant_v279.h'
+      - 'playable-track/yt_server_direct_signer_v310.h'
+      - 'playable-track/yt_operator_peer_signer_v313.h'
+      - 'playable-track/apply_yt_server_link_signer_v313.py'
+  pull_request:
+    paths:
+      - '.github/workflows/yt-real-server-mutual-test.yml'
+      - 'playable-track/apply_yt_server_mutual_test_v296.py'
+      - 'playable-track/apply_yt_server_direct_grant_v292.py'
+      - 'playable-track/apply_yt_signed_grant_proto_v288.py'
+      - 'playable-track/yt_signed_peer_grant_v279.h'
+      - 'playable-track/yt_server_direct_signer_v310.h'
+      - 'playable-track/yt_operator_peer_signer_v313.h'
+      - 'playable-track/apply_yt_server_link_signer_v313.py'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  original-world-runtime:
+    name: Original YT Service/CoopStream runtime mutual consent
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: actual-yharnam-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Build and RUN original YT server world functional tests with real two-game signed grants
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev qt6-base-dev pkg-config
+          python -m py_compile playable-track/apply_yt_server_mutual_test_v296.py
+          python playable-track/apply_yt_signed_grant_proto_v288.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          python playable-track/apply_yt_server_direct_grant_v292.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          python playable-track/apply_yt_server_link_signer_v313.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          grep -Fq 'InstallFromEnvironment(m_world);' \
+            actual-yharnam-upstream/server/src/link_server.cpp
+          python playable-track/apply_yt_server_mutual_test_v296.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          mkdir -p "$RUNNER_TEMP/yt-v296-proto"
+          protoc -Iactual-yharnam-upstream/server/coop \
+            --cpp_out="$RUNNER_TEMP/yt-v296-proto" \
+            actual-yharnam-upstream/server/coop/coop.proto
+          src=actual-yharnam-upstream/server
+          g++ -std=c++20 -fPIC -O0 -g0 -Wno-missing-field-initializers \
+            -I"$src/src" -I"$src" -I"$RUNNER_TEMP/yt-v296-proto" \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6Concurrent) \
+            "$src/tests/test_bloodborne_world.cpp" \
+            "$src/src/bloodborne_world.cpp" \
+            "$src/src/lobby_friends.cpp" \
+            "$src/src/bloodborne_party_boards.cpp" \
+            "$src/src/server_link.cpp" \
+            "$src/coop/world_log.cpp" \
+            "$src/coop/coop_messages.cpp" \
+            "$src/coop/team_lobby.cpp" \
+            "$src/coop/trade.cpp" \
+            "$src/coop/link_crypto.cpp" \
+            "$src/coop/invasions.cpp" \
+            "$src/coop/duel.cpp" \
+            "$RUNNER_TEMP/yt-v296-proto/coop.pb.cc" \
+            $(pkg-config --libs Qt6Core Qt6Network Qt6Sql Qt6Concurrent) \
+            -lprotobuf -pthread \
+            -o "$RUNNER_TEMP/yt-v296-real-world-tests"
+          # V316: compile the ACTUAL LinkServer.cpp unit whose
+          # constructor installs the operator seed signer. Prior V313
+          # tests only compiled the helper from a world-test include,
+          # which could miss LinkServer-specific source integration.
+          # This single C++ translation unit does not link or deploy.
+          printf '#pragma once\n#define BB_SCM_REV "synthetic-ci"\n' \
+            > "$RUNNER_TEMP/yt-v296-proto/bbcoop_revision.h"
+          # LinkServer includes the real shadNet protobuf client/account
+          # types; the standalone world test only needed coop.pb.h.
+          protoc -I"$src/src" \
+            --cpp_out="$RUNNER_TEMP/yt-v296-proto" \
+            "$src/src/shadnet.proto"
+          g++ -std=c++20 -fPIC -O0 -g0 -fsyntax-only \
+            -I"$src/src" -I"$src" -I"$RUNNER_TEMP/yt-v296-proto" \
+            $(pkg-config --cflags Qt6Core Qt6Network Qt6Sql Qt6Concurrent) \
+            "$src/src/link_server.cpp"
+          echo SHYT_V316_REAL_LINK_SERVER_SIGNER_TU_COMPILED
+          "$RUNNER_TEMP/yt-v296-real-world-tests" >"$RUNNER_TEMP/yt-v296-test-results.txt"
+          grep -Fq 'PASS ServerRequiresMutualDirectPeerConsentV296' \
+            "$RUNNER_TEMP/yt-v296-test-results.txt"
+          echo SHYT_V296_REAL_ORIGINAL_YT_SERVER_COOOPSTREAM_MUTUAL_CONSENT_PASS

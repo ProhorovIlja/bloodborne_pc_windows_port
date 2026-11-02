@@ -1,0 +1,290 @@
+name: Playable Yharnam Together v1.3.1 real protocol / hybrid failover guard
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt-playable-hybrid-policy.yml'
+      - 'playable-track/**'
+  pull_request:
+    paths:
+      - '.github/workflows/yt-playable-hybrid-policy.yml'
+      - 'playable-track/**'
+  workflow_dispatch:
+# Keep only the newest regression run per branch across push and PR
+# events. Distinct PRs/branches never cancel one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  coop-policy-real-upstream:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout independent playable branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout published Yharnam Together v1.3.1 source SHA (not a speculative PR)
+        uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: actual-yharnam-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Compile C++20 against original published server's real channel rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This is the exact SHA listed in the official published v1.3.1 GitHub release.
+          test "$(git -C actual-yharnam-upstream rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers -pedantic \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_transport_policy_v1.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-route-policy"
+          "$RUNNER_TEMP/yt-hybrid-route-policy"
+          # v1.3.1's real original GameFrame/GameLinkPeer, NOT a simulation.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers -pedantic \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_direct_ingress_v2.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-ingress-v131"
+          "$RUNNER_TEMP/yt-hybrid-ingress-v131"
+          # V240: egress and receiver dedup using original, pinned GameFrame
+          # and GameLinkPeer types. No live UDP/socket or game data involved.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers -pedantic \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_direct_egress_v240.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-egress-v240"
+          "$RUNNER_TEMP/yt-hybrid-egress-v240"
+          # V241: actual upstream Monocypher/LinkAuth authenticated peer
+          # datagram sealing, Open + replay detection (synthetic keys only).
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_peer_crypto_v241.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-peer-crypto-v241"
+          "$RUNNER_TEMP/yt-hybrid-peer-crypto-v241"
+          # V243: encrypted real GameFrame -> verified original ingress ->
+          # original GameLinkPeer::Receive; then same receiver via relay.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_encrypted_roundtrip_v243.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-encrypted-roundtrip-v243"
+          "$RUNNER_TEMP/yt-hybrid-encrypted-roundtrip-v243"
+          # V244: two-message peer Noise NK with original YT primitives.
+          # Only deterministic synthetic private keys are used in CI.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_peer_noise_v244.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-peer-noise-v244"
+          "$RUNNER_TEMP/yt-hybrid-peer-noise-v244"
+          # V327: exact server-signed pair/epoch with independently pinned
+          # EdDSA root, original Noise NK and AEAD third-datagram proof
+          # over real Linux UDP sockets. No production NAT route inferred.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_signed_connectivity_v327.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-signed-connectivity-v327"
+          "$RUNNER_TEMP/yt-signed-connectivity-v327"
+          # V279: real original Monocypher 4.0.3 EdDSA/BLAKE2b
+          # server-signed short-lived pair grant, tamper/expiry/epoch tests.
+          # Never use fixture keys in actual shadNet deployments.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_signed_peer_grant_v279.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-signed-peer-grant-v279"
+          "$RUNNER_TEMP/yt-hybrid-signed-peer-grant-v279"
+          # V283: issuer policy mirrors EXACT accessor contract of
+          # original upstream bbcoop::Team / TeamMember / LobbyPlayer.
+          # A synthetic roster never signs for outsiders/title/offline
+          # players or an unsupported fifth/sixth slot.
+          grep -Fq 'message TeamMember {' actual-yharnam-upstream/server/coop/coop.proto
+          grep -Fq 'PLAYING = 2;' actual-yharnam-upstream/server/coop/coop.proto
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_server_team_grant_issuer_v283.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-server-team-issuer-v283"
+          "$RUNNER_TEMP/yt-hybrid-server-team-issuer-v283"
+          # V285: original YT EdDSA signature and Noise session must
+          # authorize a physical peer endpoint. Mutable 'verified' flags
+          # alone are insufficient for admission on the OS UDP socket.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_signed_peer_ingress_v285.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-signed-peer-socket-admission-v285"
+          "$RUNNER_TEMP/yt-signed-peer-socket-admission-v285"
+          # V321: STUN transaction parsing produces advisory NAT data only.
+          # No STUN response authorizes Noise peer traffic or shadNet SHDP.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iplayable-track playable-track/test_yt_reflexive_stun_v321.cpp \
+            -o "$RUNNER_TEMP/yt-reflexive-stun-v321"
+          "$RUNNER_TEMP/yt-reflexive-stun-v321"
+          # V325: actual Linux kernel socket sends the binding request
+          # from the same 5-tuple port and rejects STUN as SHDP traffic.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iplayable-track playable-track/test_yt_stun_real_udp_loopback_v325.cpp \
+            -o "$RUNNER_TEMP/yt-real-stun-loopback-v325"
+          "$RUNNER_TEMP/yt-real-stun-loopback-v325"
+          # V247: REAL Linux kernel UDP socket loopback: original Noise NK,
+          # encrypted YT GameFrame, original GameLinkPeer, relay fallback.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_real_udp_loopback_v247.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-real-udp-v247"
+          "$RUNNER_TEMP/yt-hybrid-real-udp-v247"
+          # V251: suppress excess original YT GameLinkPeer cumulative ACK
+          # piggybacks safely, with 750ms refresh for lost UDP ACKs.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_hybrid_direct_ack_coalescer_v251.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-ack-coalescer-v251"
+          "$RUNNER_TEMP/yt-hybrid-ack-coalescer-v251"
+          # V255: execute actual source-hook adapter (default server and
+          # authenticated peer) against the ORIGINAL YT GameFrame/Monocypher.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_game_link_runtime_bridge_v255.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-game-link-runtime-bridge-v255"
+          "$RUNNER_TEMP/yt-game-link-runtime-bridge-v255"
+          # V260 and V262: the original YT Noise NK must decrypt the real
+          # received ciphertext, and only a grant/endpoint-verified direct
+          # receiver may forward to the same GameLinkPeer.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_game_link_direct_ingress_v262.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-authenticated-direct-ingress-v262"
+          "$RUNNER_TEMP/yt-authenticated-direct-ingress-v262"
+          # V264: exact SHDP ciphertext-only physical transport gate,
+          # four peers maximum, revoked/expired route refusal.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iplayable-track playable-track/test_hybrid_direct_physical_gate_v264.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-physical-gate-v264"
+          "$RUNNER_TEMP/yt-hybrid-physical-gate-v264"
+          # V286: actual V241 encrypted GameFrame must be framed
+          # as physical SHDP-v1 for V264 socket, total UDP MTU <=1200,
+          # then unwrapped before original V262 AEAD GameLink ingest.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iplayable-track playable-track/test_yt_shdp_wire_v286.cpp \
+            -o "$RUNNER_TEMP/yt-shdp-wire-v286"
+          "$RUNNER_TEMP/yt-shdp-wire-v286"
+          # V256: verify original EXACT pinned 1.3.1 game runtime source
+          # route anchors before applying any source overlay. This is a
+          # disposable GitHub Actions checkout, not a production install.
+          python playable-track/apply_yt_game_link_seam_v256.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_game_link_seam_v256.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_game_link_runtime_bridge_v255.h
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_shdp_wire_v286.h
+          grep -Fq 'BloodborneCoop::SHYTHybrid::DispatchYtFrameV255(' \
+            actual-yharnam-upstream/emulator/src/core/bloodborne_patches.cpp
+          # V265 applies only to the same pinned upstream physical socket.
+          # Production peer endpoint admission remains unconfigured/disabled.
+          python playable-track/apply_yt_direct_physical_v265.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_direct_physical_v265.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          # V324: original authenticated game UDP socket uses a
+          # separate optional, CSPRNG-transaction STUN discovery path.
+          # A discovered reflexive address cannot open SHDP peer gate.
+          python playable-track/apply_yt_reflexive_udp_v324.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_reflexive_udp_v324.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_reflexive_stun_v321.h
+          grep -Fq 'P2PBeginReflexiveDiscovery(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'reflexive_probe.Take(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          # V320: source-lock the actual Windows Tk launcher, pass only
+          # the locally confirmed public EdDSA authority to the game.
+          python playable-track/apply_yt_launcher_authority_pin_v320.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          python -m py_compile \
+            actual-yharnam-upstream/bbport/launcher/bbport_launcher_win.py
+          python playable-track/test_yt_launcher_authority_pin_v320.py \
+            --patched-launcher \
+            actual-yharnam-upstream/bbport/launcher/bbport_launcher_win.py
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/hybrid_direct_physical_gate_v264.h
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_signed_peer_ingress_v285.h
+          # V318: actual OS peer socket additionally requires the
+          # independently configured launcher EdDSA public pin.
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_client_authority_pin_v318.h
+          grep -Fq 'Hybrid::MatchesLauncherAuthorityV318(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          # V307: buffered ciphertext must re-verify the physical grant
+          # at dequeue time, even if enqueue predated its expiry.
+          grep -Fq 'const int received=ReceiveInternal(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq '{*ip,*port,0},P2PNowMs(),packet' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'SetHandleInformation(reinterpret_cast<HANDLE>(socket),' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'Hybrid::BoundedPhysicalPeerExpiryV304(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'InternalChannel::VerifiedDirectMovement' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          # V276: no trusted-peer receive if original server link is
+          # not welcomed; reauth must revoke every prior endpoint.
+          grep -Fq 'if (LinkWelcomed() && verified_direct_gate.Allows(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'V277: check + enqueue MUST be atomic' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          # V278: authenticated server Member(Quiet/Gone) also
+          # cancels the exact physical peer endpoint and queued datagrams.
+          grep -Fq 'verified_direct_gate.Revoke(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'std::erase_if(verified_direct_queue' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          # V284: real shadNet cross-shard redirects and refused
+          # server Welcomes invalidate all prior physical P2P leases.
+          grep -Fq 'RevokeVerifiedMovementEndpoints(); // V284 shard redirect' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'RevokeVerifiedMovementEndpoints(); // V284 refused welcome' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'RevokeVerifiedMovementEndpoints(); // V276: build reauth' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+      - name: Offline v1.3.1 official installer and portable SHA integrity regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s playable-track -p 'test_verify_yt_v131_release.py' -v
+          # No release executable or private original game bytes in GitHub Actions.
+          echo SHYT_PLAYABLE_V131_LAUNCHER_INTEGRITY_TEST_PASS
+      - name: Verify official release still has four-player limit
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Explicit recognition of today's actual four-player limit protects
+          # players from using an untested fifth-remote-slot hack.
+          grep -Fq 'constexpr size_t TeamSize = 4;' actual-yharnam-upstream/server/coop/team_lobby.h
+          grep -Fq 'constexpr size_t InvasionMaxPlayers = 4;' actual-yharnam-upstream/server/coop/invasions.h
+          # No published YT game file, build outputs, or run-time clients
+          # are bundled with this independent code-only experiment.
+          echo SHYT_PLAYABLE_UPSTREAM_FOUR_PLAYER_LIMIT_UNCHANGED_PASS
+
+  stun-transaction-windows:
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and run OS-CSPRNG STUN discovery (Windows)
+        shell: pwsh
+        run: |
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -Iplayable-track playable-track/test_yt_reflexive_stun_v321.cpp -o "$env:RUNNER_TEMP\yt-stun-v321.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:RUNNER_TEMP\yt-stun-v321.exe"
+          exit $LASTEXITCODE

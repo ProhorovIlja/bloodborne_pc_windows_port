@@ -1,0 +1,29 @@
+name: YT 1.3.1 offline launcher XML patch collision safety
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - 'playable-track/audit_patch_xml.py'
+      - '.github/workflows/yt-mod-patch-xml-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  byte-collision-selftest:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test offline collision guard with entirely synthetic XML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile playable-track/audit_patch_xml.py
+          python playable-track/audit_patch_xml.py --self-test
+          echo 'No retail game ELF, private mods, XML payloads or user saves in CI.'
