@@ -138,6 +138,46 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   CHECK(signed_calls==2);
   CHECK(a.direct_grants.size()==1);
   CHECK(b.direct_grants.size()==1);
+  // V301: runtime must prove that EACH real CoopStream recipient got
+  // its own correctly signed and directed peer ticket, not merely that
+  // two protobuf envelopes were sent.
+  const auto decode=[](const bbcoop::DirectPeerGrant& message) {
+      const auto* data=reinterpret_cast<const u8*>(
+          message.signed_grant().data());
+      return Grant::DecodeWire(std::span<const u8>(
+          data,message.signed_grant().size()));
+  };
+  const auto signed_a=decode(a.direct_grants.front());
+  const auto signed_b=decode(b.direct_grants.front());
+  CHECK(signed_a && signed_b);
+  const std::string authority(
+      reinterpret_cast<const char*>(pub.data()),pub.size());
+  CHECK(a.direct_grants.front().authority_public_key()==authority);
+  CHECK(b.direct_grants.front().authority_public_key()==authority);
+  const auto& current_team=service.Lobby().TeamOf(a.name);
+  CHECK(current_team && current_team==service.Lobby().TeamOf(b.name));
+  const Grant::Expect expect_a{
+      current_team->id(),party.toStdString(),a.name,b.name,
+      17,29,0x18010000,signed_a->scope.world_epoch};
+  const Grant::Expect expect_b{
+      current_team->id(),party.toStdString(),b.name,a.name,
+      29,17,0x18010000,signed_b->scope.world_epoch};
+  CHECK(signed_a->scope.world_epoch!=0);
+  CHECK(signed_a->scope.world_epoch==signed_b->scope.world_epoch);
+  CHECK(Grant::Verify(*signed_a,pub,expect_a,
+                      QDateTime::currentMSecsSinceEpoch()));
+  CHECK(Grant::Verify(*signed_b,pub,expect_b,
+                      QDateTime::currentMSecsSinceEpoch()));
+  CHECK(!Grant::Verify(*signed_a,pub,expect_b,
+                       QDateTime::currentMSecsSinceEpoch()));
+  CHECK(!Grant::Verify(*signed_b,pub,expect_a,
+                       QDateTime::currentMSecsSinceEpoch()));
+  CHECK(std::all_of(signed_a->scope.responder_noise_pub.begin(),
+                    signed_a->scope.responder_noise_pub.end(),
+                    [](u8 v){return v==static_cast<u8>('B');}));
+  CHECK(std::all_of(signed_b->scope.responder_noise_pub.begin(),
+                    signed_b->scope.responder_noise_pub.end(),
+                    [](u8 v){return v==static_cast<u8>('A');}));
   // Old consent is consumed: no third grant after one replay.
   now+=1300;
   request(a,b,'A');
