@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """V309: synthetic-only private Windows PE linker response validation."""
 from pathlib import Path
+import struct
 import tempfile
 from unittest.mock import patch
 
@@ -37,6 +38,37 @@ def main():
         rejects(lambda:probe.object_response_v309(root,names[1:]))
         rejects(lambda:probe.object_response_v309(root,[*names,names[0]]))
         rejects(lambda:probe.object_response_v309(root,['recomp.c']))
+        # V312: a linker exit code 0 without a real AMD64 PE DLL
+        # is never a successful symbol-closure probe.
+        pefile=root/'private-native-link-probe-v309.dll'
+        assert not probe.verify_private_pe_dll_v312(pefile)
+        pe=bytearray(512)
+        pe[:2]=b'MZ'
+        struct.pack_into('<I',pe,0x3c,0x80)
+        pe[0x80:0x84]=b'PE\0\0'
+        struct.pack_into('<HHLLLHH',pe,0x84,
+                         0x8664,1,0,0,0,0xf0,0x2000)
+        struct.pack_into('<H',pe,0x98,0x20b)
+        struct.pack_into('<I',pe,0x98+0x38,0x2000)
+        pefile.write_bytes(pe)
+        assert probe.verify_private_pe_dll_v312(pefile)
+        saved=pe[0]
+        pe[0]=0
+        pefile.write_bytes(pe)
+        assert not probe.verify_private_pe_dll_v312(pefile)
+        pe[0]=saved
+        struct.pack_into('<I',pe,0x98+0x10,0x1000)
+        pefile.write_bytes(pe)
+        assert not probe.verify_private_pe_dll_v312(pefile)
+        struct.pack_into('<I',pe,0x98+0x10,0)
+        struct.pack_into('<H',pe,0x84,0x14c)
+        pefile.write_bytes(pe)
+        assert not probe.verify_private_pe_dll_v312(pefile)
+        struct.pack_into('<H',pe,0x84,0x8664)
+        struct.pack_into('<H',pe,0x84+18,0x20)
+        pefile.write_bytes(pe)
+        assert not probe.verify_private_pe_dll_v312(pefile)
+        pefile.unlink()
         # V311: prevent complete synthetic objects and a claimed
         # manifest from becoming a retail game link candidate unless
         # both original preparation AND link inventory verified 1.09.
