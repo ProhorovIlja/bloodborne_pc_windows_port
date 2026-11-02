@@ -1,0 +1,78 @@
+name: YT pinned original full game client compiled candidate
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt-original-game-client-build.yml'
+      - 'playable-track/apply_yt_game_link_seam_v256.py'
+      - 'playable-track/apply_yt_direct_physical_v265.py'
+      - 'playable-track/apply_yt_reflexive_udp_v324.py'
+      - 'playable-track/yt_game_link_runtime_bridge_v255.h'
+      - 'playable-track/yt_reflexive_stun_v321.h'
+      - 'playable-track/yt_signed_peer_ingress_v285.h'
+      - 'playable-track/yt_direct_physical_api_v264.h'
+  workflow_dispatch:
+concurrency:
+  group: original-game-client-build-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  original-linux-game-client:
+    name: Fully compile real patched YT original shadPS4 host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: actual-yt
+          persist-credentials: false
+          submodules: false
+      - name: Apply ALL real game movement and physical socket source overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C actual-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          python playable-track/apply_yt_game_link_seam_v256.py --upstream-checkout actual-yt --mode apply
+          python playable-track/apply_yt_direct_physical_v265.py --upstream-checkout actual-yt --mode apply
+          python playable-track/apply_yt_reflexive_udp_v324.py --upstream-checkout actual-yt --mode apply
+          grep -Fq 'DispatchYtFrameV255(' actual-yt/emulator/src/core/bloodborne_patches.cpp
+          grep -Fq 'P2PBeginReflexiveDiscovery(' actual-yt/emulator/src/core/libraries/network/p2p_sockets.cpp
+          echo SHYT_ORIGINAL_GAME_CLIENT_FULL_SOURCE_OVERLAY_READY
+      - name: Install original Linux shadPS4 game client SDK dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build clang cmake pkg-config libasound2-dev libpulse-dev libopenal-dev libssl-dev zlib1g-dev libedit-dev libudev-dev libevdev-dev libsdl2-dev libjack-dev libsndio-dev libvulkan-dev vulkan-validationlayers libpng-dev libwayland-dev libxkbcommon-dev
+          clang++ --version | head -1
+      - name: Fetch original exact-commit graphics and runtime submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C actual-yt submodule update --init --recursive --depth 1 --quiet emulator/externals
+          test -f actual-yt/emulator/externals/zlib-ng/CMakeLists.txt
+          test -f actual-yt/emulator/externals/fmt/CMakeLists.txt
+      - name: Configure and compile entire ORIGINAL patched YT game client
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S actual-yt/emulator -B "$RUNNER_TEMP/yt-original-client-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DENABLE_TESTS=OFF -DENABLE_UPDATER=OFF -DENABLE_DISCORD_RPC=OFF >"$RUNNER_TEMP/yt-original-client-configure.log" 2>&1 || { tail -30 "$RUNNER_TEMP/yt-original-client-configure.log"; exit 1; }
+          if ! cmake --build "$RUNNER_TEMP/yt-original-client-build" --target shadps4 --parallel 2 >"$RUNNER_TEMP/yt-original-client-build.log" 2>&1; then
+            grep -E '(^|:) error:|fatal error:|FAILED:|CMake Error:' "$RUNNER_TEMP/yt-original-client-build.log" | tail -15 || true
+            exit 1
+          fi
+          test -x "$RUNNER_TEMP/yt-original-client-build/shadps4"
+          echo SHYT_FULL_ORIGINAL_YT_PATCHED_GAME_CLIENT_COMPILE_PASS
+      - name: Store game-client executable candidate without proprietary assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-v131-patched-linux-shadps4-test-only
+          path: ${{ runner.temp }}/yt-original-client-build/shadps4
+          if-no-files-found: error
+          retention-days: 7
