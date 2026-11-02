@@ -52,7 +52,12 @@ jobs:
           set -euo pipefail
           # Genuine frozen Windows Tk Python entrypoint executes a benign
           # script without starting a GUI or opening an original game.
-          python -c "from pathlib import Path; Path('yt-launcher-smoke.py').write_text('import sys\\nfrom pathlib import Path\\nassert getattr(sys, \\\"frozen\\\", False)\\nPath(sys.argv[1]).write_text(\\\"BLAUNCHER_WINDOWS_SMOKE_OK\\\")\\n', encoding='utf-8')"
+          cat > yt-launcher-smoke.py <<'PY'
+          import sys
+          from pathlib import Path
+          assert getattr(sys, "frozen", False)
+          Path(sys.argv[1]).write_text("BLAUNCHER_WINDOWS_SMOKE_OK")
+          PY
           python -c "from pathlib import Path; import subprocess; exe=Path('candidate-dist/BLauncher/BLauncher.exe').resolve(); script=Path('yt-launcher-smoke.py').resolve(); marker=Path('yt-launcher-smoke.pass').resolve(); p=subprocess.run([str(exe),'--script',str(script),str(marker)],capture_output=True,timeout=40); assert p.returncode==0 and marker.is_file() and marker.read_text()=='BLAUNCHER_WINDOWS_SMOKE_OK', 'Windows frozen BLauncher entrypoint failed'"
           echo SHYT_REAL_WINDOWS_BLAUNCHER_FROZEN_RUNTIME_SCRIPT_MODE_PASS
       - name: Upload unsigned standalone-launcher candidate, no game assets
