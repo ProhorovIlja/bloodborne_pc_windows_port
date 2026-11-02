@@ -98,6 +98,11 @@ def patch(source:str)->str:
     }
 
     int ReadVerifiedMovement(void* out,u32 max,u32* ip,u16* port) {
+        // V276: previously admitted peer ciphertext must not outlive
+        // the ORIGINAL server-authenticated link's welcome state.
+        // The live V262 world/party lease is rechecked again by game ingress.
+        if (!LinkWelcomed() || !IsReady())
+            return -1;
         // Never let generic ReceiveInternal truncate an authenticated
         // SHDP ciphertext. GameLink needs the ENTIRE AEAD frame or none.
         if (!out || max < BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::MaxWire)
@@ -148,7 +153,7 @@ def patch(source:str)->str:
                     permitted=verified_direct_gate.Allows(
                         {from.sin_addr.s_addr,from.sin_port,0},now,datagram);
                 }
-                if (permitted) {
+                if (permitted && LinkWelcomed()) {
                     PushInternal(InternalChannel::VerifiedDirectMovement,
                                  from.sin_addr.s_addr,from.sin_port,
                                  datagram.data(),datagram.size());
