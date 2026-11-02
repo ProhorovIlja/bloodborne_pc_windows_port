@@ -2,6 +2,7 @@
 // V286 actual physical YT SHDP header and total datagram MTU safety.
 #include "yt_shdp_wire_v286.h"
 #include "hybrid_direct_physical_gate_v264.h"
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdio>
