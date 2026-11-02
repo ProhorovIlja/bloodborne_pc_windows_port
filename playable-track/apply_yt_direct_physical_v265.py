@@ -188,6 +188,22 @@ def patch(source:str)->str:
         "        }\n"
         "        const u32 addr = ntohl(member.addr_nbo);")
 
+    # V284: redirected shadNet shards and refused welcomes invalidate
+    # every previously authenticated peer grant. The exact upstream
+    # OnRedirect/OnWelcome methods release link_mutex BEFORE these
+    # additions acquire verified_direct_mutex, preserving lock order.
+    src=replace_once(src,
+        "        const u32 addr = ntohl(redirect.addr_nbo);",
+        "        RevokeVerifiedMovementEndpoints(); // V284 shard redirect\n"
+        "        const u32 addr = ntohl(redirect.addr_nbo);")
+    src=replace_once(src,
+        "        if (welcome.accepted) {\n"
+        "            // The address the game's own NAT queries see:",
+        "        if (!welcome.accepted)\n"
+        "            RevokeVerifiedMovementEndpoints(); // V284 refused welcome\n"
+        "        if (welcome.accepted) {\n"
+        "            // The address the game's own NAT queries see:")
+
     gate="""            // V265: a separately typed, encrypted SHDP packet from a
             // verified peer endpoint. Never place it into original shadNet
             // signaling, GamePackets or direct guest socket queues.
