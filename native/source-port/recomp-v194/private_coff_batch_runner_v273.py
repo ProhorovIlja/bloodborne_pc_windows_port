@@ -34,8 +34,11 @@ def enumerate_shards(generated:Path)->list[str]:
     if not path.is_dir() or path.is_symlink():
         raise ValueError("unsafe private generated source tree")
     names=[]
-    # Nonrecursive by design: only produced flat recomp_XXXXX.c objects
-    # may be used by the pinned V217 compiler; never search arbitrary dirs.
+    # V305: include BOTH the generated recomp.c registry (which exports
+    # bb_recomp_init / the original game's function table) and all
+    # flat recomp_XXXXX.c bodies. Omitting registry must never yield a
+    # misleading "full COFF set verified" or runnable-link claim.
+    # Never search arbitrary dirs or follow generated symlinks.
     for child in path.iterdir():
         if child.is_symlink():
             raise ValueError("linked private source files are forbidden")
@@ -43,8 +46,9 @@ def enumerate_shards(generated:Path)->list[str]:
             if not (1<=child.stat().st_size<=coff.MAX_SOURCE_BYTES):
                 raise ValueError("invalid private generated source size")
             names.append(child.name)
-    if not 1<=len(names)<=MAX_SHARDS:
-        raise ValueError("unexpected original-game C shard count")
+    if not 2<=len(names)<=MAX_SHARDS or 'recomp.c' not in names or not any(
+            name!='recomp.c' for name in names):
+        raise ValueError("missing original-game registration table or C bodies")
     return sorted(names)
 
 def verify_original_preparation(generated:Path,names:list[str])->bool:
