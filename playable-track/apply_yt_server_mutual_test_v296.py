@@ -183,6 +183,37 @@ def main():
     content=patched(path.read_text(encoding="utf-8"))
     if x.mode=="apply":
         path.write_text(content,encoding="utf-8")
+        # V296 diagnostics ONLY in disposable functional test build.
+        # Production server patch remains silent and private.
+        server=root/"server/src/bloodborne_world.cpp"
+        body=server.read_text(encoding="utf-8")
+        body=once(body,'#include "bloodborne_world.h"',
+             '#include "bloodborne_world.h"\n#include <cstdio>')
+        stages=[
+          ('    if (envelope.has_direct_peer_request()) {',
+           '    if (envelope.has_direct_peer_request()) {\n'
+           '        std::fprintf(stderr,"V296_GATE_RECEIVED\\n");'),
+          ('        // Charge requester BEFORE any costly signing work',
+           '        std::fprintf(stderr,"V296_GATE_BASIC_PASS\\n");\n'
+           '        // Charge requester BEFORE any costly signing work'),
+          ('        // Original YT TeamMember::PLAYING=2.',
+           '        std::fprintf(stderr,"V296_GATE_TEAM_PASS\\n");\n'
+           '        // Original YT TeamMember::PLAYING=2.'),
+          ('        const auto world=worlds.find(member.party);',
+           '        std::fprintf(stderr,"V296_GATE_PLAYING_PASS\\n");\n'
+           '        const auto world=worlds.find(member.party);'),
+          ('        Member* recipient=nullptr;',
+           '        std::fprintf(stderr,"V296_GATE_WORLD_PASS\\n");\n'
+           '        Member* recipient=nullptr;'),
+          ('        if (!recipient) return;',
+           '        if (!recipient) return;\n'
+           '        std::fprintf(stderr,"V296_GATE_RECIPIENT_PASS\\n");'),
+          ('        if (!reciprocal) {',
+           '        std::fprintf(stderr,"V296_GATE_RECIPROCAL=%d\\n",reciprocal);\n'
+           '        if (!reciprocal) {'),
+        ]
+        for a,b in stages:body=once(body,a,b)
+        server.write_text(body,encoding="utf-8")
         print("SHYT_V296_YT_ORIGINAL_SERVER_MUTUAL_CONSENT_TEST_APPLIED")
     else:
         print("SHYT_V296_YT_ORIGINAL_SERVER_TEST_ANCHORS_PASS")
