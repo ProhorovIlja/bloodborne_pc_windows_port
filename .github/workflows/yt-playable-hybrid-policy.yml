@@ -145,6 +145,12 @@ jobs:
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'V277: check + enqueue MUST be atomic' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          # V278: authenticated server Member(Quiet/Gone) also
+          # cancels the exact physical peer endpoint and queued datagrams.
+          grep -Fq 'verified_direct_gate.Revoke(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'std::erase_if(verified_direct_queue' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'RevokeVerifiedMovementEndpoints(); // V276: build reauth' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
       - name: Offline v1.3.1 official installer and portable SHA integrity regression suite
