@@ -8,6 +8,7 @@
 // server-authenticated peer pair grant + OS CSPRNG Noise handshake,
 // endpoint validation and lifecycle revocation. No bool is an auth proof.
 #include "hybrid_peer_crypto_v241.h"
+#include "yt_shdp_wire_v286.h"
 #include "hybrid_direct_ack_coalescer_v251.h"
 #include <cstdint>
 #include <span>
@@ -67,7 +68,12 @@ EgressResult DispatchYtFrameV255(
     const auto secure_direct = [&](const GameFrame& movement) -> bool {
         const auto encrypted=active_grant->peer_crypto->SealMovement(movement);
         if (!encrypted) return false;
-        return peer_wire_send(pending.member,std::span<const u8>(*encrypted));
+        // V286: OS physical socket accepts SHDP-v1 framed ciphertext,
+        // while V241 seals only the original GameFrame AEAD payload.
+        // Enforce MTU inclusive of the 9-byte channel header.
+        const auto physical=ShdpWireV286::Wrap(*encrypted);
+        if (!physical) return false; // server route fallback
+        return peer_wire_send(pending.member,std::span<const u8>(*physical));
     };
     return SendExistingGameFrameV251(
         pending.frame, active_grant->endpoints,
