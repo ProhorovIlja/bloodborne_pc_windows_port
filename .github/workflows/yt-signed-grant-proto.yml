@@ -8,6 +8,7 @@ on:
       - 'playable-track/test_yt_signed_grant_proto_v288.cpp'
       - 'playable-track/yt_signed_grant_coop_stream_v289.h'
       - 'playable-track/test_yt_signed_grant_coop_stream_v289.cpp'
+      - 'playable-track/apply_yt_server_direct_grant_v292.py'
   pull_request:
     paths:
       - '.github/workflows/yt-signed-grant-proto.yml'
@@ -15,6 +16,7 @@ on:
       - 'playable-track/test_yt_signed_grant_proto_v288.cpp'
       - 'playable-track/yt_signed_grant_coop_stream_v289.h'
       - 'playable-track/test_yt_signed_grant_coop_stream_v289.cpp'
+      - 'playable-track/apply_yt_server_direct_grant_v292.py'
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
@@ -46,6 +48,20 @@ jobs:
             --upstream-checkout actual-yharnam-upstream --mode check
           python playable-track/apply_yt_signed_grant_proto_v288.py \
             --upstream-checkout actual-yharnam-upstream --mode apply
+          # V292: patch exactly the original shadNet game SERVER
+          # Service::Take() admission, never from arbitrary client UDP.
+          # Default server issuer callback absent: fail closed.
+          python -m py_compile playable-track/apply_yt_server_direct_grant_v292.py
+          python playable-track/apply_yt_server_direct_grant_v292.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_server_direct_grant_v292.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          grep -Fq 'if (envelope.has_direct_peer_request())' \
+            actual-yharnam-upstream/server/src/bloodborne_world.cpp
+          grep -Fq 'WorldLogEpoch(world->second.world,world->second.logs)' \
+            actual-yharnam-upstream/server/src/bloodborne_world.cpp
+          grep -Fq 'DirectPeerIssuer direct_peer_issuer;' \
+            actual-yharnam-upstream/server/src/bloodborne_world.h
           # No prebuilt generated files or retail game assets are committed.
           sudo apt-get update -qq
           sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
