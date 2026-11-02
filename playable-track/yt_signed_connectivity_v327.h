@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
-// V327: a bounded, three-datagram AUTHENTICATED-CONNECTIVITY trial.
+// V330: a bounded, four-datagram AUTHENTICATED-CONNECTIVITY trial.
 // STUN reports an advisory reflexive endpoint; it never enables this.
 // Server-signed exact pair/epoch, a pinned authority and original YT
 // Noise NK are checked before a packet can be sent or processed.
 //
 // NK authenticates the responder only. The responder's return-path
 // confirmation proves receipt of its answer and possession of derived
-// keys, NOT an independent initiator identity. The original authenticated
+// keys, NOT an independent initiator identity. The fourth, encrypted ACK
+// prevents the initiator from switching to direct before the responder
+// has confirmed the third datagram. The original authenticated
 // server pair grant, exact observed source and gameplay lease remain
 // mandatory. This is a protocol fixture, not installed in live YT sockets.
 #include "hybrid_peer_noise_v244.h"
@@ -36,6 +38,10 @@ constexpr std::array<u8,9> ConfirmHeader{
     0xff,0xff,0xff,0xff,'S','H','P','C',1};
 constexpr std::size_t ConfirmWireBytes=
     ConfirmHeader.size()+32+LinkAuth::TrailerBytes;
+constexpr std::array<u8,9> AckHeader{
+    0xff,0xff,0xff,0xff,'S','H','P','A',1};
+constexpr std::size_t AckWireBytes=
+    AckHeader.size()+32+LinkAuth::TrailerBytes;
 
 inline bool Approved(
     const Grant::Signed& signed_pair,const Grant::PubKey& pinned,
@@ -78,6 +84,33 @@ inline bool AuthenticateFinishProof(
                       packet.begin()+ConfirmHeader.size());
 }
 
+inline std::vector<u8> EncryptResponderAck(
+    const Noise::Keys& keys,const PeerCryptoScopeV241& scope)
+{
+    std::vector<u8> packet(AckHeader.begin(),AckHeader.end());
+    const auto binding=PeerBindingV241(scope);
+    packet.insert(packet.end(),binding.begin(),binding.end());
+    LinkAuth::Session crypto(keys.second,keys.first);
+    const auto trailer=crypto.Seal(packet);
+    packet.insert(packet.end(),trailer.begin(),trailer.end());
+    return packet;
+}
+inline bool AuthenticateResponderAck(
+    const Noise::Keys& keys,const PeerCryptoScopeV241& scope,
+    std::span<const u8> received)
+{
+    if(received.size()!=AckWireBytes ||
+       !std::equal(AckHeader.begin(),AckHeader.end(),received.begin()))
+        return false;
+    std::vector<u8> packet(received.begin(),received.end());
+    LinkAuth::Session crypto(keys.first,keys.second);
+    if(crypto.Open(packet)!=LinkAuth::Session::Verdict::Ok)
+        return false;
+    const auto binding=PeerBindingV241(scope);
+    return std::equal(binding.begin(),binding.end(),
+                      packet.begin()+AckHeader.size());
+}
+
 class Initiator {
 public:
     Initiator(PeerCryptoScopeV241 scope,
@@ -114,17 +147,30 @@ public:
             return std::nullopt;
         auto keys=noise_.Finish(answer);
         if(!keys)return std::nullopt;
-        phase_=2;
+        keys_=*keys;
+        phase_=2; // pending authenticated ACK, not ready to offload
         return Ready{*keys,EncryptFinishProof(*keys,scope_)};
     }
-    bool ReadyForDirect() const {return phase_==2;}
-    void Reset() {phase_=3;}
+    bool OnAcknowledge(Endpoint from,std::span<const u8> ack,
+                       s64 unix_now_ms,s64 steady_now_ms)
+    {
+        if(phase_!=2 || !keys_ || from!=peer_ ||
+           steady_now_ms<0 || steady_now_ms>expires_ ||
+           !Grant::Verify(grant_,pinned_,view_,unix_now_ms) ||
+           !AuthenticateResponderAck(*keys_,scope_,ack))
+            return false;
+        phase_=3;
+        return true;
+    }
+    bool ReadyForDirect() const {return phase_==3;}
+    void Reset() {keys_.reset();phase_=4;}
 private:
     PeerCryptoScopeV241 scope_;
     Grant::Signed grant_;
     Grant::PubKey pinned_;
     Grant::Expect view_;
     Noise::Initiator noise_;
+    std::optional<Noise::Keys> keys_;
     Endpoint peer_{};
     s64 expires_=0;
     int phase_=0;
@@ -157,16 +203,17 @@ public:
         phase_=1;
         return answer->answer;
     }
-    bool OnFinish(Endpoint from,std::span<const u8> authenticated_proof,
-                  s64 unix_now_ms,s64 steady_now_ms)
+    std::optional<std::vector<u8>> OnFinish(
+        Endpoint from,std::span<const u8> authenticated_proof,
+        s64 unix_now_ms,s64 steady_now_ms)
     {
         if(phase_!=1 || !keys_ || from!=peer_ ||
            steady_now_ms<0 || steady_now_ms>expires_ ||
            !Grant::Verify(grant_,pinned_,view_,unix_now_ms) ||
            !AuthenticateFinishProof(*keys_,scope_,authenticated_proof))
-            return false;
+            return std::nullopt;
         phase_=2;
-        return true;
+        return EncryptResponderAck(*keys_,scope_);
     }
     bool ReadyForDirect() const {return phase_==2;}
     void Reset() {keys_.reset();phase_=3;}
