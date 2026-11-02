@@ -40,6 +40,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Install actual lld linker for Linux-only synthetic PE smoke
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lld
+          command -v clang >/dev/null
+          command -v lld-link >/dev/null
       - name: Synthetic private original-game COFF safety checks
         shell: bash
         run: |
