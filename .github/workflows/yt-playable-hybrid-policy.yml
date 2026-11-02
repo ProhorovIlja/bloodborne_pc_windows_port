@@ -103,6 +103,15 @@ jobs:
             actual-yharnam-upstream/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-hybrid-server-team-issuer-v283"
           "$RUNNER_TEMP/yt-hybrid-server-team-issuer-v283"
+          # V285: original YT EdDSA signature and Noise session must
+          # authorize a physical peer endpoint. Mutable 'verified' flags
+          # alone are insufficient for admission on the OS UDP socket.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_signed_peer_ingress_v285.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-signed-peer-socket-admission-v285"
+          "$RUNNER_TEMP/yt-signed-peer-socket-admission-v285"
           # V247: REAL Linux kernel UDP socket loopback: original Noise NK,
           # encrypted YT GameFrame, original GameLinkPeer, relay fallback.
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
@@ -158,6 +167,9 @@ jobs:
           python playable-track/apply_yt_direct_physical_v265.py \
             --upstream-checkout actual-yharnam-upstream --mode apply
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/hybrid_direct_physical_gate_v264.h
+          test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_signed_peer_ingress_v285.h
+          grep -Fq 'Hybrid::ValidateSignedPeerIngressV285(proof)' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'InternalChannel::VerifiedDirectMovement' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           # V276: no trusted-peer receive if original server link is
