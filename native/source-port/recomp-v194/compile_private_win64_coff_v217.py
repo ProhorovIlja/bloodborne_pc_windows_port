@@ -74,10 +74,11 @@ def coff_ok(path: Path) -> bool:
                 raw_size,raw_at,reloc_at,_,nreloc,_=struct.unpack_from(
                     '<LLLLHH',data,16)
                 if raw_size and (raw_at<section_end or
-                                 raw_at>size or raw_size>size-raw_at):
+                                 raw_at>symbols or raw_size>symbols-raw_at):
                     return False
                 if nreloc and (reloc_at<section_end or
-                               reloc_at>size or nreloc>(size-reloc_at)//10):
+                               reloc_at>symbols or
+                               nreloc>(symbols-reloc_at)//10):
                     return False
             string_at=symbols+nsyms*18
             if string_at>size-4:
