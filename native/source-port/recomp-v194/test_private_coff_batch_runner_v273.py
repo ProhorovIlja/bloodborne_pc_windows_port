@@ -87,7 +87,7 @@ def run()->None:
         provenance_file.write_text(json.dumps(provenance),encoding='utf-8')
         (source/names[0]).write_text('changed synthetic source')
         rejected(lambda:batch.verify_original_preparation(source,names))
-        (source/names[0]).write_bytes(b'/* synthetic never derived from game */\n')
+        (source/names[0]).write_bytes(b'/* synthetic generated function table */\n')
         assert not batch.verify_original_preparation(source,names)
         (scanner/'functions.tsv').write_text('changed scanner')
         rejected(lambda:batch.verify_original_preparation(source,names))
@@ -115,7 +115,7 @@ def run()->None:
         # invalidates the cached COFF, even if its filename is unchanged.
         first.write_text('/* NEW synthetic source */\n',encoding='utf-8')
         assert len(batch.pending_shards(source,dest,names,manifest,expected))==5
-        first.write_bytes(b'/* synthetic never derived from game */\n')
+        first.write_bytes(b'/* synthetic generated function table */\n')
         obj.write_bytes(struct.pack('<HH',0x14c,2)+bytes(16))
         assert len(batch.pending_shards(source,dest,names,manifest,expected))==5
         obj.write_bytes(synthetic_amd64_coff())
