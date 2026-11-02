@@ -65,6 +65,18 @@ def run()->None:
         provenance['scanner_index_sha256']=coff.digest(scan_file)
         provenance_file.write_text(json.dumps(provenance),encoding='utf-8')
         assert batch.verify_original_preparation(source,names) is False
+        # The larger scanner budget is bounded and MUST NOT loosen the
+        # separate 2 MiB JSON manifest protection.
+        with scan_file.open('r+b') as fp:
+            fp.truncate(batch.MAX_SCAN_INDEX+1)
+        rejected(lambda:batch.verify_original_preparation(source,names))
+        scan_file.write_text('synthetic-only\\n')
+        provenance['scanner_index_sha256']=coff.digest(scan_file)
+        provenance_file.write_text(json.dumps(provenance),encoding='utf-8')
+        with provenance_file.open('r+b') as fp:
+            fp.truncate(batch.MAX_MANIFEST+1)
+        rejected(lambda:batch.verify_original_preparation(source,names))
+        provenance_file.write_text(json.dumps(provenance),encoding='utf-8')
         (source/names[0]).write_text('changed synthetic source')
         rejected(lambda:batch.verify_original_preparation(source,names))
         (source/names[0]).write_bytes(b'/* synthetic never derived from game */\n')
