@@ -176,7 +176,7 @@ jobs:
             --upstream-checkout actual-yharnam-upstream --mode apply
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/hybrid_direct_physical_gate_v264.h
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_signed_peer_ingress_v285.h
-          grep -Fq 'Hybrid::ValidateSignedPeerIngressV285(proof)' \
+          grep -Fq 'Hybrid::BoundedPhysicalPeerExpiryV304(' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'InternalChannel::VerifiedDirectMovement' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
