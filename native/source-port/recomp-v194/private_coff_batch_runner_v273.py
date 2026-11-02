@@ -42,6 +42,38 @@ def enumerate_shards(generated:Path)->list[str]:
         raise ValueError("unexpected original-game C shard count")
     return sorted(names)
 
+def verify_original_preparation(generated:Path,names:list[str])->bool:
+    # V274: a directory named recomp_*.c is not by itself evidence
+    # of having come from the user's complete decrypted original game.
+    # V204 preparation pins the full original C set AND scanner index.
+    # The original V204 manifest may explicitly say that retail 1.09
+    # has NOT been verified; never silently upgrade that assertion.
+    original_work=coff.private(generated.parent)
+    metadata=original_work/'full-original-preparation.json'
+    scanner=original_work/'scan/functions.tsv'
+    if (metadata.is_symlink() or not metadata.is_file() or
+            metadata.stat().st_size>MAX_MANIFEST or
+            scanner.is_symlink() or not scanner.is_file() or
+            scanner.stat().st_size>MAX_MANIFEST):
+        raise ValueError("missing protected original-game AOT provenance")
+    parsed=json.loads(metadata.read_text(encoding='utf-8'))
+    if (parsed.get('format')!='SHYT_PRIVATE_FULL_IMAGE_V204' or
+            parsed.get('upstream')!=coff.PIN or
+            parsed.get('scanner_index_sha256')!=coff.digest(scanner) or
+            type(parsed.get('functions_scanned')) is not int or
+            parsed['functions_scanned']<=0):
+        raise ValueError("original game scanner provenance mismatch")
+    expected=parsed.get('c_hashes')
+    if not isinstance(expected,dict) or set(expected)!=set(names):
+        raise ValueError("original C shards do not match V204 manifest")
+    for name in names:
+        digest=expected[name]
+        if (not isinstance(digest,str) or len(digest)!=64 or
+                any(ch not in '0123456789abcdef' for ch in digest) or
+                coff.digest(generated/name)!=digest):
+            raise ValueError("private original C shard changed since scan")
+    return parsed.get('version_109_verified') is True
+
 def manifest_for(output:Path)->dict:
     path=coff.private(output)/'private_coff_manifest_v217.json'
     if not path.exists():
@@ -104,6 +136,7 @@ def run(args:argparse.Namespace)->dict:
     if not output.parent.is_dir():
         raise ValueError("missing private output parent")
     names=enumerate_shards(generated)
+    verified_109=verify_original_preparation(generated,names)
     # Preserve the exact provenance of the current private build. If any
     # include, compiler binary, SDK metadata or original shard changed,
     # V217 will rebuild the affected object instead of reusing stale COFF.
@@ -118,6 +151,7 @@ def run(args:argparse.Namespace)->dict:
         'still_pending':len(pending),
         'private_game_boot_proven':False,
         'native_runtime_guest_free_proven':False,
+        'private_original_109_verified':verified_109,
     }
     if args.preview or not pending:
         return result
