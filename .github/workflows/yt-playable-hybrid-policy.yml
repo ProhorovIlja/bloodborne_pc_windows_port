@@ -136,7 +136,9 @@ jobs:
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           # V276: no trusted-peer receive if original server link is
           # not welcomed; reauth must revoke every prior endpoint.
-          grep -Fq 'if (permitted && LinkWelcomed())' \
+          grep -Fq 'if (LinkWelcomed() && verified_direct_gate.Allows(' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'V277: check + enqueue MUST be atomic' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'RevokeVerifiedMovementEndpoints(); // V276: build reauth' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
