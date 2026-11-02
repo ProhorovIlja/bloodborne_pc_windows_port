@@ -136,7 +136,11 @@ def patch(source:str)->str:
     gate="""            // V265: a separately typed, encrypted SHDP packet from a
             // verified peer endpoint. Never place it into original shadNet
             // signaling, GamePackets or direct guest socket queues.
-            if (BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::CorrectWire(datagram)) {
+            if (BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::LooksLikePeerWire(datagram)) {
+                // V272: consume SHDP family even if malformed/unknown version.
+                // Peer traffic must NEVER fall through to the old SHAD path.
+                if (!BloodborneCoop::SHYTHybrid::DirectPhysicalGateV264::CorrectWire(datagram))
+                    continue;
                 const auto now=P2PNowMs();
                 bool permitted=false;
                 {
