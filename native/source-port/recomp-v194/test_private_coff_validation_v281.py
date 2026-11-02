@@ -52,6 +52,33 @@ def main()->None:
               struct.pack('<H',1)+original[20+34:],False)
         check(changed(78,struct.pack('<L',0)),False)
         check(changed(78,struct.pack('<L',0xffffffff)),False)
+        # V293: exact native AMD64 COFF relocation structure.
+        # The old checker counted bytes but did not validate the COFF
+        # relocation's symbol ordinal. Broken objects looked cached.
+        def relocated(rows:bytes,nreloc:int,overflow:bool=False)->bytes:
+            head=bytearray(original[:60])
+            struct.pack_into('<L',head,8,60+len(rows)) # symbol table moved
+            struct.pack_into('<L',head,20+24,60)       # relocation pointer
+            struct.pack_into('<H',head,20+32,nreloc)
+            struct.pack_into('<L',head,20+36,0x01000000 if overflow else 0)
+            return bytes(head)+rows+original[60:]
+        valid=struct.pack('<LLH',0,0,4) # REL32 to first external
+        check(relocated(valid,1),True)
+        check(relocated(struct.pack('<LLH',0,1,4),1),False)
+        check(relocated(struct.pack('<LLH',0,0,17),1),False)
+        check(relocated(valid[:9],1),False)
+        check(relocated(valid,1,True),False) # contradictory overflow flag
+        check(relocated(valid,0xffff,False),False)
+        # Legitimate huge AOT modules may exceed 65535 relocations.
+        # First overflow record declares the total incl. dummy entry.
+        large=struct.pack('<LLH',65536,0,0)+valid*65535
+        check(relocated(large,0xffff,True),True)
+        invalid=bytearray(large)
+        struct.pack_into('<L',invalid,0,65535) # bad dummy overflow count
+        check(relocated(bytes(invalid),0xffff,True),False)
+        invalid=bytearray(large)
+        struct.pack_into('<L',invalid,10+4,1) # bad indexed original symbol
+        check(relocated(bytes(invalid),0xffff,True),False)
         check(original+b'extra',True) # padding/alignment allowed
         check(b'',False)
         # Public checkout has no access to private COFF inventory.
