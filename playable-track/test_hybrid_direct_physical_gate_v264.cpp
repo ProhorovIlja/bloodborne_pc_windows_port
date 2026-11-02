@@ -28,12 +28,22 @@ int main() {
     auto wrong=encrypted;
     wrong[4]='S';wrong[5]='H';wrong[6]='A';wrong[7]='D';
     assert(!gate.Allows(first,10000,wrong));
+    assert(!DirectPhysicalGateV264::LooksLikePeerWire(wrong));
     wrong=encrypted;wrong[8]=2;
     assert(!gate.Allows(first,10000,wrong));
+    assert(DirectPhysicalGateV264::LooksLikePeerWire(wrong));
+    assert(!DirectPhysicalGateV264::CorrectWire(wrong));
+    // V272: a peer datagram with an unsupported version is NEVER SHAD.
     wrong=encrypted;wrong.resize(DirectPhysicalGateV264::MaxWire+1);
     assert(!gate.Allows(first,10000,wrong));
     wrong=encrypted;wrong.resize(15);
+    assert(DirectPhysicalGateV264::LooksLikePeerWire(wrong));
     assert(!gate.Allows(first,10000,wrong));
+    wrong=encrypted;wrong.resize(8);
+    assert(DirectPhysicalGateV264::LooksLikePeerWire(wrong));
+    assert(!DirectPhysicalGateV264::CorrectWire(wrong));
+    wrong.resize(7);
+    assert(!DirectPhysicalGateV264::LooksLikePeerWire(wrong));
 
     for(unsigned i=1;i<DirectPhysicalGateV264::MaxPeerEndpoints;++i) {
         assert(gate.InstallAuthenticatedEndpoint(
