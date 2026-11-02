@@ -28,7 +28,7 @@ def once(data:str,before:str,after:str)->str:
     return data.replace(before,after,1)
 
 def header(src:str)->str:
-    src=once(src,"#include <deque>","#include <functional>\n#include <deque>")
+    src=once(src,"#include <deque>","#include <functional>\n#include <utility>\n#include <deque>")
     anchor="    void SetHosted(const HostedRules& rules);"
     change="""    // V292: production server ONLY. Default is no issuer => no P2P.
     // All fields come from currently authenticated shadNet membership,
@@ -49,8 +49,8 @@ def header(src:str)->str:
 
 """+anchor
     src=once(src,anchor,change)
-    src=once(src,"        bool quiet = false; // its link is quiet (the hub's)",
-        "        bool quiet = false; // its link is quiet (the hub's)\n"
+    src=once(src,"        bool quiet = false;       // its link is quiet (the hub's)",
+        "        bool quiet = false;       // its link is quiet (the hub's)\n"
         "        qint64 last_direct_peer_request_ms = 0; // V292 rate limit")
     marker="    BloodborneCoop::TeamLobby lobby;"
     src=once(src,marker,"    DirectPeerIssuer direct_peer_issuer; // V292 deliberately unset by default\n"+marker)
