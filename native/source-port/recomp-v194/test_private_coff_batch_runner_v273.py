@@ -29,7 +29,15 @@ def run()->None:
         for i in range(4):
             (source/f'recomp_{i:05x}.c').write_bytes(
                 b'/* synthetic never derived from game */\n')
+        # V305: recomp.c is the mandatory AOT function registry, not an
+        # optional gameplay shard. An incomplete manifest must not pass.
+        registry=source/'recomp.c'
+        rejected(lambda:batch.enumerate_shards(source))
+        registry.write_bytes(b'/* synthetic generated function table */\n')
         names=batch.enumerate_shards(source)
+        registry.unlink()
+        rejected(lambda:batch.enumerate_shards(source))
+        registry.write_bytes(b'/* synthetic generated function table */\n')
         # V274: a filename alone is not proof that its C came from a
         # complete original-game scan. Only a matching pinned V204
         # manifest and exact scanner index unlock private scheduling.
@@ -85,7 +93,7 @@ def run()->None:
         rejected(lambda:batch.verify_original_preparation(source,names))
         (scanner/'functions.tsv').write_text('synthetic-only\\n')
         assert not batch.verify_original_preparation(source,names)
-        assert len(names)==4
+        assert len(names)==5
         assert names==sorted(names)
         (source/'unrelated.txt').write_text('safe')
         assert batch.enumerate_shards(source)==names
@@ -106,13 +114,13 @@ def run()->None:
         # Any changed source, object or changed SDK/compiler provenance
         # invalidates the cached COFF, even if its filename is unchanged.
         first.write_text('/* NEW synthetic source */\n',encoding='utf-8')
-        assert len(batch.pending_shards(source,dest,names,manifest,expected))==4
+        assert len(batch.pending_shards(source,dest,names,manifest,expected))==5
         first.write_bytes(b'/* synthetic never derived from game */\n')
         obj.write_bytes(struct.pack('<HH',0x14c,2)+bytes(16))
-        assert len(batch.pending_shards(source,dest,names,manifest,expected))==4
+        assert len(batch.pending_shards(source,dest,names,manifest,expected))==5
         obj.write_bytes(synthetic_amd64_coff())
         assert len(batch.pending_shards(source,dest,names,manifest,
-                                        {**expected,'opt':1}))==4
+                                        {**expected,'opt':1}))==5
         state.write_text('{"format":"WRONG","objects":{}}',encoding='utf-8')
         rejected(lambda:batch.manifest_for(dest))
         state.unlink()
@@ -122,9 +130,9 @@ def run()->None:
         # object bytes below are synthetic and disposable.
         incomplete=batch.verify_link_inventory_v275(
             source,dest,names,manifest,expected)
-        assert incomplete['expected_original_shards']==4
+        assert incomplete['expected_original_shards']==5
         assert incomplete['verified_private_win64_coff']==1
-        assert incomplete['missing_or_stale_coff']==3
+        assert incomplete['missing_or_stale_coff']==4
         assert not incomplete['full_coff_set_verified']
         assert not incomplete['native_pe_linked']
         assert not incomplete['game_boot_proven']
@@ -137,7 +145,7 @@ def run()->None:
                 'object_sha256':coff.digest(obj_file)}
         complete=batch.verify_link_inventory_v275(
             source,dest,names,manifest,expected)
-        assert complete['verified_private_win64_coff']==4
+        assert complete['verified_private_win64_coff']==5
         assert complete['missing_or_stale_coff']==0
         assert complete['full_coff_set_verified']
         assert not complete['private_original_109_verified']
@@ -155,7 +163,7 @@ def run()->None:
         assert aggregate['link_inventory']['full_coff_set_verified']
         report=aggregate['symbol_closure']
         assert report['external_definitions']==1
-        assert report['duplicate_external_names_across_objects']==3
+        assert report['duplicate_external_names_across_objects']==4
         assert report['external_references_unresolved_in_game_objects']==0
         assert not report['native_pe_link_complete']
         changed_obj=dest/(Path(names[-1]).stem+'.obj')
@@ -176,7 +184,7 @@ def run()->None:
         rejected(lambda:batch.enumerate_shards(source))
         (source/'recomp_abcde.c').unlink()
         (source/'recomp_fffff.c').mkdir()
-        assert len(batch.enumerate_shards(source))==4
+        assert len(batch.enumerate_shards(source))==5
         # A matching symlink must not be silently followed.
         linked=source/'recomp_fffaa.c'
         try:
