@@ -1,0 +1,56 @@
+name: YT pinned modified Windows BLauncher frozen candidate
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt-original-windows-launcher-candidate.yml'
+      - 'playable-track/apply_yt_launcher_authority_pin_v320.py'
+      - 'playable-track/test_yt_launcher_authority_pin_v320.py'
+  workflow_dispatch:
+concurrency:
+  group: original-launcher-candidate-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  frozen-windows-launcher:
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: actual-yt
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Patch exact original Windows launcher and verify independent authority key
+        shell: bash
+        run: |
+          set -euo pipefail
+          python playable-track/apply_yt_launcher_authority_pin_v320.py --upstream-checkout actual-yt --mode apply
+          python -m py_compile actual-yt/bbport/launcher/bbport_launcher_win.py
+          python playable-track/test_yt_launcher_authority_pin_v320.py --patched-launcher actual-yt/bbport/launcher/bbport_launcher_win.py
+      - name: Freeze real patched Tkinter Windows BLauncher into PE executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet pyinstaller==6.22.3 pillow truststore
+          python -m PyInstaller --noconfirm --clean --log-level WARN --windowed --noupx --name BLauncher --distpath candidate-dist --workpath candidate-build --specpath candidate-build --paths actual-yt/bbport/scripts --paths actual-yt/bbport/tools --hidden-import fetch_fsr4vk --hidden-import bbport_icons --hidden-import truststore --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox --runtime-hook actual-yt/bbport/packaging/windows/tk_runtime_hook.py actual-yt/bbport/launcher/bbport_launcher_win.py
+          python -c "from pathlib import Path; p=Path('candidate-dist/BLauncher/BLauncher.exe'); assert p.is_file() and p.stat().st_size>100000; assert p.open('rb').read(2)==b'MZ'"
+          echo SHYT_WINDOWS_ORIGINAL_YT_PATCHED_FROZEN_LAUNCHER_PE_PASS
+      - name: Upload unsigned standalone-launcher candidate, no game assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-v320-unsigned-Windows-BLauncher-test-only
+          path: candidate-dist/BLauncher/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 5
