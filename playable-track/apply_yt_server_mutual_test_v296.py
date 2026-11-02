@@ -54,6 +54,22 @@ int ServerRequiresMutualDirectPeerConsentV296() {
           QFileDevice::ReadOwner|QFileDevice::WriteOwner));
     CHECK(qputenv("SHYT_P2P_EDDSA_SEED_FILE",
                   QFile::encodeName(seed_path)));
+    // V314: world-readable seeds and symlink aliases must fail.
+    CHECK(local_seed.setPermissions(
+          QFileDevice::ReadOwner|QFileDevice::WriteOwner|
+          QFileDevice::ReadGroup));
+    CHECK(!BloodborneCoop::SHYTHybrid::OperatorPeerSignerV313::
+          InstallFromEnvironment(configured));
+    CHECK(local_seed.setPermissions(
+          QFileDevice::ReadOwner|QFileDevice::WriteOwner));
+    const QString link_path=private_dir.filePath("signer-link.bin");
+    CHECK(QFile::link(seed_path,link_path));
+    CHECK(qputenv("SHYT_P2P_EDDSA_SEED_FILE",
+                  QFile::encodeName(link_path)));
+    CHECK(!BloodborneCoop::SHYTHybrid::OperatorPeerSignerV313::
+          InstallFromEnvironment(configured));
+    CHECK(qputenv("SHYT_P2P_EDDSA_SEED_FILE",
+                  QFile::encodeName(seed_path)));
     CHECK(BloodborneCoop::SHYTHybrid::OperatorPeerSignerV313::
           InstallFromEnvironment(configured));
     qunsetenv("SHYT_P2P_EDDSA_SEED_FILE");
