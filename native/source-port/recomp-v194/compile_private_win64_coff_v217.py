@@ -73,13 +73,50 @@ def coff_ok(path: Path) -> bool:
                     return False
                 raw_size,raw_at,reloc_at,_,nreloc,_=struct.unpack_from(
                     '<LLLLHH',data,16)
+                characteristics=struct.unpack_from('<I',data,36)[0]
                 if raw_size and (raw_at<section_end or
                                  raw_at>symbols or raw_size>symbols-raw_at):
                     return False
-                if nreloc and (reloc_at<section_end or
-                               reloc_at>symbols or
-                               nreloc>(symbols-reloc_at)//10):
+                # V293: COFF AMD64 relocation count can legitimately
+                # overflow 16 bits for large original-game AOT shards.
+                # The IMAGE_SCN_LNK_NRELOC_OVFL flag (0x01000000)
+                # demands a first dummy relocation whose VA contains
+                # the real count INCLUDING that dummy record.
+                overflow=bool(characteristics & 0x01000000)
+                if overflow != (nreloc==0xffff):
                     return False
+                relocation_count=nreloc
+                if nreloc:
+                    if reloc_at<section_end or reloc_at>symbols:
+                        return False
+                    if overflow:
+                        if symbols-reloc_at<10:
+                            return False
+                        pos=stream.tell()
+                        stream.seek(reloc_at)
+                        dummy=stream.read(10)
+                        stream.seek(pos)
+                        relocation_count,index,kind=struct.unpack('<LLH',dummy)
+                        if (relocation_count<=0xffff or
+                                index!=0 or kind!=0):
+                            return False
+                    if (relocation_count>1_000_000 or
+                            relocation_count>(symbols-reloc_at)//10):
+                        return False
+                    # No private code is read. Relocation metadata is
+                    # checked for missing original COFF symbol entries.
+                    # A bad symbol ordinal otherwise survives V275 cache
+                    # verification and only fails at final Windows link.
+                    pos=stream.tell()
+                    stream.seek(reloc_at+(10 if overflow else 0))
+                    for _ in range(relocation_count-(1 if overflow else 0)):
+                        raw=stream.read(10)
+                        if len(raw)!=10:
+                            return False
+                        _,symbol_index,rel_type=struct.unpack('<LLH',raw)
+                        if symbol_index>=nsyms or rel_type>0x10:
+                            return False
+                    stream.seek(pos)
             string_at=symbols+nsyms*18
             if string_at>size-4:
                 return False
