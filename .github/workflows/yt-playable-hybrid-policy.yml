@@ -82,6 +82,15 @@ jobs:
             actual-yharnam-upstream/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-hybrid-peer-noise-v244"
           "$RUNNER_TEMP/yt-hybrid-peer-noise-v244"
+          # V279: real original Monocypher 4.0.3 EdDSA/BLAKE2b
+          # server-signed short-lived pair grant, tamper/expiry/epoch tests.
+          # Never use fixture keys in actual shadNet deployments.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_signed_peer_grant_v279.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-signed-peer-grant-v279"
+          "$RUNNER_TEMP/yt-hybrid-signed-peer-grant-v279"
           # V247: REAL Linux kernel UDP socket loopback: original Noise NK,
           # encrypted YT GameFrame, original GameLinkPeer, relay fallback.
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
