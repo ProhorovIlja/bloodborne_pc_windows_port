@@ -134,6 +134,12 @@ jobs:
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/hybrid_direct_physical_gate_v264.h
           grep -Fq 'InternalChannel::VerifiedDirectMovement' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          # V276: no trusted-peer receive if original server link is
+          # not welcomed; reauth must revoke every prior endpoint.
+          grep -Fq 'if (permitted && LinkWelcomed())' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'RevokeVerifiedMovementEndpoints(); // V276: build reauth' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
       - name: Offline v1.3.1 official installer and portable SHA integrity regression suite
         shell: bash
         run: |
