@@ -174,6 +174,15 @@ jobs:
             --upstream-checkout actual-yharnam-upstream --mode check
           python playable-track/apply_yt_direct_physical_v265.py \
             --upstream-checkout actual-yharnam-upstream --mode apply
+          # V320: source-lock the actual Windows Tk launcher, pass only
+          # the locally confirmed public EdDSA authority to the game.
+          python playable-track/apply_yt_launcher_authority_pin_v320.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          python -m py_compile \
+            actual-yharnam-upstream/bbport/launcher/bbport_launcher_win.py
+          python playable-track/test_yt_launcher_authority_pin_v320.py \
+            --patched-launcher \
+            actual-yharnam-upstream/bbport/launcher/bbport_launcher_win.py
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/hybrid_direct_physical_gate_v264.h
           test -f actual-yharnam-upstream/emulator/src/core/shyt_hybrid/yt_signed_peer_ingress_v285.h
           # V318: actual OS peer socket additionally requires the
