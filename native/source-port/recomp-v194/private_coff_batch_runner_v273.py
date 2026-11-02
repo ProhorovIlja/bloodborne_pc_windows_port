@@ -155,6 +155,23 @@ def verify_link_inventory_v275(generated:Path, output:Path,
         'game_boot_proven':False,
     }
 
+def attach_link_preflight_v287(
+    result:dict, args:argparse.Namespace, generated:Path, output:Path,
+    names:list[str], manifest:dict, base:dict)->None:
+    if not (args.verify_link_inventory or args.verify_symbol_closure):
+        return
+    inventory=verify_link_inventory_v275(
+        generated,output,names,manifest,base)
+    result['link_inventory']=inventory
+    if args.verify_symbol_closure:
+        if not inventory['full_coff_set_verified']:
+            result['symbol_closure']={'status':'blocked_incomplete_coff_set',
+                                      'native_pe_link_complete':False}
+        else:
+            from private_coff_symbol_closure_v287 import verify_external_symbol_closure
+            files=[output/(Path(name).stem+'.obj') for name in names]
+            result['symbol_closure']=verify_external_symbol_closure(files)
+
 def run(args:argparse.Namespace)->dict:
     if not 0<=args.opt<=2 or not 1<=args.max_batches<=MAX_BATCHES or not (
             45<=args.budget_seconds<=3600):
@@ -184,9 +201,8 @@ def run(args:argparse.Namespace)->dict:
         'private_original_109_verified':verified_109,
     }
     if args.preview or not pending:
-        if args.verify_link_inventory:
-            result['link_inventory']=verify_link_inventory_v275(
-                generated,output,names,manifest,base)
+        attach_link_preflight_v287(
+            result,args,generated,output,names,manifest,base)
         return result
     started=time.monotonic()
     for i in range(0,len(pending),4):
@@ -210,9 +226,8 @@ def run(args:argparse.Namespace)->dict:
     check=pending_shards(generated,output,names,manifest_for(output),base)
     result['still_pending']=len(check)
     result['verified_cached_shards']=len(names)-len(check)
-    if args.verify_link_inventory:
-        result['link_inventory']=verify_link_inventory_v275(
-            generated,output,names,manifest_for(output),base)
+    attach_link_preflight_v287(
+        result,args,generated,output,names,manifest_for(output),base)
     return result
 
 def main()->None:
@@ -227,6 +242,8 @@ def main()->None:
     p.add_argument('--preview',action='store_true')
     p.add_argument('--verify-link-inventory',action='store_true',
                    help='SHA-verify every original COFF without linking or publishing it')
+    p.add_argument('--verify-symbol-closure',action='store_true',
+                   help='Count unresolved external COFF symbols only after full SHA-verified private object set')
     args=p.parse_args()
     try:
         report=run(args)
