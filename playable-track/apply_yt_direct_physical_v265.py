@@ -28,7 +28,8 @@ def replace_once(source:str,needle:str,change:str)->str:
 def patch(source:str)->str:
     src=replace_once(source,SOURCE_HEADER,
         SOURCE_HEADER+'\n#include "core/shyt_hybrid/yt_direct_physical_api_v264.h"\n'
-        '#include "core/shyt_hybrid/hybrid_direct_physical_gate_v264.h"')
+        '#include "core/shyt_hybrid/hybrid_direct_physical_gate_v264.h"\n'
+        '#include "core/shyt_hybrid/yt_client_authority_pin_v318.h"')
     # V306: Windows restarts must NOT inherit the actual UDP socket
     # (or the readiness pair). A stale inherited server link can keep
     # the old session alive and break the new game's authentication.
@@ -88,7 +89,12 @@ def patch(source:str)->str:
                 std::chrono::system_clock::now().time_since_epoch()).count();
         const auto expires=Hybrid::BoundedPhysicalPeerExpiryV304(
             proof,socket_now,unix_now);
-        if (!LinkWelcomed() || !expires)
+        // V318: even a VALID signed grant must match a pin loaded
+        // independently from the trusted launcher, not supplied by
+        // the grant packet or the caller-provided proof struct.
+        if (!LinkWelcomed() || !expires ||
+            !Hybrid::MatchesLauncherAuthorityV318(
+                proof.pinned_authority_pub))
             return false;
         const auto& entry=proof.receiver;
         const auto [address,port]=entry.approved_endpoint;
@@ -320,7 +326,8 @@ def main()->None:
         raise ValueError("run verified V256 source overlay first")
     base=Path(__file__).resolve().parent
     for name in ("hybrid_direct_physical_gate_v264.h","yt_direct_physical_api_v264.h",
-                 "yt_signed_peer_grant_v279.h","yt_signed_peer_ingress_v285.h"):
+                 "yt_signed_peer_grant_v279.h","yt_signed_peer_ingress_v285.h",
+                 "yt_client_authority_pin_v318.h"):
         src=base/name
         if src.is_symlink() or not src.is_file():
             raise ValueError("missing required physical gate header")
@@ -328,7 +335,8 @@ def main()->None:
         if dst.exists() or dst.is_symlink():
             raise ValueError("refusing overwrite of existing physical gate header")
     for name in ("hybrid_direct_physical_gate_v264.h","yt_direct_physical_api_v264.h",
-                 "yt_signed_peer_grant_v279.h","yt_signed_peer_ingress_v285.h"):
+                 "yt_signed_peer_grant_v279.h","yt_signed_peer_ingress_v285.h",
+                 "yt_client_authority_pin_v318.h"):
         (header_dir/name).write_bytes((base/name).read_bytes())
     path.write_text(converted,encoding="utf-8")
     print("SHYT_V265_PINNED_PHYSICAL_UDP_SOURCE_APPLIED_DEFAULT_OFF")
