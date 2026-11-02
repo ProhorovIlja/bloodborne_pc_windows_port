@@ -41,6 +41,11 @@ def header(src:str)->str:
         quint32 sender_run=0, receiver_run=0, map=0;
         quint64 world_epoch=0;
         quint32 sender_game_link_instance=0, receiver_game_link_instance=0;
+        // V308: authoritative LinkAuth-observed physical UDP endpoints.
+        // NOT a client-supplied UDP address, NAT probe, or game vport.
+        ServerLink::Endpoint sender_link{}, receiver_link{};
+        // Responder's X25519 identity from its own authenticated intent.
+        std::string responder_noise_static_key;
     };
     using DirectPeerIssuer = std::function<std::optional<bbcoop::Envelope>(
         const DirectPairSource&, const bbcoop::DirectPeerRequest&)>;
@@ -73,7 +78,8 @@ def header(src:str)->str:
 def source(src:str)->str:
     src=once(src,'#include "bloodborne_world.h"',
              '#include "bloodborne_world.h"\n'
-             '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"')
+             '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"\n'
+             '#include <QtEndian>')
     marker="""    if (envelope.has_invade_request()) {
         OnInvadeRequest(member, envelope.invade_request(), now_ms, result);
         return;
@@ -191,6 +197,19 @@ def source(src:str)->str:
             member.peer_intent_ms=now_ms;
             return; // no issued peer grant until reciprocal request
         }
+        // V308: authoritative LinkAuth observed UDP endpoints are held
+        // by Service::Receive in its existing endpoint map, keyed by
+        // the authenticated member's link key. No client IP claims.
+        const auto sender_link=endpoints.find(member.key);
+        const auto receiver_link=endpoints.find(recipient->key);
+        if (sender_link==endpoints.end() ||
+            receiver_link==endpoints.end() ||
+            sender_link->second.Key()!=member.key ||
+            receiver_link->second.Key()!=recipient->key ||
+            sender_link->second==receiver_link->second ||
+            !sender_link->second.ipv4 || !sender_link->second.port ||
+            !receiver_link->second.ipv4 || !receiver_link->second.port)
+            return; // refuse to sign without BOTH live server links
         // V295: consume the earlier player's consent BEFORE invoking
         // the external issuer. Replayed/duplicated requests cannot
         // reuse old consent or trigger a second grant.
@@ -221,11 +240,13 @@ def source(src:str)->str:
         DirectPairSource authoritative{
             team->id(),team->party(),member.name,recipient->name,
             member.run,recipient->run,member.map,world_epoch,
-            request.game_link_instance(),previous.game_link_instance()};
-        // Caller must create signed V279 grant and derive actual peer
-        // UDP endpoints and responder Noise identity from its trusted
-        // server-side authenticated link registry, not from request.
-        // Callback must refuse unregistered keys/nonce replay.
+            request.game_link_instance(),previous.game_link_instance(),
+            sender_link->second,receiver_link->second,
+            previous.noise_static_public_key()};
+        // Callback signs ONLY the server-observed sender/receiver links
+        // and the responder key from that responder's own authenticated
+        // request. A real signer still needs OS CSPRNG private key/nonce
+        // provisioning; NAT reachability is separate from observed link.
         const auto issued=direct_peer_issuer(authoritative,request);
         const DirectPairSource reverse{
             authoritative.team,authoritative.party,
@@ -233,7 +254,9 @@ def source(src:str)->str:
             authoritative.receiver_run,authoritative.sender_run,
             authoritative.map,authoritative.world_epoch,
             authoritative.receiver_game_link_instance,
-            authoritative.sender_game_link_instance};
+            authoritative.sender_game_link_instance,
+            authoritative.receiver_link,authoritative.sender_link,
+            request.noise_static_public_key()};
         const auto issued_reverse=direct_peer_issuer(reverse,previous);
         const auto valid_envelope=[](const std::optional<bbcoop::Envelope>& e) {
             return e && e->has_direct_peer_grant() &&
@@ -269,6 +292,14 @@ def source(src:str)->str:
         if (!signed_scope || !Grant::Verify(
                 *signed_scope,direct_peer_authority_pub,live,
                 QDateTime::currentMSecsSinceEpoch()) ||
+            signed_scope->scope.sender_ip_nbo!=
+                qToBigEndian(authoritative.sender_link.ipv4) ||
+            signed_scope->scope.sender_port_nbo!=
+                qToBigEndian(authoritative.sender_link.port) ||
+            signed_scope->scope.receiver_ip_nbo!=
+                qToBigEndian(authoritative.receiver_link.ipv4) ||
+            signed_scope->scope.receiver_port_nbo!=
+                qToBigEndian(authoritative.receiver_link.port) ||
             !std::equal(signed_scope->scope.responder_noise_pub.begin(),
                         signed_scope->scope.responder_noise_pub.end(),
                         reinterpret_cast<const u8*>(
@@ -292,6 +323,14 @@ def source(src:str)->str:
         if (!reverse_signed || !Grant::Verify(
                 *reverse_signed,direct_peer_authority_pub,reverse_live,
                 QDateTime::currentMSecsSinceEpoch()) ||
+            reverse_signed->scope.sender_ip_nbo!=
+                qToBigEndian(reverse.sender_link.ipv4) ||
+            reverse_signed->scope.sender_port_nbo!=
+                qToBigEndian(reverse.sender_link.port) ||
+            reverse_signed->scope.receiver_ip_nbo!=
+                qToBigEndian(reverse.receiver_link.ipv4) ||
+            reverse_signed->scope.receiver_port_nbo!=
+                qToBigEndian(reverse.receiver_link.port) ||
             !std::equal(reverse_signed->scope.responder_noise_pub.begin(),
                         reverse_signed->scope.responder_noise_pub.end(),
                         reinterpret_cast<const u8*>(
