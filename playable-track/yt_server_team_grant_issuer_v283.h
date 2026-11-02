@@ -17,6 +17,7 @@
 #include "yt_signed_peer_grant_v279.h"
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace BloodborneCoop::SHYTHybrid::ServerTeamIssuerV283 {
@@ -74,4 +75,29 @@ std::optional<SignedPeerGrantV279::Signed> Issue(
     return SignedPeerGrantV279::Sign(server_scoped_grant,
                                     server_only_eddsa_secret);
 }
+// V296: original TeamLobby::TeamOf() returns the *canonical* team,
+// whose TeamMember.state is intentionally stale/default. The original
+// TeamLobby::StateFor() creates a server-authored VIEW with current
+// PLAYING/TITLE/OFFLINE status. Issuers must use that fresh view, not
+// canonical TeamOf or a client-supplied LobbyState.
+template <typename TeamLobby>
+std::optional<SignedPeerGrantV279::Signed> IssueFromLiveLobby(
+    const TeamLobby& authoritative_lobby,
+    const SignedPeerGrantV279::Scope& server_derived_grant,
+    std::string_view authenticated_link_member,
+    std::size_t actual_team_limit,
+    const SignedPeerGrantV279::SecretKey& server_only_eddsa_secret)
+{
+    const std::string link_member{authenticated_link_member};
+    const auto* canonical=authoritative_lobby.TeamOf(link_member);
+    if(!canonical) return std::nullopt;
+    const auto view=authoritative_lobby.StateFor(link_member);
+    if(!view.has_team() || view.team().id()!=canonical->id() ||
+       view.team().party()!=canonical->party() ||
+       view.team().members_size()!=canonical->members_size())
+        return std::nullopt;
+    return Issue(view.team(),server_derived_grant,authenticated_link_member,
+                 actual_team_limit,server_only_eddsa_secret);
+}
+
 } // namespace BloodborneCoop::SHYTHybrid::ServerTeamIssuerV283
