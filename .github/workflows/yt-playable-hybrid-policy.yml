@@ -172,6 +172,12 @@ jobs:
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'std::erase_if(verified_direct_queue' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          # V284: real shadNet cross-shard redirects and refused
+          # server Welcomes invalidate all prior physical P2P leases.
+          grep -Fq 'RevokeVerifiedMovementEndpoints(); // V284 shard redirect' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
+          grep -Fq 'RevokeVerifiedMovementEndpoints(); // V284 refused welcome' \
+            actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
           grep -Fq 'RevokeVerifiedMovementEndpoints(); // V276: build reauth' \
             actual-yharnam-upstream/emulator/src/core/libraries/network/p2p_sockets.cpp
       - name: Offline v1.3.1 official installer and portable SHA integrity regression suite
