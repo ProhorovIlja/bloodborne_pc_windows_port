@@ -48,7 +48,7 @@ def run()->None:
         assert not batch.verify_original_preparation(source,names)
         (source/names[0]).write_text('changed synthetic source')
         rejected(lambda:batch.verify_original_preparation(source,names))
-        (source/names[0]).write_bytes(b'/* synthetic never derived from game */\\n')
+        (source/names[0]).write_bytes(b'/* synthetic never derived from game */\n')
         assert not batch.verify_original_preparation(source,names)
         (scanner/'functions.tsv').write_text('changed scanner')
         rejected(lambda:batch.verify_original_preparation(source,names))
