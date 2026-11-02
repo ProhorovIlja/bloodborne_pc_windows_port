@@ -57,13 +57,18 @@ def prepare_private_link_probe_v309(
     output=coff.private(output)
     names=batch.enumerate_shards(generated)
     # No link plan is emitted on incomplete, stale or corrupted COFF.
-    batch.verify_original_preparation(generated,names)
+    # V311: complete != authentic. A V204 manifest explicitly
+    # declaring version_109_verified=False must never be elevated into
+    # a link candidate, even with perfectly hashed synthetic objects.
+    if batch.verify_original_preparation(generated,names) is not True:
+        raise ValueError('original retail 1.09 image not verified')
     base=batch.expected_base(generated,upstream,sdk,output,opt)
     manifest=batch.manifest_for(output)
     check=batch.verify_link_inventory_v275(
         generated,output,names,manifest,base)
-    if not check['full_coff_set_verified']:
-        raise ValueError('private original AOT COFF set is incomplete')
+    if not check['full_coff_set_verified'] or not (
+            check['private_original_109_verified'] is True):
+        raise ValueError('incomplete or unauthenticated original game COFF')
     response=object_response_v309(output,names)
     return response,len(names)
 
