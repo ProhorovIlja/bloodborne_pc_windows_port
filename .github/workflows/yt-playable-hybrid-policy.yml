@@ -91,6 +91,18 @@ jobs:
             actual-yharnam-upstream/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-hybrid-signed-peer-grant-v279"
           "$RUNNER_TEMP/yt-hybrid-signed-peer-grant-v279"
+          # V283: issuer policy mirrors EXACT accessor contract of
+          # original upstream bbcoop::Team / TeamMember / LobbyPlayer.
+          # A synthetic roster never signs for outsiders/title/offline
+          # players or an unsupported fifth/sixth slot.
+          grep -Fq 'message TeamMember {' actual-yharnam-upstream/server/coop/coop.proto
+          grep -Fq 'PLAYING = 2;' actual-yharnam-upstream/server/coop/coop.proto
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Iactual-yharnam-upstream/server -Iplayable-track \
+            playable-track/test_yt_server_team_grant_issuer_v283.cpp \
+            actual-yharnam-upstream/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-hybrid-server-team-issuer-v283"
+          "$RUNNER_TEMP/yt-hybrid-server-team-issuer-v283"
           # V247: REAL Linux kernel UDP socket loopback: original Noise NK,
           # encrypted YT GameFrame, original GameLinkPeer, relay fallback.
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
