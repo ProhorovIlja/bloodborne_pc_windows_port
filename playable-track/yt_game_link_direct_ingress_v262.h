@@ -6,6 +6,7 @@
 // a peer-supplied UDP packet. Standalone OS UDP socket/ICE integration
 // and server-attested endpoint binding are still required.
 #include "hybrid_peer_crypto_v241.h"
+#include "yt_shdp_wire_v286.h"
 #include <cstdint>
 #include <span>
 #include <utility>
@@ -53,4 +54,19 @@ inline std::vector<std::vector<u8>> ReceiveDirectYtFrameV262(
         return {};
     return original_receiver.Receive(*decoded,authorized.lease.now_ms);
 }
+// V286: production physical socket returns SHDP-v1 framed ciphertext.
+// Decode the *outer* transport envelope before original V262 verifies
+// the AEAD/replay/sender; never pass SHDP bytes straight into Session.
+inline std::vector<std::vector<u8>> ReceivePhysicalDirectYtFrameV286(
+    GameLinkPeer& original_receiver,
+    VerifiedPeerIngressV262& authorized,
+    std::pair<u32,u16> udp_source,
+    std::span<const u8> physical_datagram)
+{
+    const auto raw=ShdpWireV286::OpenEnvelope(physical_datagram);
+    if (!raw) return {};
+    return ReceiveDirectYtFrameV262(
+        original_receiver,authorized,udp_source,*raw);
+}
+
 } // namespace BloodborneCoop::SHYTHybrid
