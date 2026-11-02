@@ -12,6 +12,7 @@
 // original authoritative gameplay map/instances and peer endpoint.
 // This is a cryptographic building block, not a production issuer.
 #include "coop/link_auth.h"
+#include "hybrid_peer_crypto_v241.h"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -133,4 +134,24 @@ inline bool Verify(const Signed& signed_grant, const PubKey& trusted_authority,
             signed_grant.signature.data(),trusted_authority.data(),
             bytes.data(),bytes.size())==0;
 }
+// V280: signed permission is not a Noise key. Both MUST bind to the
+// exact same original YT sender/receiver, world run and responder
+// static X25519 public key before a direct channel is even considered.
+inline bool AuthorizesNoiseScope(
+    const Signed& signed_grant, const PubKey& trusted_authority,
+    const Expect& live, s64 now_unix_ms,
+    const BloodborneCoop::SHYTHybrid::PeerCryptoScopeV241& noise_scope,
+    const PubKey& responder_noise_pub)
+{
+    return Verify(signed_grant,trusted_authority,live,now_unix_ms) &&
+        signed_grant.scope.party==noise_scope.party_session &&
+        signed_grant.scope.sender==noise_scope.hunter_a &&
+        signed_grant.scope.receiver==noise_scope.hunter_b &&
+        signed_grant.scope.sender_instance==noise_scope.a_instance &&
+        signed_grant.scope.receiver_instance==noise_scope.b_instance &&
+        signed_grant.scope.world_epoch==noise_scope.world_epoch &&
+        signed_grant.scope.map==noise_scope.map &&
+        signed_grant.scope.responder_noise_pub==responder_noise_pub;
+}
+
 } // namespace BloodborneCoop::SHYTHybrid::SignedPeerGrantV279
