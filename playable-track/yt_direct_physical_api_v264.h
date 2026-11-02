@@ -4,11 +4,11 @@
 // YT shadNet/SHAD functions. Until server-authenticated pair grants have
 // installed a V262 receiving session, all operations deny by default.
 // This header is included only in the pinned source-overlay client.
-#include "yt_game_link_direct_ingress_v262.h"
+#include "yt_signed_peer_ingress_v285.h"
 namespace Libraries::Net {
 // Socket endpoints and return address fields use network byte order.
 bool P2PInstallVerifiedMovementEndpoint(
-    const BloodborneCoop::SHYTHybrid::VerifiedPeerIngressV262& verified);
+    const BloodborneCoop::SHYTHybrid::SignedPeerIngressV285& verified);
 int P2PVerifiedMovementSendTo(
     const void *sealed, u32 len, u32 addr_nbo, u16 port_nbo);
 int P2PVerifiedMovementRecvFrom(
