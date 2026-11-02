@@ -382,6 +382,7 @@ def main()->None:
             "hybrid_direct_egress_v240.h",
             "hybrid_peer_crypto_v241.h",
             "yt_signed_peer_grant_v279.h",
+            "yt_server_direct_signer_v310.h",
         )
         for filename in dependencies:
             src=source_dir/filename
