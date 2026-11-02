@@ -10,6 +10,9 @@
 // does not yet implement server-side provisioning of that trusted pin.
 #include "yt_game_link_direct_ingress_v262.h"
 #include "yt_signed_peer_grant_v279.h"
+#include <algorithm>
+#include <limits>
+#include <optional>
 
 namespace BloodborneCoop::SHYTHybrid {
 struct SignedPeerIngressV285 {
@@ -55,5 +58,33 @@ inline bool ValidateSignedPeerIngressV285(const SignedPeerIngressV285& proof) {
             entry.lease,entry.identity,entry.endpoints) &&
         ChooseNativePacketCarrier(0x06,entry.endpoints,entry.lease)
             ==Carrier::DirectPeer;
+}
+
+// V304: the OS socket uses steady-clock milliseconds but the server
+// signs wall-clock Unix milliseconds. Verify the grant against FRESH
+// local wall time at installation, then cap the physical route to BOTH
+// the existing original GameLink lease and the signed ticket's expiry.
+// A 30-second signed ticket must never leave a 10-minute socket gate.
+inline std::optional<s64> BoundedPhysicalPeerExpiryV304(
+    const SignedPeerIngressV285& proof,
+    s64 observed_steady_ms, s64 observed_unix_ms)
+{
+    namespace Grant=SignedPeerGrantV279;
+    if (!ValidateSignedPeerIngressV285(proof) ||
+        observed_steady_ms<0 || observed_unix_ms<=0 ||
+        observed_steady_ms>std::numeric_limits<s64>::max()-35'000 ||
+        !Grant::Verify(proof.issued_by_server,proof.pinned_authority_pub,
+                       proof.live_server_view,observed_unix_ms))
+        return std::nullopt;
+    const s64 remaining=
+        proof.issued_by_server.scope.expires_unix_ms-observed_unix_ms;
+    if (remaining<=0 || remaining>35'000)
+        return std::nullopt;
+    const s64 capped=std::min(
+        proof.receiver.lease.lease_expiry_ms,
+        observed_steady_ms+remaining);
+    if (capped<=observed_steady_ms)
+        return std::nullopt;
+    return capped;
 }
 } // namespace BloodborneCoop::SHYTHybrid
