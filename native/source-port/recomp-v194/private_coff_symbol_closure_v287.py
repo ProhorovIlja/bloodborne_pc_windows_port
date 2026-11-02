@@ -95,6 +95,19 @@ def verify_external_symbol_closure(object_files:list[Path])->dict:
         undefined.update(needs)
         weak+=w
     unresolved=undefined.difference(defined)
+    # V328: private *aggregate* host-import demand. An unresolved
+    # external may be referenced by hundreds of original COFF modules:
+    # raw counts alone conceal how broadly a missing Windows subsystem
+    # blocks linking. Keep every symbol name in memory only, never print
+    # or serialize raw private import names or per-module paths.
+    unresolved_by_object=[len(needs.intersection(unresolved))
+                          for _,needs in all_objects]
+    unresolved_sites=sum(unresolved_by_object)
+    blocked_objects=sum(bool(n) for n in unresolved_by_object)
+    max_per_object=max(unresolved_by_object)
+    single_owner_unresolved=sum(
+        sum(1 for _,needs in all_objects if name in needs)==1
+        for name in unresolved)
     dependencies:list[set[int]]=[set() for _ in object_files]
     for object_id,(_,needs) in enumerate(all_objects):
         for name in needs:
@@ -138,6 +151,13 @@ def verify_external_symbol_closure(object_files:list[Path])->dict:
         'external_definitions':len(defined),
         'external_references':len(undefined),
         'external_references_unresolved_in_game_objects':len(unresolved),
+        'unresolved_reference_sites_across_objects':unresolved_sites,
+        'object_modules_blocked_by_host_imports':blocked_objects,
+        'object_modules_self_contained_against_external_imports':
+            len(object_files)-blocked_objects,
+        'max_unresolved_imports_in_one_object':max_per_object,
+        'unresolved_symbols_needed_by_exactly_one_object':
+            single_owner_unresolved,
         'duplicate_external_names_across_objects':duplicate_definitions,
         'weak_external_symbols':weak,
         'coff_symbols_inspected':total_symbols,
