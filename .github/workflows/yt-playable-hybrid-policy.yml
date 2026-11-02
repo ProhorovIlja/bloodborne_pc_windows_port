@@ -258,3 +258,18 @@ jobs:
           # No published YT game file, build outputs, or run-time clients
           # are bundled with this independent code-only experiment.
           echo SHYT_PLAYABLE_UPSTREAM_FOUR_PLAYER_LIMIT_UNCHANGED_PASS
+
+  stun-transaction-windows:
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and run OS-CSPRNG STUN discovery (Windows)
+        shell: pwsh
+        run: |
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic -Iplayable-track playable-track/test_yt_reflexive_stun_v321.cpp -o "$env:RUNNER_TEMP\yt-stun-v321.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:RUNNER_TEMP\yt-stun-v321.exe"
+          exit $LASTEXITCODE
