@@ -28,6 +28,32 @@ def run()->None:
             (source/f'recomp_{i:05x}.c').write_bytes(
                 b'/* synthetic never derived from game */\n')
         names=batch.enumerate_shards(source)
+        # V274: a filename alone is not proof that its C came from a
+        # complete original-game scan. Only a matching pinned V204
+        # manifest and exact scanner index unlock private scheduling.
+        rejected(lambda:batch.verify_original_preparation(source,names))
+        scanner=root/'scan'
+        scanner.mkdir()
+        (scanner/'functions.tsv').write_text('synthetic-only\\n')
+        provenance={
+            'format':'SHYT_PRIVATE_FULL_IMAGE_V204',
+            'upstream':coff.PIN,
+            'functions_scanned':4,
+            'version_109_verified':False,
+            'scanner_index_sha256':coff.digest(scanner/'functions.tsv'),
+            'c_hashes':{name:coff.digest(source/name) for name in names}
+        }
+        provenance_file=root/'full-original-preparation.json'
+        provenance_file.write_text(json.dumps(provenance),encoding='utf-8')
+        assert not batch.verify_original_preparation(source,names)
+        (source/names[0]).write_text('changed synthetic source')
+        rejected(lambda:batch.verify_original_preparation(source,names))
+        (source/names[0]).write_bytes(b'/* synthetic never derived from game */\\n')
+        assert not batch.verify_original_preparation(source,names)
+        (scanner/'functions.tsv').write_text('changed scanner')
+        rejected(lambda:batch.verify_original_preparation(source,names))
+        (scanner/'functions.tsv').write_text('synthetic-only\\n')
+        assert not batch.verify_original_preparation(source,names)
         assert len(names)==4
         assert names==sorted(names)
         (source/'unrelated.txt').write_text('safe')
