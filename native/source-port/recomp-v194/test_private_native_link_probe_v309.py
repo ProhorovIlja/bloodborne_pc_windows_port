@@ -3,6 +3,7 @@
 """V309: synthetic-only private Windows PE linker response validation."""
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 
 import private_native_link_probe_v309 as probe
 from test_private_coff_validation_v281 import synthetic_amd64_coff
@@ -36,6 +37,37 @@ def main():
         rejects(lambda:probe.object_response_v309(root,names[1:]))
         rejects(lambda:probe.object_response_v309(root,[*names,names[0]]))
         rejects(lambda:probe.object_response_v309(root,['recomp.c']))
+        # V311: prevent complete synthetic objects and a claimed
+        # manifest from becoming a retail game link candidate unless
+        # both original preparation AND link inventory verified 1.09.
+        with (patch.object(probe.batch,'enumerate_shards',return_value=names),
+              patch.object(probe.batch,'verify_original_preparation',
+                           return_value=False) as original,
+              patch.object(probe.batch,'expected_base',return_value={}),
+              patch.object(probe.batch,'manifest_for',return_value={'objects':{}}),
+              patch.object(probe.batch,'verify_link_inventory_v275',
+                           return_value={
+                               'full_coff_set_verified':True,
+                               'private_original_109_verified':False,
+                           }) as inventory):
+            rejects(lambda:probe.prepare_private_link_probe_v309(
+                root,root,root,root,0))
+            original.return_value=True
+            rejects(lambda:probe.prepare_private_link_probe_v309(
+                root,root,root,root,0))
+            inventory.return_value={
+                'full_coff_set_verified':False,
+                'private_original_109_verified':True,
+            }
+            rejects(lambda:probe.prepare_private_link_probe_v309(
+                root,root,root,root,0))
+            inventory.return_value={
+                'full_coff_set_verified':True,
+                'private_original_109_verified':True,
+            }
+            verified,shard_count=probe.prepare_private_link_probe_v309(
+                root,root,root,root,0)
+            assert verified==rsp and shard_count==len(names)
         # Never claim a full PE link if a genuine generated body object
         # is missing or truncated, even though the registration exists.
         (root/'recomp_00001.obj').unlink()
