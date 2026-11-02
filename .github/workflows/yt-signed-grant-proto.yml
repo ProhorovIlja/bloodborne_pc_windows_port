@@ -1,0 +1,58 @@
+name: YT V288 genuine shadNet Coop grant protobuf
+on:
+  push:
+    branches: [feature/yt-playable-hybrid-policy-v1-20261101]
+    paths:
+      - '.github/workflows/yt-signed-grant-proto.yml'
+      - 'playable-track/apply_yt_signed_grant_proto_v288.py'
+      - 'playable-track/test_yt_signed_grant_proto_v288.cpp'
+  pull_request:
+    paths:
+      - '.github/workflows/yt-signed-grant-proto.yml'
+      - 'playable-track/apply_yt_signed_grant_proto_v288.py'
+      - 'playable-track/test_yt_signed_grant_proto_v288.cpp'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  original-protoc:
+    name: Pinned YT v1.3.1 C++ protobuf grant wire
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: actual-yharnam-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Compile exact original Coop protobuf with new default-off grant control
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile playable-track/apply_yt_signed_grant_proto_v288.py
+          python playable-track/apply_yt_signed_grant_proto_v288.py \
+            --upstream-checkout actual-yharnam-upstream --mode check
+          python playable-track/apply_yt_signed_grant_proto_v288.py \
+            --upstream-checkout actual-yharnam-upstream --mode apply
+          # No prebuilt generated files or retail game assets are committed.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
+          mkdir -p "$RUNNER_TEMP/yt-grant-proto"
+          protoc -Iactual-yharnam-upstream/server/coop \
+            --cpp_out="$RUNNER_TEMP/yt-grant-proto" \
+            actual-yharnam-upstream/server/coop/coop.proto
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -I"$RUNNER_TEMP/yt-grant-proto" \
+            "$RUNNER_TEMP/yt-grant-proto/coop.pb.cc" \
+            playable-track/test_yt_signed_grant_proto_v288.cpp \
+            -lprotobuf-lite -pthread \
+            -o "$RUNNER_TEMP/yt-v288-real-protoc"
+          "$RUNNER_TEMP/yt-v288-real-protoc"
