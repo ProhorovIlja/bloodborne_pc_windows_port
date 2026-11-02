@@ -154,9 +154,12 @@ def source(src:str)->str:
         // bytes with the server's independently pinned authority key.
         namespace Grant=BloodborneCoop::SHYTHybrid::SignedPeerGrantV279;
         const auto& sent=issued->direct_peer_grant();
+        // std::string bytes are char (often signed), while the public
+        // key is uint8_t: compare as raw octets, including 0x80..0xff.
+        const auto* returned_key=reinterpret_cast<const std::uint8_t*>(
+            sent.authority_public_key().data());
         if (!std::equal(direct_peer_authority_pub.begin(),
-                        direct_peer_authority_pub.end(),
-                        sent.authority_public_key().begin()))
+                        direct_peer_authority_pub.end(),returned_key))
             return;
         const auto* payload=reinterpret_cast<const u8*>(
             sent.signed_grant().data());
