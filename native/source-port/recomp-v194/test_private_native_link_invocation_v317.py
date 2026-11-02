@@ -57,11 +57,20 @@ def main()->None:
         # report unresolved bb_recomp_body, not "success".
         negative=root/'negative-link.rsp'
         bad_output=root/'negative-link.dll'
-        missing_body=response.replace(
-            '"'+str(root/'recomp_00000.obj')+'"','').replace(
-            '/OUT:"'+str(target)+'"',
-            '/OUT:"'+str(bad_output)+'"')
-        assert missing_body!=response
+        # V319: Windows TempDirectory paths may be canonicalized
+        # differently by Path.resolve() inside the response builder.
+        # Identify only the expected exact source stem, never by
+        # reconstructing a platform-dependent absolute path.
+        original_lines=response.splitlines()
+        body_lines=[line for line in original_lines if
+                    line.startswith('"') and
+                    line.lower().endswith('recomp_00000.obj"')]
+        assert len(body_lines)==1
+        missing_body='\n'.join(
+            '/OUT:"'+str(bad_output)+'"' if line.startswith('/OUT:')
+            else line for line in original_lines
+            if line not in body_lines)+'\n'
+        assert 'recomp_00000.obj' not in missing_body
         probe.save_exclusive_v309(negative,missing_body)
         bad=subprocess.run([linker,'@'+str(negative)],
                            stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
