@@ -46,6 +46,15 @@ jobs:
           python -m PyInstaller --noconfirm --clean --log-level WARN --windowed --noupx --name BLauncher --distpath candidate-dist --workpath candidate-build --specpath candidate-build --paths actual-yt/bbport/scripts --paths actual-yt/bbport/tools --hidden-import fetch_fsr4vk --hidden-import bbport_icons --hidden-import truststore --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox --runtime-hook actual-yt/bbport/packaging/windows/tk_runtime_hook.py actual-yt/bbport/launcher/bbport_launcher_win.py
           python -c "from pathlib import Path; p=Path('candidate-dist/BLauncher/BLauncher.exe'); assert p.is_file() and p.stat().st_size>100000; assert p.open('rb').read(2)==b'MZ'"
           echo SHYT_WINDOWS_ORIGINAL_YT_PATCHED_FROZEN_LAUNCHER_PE_PASS
+      - name: Actually execute frozen BLauncher.exe in no-game script mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Genuine frozen Windows Tk Python entrypoint executes a benign
+          # script without starting a GUI or opening an original game.
+          python -c "from pathlib import Path; Path('yt-launcher-smoke.py').write_text('import sys\\nfrom pathlib import Path\\nassert getattr(sys, \\\"frozen\\\", False)\\nPath(sys.argv[1]).write_text(\\\"BLAUNCHER_WINDOWS_SMOKE_OK\\\")\\n', encoding='utf-8')"
+          python -c "from pathlib import Path; import subprocess; exe=Path('candidate-dist/BLauncher/BLauncher.exe').resolve(); script=Path('yt-launcher-smoke.py').resolve(); marker=Path('yt-launcher-smoke.pass').resolve(); p=subprocess.run([str(exe),'--script',str(script),str(marker)],capture_output=True,timeout=40); assert p.returncode==0 and marker.is_file() and marker.read_text()=='BLAUNCHER_WINDOWS_SMOKE_OK', 'Windows frozen BLauncher entrypoint failed'"
+          echo SHYT_REAL_WINDOWS_BLAUNCHER_FROZEN_RUNTIME_SCRIPT_MODE_PASS
       - name: Upload unsigned standalone-launcher candidate, no game assets
         uses: actions/upload-artifact@v4
         with:
