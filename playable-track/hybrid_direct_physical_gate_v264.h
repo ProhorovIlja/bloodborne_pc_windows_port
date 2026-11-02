@@ -30,14 +30,22 @@ public:
         0xff,0xff,0xff,0xff,'S','H','D','P',1
     };
 
+    static bool LooksLikePeerWire(std::span<const std::uint8_t> packet) {
+        // V272: recognize the SHDP protocol family BEFORE validating
+        // version/size. Invalid future/short SHDP must be dropped, not
+        // passed into the trusted server-only SHAD/GamePackets path.
+        if (packet.size()<WireHeader.size()-1) return false;
+        for(std::size_t i=0;i<WireHeader.size()-1;++i)
+            if(packet[i]!=WireHeader[i]) return false;
+        return true;
+    }
+
     static bool CorrectWire(std::span<const std::uint8_t> packet) {
         // Nine-byte unauthenticated outer header, encrypted body and
         // original LinkAuth::Session 24-byte counter+tag minimum.
-        if (packet.size()<WireHeader.size()+32+24+1 ||
-            packet.size()>MaxWire) return false;
-        for(std::size_t i=0;i<WireHeader.size();++i)
-            if(packet[i]!=WireHeader[i]) return false;
-        return true;
+        return LooksLikePeerWire(packet) &&
+            packet.size()>=WireHeader.size()+32+24+1 &&
+            packet.size()<=MaxWire && packet[WireHeader.size()-1]==1;
     }
 
     // Only call from the real authenticated server-grant/Noise lifecycle,
