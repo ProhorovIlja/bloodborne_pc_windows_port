@@ -93,10 +93,10 @@ def source(src:str)->str:
         int sender_playing=0, recipient_playing=0;
         for (const auto& seat:team->members()) {
             if (seat.member()==member.name &&
-                seat.state()==bbcoop::TeamMember::PLAYING)
+                seat.state()==bbcoop::LobbyPlayer::PLAYING)
                 ++sender_playing;
             if (seat.member()==request.recipient() &&
-                seat.state()==bbcoop::TeamMember::PLAYING)
+                seat.state()==bbcoop::LobbyPlayer::PLAYING)
                 ++recipient_playing;
         }
         if (sender_playing!=1 || recipient_playing!=1)
