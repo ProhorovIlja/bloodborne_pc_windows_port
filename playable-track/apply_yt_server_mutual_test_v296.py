@@ -121,12 +121,13 @@ int ServerRequiresMutualDirectPeerConsentV296() {
             std::string(reinterpret_cast<const char*>(pub.data()),pub.size()));
         return message;
       },pub);
-  const auto request=[&](Game& from,const Game& to,char key) {
+  const auto request=[&](Game& from,const Game& to,char key,
+                        char nonce=0) {
       bbcoop::Envelope msg{};
       auto* intent=msg.mutable_direct_peer_request();
       intent->set_recipient(to.name);
       intent->set_noise_static_public_key(std::string(32,key));
-      intent->set_request_nonce(std::string(16,key));
+      intent->set_request_nonce(std::string(16,nonce?nonce:key));
       intent->set_game_link_instance(from.name==a.name?17:29);
       from.Send(msg,now);
       step();
@@ -193,14 +194,31 @@ int ServerRequiresMutualDirectPeerConsentV296() {
                     signed_b->scope.responder_noise_pub.end(),
                     [](u8 v){return v==static_cast<u8>('A');}));
   // Old consent is consumed: no third grant after one replay.
+  // V302: both old, mutually consented requests replayed after the
+  // rate-limit window must NOT mint two more valid signed grants.
   now+=1300;
   request(a,b,'A');
-  CHECK(signed_calls==2);
-  CHECK(a.direct_grants.size()==1);
-  now+=13000;
   request(b,a,'B');
   CHECK(signed_calls==2);
+  CHECK(a.direct_grants.size()==1);
   CHECK(b.direct_grants.size()==1);
+  // Legitimate new reciprocal consent with NEW nonces and the same
+  // registered Noise identities must still work in the same world.
+  now+=1300;
+  request(a,b,'A','C');
+  request(b,a,'B','D');
+  CHECK(signed_calls==4);
+  CHECK(a.direct_grants.size()==2);
+  CHECK(b.direct_grants.size()==2);
+  CHECK(decode(a.direct_grants.back()).has_value());
+  CHECK(decode(b.direct_grants.back()).has_value());
+  // Even older prior nonces stay blocked after a second valid grant.
+  now+=1300;
+  request(a,b,'A');
+  request(b,a,'B');
+  CHECK(signed_calls==4);
+  CHECK(a.direct_grants.size()==2);
+  CHECK(b.direct_grants.size()==2);
   return 0;
 }
 '''
