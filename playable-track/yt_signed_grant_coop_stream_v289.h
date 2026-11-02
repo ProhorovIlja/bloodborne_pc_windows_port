@@ -32,6 +32,19 @@ std::optional<bbcoop::Envelope> ServerIssue(
         original_authenticated_link_member,
         authoritative_server_team_limit,server_only_secret);
     if(!signed_grant)return std::nullopt;
+    // V291: catch a broken server key configuration BEFORE publishing:
+    // the authority public key advertised over the existing Coop link
+    // must actually verify a signature made by the configured private
+    // signing key. A mismatched key pair never opens peer routing.
+    const Grant::Expect scope_view{
+        server_derived_scope.team,server_derived_scope.party,
+        server_derived_scope.sender,server_derived_scope.receiver,
+        server_derived_scope.sender_instance,
+        server_derived_scope.receiver_instance,
+        server_derived_scope.map,server_derived_scope.world_epoch};
+    if(!Grant::Verify(*signed_grant,authority_public_key,scope_view,
+                      server_derived_scope.issued_unix_ms))
+        return std::nullopt;
     const auto bytes=Grant::EncodeWire(*signed_grant);
     if(bytes.empty() || bytes.size()>512)return std::nullopt;
     bbcoop::Envelope message{};
