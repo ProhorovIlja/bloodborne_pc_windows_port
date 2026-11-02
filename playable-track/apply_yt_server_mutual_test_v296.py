@@ -162,6 +162,17 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   const Grant::Expect expect_b{
       current_team->id(),party.toStdString(),b.name,a.name,
       29,17,0x18010000,signed_b->scope.world_epoch};
+  CHECK(signed_a->scope.team==current_team->id());
+  CHECK(signed_a->scope.party==party.toStdString());
+  CHECK(signed_a->scope.sender==a.name);
+  CHECK(signed_a->scope.receiver==b.name);
+  CHECK(signed_a->scope.sender_instance==17);
+  CHECK(signed_a->scope.receiver_instance==29);
+  CHECK(signed_a->scope.map==0x18010000);
+  CHECK(signed_b->scope.sender==b.name);
+  CHECK(signed_b->scope.receiver==a.name);
+  CHECK(signed_b->scope.sender_instance==29);
+  CHECK(signed_b->scope.receiver_instance==17);
   CHECK(signed_a->scope.world_epoch!=0);
   CHECK(signed_a->scope.world_epoch==signed_b->scope.world_epoch);
   CHECK(Grant::Verify(*signed_a,pub,expect_a,
