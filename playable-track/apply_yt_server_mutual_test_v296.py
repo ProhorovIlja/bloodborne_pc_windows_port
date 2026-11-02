@@ -134,6 +134,15 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   CHECK(signed_calls==0);
   CHECK(a.direct_grants.empty() && b.direct_grants.empty());
   request(b,a,'B');
+  std::cerr<<"V296_DIAG count="<<signed_calls
+    <<" a_grants="<<a.direct_grants.size()
+    <<" b_grants="<<b.direct_grants.size()
+    <<" a_team="<<a.lobby.team().id()
+    <<" b_team="<<b.lobby.team().id()
+    <<" a_map="<<(service.PlaceOf(a.endpoint) ? service.PlaceOf(a.endpoint)->map : 0)
+    <<" b_map="<<(service.PlaceOf(b.endpoint) ? service.PlaceOf(b.endpoint)->map : 0)
+    <<" player_status="<<a.lobby.team().members(0).state()
+    <<"/"<<b.lobby.team().members(1).state()<<'\n';
   CHECK(signed_calls==2);
   CHECK(a.direct_grants.size()==1);
   CHECK(b.direct_grants.size()==1);
