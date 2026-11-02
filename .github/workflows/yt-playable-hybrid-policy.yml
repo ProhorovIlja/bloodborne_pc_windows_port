@@ -112,6 +112,12 @@ jobs:
             actual-yharnam-upstream/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-signed-peer-socket-admission-v285"
           "$RUNNER_TEMP/yt-signed-peer-socket-admission-v285"
+          # V321: STUN transaction parsing produces advisory NAT data only.
+          # No STUN response authorizes Noise peer traffic or shadNet SHDP.
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -Iplayable-track playable-track/test_yt_reflexive_stun_v321.cpp \
+            -o "$RUNNER_TEMP/yt-reflexive-stun-v321"
+          "$RUNNER_TEMP/yt-reflexive-stun-v321"
           # V247: REAL Linux kernel UDP socket loopback: original Noise NK,
           # encrypted YT GameFrame, original GameLinkPeer, relay fallback.
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
