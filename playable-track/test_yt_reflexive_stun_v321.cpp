@@ -29,6 +29,12 @@ static std::vector<u8> Response(
     return r;
 }
 int main() {
+    // V323: actual platform CSPRNG transaction IDs, no predictable
+    // nonce or acceptance when system entropy is unavailable.
+    std::array<u8,12> entropy_first{},entropy_second{};
+    assert(FreshTransactionIdV323(entropy_first));
+    assert(FreshTransactionIdV323(entropy_second));
+    assert(entropy_first!=entropy_second);
     Binding binding{};
     const auto server=Ep({192,0,2,7},{13,150});
     const auto rogue=Ep({192,0,2,8},{13,150});
