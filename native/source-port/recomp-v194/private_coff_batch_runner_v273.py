@@ -63,11 +63,11 @@ def fingerprint_matches(source:Path,dest:Path,old:dict|None,
         coff.coff_ok(dest) and coff.digest(dest)==old.get('object_sha256')
     )
 
-def expected_base(upstream:Path,sdk:Path,output:Path,opt:int)->dict:
+def expected_base(generated:Path,upstream:Path,sdk:Path,output:Path,opt:int)->dict:
     import subprocess
     import verify_coff_dependencies_v219 as deps
     header,sdk_hash,compiler=coff.prerequisites(
-        output.parent/'dummy-generated',upstream,sdk,output)
+        generated,upstream,sdk,output)
     del header
     return {
         'upstream':coff.PIN,
@@ -107,7 +107,7 @@ def run(args:argparse.Namespace)->dict:
     # Preserve the exact provenance of the current private build. If any
     # include, compiler binary, SDK metadata or original shard changed,
     # V217 will rebuild the affected object instead of reusing stale COFF.
-    base=expected_base(upstream,sdk,output,args.opt)
+    base=expected_base(generated,upstream,sdk,output,args.opt)
     manifest=manifest_for(output)
     pending=pending_shards(generated,output,names,manifest,base)
     result={
