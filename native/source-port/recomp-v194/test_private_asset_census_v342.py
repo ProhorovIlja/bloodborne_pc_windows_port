@@ -18,7 +18,7 @@ def main():
         (bb/'chr'/'another.bnd').write_bytes(b'BND4'+b'B'*12)
         (ds/'chr'/'model.flver').write_bytes(b'FLVER'+b'C'*7)
         (ds/'map'/'unknown.blob').write_bytes(b'D'*32)
-        assert owner_root(bb)==bb
+        assert owner_root(bb)==bb.resolve(strict=True)
         counts=census(bb)
         assert counts['files']==2 and counts['bytes']==27
         assert counts['groups']=={'chr':2}
