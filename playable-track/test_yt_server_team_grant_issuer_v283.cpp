@@ -24,6 +24,24 @@ struct TeamFixture {
     int members_size() const {return static_cast<int>(current.size());}
     const TeamMemberFixture& members(int index) const {return current.at(index);}
 };
+struct LiveTeamSnapshot {
+    TeamFixture row;
+    bool present=true;
+    bool has_team() const {return present;}
+    const TeamFixture& team() const {return row;}
+};
+struct LiveLobbyFixture {
+    TeamFixture canonical;
+    LiveTeamSnapshot snapshot;
+    const TeamFixture* TeamOf(const std::string& id) const {
+        for(const auto& member:canonical.current)
+            if(member.id==id)return &canonical;
+        return nullptr;
+    }
+    LiveTeamSnapshot StateFor(const std::string&) const {
+        return snapshot;
+    }
+};
 }
 int main() {
     using namespace SignedPeerGrantV279;
@@ -53,6 +71,32 @@ int main() {
     const Expect live{"team-42","world:42","A","B",10,11,0x101,2};
     assert(Verify(*authorized,pub,live,scope.issued_unix_ms));
     assert(DecodeWire(EncodeWire(*authorized)));
+
+    // V296: in ORIGINAL YT, TeamOf() contains canonical members with
+    // unset/stale state. StateFor() materializes accurate server-derived
+    // PLAYING/TITLE/OFFLINE in its copy, not in that storage record.
+    LiveLobbyFixture real_contract{};
+    real_contract.canonical=team;
+    real_contract.snapshot.row=team;
+    real_contract.canonical.current[0].status=0;
+    real_contract.canonical.current[1].status=0;
+    assert(!ServerTeamIssuerV283::Issue(
+        real_contract.canonical,scope,"A",4,secret));
+    const auto live_signed=ServerTeamIssuerV283::IssueFromLiveLobby(
+        real_contract,scope,"A",4,secret);
+    assert(live_signed);
+    assert(Verify(*live_signed,pub,live,scope.issued_unix_ms));
+    real_contract.snapshot.row.current[1].status=0;
+    assert(!ServerTeamIssuerV283::IssueFromLiveLobby(
+        real_contract,scope,"A",4,secret));
+    real_contract.snapshot.row.current[1].status=2;
+    real_contract.snapshot.present=false;
+    assert(!ServerTeamIssuerV283::IssueFromLiveLobby(
+        real_contract,scope,"A",4,secret));
+    real_contract.snapshot.present=true;
+    real_contract.snapshot.row.party_value="world:forged";
+    assert(!ServerTeamIssuerV283::IssueFromLiveLobby(
+        real_contract,scope,"A",4,secret));
 
     assert(!ServerTeamIssuerV283::Issue(team,scope,"B",4,secret));
     assert(!ServerTeamIssuerV283::Issue(team,scope,"stranger",4,secret));
