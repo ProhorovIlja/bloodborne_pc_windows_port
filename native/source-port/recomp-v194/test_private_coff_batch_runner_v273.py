@@ -9,6 +9,7 @@ import tempfile
 
 import private_coff_batch_runner_v273 as batch
 import compile_private_win64_coff_v217 as coff
+from test_private_coff_validation_v281 import synthetic_amd64_coff
 
 def rejected(fn):
     try: fn()
@@ -61,7 +62,7 @@ def run()->None:
         expected={'upstream':'synthetic','opt':0}
         first=source/names[0]
         obj=dest/(first.stem+'.obj')
-        obj.write_bytes(struct.pack('<HH',0x8664,2)+bytes(16))
+        obj.write_bytes(synthetic_amd64_coff())
         spec={**expected,'source_sha256':coff.digest(first)}
         manifest={'format':'SHYT_PRIVATE_ORIGINAL_COFF_V217',
                   'objects':{names[0]:{
@@ -79,7 +80,7 @@ def run()->None:
         first.write_bytes(b'/* synthetic never derived from game */\n')
         obj.write_bytes(struct.pack('<HH',0x14c,2)+bytes(16))
         assert len(batch.pending_shards(source,dest,names,manifest,expected))==4
-        obj.write_bytes(struct.pack('<HH',0x8664,2)+bytes(16))
+        obj.write_bytes(synthetic_amd64_coff())
         assert len(batch.pending_shards(source,dest,names,manifest,
                                         {**expected,'opt':1}))==4
         state.write_text('{"format":"WRONG","objects":{}}',encoding='utf-8')
@@ -100,7 +101,7 @@ def run()->None:
         for name in names[1:]:
             origin=source/name
             obj_file=dest/(origin.stem+'.obj')
-            obj_file.write_bytes(struct.pack('<HH',0x8664,2)+bytes(16))
+            obj_file.write_bytes(synthetic_amd64_coff())
             manifest['objects'][name]={
                 'spec':{**expected,'source_sha256':coff.digest(origin)},
                 'object_sha256':coff.digest(obj_file)}
