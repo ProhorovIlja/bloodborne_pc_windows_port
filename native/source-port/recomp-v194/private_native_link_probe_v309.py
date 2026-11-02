@@ -20,6 +20,7 @@ import sys
 
 import private_coff_batch_runner_v273 as batch
 import compile_private_win64_coff_v217 as coff
+import private_coff_symbol_closure_v287 as symbols
 from bounded_private_subprocess_v210 import run_stage
 
 MAX_LINK_BUDGET=1800
@@ -145,6 +146,33 @@ def verify_private_pe_dll_v312(path:Path)->bool:
     except (OSError,ValueError,struct.error,OverflowError):
         return False
 
+def private_aggregate_import_audit_v322(
+    output:Path,names:list[str])->dict:
+    """Aggregate real SHA-checked AMD64 COFF import gaps, never names.
+
+    Full original AOT C->COFF inventory is verified by the caller before
+    this diagnostic. Under /NODEFAULTLIB, unresolved externals cannot
+    silently become a meaningful successful private PE link.
+    """
+    root=coff.private(output).resolve(strict=True)
+    if (not 2<=len(names)<=batch.MAX_SHARDS or
+            'recomp.c' not in names or len(names)!=len(set(names))):
+        raise ValueError('original AOT COFF import set missing')
+    entries=[root/(Path(name).stem+'.obj') for name in sorted(names)]
+    if any(not coff.VALID.fullmatch(name) for name in names):
+        raise ValueError('unsafe original COFF import filename')
+    report=symbols.verify_external_symbol_closure(entries)
+    if report['verified_amd64_coff_objects']!=len(names):
+        raise ValueError('incomplete private native import inventory')
+    return {
+        'objects':len(names),
+        'references':report['external_references'],
+        'unresolved':report['external_references_unresolved_in_game_objects'],
+        'duplicates':report['duplicate_external_names_across_objects'],
+        'weak':report['weak_external_symbols'],
+        'dependency_edges':report['direct_object_dependency_edges'],
+    }
+
 def guard_private_link_target_v315(output:Path)->Path:
     """Refuse any pre-existing PE probe output, including symlink/reparse.
 
@@ -175,6 +203,8 @@ def main()->int:
     p.add_argument('--budget-seconds',type=int,default=180)
     p.add_argument('--attempt',action='store_true',
                    help='run bounded original COFF lld-link /DLL /NOENTRY probe')
+    p.add_argument('--audit-imports',action='store_true',
+                   help='print private aggregate unresolved COFF counts ONLY')
     args=p.parse_args()
     try:
         if not 10<=args.budget_seconds<=MAX_LINK_BUDGET:
@@ -183,6 +213,18 @@ def main()->int:
             args.generated_dir,args.upstream,args.sdk,args.output_dir,args.opt)
         output=coff.private(args.output_dir).resolve(strict=True)
         guard_private_link_target_v315(output)
+        # V322: the full original-game external symbol gap is counted
+        # privately BEFORE any linker output or response file is made.
+        # /NODEFAULTLIB means not even a genuine CRT import is silently
+        # resolved by a default external library at this diagnostic step.
+        if args.audit_imports or args.attempt:
+            names=batch.enumerate_shards(coff.private(args.generated_dir))
+            report=private_aggregate_import_audit_v322(output,names)
+            print('SHYT_V322_PRIVATE_AGGREGATE_IMPORT_AUDIT '+
+                  ' '.join(f'{key}={value}' for key,value in report.items()))
+            if args.attempt and report['unresolved']:
+                print('SHYT_V322_LINK_BLOCKED_UNRESOLVED_PRIVATE_IMPORTS')
+                return 2
         target=output/'private-native-link-probe-v309.rsp'
         save_exclusive_v309(target,response)
         print('SHYT_V309_VERIFIED_PRIVATE_FULL_COFF_LINK_PLAN objects='+str(count))
