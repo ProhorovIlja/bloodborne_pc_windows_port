@@ -18,6 +18,7 @@ def patched(s):
     s=once(s, '#include "bloodborne_world.h"',
            '#include "bloodborne_world.h"\n'
            '#include "shyt_hybrid/yt_signed_peer_grant_v279.h"\n'
+           '#include "shyt_hybrid/yt_server_direct_signer_v310.h"\n'
            '#include <QtEndian>')
     s=once(s, '''    } else if (envelope.has_team_start()) {
       starts.push_back(envelope.team_start());
@@ -93,47 +94,36 @@ int ServerRequiresMutualDirectPeerConsentV296() {
       secret.data(),pub.data(),seed.data());
   int signed_calls=0;
   bool corrupt_signed_endpoint=false;
+  namespace Signer=BloodborneCoop::SHYTHybrid::ServerDirectSignerV310;
+  // The real server still explicitly installs the callback; default off.
+  // Only the test key is deterministic, never the ticket nonce.
   service.SetDirectPeerIssuer(
       [&](const Service::DirectPairSource& src,
-          const bbcoop::DirectPeerRequest&) ->std::optional<bbcoop::Envelope>{
+          const bbcoop::DirectPeerRequest& intent)
+          ->std::optional<bbcoop::Envelope>{
         ++signed_calls;
-        Grant::Scope scope{};
-        scope.team=src.team;scope.party=src.party;
-        scope.sender=src.sender;scope.receiver=src.receiver;
-        scope.sender_instance=src.sender_game_link_instance;
-        scope.receiver_instance=src.receiver_game_link_instance;
-        scope.map=src.map;scope.world_epoch=src.world_epoch;
-        scope.issued_unix_ms=QDateTime::currentMSecsSinceEpoch();
-        scope.expires_unix_ms=scope.issued_unix_ms+20000;
-        // V308: the server issuer MUST use authenticated LinkAuth
-        // endpoint records, not synthetic guesswork or peer claims.
-        scope.sender_ip_nbo=qToBigEndian(src.sender_link.ipv4);
-        scope.receiver_ip_nbo=qToBigEndian(src.receiver_link.ipv4);
-        scope.sender_port_nbo=qToBigEndian(src.sender_link.port);
-        scope.receiver_port_nbo=qToBigEndian(src.receiver_link.port);
-        if (src.sender_link!=(
+        if(src.sender_link!=(
                 src.sender==a.name?a.endpoint:b.endpoint) ||
-            src.receiver_link!=(
-                src.receiver==a.name?a.endpoint:b.endpoint) ||
-            src.responder_noise_static_key.size()!=32)
+           src.receiver_link!=(
+                src.receiver==a.name?a.endpoint:b.endpoint))
           return std::nullopt;
-        std::copy(src.responder_noise_static_key.begin(),
-                  src.responder_noise_static_key.end(),
-                  scope.responder_noise_pub.begin());
-        // V308 negative case: even a VALID EdDSA signature cannot
-        // redirect a peer toward a server-unobserved port.
-        if(corrupt_signed_endpoint) scope.sender_port_nbo^=1;
-        scope.grant_nonce.fill(static_cast<u8>(signed_calls));
-        const auto grant=Grant::Sign(scope,secret);
-        if(!grant) return std::nullopt;
-        const auto raw=Grant::EncodeWire(*grant);
-        bbcoop::Envelope message{};
-        auto* body=message.mutable_direct_peer_grant();
-        body->set_signed_grant(
-            std::string(reinterpret_cast<const char*>(raw.data()),raw.size()));
-        body->set_authority_public_key(
-            std::string(reinterpret_cast<const char*>(pub.data()),pub.size()));
-        return message;
+        auto ticket=Signer::Issue(src,intent,secret,pub);
+        if(!ticket || !corrupt_signed_endpoint)return ticket;
+        // Even a legitimately signed malicious endpoint must be
+        // rejected by Service, not merely by the signer helper.
+        const auto& old=ticket->direct_peer_grant().signed_grant();
+        const auto* wire=reinterpret_cast<const u8*>(old.data());
+        auto decoded=Grant::DecodeWire(std::span<const u8>(
+            wire,old.size()));
+        if(!decoded)return std::nullopt;
+        decoded->scope.sender_port_nbo^=1;
+        auto resigned=Grant::Sign(decoded->scope,secret);
+        if(!resigned)return std::nullopt;
+        const auto bytes=Grant::EncodeWire(*resigned);
+        ticket->mutable_direct_peer_grant()->set_signed_grant(
+            std::string(reinterpret_cast<const char*>(bytes.data()),
+                        bytes.size()));
+        return ticket;
       },pub);
   const auto request=[&](Game& from,const Game& to,char key,
                         char nonce=0) {
@@ -201,6 +191,8 @@ int ServerRequiresMutualDirectPeerConsentV296() {
   CHECK(signed_b->scope.receiver_instance==17);
   CHECK(signed_a->scope.world_epoch!=0);
   CHECK(signed_a->scope.world_epoch==signed_b->scope.world_epoch);
+  // V310: two signed directions have independent OS-random nonces.
+  CHECK(signed_a->scope.grant_nonce!=signed_b->scope.grant_nonce);
   CHECK(Grant::Verify(*signed_a,pub,expect_a,
                       QDateTime::currentMSecsSinceEpoch()));
   CHECK(Grant::Verify(*signed_b,pub,expect_b,
