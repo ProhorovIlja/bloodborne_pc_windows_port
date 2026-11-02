@@ -58,23 +58,23 @@ def patch(source:str)->str:
     // game receiver can approve an endpoint. This socket method never
     // interprets a remote UDP address as identity or proof of admission.
     bool InstallVerifiedMovementEndpoint(
-        const BloodborneCoop::SHYTHybrid::VerifiedPeerIngressV262& proof) {
+        const BloodborneCoop::SHYTHybrid::SignedPeerIngressV285& proof) {
         namespace Hybrid = BloodborneCoop::SHYTHybrid;
-        if (!LinkWelcomed() || !proof.session ||
-            !proof.endpoint_proved_by_authenticated_handshake ||
-            !proof.session->MatchesIncomingGrantV262(
-                proof.lease, proof.identity, proof.endpoints) ||
-            Hybrid::ChooseNativePacketCarrier(
-                0x06, proof.endpoints, proof.lease) != Hybrid::Carrier::DirectPeer)
+        // V285: prevent arbitrary client-side V262 flags from enabling
+        // this socket. Require a real signed EdDSA server grant, bound to
+        // the pinned authority, the original YT Noise scope, exact epoch,
+        // authenticated peer IP:port and game-level lease.
+        if (!LinkWelcomed() || !Hybrid::ValidateSignedPeerIngressV285(proof))
             return false;
-        const auto [address,port]=proof.approved_endpoint;
+        const auto& entry=proof.receiver;
+        const auto [address,port]=entry.approved_endpoint;
         const auto server=LinkServer();
         if (!address || !port ||
             (address==server.addr_nbo && port==server.port_nbo))
             return false;
         std::lock_guard guard(verified_direct_mutex);
         return verified_direct_gate.InstallAuthenticatedEndpoint(
-            {address,port,proof.lease.lease_expiry_ms},proof.lease.now_ms);
+            {address,port,entry.lease.lease_expiry_ms},entry.lease.now_ms);
     }
 
     // This is a separate authenticated wire route, not SendInternal's
@@ -236,7 +236,7 @@ def patch(source:str)->str:
 // original YT server-only SHAD wire path. Without a real verified V262
 // pair grant, Send/Receive remain disabled and do not bypass shadNet.
 bool P2PInstallVerifiedMovementEndpoint(
-    const BloodborneCoop::SHYTHybrid::VerifiedPeerIngressV262& proof) {
+    const BloodborneCoop::SHYTHybrid::SignedPeerIngressV285& proof) {
     return P2PTransport::Instance().InstallVerifiedMovementEndpoint(proof);
 }
 int P2PVerifiedMovementSendTo(const void* data,u32 len,u32 ip,u16 port) {
@@ -282,14 +282,16 @@ def main()->None:
     if not header_dir.is_dir() or header_dir.is_symlink():
         raise ValueError("run verified V256 source overlay first")
     base=Path(__file__).resolve().parent
-    for name in ("hybrid_direct_physical_gate_v264.h","yt_direct_physical_api_v264.h"):
+    for name in ("hybrid_direct_physical_gate_v264.h","yt_direct_physical_api_v264.h",
+                 "yt_signed_peer_grant_v279.h","yt_signed_peer_ingress_v285.h"):
         src=base/name
         if src.is_symlink() or not src.is_file():
             raise ValueError("missing required physical gate header")
         dst=header_dir/name
         if dst.exists() or dst.is_symlink():
             raise ValueError("refusing overwrite of existing physical gate header")
-    for name in ("hybrid_direct_physical_gate_v264.h","yt_direct_physical_api_v264.h"):
+    for name in ("hybrid_direct_physical_gate_v264.h","yt_direct_physical_api_v264.h",
+                 "yt_signed_peer_grant_v279.h","yt_signed_peer_ingress_v285.h"):
         (header_dir/name).write_bytes((base/name).read_bytes())
     path.write_text(converted,encoding="utf-8")
     print("SHYT_V265_PINNED_PHYSICAL_UDP_SOURCE_APPLIED_DEFAULT_OFF")
