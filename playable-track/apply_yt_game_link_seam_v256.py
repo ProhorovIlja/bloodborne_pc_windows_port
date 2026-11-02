@@ -21,6 +21,7 @@ HEADERS = (
     "hybrid_direct_ack_coalescer_v251.h",
     "hybrid_peer_crypto_v241.h",
     "yt_game_link_runtime_bridge_v255.h",
+    "yt_shdp_wire_v286.h",
     "yt_game_link_direct_ingress_v262.h",
 )
 INCLUDE_POINT = '#include "core/bloodborne_game_link.h"'
