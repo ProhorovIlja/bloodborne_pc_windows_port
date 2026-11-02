@@ -22,3 +22,35 @@ Applies to every future Bloodborne / Yharnam Together continuation, PR #84, PR #
 
 ## Limitations
 This is a persisted operational rule for the assistant, not a platform-enforced cap on the GitHub/Drive tool implementations. Tool-side fetching may still occur internally; avoid asking for large resources in the first place. No claim that this alone fixes underlying UI/tool timeouts. Never claim an unexecuted build or gameplay test succeeded.
+
+## 2026-11-01: `Error in input stream` operational RCA and mitigations
+
+- Root cause of any specific ChatGPT UI error is **NOT established**. Official
+  OpenAI troubleshooting notes that errors can stem from transient server-side
+  faults, browser/WebSocket/VPN/proxy/extension interference, or long chats.
+  Official status history did not list a new Nov 1 incident when checked.
+  We cannot modify ChatGPT's internal stream infrastructure from this repo.
+- Public Developer Community reports this exact message even on trivial Python
+  or container calls during an infrastructure incident. Do not reflexively
+  blame GitHub or a user's source code without evidence.
+- New private Bloodborne V204 scanner-generator safety:
+  `bounded_private_subprocess_v210.py` replaces unbounded
+  `capture_output=True`; all five processes drain incrementally and
+  retain only the first/last 32 KiB of output in private 0600 files. Failure,
+  timeout and truncated stream metadata stay outside Git.
+- `private_pipeline_status_v211.py --work <PRIVATE_WORK_DIR>` emits only
+  a small, private-safe checkpoint status, making progress inspectable
+  after the chat stream drops without ever copying the log into ChatGPT.
+- Synthetic CI: V210 Linux/Windows
+  https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41308752559 ;
+  V211 Linux/Windows
+  https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/41308942452 .
+- Keep PR/CI reads bounded and source reads to specific line spans. No full
+  logs, PR diffs, game binaries or whole long chat imports into the response.
+- If UI failures persist even with small chat/tool calls: test hard refresh
+  and a new conversation in the same Project, incognito without extensions,
+  no VPN/proxy, different network; collect request timestamps/IDs and contact
+  OpenAI Support if reproduced across devices. Official guidance:
+  https://help.openai.com/en/articles/7996703-troubleshooting-chatgpt-error-messages .
+- Neither source-only synthetic CI nor a clean stream establishes successful
+  full-game AOT, true five-player gameplay, native Bloodborne boot, or P2P.
