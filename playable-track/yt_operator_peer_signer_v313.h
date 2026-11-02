@@ -18,6 +18,7 @@
 #include <cstring>
 #include <memory>
 #ifdef __linux__
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -40,22 +41,37 @@ inline bool InstallFromEnvironment(BloodborneWorld::Service& service) {
     if (path.isEmpty())
         return false; // strict default off
 #ifdef __linux__
-    if (path.size()>1024 || QFileInfo(path).isSymLink() ||
-        !QFileInfo(path).isFile()) {
-        qWarning() << "SHYT P2P signer disabled: unsafe seed file";
+    // V314: QFileInfo followed by QFile::open had a classic TOCTOU:
+    // swapping an accepted regular file for a symlink between the
+    // checks could read an unrelated owner-only file. Open precisely
+    // once using kernel-enforced NOFOLLOW, then verify the *same fd*.
+    // NONBLOCK stops a swapped FIFO/device from hanging startup.
+    if (path.size()>1024 || path.contains(QChar::Null)) {
+        qWarning() << "SHYT P2P signer disabled: unsafe seed path";
         return false;
     }
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly|QIODevice::Unbuffered)) {
+    const QByteArray native_path=QFile::encodeName(path);
+    const int fd=::open(native_path.constData(),
+        O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK|O_NOCTTY);
+    if (fd<0) {
         qWarning() << "SHYT P2P signer disabled: seed inaccessible";
         return false;
     }
     struct stat mode{};
-    if (fstat(file.handle(),&mode)!=0 || !S_ISREG(mode.st_mode) ||
-        mode.st_uid!=geteuid() || mode.st_nlink!=1 ||
-        (mode.st_mode & 0077)!=0 || (mode.st_mode & 0400)==0 ||
-        mode.st_size!=32) {
-        qWarning() << "SHYT P2P signer disabled: seed is not a private 0600 file";
+    const bool valid=(fstat(fd,&mode)==0 && S_ISREG(mode.st_mode) &&
+        mode.st_uid==geteuid() && mode.st_nlink==1 &&
+        (mode.st_mode & 0077)==0 && (mode.st_mode & 0400)!=0 &&
+        mode.st_size==32);
+    if (!valid) {
+        ::close(fd);
+        qWarning() << "SHYT P2P signer disabled: seed is not owner-only regular file";
+        return false;
+    }
+    QFile file;
+    if (!file.open(fd,QIODevice::ReadOnly|QIODevice::Unbuffered,
+                   QFileDevice::AutoCloseHandle)) {
+        ::close(fd);
+        qWarning() << "SHYT P2P signer disabled: cannot consume verified fd";
         return false;
     }
     QByteArray contents=file.read(33);
