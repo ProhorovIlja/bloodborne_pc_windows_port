@@ -34,8 +34,14 @@ def digest(path: Path) -> str:
 
 def private(path: Path) -> Path:
     p = path.absolute()
-    if p.is_symlink() or any((a / '.git').exists() for a in (p, *p.parents)):
-        raise ValueError('private game files must stay outside Git')
+    # V344: full-game generated C/COFF must never be redirected through
+    # an ancestor symlink/junction into a public Git checkout.
+    canonical = p.resolve(strict=False)
+    lexical = (p, *p.parents)
+    actual = (canonical, *canonical.parents)
+    if (any(a.is_symlink() for a in lexical) or
+            any((a / '.git').exists() for a in (*lexical, *actual))):
+        raise ValueError('private game files must stay outside Git and path aliases')
     return p
 
 def coff_ok(path: Path) -> bool:
