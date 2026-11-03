@@ -47,6 +47,7 @@ add_library(bb_plugin_shyt MODULE
   plugins/shyt_probe/shyt_yt_link_wire_v403.cpp
   plugins/shyt_probe/shyt_yt_secure_game_data_v405.cpp
   plugins/shyt_probe/shyt_yt_udp_endpoint_v406.cpp
+  plugins/shyt_probe/shyt_yt_server_session_v408.cpp
   plugins/shyt_probe/yt_original/coop/link_crypto.cpp)
 target_include_directories(bb_plugin_shyt PRIVATE
   include plugins/shyt_probe/yt_original
@@ -56,7 +57,7 @@ target_include_directories(bb_plugin_shyt PRIVATE
 if(WIN32)
   target_link_options(bb_plugin_shyt PRIVATE
     -static -static-libgcc -static-libstdc++)
-  target_link_libraries(bb_plugin_shyt PRIVATE ws2_32)
+  target_link_libraries(bb_plugin_shyt PRIVATE ws2_32 bcrypt)
 endif()
 set_target_properties(bb_plugin_shyt PROPERTIES
   OUTPUT_NAME shyt_bbhost_probe PREFIX ""
@@ -110,6 +111,8 @@ def main()->None:
     yt_secure_header=Path(__file__).resolve().parent/"shyt_yt_secure_game_data_v405.h"
     yt_udp_source=Path(__file__).resolve().parent/"shyt_yt_udp_endpoint_v406.cpp"
     yt_udp_header=Path(__file__).resolve().parent/"shyt_yt_udp_endpoint_v406.h"
+    yt_session_source=Path(__file__).resolve().parent/"shyt_yt_server_session_v408.cpp"
+    yt_session_header=Path(__file__).resolve().parent/"shyt_yt_server_session_v408.h"
     if (cmake.is_symlink() or not cmake.is_file() or
         git(root,"rev-parse","HEAD:CMakeLists.txt")!=CMAKE_BLOB or
         git(root,"hash-object","CMakeLists.txt")!=CMAKE_BLOB or
@@ -127,6 +130,8 @@ def main()->None:
         not yt_secure_header.is_file() or yt_secure_header.is_symlink() or
         not yt_udp_source.is_file() or yt_udp_source.is_symlink() or
         not yt_udp_header.is_file() or yt_udp_header.is_symlink() or
+        not yt_session_source.is_file() or yt_session_source.is_symlink() or
+        not yt_session_header.is_file() or yt_session_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
         raise ValueError("CMake or plugin input not clean and source pinned")
     original=cmake.read_text(encoding="utf-8")
@@ -148,6 +153,8 @@ def main()->None:
         shutil.copyfile(yt_secure_header,plugin_root/yt_secure_header.name)
         shutil.copyfile(yt_udp_source,plugin_root/yt_udp_source.name)
         shutil.copyfile(yt_udp_header,plugin_root/yt_udp_header.name)
+        shutil.copyfile(yt_session_source,plugin_root/yt_session_source.name)
+        shutil.copyfile(yt_session_header,plugin_root/yt_session_header.name)
         vendored=plugin_root/"yt_original"/"coop"
         (vendored/"monocypher").mkdir(parents=True)
         for file in YT_CRYPTO_BLOBS:
