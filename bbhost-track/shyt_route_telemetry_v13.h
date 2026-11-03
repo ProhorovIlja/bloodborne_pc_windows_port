@@ -9,6 +9,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 struct ShytRouteCountersV13 {
     std::atomic<std::uint64_t> direct_packets{0}, relay_packets{0};
@@ -19,8 +23,16 @@ inline ShytRouteCountersV13 shyt_route_v13;
 
 inline bool shyt_route_audit_enabled_v13() {
     static const bool enabled = [] {
+#if defined(_WIN32)
+        // The MSVC CRT deprecates getenv (C4996), which becomes a hard
+        // error under clang++ -Werror. Use Win32's read-only OS API.
+        char value[3] = {};
+        return GetEnvironmentVariableA("SHYT_ROUTE_AUDIT", value,
+                                       sizeof(value)) == 1 && value[0] == '1';
+#else
         const char* value = std::getenv("SHYT_ROUTE_AUDIT");
         return value && value[0] == '1' && value[1] == '\0';
+#endif
     }();
     return enabled;
 }
