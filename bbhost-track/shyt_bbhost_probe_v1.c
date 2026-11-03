@@ -15,6 +15,7 @@
 #include "shyt_yt_native_channel_policy_v21.h"
 #include "shyt_yt_packet_routes_v358.h"
 #include "shyt_yt_game_frame_v362.h"
+#include "shyt_yt_shlk_client_v401.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -191,6 +192,14 @@ BB_PLUGIN_EXPORT const BbOption bb_plugin_options[] = {
  * codec and server routing imported into this BBHost plugin. No game
  * packets or network traffic are read or injected at startup. */
 static int shyt_yt_transport_codec_selfcheck_v363(void) {
+    /* This is an in-process check of the real original YT crypto wrapper.
+     * No handshake or network session starts before user-controlled login.
+     */
+    ShytYtShlkClientV401 *auth=shyt_yt_shlk_new_v401();
+    if (!auth) return 0;
+    const int not_linked=(shyt_yt_shlk_linked_v401(auth)==0);
+    shyt_yt_shlk_free_v401(auth);
+    if (!not_linked) return 0;
     ShytYtGameFrameV362 source={0}, decoded={0};
     unsigned char wire[64]={0};
     size_t encoded=0;
@@ -244,6 +253,7 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     atomic_store_explicit(&malformed_sends_v17,0u,memory_order_relaxed);
     shyt_world_ledger_reset_v4(&world_events);
     api->log("shyt-bbhost-probe: read-only plugin API accepted; no networking installed");
+    api->log("shyt-bbhost-probe: original YT SHLK4 crypto C session linked, local unconnected; NO network socket/login or P2P installed");
     api->log("shyt-bbhost-probe: actual YT GameFrame V362 codec + V358 packet policy linked; NO SHLK authentication or P2P installed");
     return 0;
 }
