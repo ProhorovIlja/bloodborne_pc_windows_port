@@ -8,6 +8,8 @@ on:
       - '.github/workflows/yt-bbhost-modified-windows-build.yml'
       - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
       - 'bbhost-track/apply_bbhost_os_stun_v2.py'
+      - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
+      - 'bbhost-track/shyt_route_telemetry_v13.h'
       - 'bbhost-track/shyt_bbhost_probe_v1.c'
       - 'bbhost-track/yt_world_event_ledger_v4.h'
   workflow_dispatch:
@@ -45,9 +47,13 @@ jobs:
           python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode apply
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
           grep -Fq 'add_library(bb_plugin_shyt MODULE' pinned-bbhost/CMakeLists.txt
           grep -Fq 'bb_plugin_debug_menu bb_plugin_shyt' pinned-bbhost/CMakeLists.txt
           grep -Fq 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'shyt_route_account_success_v13(shyt_relay_framed_v13,' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'SHYT_ROUTE_AUDIT' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
       - name: Build genuine modified Windows bbhost.exe using upstream cross toolchain
         shell: bash
         run: |
