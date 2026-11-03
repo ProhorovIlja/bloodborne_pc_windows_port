@@ -18,6 +18,12 @@ struct ShytRouteCountersV13 {
     std::atomic<std::uint64_t> direct_packets{0}, relay_packets{0};
     std::atomic<std::uint64_t> direct_wire_bytes{0}, relay_wire_bytes{0};
     std::atomic<std::uint64_t> all_packets{0};
+    // V19: game-header-recognized incoming UDP datagrams queued for the game.
+    // Wire bytes include the 4-byte relay-to-client prefix when present.
+    // Excludes STUN, hole-punch probes, and unrecognized/no-header datagrams.
+    std::atomic<std::uint64_t> direct_rx_packets{0}, relay_rx_packets{0};
+    std::atomic<std::uint64_t> direct_rx_wire_bytes{0}, relay_rx_wire_bytes{0};
+    std::atomic<std::uint64_t> rx_all_packets{0};
 };
 inline ShytRouteCountersV13 shyt_route_v13;
 
@@ -56,4 +62,21 @@ inline void shyt_route_account_success_v13(bool framed_relay, std::uint64_t byte
         static_cast<unsigned long long>(shyt_route_v13.direct_wire_bytes.load(std::memory_order_relaxed)),
         static_cast<unsigned long long>(shyt_route_v13.relay_packets.load(std::memory_order_relaxed)),
         static_cast<unsigned long long>(shyt_route_v13.relay_wire_bytes.load(std::memory_order_relaxed)));
+}
+
+inline void shyt_route_account_received_v19(bool framed_relay,
+                                           std::uint64_t bytes_received_on_socket) {
+    if (!shyt_route_audit_enabled_v13()) return;
+    auto& packets = framed_relay ? shyt_route_v13.relay_rx_packets : shyt_route_v13.direct_rx_packets;
+    auto& bytes = framed_relay ? shyt_route_v13.relay_rx_wire_bytes : shyt_route_v13.direct_rx_wire_bytes;
+    packets.fetch_add(1, std::memory_order_relaxed);
+    bytes.fetch_add(bytes_received_on_socket, std::memory_order_relaxed);
+    const auto count = shyt_route_v13.rx_all_packets.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (count % 1024u) return;
+    host_log("shyt-route-v19: queued game-header receives %llu direct %llu/%llu B relay-framed %llu/%llu B (NOT proof of YT authenticated sessions)",
+        static_cast<unsigned long long>(count),
+        static_cast<unsigned long long>(shyt_route_v13.direct_rx_packets.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(shyt_route_v13.direct_rx_wire_bytes.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(shyt_route_v13.relay_rx_packets.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(shyt_route_v13.relay_rx_wire_bytes.load(std::memory_order_relaxed)));
 }
