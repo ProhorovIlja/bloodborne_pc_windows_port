@@ -45,6 +45,7 @@ add_library(bb_plugin_shyt MODULE
   plugins/shyt_probe/shyt_yt_game_frame_v362.c
   plugins/shyt_probe/shyt_yt_shlk_client_v401.cpp
   plugins/shyt_probe/shyt_yt_link_wire_v403.cpp
+  plugins/shyt_probe/shyt_yt_secure_game_data_v405.cpp
   plugins/shyt_probe/yt_original/coop/link_crypto.cpp)
 target_include_directories(bb_plugin_shyt PRIVATE
   include plugins/shyt_probe/yt_original
@@ -103,6 +104,8 @@ def main()->None:
     yt_shlk_header=Path(__file__).resolve().parent/"shyt_yt_shlk_client_v401.h"
     yt_wire_source=Path(__file__).resolve().parent/"shyt_yt_link_wire_v403.cpp"
     yt_wire_header=Path(__file__).resolve().parent/"shyt_yt_link_wire_v403.h"
+    yt_secure_source=Path(__file__).resolve().parent/"shyt_yt_secure_game_data_v405.cpp"
+    yt_secure_header=Path(__file__).resolve().parent/"shyt_yt_secure_game_data_v405.h"
     if (cmake.is_symlink() or not cmake.is_file() or
         git(root,"rev-parse","HEAD:CMakeLists.txt")!=CMAKE_BLOB or
         git(root,"hash-object","CMakeLists.txt")!=CMAKE_BLOB or
@@ -116,6 +119,8 @@ def main()->None:
         not yt_shlk_header.is_file() or yt_shlk_header.is_symlink() or
         not yt_wire_source.is_file() or yt_wire_source.is_symlink() or
         not yt_wire_header.is_file() or yt_wire_header.is_symlink() or
+        not yt_secure_source.is_file() or yt_secure_source.is_symlink() or
+        not yt_secure_header.is_file() or yt_secure_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
         raise ValueError("CMake or plugin input not clean and source pinned")
     original=cmake.read_text(encoding="utf-8")
@@ -133,6 +138,8 @@ def main()->None:
         shutil.copyfile(yt_shlk_header,plugin_root/yt_shlk_header.name)
         shutil.copyfile(yt_wire_source,plugin_root/yt_wire_source.name)
         shutil.copyfile(yt_wire_header,plugin_root/yt_wire_header.name)
+        shutil.copyfile(yt_secure_source,plugin_root/yt_secure_source.name)
+        shutil.copyfile(yt_secure_header,plugin_root/yt_secure_header.name)
         vendored=plugin_root/"yt_original"/"coop"
         (vendored/"monocypher").mkdir(parents=True)
         for file in YT_CRYPTO_BLOBS:
