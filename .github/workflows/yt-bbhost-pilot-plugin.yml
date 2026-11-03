@@ -45,6 +45,14 @@ jobs:
           python bbhost-track/check_netsync_yt_pin_v17.py \
             --yt-source pinned-yt/bbport/patches/coop-sites.json \
             --probe bbhost-track/shyt_bbhost_probe_v1.c
+      - name: Verify ALL 68 exact YT server channel policies against BBHost C plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          python bbhost-track/check_yt_native_channel_policy_v21.py \
+            --yt-policy pinned-yt/server/coop/packet_routes.h \
+            --host-policy bbhost-track/shyt_yt_native_channel_policy_v21.h
       - name: Strict source pin and GPL3 plugin public API guard
         shell: bash
         run: |
