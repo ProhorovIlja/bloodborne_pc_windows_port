@@ -11,6 +11,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include "bbhost_plugin.h"
+#include "yt_world_event_ledger_v4.h"
 #include <stddef.h>
 #include <stdint.h>
 #ifdef _WIN32
@@ -23,6 +24,16 @@
 static const BbHostApi *host;
 static uint64_t frame_count;
 static uint64_t window_start_ms;
+static ShytWorldLedgerV4 world_events;
+static int reported_world_overflow;
+
+static void on_world_flag_v4(uint32_t id,int value,void *user) {
+    (void)user;
+    /* Only the game's original main-thread flag callback is observed.
+     * Never send an unauthenticated delta or alter the game in this pilot. */
+    (void)shyt_world_ledger_push_v4(&world_events,id,value);
+}
+
 
 static uint64_t monotonic_ms(void) {
 #ifdef _WIN32
@@ -48,6 +59,10 @@ static void on_game_frame(void *user) {
     if (frame_count == 0) window_start_ms = now;
     ++frame_count;
     if ((frame_count % 600u) != 0u) return;
+    if (world_events.invalid_incremental && !reported_world_overflow) {
+        host->log("shyt-bbhost-probe: world flags overflow, incremental stream INVALID; future signed full snapshot required");
+        reported_world_overflow=1;
+    }
     if (!now || !window_start_ms || now <= window_start_ms) {
         host->log("shyt-bbhost-probe: timing unavailable; no FPS claim");
         window_start_ms = now;
@@ -85,6 +100,8 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     host = api;
     frame_count = 0;
     window_start_ms = 0;
+    reported_world_overflow=0;
+    shyt_world_ledger_reset_v4(&world_events);
     api->log("shyt-bbhost-probe: read-only plugin API accepted; no networking installed");
     return 0;
 }
@@ -96,6 +113,19 @@ BB_PLUGIN_EXPORT int bb_plugin_image(const BbHostApi *api) {
      * the host can unload the plugin without any dangling callback.
      */
     if (api->on_frame(on_game_frame, 0) != 0) return 1;
+    /* V4: event flag callback is one real YT-required progression source.
+     * Register AFTER on_frame: failure here MUST NOT unload the plugin,
+     * otherwise the installed frame callback would dangle.
+     * No sync transport is present, and no game state is modified. */
+    if (api->version >= 4u &&
+        api->size >= offsetof(BbHostApi,on_event_flag) +
+                     sizeof(api->on_event_flag) &&
+        api->on_event_flag &&
+        api->on_event_flag(on_world_flag_v4,0)==0) {
+        api->log("shyt-bbhost-probe: world progression callback captured, LOCAL ONLY");
+    } else {
+        api->log("shyt-bbhost-probe: world flag callback unavailable; disabled");
+    }
     api->log("shyt-bbhost-probe: original Bloodborne 1.09 image accepted; observe-only");
     return 0;
 }
