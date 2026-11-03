@@ -19,6 +19,12 @@ import private_original_preflight_v212 as preflight
 
 PIN="8f31ec7c41f252730c6325d52647046baef7549f"
 STAMP="SHYT_PRIVATE_FULL_IMAGE_V204"
+# Published BBHost 1.09 decrypted ELF identity, used ONLY as a build-time
+# exact-match attestation. No original game data enters the repository.
+ORIGINAL_109_SHA256="941f887a562aae054fac35af8cc8f27cf075f3d4cc2e029fb5ae2a663aaa5ae7"
+
+def verified_original_109_digest(digest: str)->bool:
+    return type(digest) is str and digest==ORIGINAL_109_SHA256
 
 def sha(p):
     h=hashlib.sha256()
@@ -71,6 +77,12 @@ def prepare(root,eboot,work):
     with eboot.open("rb") as f:magic=f.read(4)
     if magic not in (b"\x7fELF",b"O\x15=\x1d"):
         raise ValueError("original PS4 SELF/plain ELF header required; no encrypted dump")
+    # V335: hash the actual build input, not a name or SFO version string.
+    # The old V204 writer unconditionally set version_109_verified=False,
+    # making the strict V311 original-only link gate impossible to satisfy.
+    original=eboot.resolve(strict=True)
+    original_digest=sha(original)
+    version_109_verified=verified_original_109_digest(original_digest)
     if work.exists() and any(work.iterdir()):
         raise ValueError("private output is not empty; use a new work folder")
     work.mkdir(parents=True,exist_ok=True)
@@ -79,7 +91,6 @@ def prepare(root,eboot,work):
     scan.mkdir();gen.mkdir()
     t=root/"tools/recomp"
     elf=work/"original.elf"
-    original=eboot.resolve(strict=True)
     run([sys.executable,t/"ps4elf.py",original,elf],"extract_elf",private_logs)
     run([sys.executable,t/"pointers.py",original,scan/"pointers.txt"],"pointers",private_logs)
     run([root/"out/recomp/scan",elf,scan,scan/"pointers.txt"],"function_scan",private_logs)
@@ -110,9 +121,14 @@ def prepare(root,eboot,work):
     registration=coverage.inspect_file(gen/"recomp.c",count,tab)
     hashes={p.name:sha(p) for p in auditor.sources(gen)}
     audit=auditor.audit(gen)
+    # Fail closed if the owner's local input was replaced during generation.
+    # A known checksum attests the *input identity*, NOT correct AOT coverage,
+    # no guest callbacks, complete imports, a linkable PE or a game boot.
+    if sha(original)!=original_digest:
+        raise ValueError("original private game image changed during AOT preparation")
     metadata={"format":STAMP,"upstream":PIN,
-              "input_sha256":sha(original),"original_size_bytes":size,
-              "version_109_verified":False,
+              "input_sha256":original_digest,"original_size_bytes":size,
+              "version_109_verified":version_109_verified,
               **registration,"c_hashes":hashes,
               "scanner_index_sha256":sha(tab),
               "fallback_calls":audit["callback_total"],
@@ -125,7 +141,7 @@ def prepare(root,eboot,work):
     return {**registration,"generated_c_modules":len(hashes),
             "fallback_calls":audit["callback_total"],
             "strict_no_guest_runtime":audit["strict_native_runtime_ready"],
-            "version_109_verified":False,"game_boot_proven":False}
+            "version_109_verified":version_109_verified,"game_boot_proven":False}
 
 if __name__=="__main__":
     a=argparse.ArgumentParser()
