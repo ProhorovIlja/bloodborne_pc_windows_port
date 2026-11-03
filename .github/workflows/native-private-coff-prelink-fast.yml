@@ -7,6 +7,7 @@ on:
       - 'native/source-port/recomp-v194/private_coff_*'
       - 'native/source-port/recomp-v194/private_native_link_probe_v309.py'
       - 'native/source-port/recomp-v194/audit_current_recompiler_abi_v333.py'
+      - 'native/source-port/recomp-v194/audit_split_bbcpu_abi_v334.py'
       - 'native/source-port/recomp-v194/test_private_native_link_probe_v309.py'
       - 'native/source-port/recomp-v194/test_private_native_link_invocation_v317.py'
       - 'native/source-port/recomp-v194/test_private_coff_*'
@@ -18,6 +19,7 @@ on:
       - 'native/source-port/recomp-v194/private_coff_*'
       - 'native/source-port/recomp-v194/private_native_link_probe_v309.py'
       - 'native/source-port/recomp-v194/audit_current_recompiler_abi_v333.py'
+      - 'native/source-port/recomp-v194/audit_split_bbcpu_abi_v334.py'
       - 'native/source-port/recomp-v194/test_private_native_link_probe_v309.py'
       - 'native/source-port/recomp-v194/test_private_native_link_invocation_v317.py'
       - 'native/source-port/recomp-v194/test_private_coff_*'
@@ -54,6 +56,19 @@ jobs:
         run: |
           python native/source-port/recomp-v194/audit_current_recompiler_abi_v333.py \
             --upstream public-recompiler-abi-check
+      - name: Checkout standalone bbcpu CPU/runtime after November upstream split
+        uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bbcpu
+          ref: 3f9b6c1a11d5a443ee2e556a0d1f3aec4a73f0ca
+          path: public-split-bbcpu
+          persist-credentials: false
+      - name: Verify old Windows AOT RcApi4 is semantically identical after CPU split
+        shell: bash
+        run: |
+          python native/source-port/recomp-v194/audit_split_bbcpu_abi_v334.py \
+            --old-recompiler public-recompiler-abi-check \
+            --split-bbcpu public-split-bbcpu
       - name: Install actual lld linker for Linux-only synthetic PE smoke
         if: runner.os == 'Linux'
         shell: bash
