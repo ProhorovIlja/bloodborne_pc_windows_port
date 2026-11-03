@@ -6,6 +6,9 @@ on:
       - '.github/workflows/yt-bbhost-live-server-session-v408.yml'
       - 'bbhost-track/shyt_yt_server_session_v408.*'
       - 'bbhost-track/test_shyt_yt_server_session_v408.cpp'
+      - 'bbhost-track/shyt_yt_signup_work_v409.cpp'
+      - 'bbhost-track/shyt_yt_signup_work_v409.h'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.cpp'
   workflow_dispatch:
 permissions:
   contents: read
@@ -56,6 +59,7 @@ jobs:
                  bbhost-track/shyt_yt_link_wire_v403.cpp \
                  bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
                  bbhost-track/shyt_yt_server_session_v408.cpp \
+                 bbhost-track/shyt_yt_signup_work_v409.cpp \
                  bbhost-track/test_shyt_yt_server_session_v408.cpp \
                  v408-source-crypto.obj ws2_32.lib bcrypt.lib \
                  /Fe:./shyt-v408-real-session.exe >>v408-build.log 2>&1; then
@@ -76,6 +80,7 @@ jobs:
                   bbhost-track/shyt_yt_link_wire_v403.cpp \
                   bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
                   bbhost-track/shyt_yt_server_session_v408.cpp \
+                  bbhost-track/shyt_yt_signup_work_v409.cpp \
                   bbhost-track/test_shyt_yt_server_session_v408.cpp \
                   v408-source-crypto.o -o shyt-v408-real-session) \
                   >v408-build.log 2>&1; then
@@ -89,6 +94,7 @@ jobs:
           fi
           cat v408-run.log
           echo SHYT_V408_AUTHENTIC_ORIGINAL_YT_LOGIN_HEARTBEAT_QUARANTINE_OVER_NATIVE_UDP_PASS
+          echo SHYT_V409_TRUE_YT_HOSTED_NEW_ACCOUNT_WORK_ASYNC_SOLVER_PASS
       - name: Upload only six lines of local-only fictional-data diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
