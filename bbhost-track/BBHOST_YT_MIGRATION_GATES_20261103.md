@@ -53,14 +53,21 @@ natively, but it still relies on that original executable.
   or other licenses; binary-only or GPL-2.0-only pieces are NOT assumed
   legally mergeable. Keep license notices and source available.
 
-## Hard compatibility blocker: owner's original game version
+## Owner image: historical local verification, current copy still must be checked
 
 BBHost requires exact **decrypted ELF64** SHA-256:
 `941f887a562aae054fac35af8cc8f27cf075f3d4cc2e029fb5ae2a663aaa5ae7`
 for its *one* supported original 1.09 game executable. Its docs illustrate
 CUSA00900. The owner's private Google Drive contains **CUSA03173**
-(GOTY edition), and compatibility must be **verified**, not inferred from
-matching `APP_VER 01.09`. Locally run:
+(GOTY edition). **Newly recovered historical evidence:** a private owner-supplied
+BBHost log dated **2026-10-11** recorded the `CUSA03173-patch` decrypted
+ELF's SHA-256 as **exactly the pinned BBHost 1.09 hash above**, and logged
+successful relocation, import binding and the BBHost engine 1.09 image binding.
+This confirms that at least one earlier owner-local CUSA03173-patch image
+passed the strict BBHost identity gate. It is NOT proof that the *current*
+Drive image has identical bytes, that our modified BBHost loads it, or that
+seamless co-op works. Do not embed the private log or owner machine paths in
+GitHub. Recheck the current selected local ELF before installation. Locally run:
 ```sh
 python bbhost-track/check_owner_bbhost_109_v1.py --owner-private-eboot /PRIVATE/PATH/eboot.bin
 ```
