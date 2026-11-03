@@ -149,8 +149,44 @@ int main() {
     if(!shyt_yt_server_counters_v408(client,&before_welcome) ||
        before_welcome.auth_errors<2)
         return bad(29);
+    // A real hosted server requires original SHA256(cookie,id,nonce)
+    // for a new account. The authentic Noise NK Work challenge MUST be
+    // solved on a cancellable worker without blocking any game frame.
+    auto valid_work=responder->Answer(YT::EncodeWork(10),fake_key(49));
+    if(!send_to(server,endpoint,valid_work.datagram) ||
+       shyt_yt_server_tick_v408(client,1160)!=1)
+        return bad(30);
+    ShytYtServerCountersV408 work_counters{};
+    bool sent_work_hello=false;
+    for(unsigned attempt=0;attempt<200u;++attempt) {
+        if(shyt_yt_server_tick_v408(client,1161+attempt)!=1)
+            return bad(31);
+        if(!shyt_yt_server_counters_v408(client,&work_counters))
+            return bad(32);
+        if(shyt_yt_server_phase_v408(client)==SHYT_V408_WAIT_WELCOME &&
+           work_counters.hello_sent==3u) {
+            sent_work_hello=true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    if(!sent_work_hello ||
+       work_counters.verified_work_challenges!=1u ||
+       work_counters.work_nonces_solved!=1u)
+        return bad(33);
+    const auto third=receive(server,endpoint);
+    std::vector<u8> completed_hello;
+    auto approved_work_responder=LinkAuth::Responder::Open(
+        server_key,third,completed_hello);
+    const auto decoded_hello=YT::DecodeHello(completed_hello);
+    if(!approved_work_responder || !decoded_hello ||
+       !decoded_hello->work ||
+       decoded_hello->online_id!="fictional-id" ||
+       decoded_hello->secret!="fictional-secret" ||
+       !LinkAuth::WorkDone(cookie,"fictional-id",*decoded_hello->work,10))
+        return bad(34);
     const auto welcome=YT::Encode(YT::Welcome{true,"fictional-joined"});
-    auto answer=responder->Answer(welcome,fake_key(55));
+    auto answer=approved_work_responder->Answer(welcome,fake_key(55));
     if(!send_to(server,endpoint,answer.datagram))
         return bad(15);
     if(shyt_yt_server_tick_v408(client,1200)!=1 ||
@@ -158,7 +194,7 @@ int main() {
         return bad(16);
     ShytYtServerCountersV408 counts{};
     if(!shyt_yt_server_counters_v408(client,&counts) ||
-       counts.hello_sent!=2 || counts.heartbeats_sent!=1)
+       counts.hello_sent!=3 || counts.heartbeats_sent!=1)
         return bad(17);
     // The authenticated heartbeat must use the ORIGINAL YT session keys.
     auto ping_wire=receive(server,endpoint);
@@ -217,6 +253,7 @@ int main() {
     WSACleanup();
 #endif
     std::puts("SHYT_V408_REAL_ORIGINAL_YT_SERVER_LINK_SESSION_LOGIN_HEARTBEAT_QUARANTINE_PASS");
+    std::puts("SHYT_V409_SOURCE_PINNED_YT_HOSTED_SIGNUP_POW_BACKGROUND_NONCE_AND_RELOGIN_PASS");
     std::puts("localhost only; encrypted game Data quarantined. No production or retail game connection.");
     return 0;
 }
