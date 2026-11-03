@@ -52,11 +52,13 @@ def main()->None:
     plugin=plugin_root/"shyt_bbhost_probe_v1.c"
     source=Path(__file__).resolve().parent/"shyt_bbhost_probe_v1.c"
     world_header=Path(__file__).resolve().parent/"yt_world_event_ledger_v4.h"
+    yt_policy_header=Path(__file__).resolve().parent/"shyt_yt_native_channel_policy_v21.h"
     if (cmake.is_symlink() or not cmake.is_file() or
         git(root,"rev-parse","HEAD:CMakeLists.txt")!=CMAKE_BLOB or
         git(root,"hash-object","CMakeLists.txt")!=CMAKE_BLOB or
         not source.is_file() or source.is_symlink() or
         not world_header.is_file() or world_header.is_symlink() or
+        not yt_policy_header.is_file() or yt_policy_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
         raise ValueError("CMake or plugin input not clean and source pinned")
     original=cmake.read_text(encoding="utf-8")
@@ -66,6 +68,7 @@ def main()->None:
         plugin_root.mkdir()
         shutil.copyfile(source,plugin)
         shutil.copyfile(world_header,plugin_root/world_header.name)
+        shutil.copyfile(yt_policy_header,plugin_root/yt_policy_header.name)
         updated=original.replace(CMAKE_ANCHOR,CMAKE_ANCHOR+CMAKE_APPEND)
         updated=updated.replace(PACKAGE_ANCHOR,
                                 PACKAGE_ANCHOR+" bb_plugin_shyt")
