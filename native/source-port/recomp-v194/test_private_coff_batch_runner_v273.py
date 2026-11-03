@@ -50,6 +50,9 @@ def run()->None:
             'upstream':coff.PIN,
             'functions_scanned':4,
             'version_109_verified':False,
+            # V336 requires a well-formed original input identity, even if
+            # this wholly invented fixture must remain unverified as retail.
+            'input_sha256':'1'*64,
             'scanner_index_sha256':coff.digest(scanner/'functions.tsv'),
             'c_hashes':{name:coff.digest(source/name) for name in names}
         }
