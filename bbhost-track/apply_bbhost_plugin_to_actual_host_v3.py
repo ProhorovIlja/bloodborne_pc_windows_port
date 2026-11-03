@@ -17,6 +17,11 @@ UPSTREAM="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
 CMAKE_BLOB="672a3c1c3b9264cf3cc34d4606b844e5cba87717"
 CMAKE_ANCHOR="""set_target_properties(bb_plugin_hello PROPERTIES OUTPUT_NAME hello PREFIX ""
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)"""
+# BBHost's Windows package-win target has explicit dependencies. Merely
+# adding a MODULE target leaves our DLL OUT of the package build graph.
+PACKAGE_ANCHOR = ("    DEPENDS bbhost bb_plugin_randomizer bb_plugin_boss_rush "
+                  "bb_plugin_mutators bb_plugin_quake bb_plugin_lohit bb_plugin_debug_menu")
+
 CMAKE_APPEND="""
 # SHYT V3: build an opt-in, source-only real BBHost plugin beside hello.
 # It performs no network injection or game writes and cannot load into
@@ -55,14 +60,16 @@ def main()->None:
         plugin_root.exists() or plugin_root.is_symlink()):
         raise ValueError("CMake or plugin input not clean and source pinned")
     original=cmake.read_text(encoding="utf-8")
-    if original.count(CMAKE_ANCHOR)!=1:
-        raise ValueError("original BBHost CMake plugin insertion drift")
+    if original.count(CMAKE_ANCHOR)!=1 or original.count(PACKAGE_ANCHOR)!=1:
+        raise ValueError("original BBHost CMake plugin/package anchor drift")
     if a.mode=="apply":
         plugin_root.mkdir()
         shutil.copyfile(source,plugin)
         shutil.copyfile(world_header,plugin_root/world_header.name)
-        cmake.write_text(original.replace(CMAKE_ANCHOR,
-            CMAKE_ANCHOR+CMAKE_APPEND),encoding="utf-8")
+        updated=original.replace(CMAKE_ANCHOR,CMAKE_ANCHOR+CMAKE_APPEND)
+        updated=updated.replace(PACKAGE_ANCHOR,
+                                PACKAGE_ANCHOR+" bb_plugin_shyt")
+        cmake.write_text(updated,encoding="utf-8")
     print("SHYT_BBHOST_V3_REAL_HOST_PLUGIN_CMAKE_"+("APPLIED" if a.mode=="apply" else "PINNED"))
 
 if __name__=="__main__":
