@@ -1,0 +1,40 @@
+name: SHYT V400 complete-package release policy, fail closed
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-full-release-contract-v400.yml'
+      - 'bbhost-track/full_release_contract_v400.json'
+      - 'bbhost-track/full_release_guard_v400.py'
+      - 'bbhost-track/test_full_release_guard_v400.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  only-one-complete-game-package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify 19 hard release gates, no game/private files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile bbhost-track/full_release_guard_v400.py bbhost-track/test_full_release_guard_v400.py
+          python bbhost-track/test_full_release_guard_v400.py
+          python bbhost-track/full_release_guard_v400.py \
+            --manifest bbhost-track/full_release_contract_v400.json --mode audit
+          if python bbhost-track/full_release_guard_v400.py \
+               --manifest bbhost-track/full_release_contract_v400.json --mode ship; then
+            echo 'ERROR: unproven, partial experimental client allowed to ship'
+            exit 1
+          fi
+          test ! -f eboot.bin-decrypted
+          test ! -f eboot.bin
+          echo SHYT_V400_ONE_PRODUCT_NOT_A_PIECEMEAL_RELEASE_PASS
