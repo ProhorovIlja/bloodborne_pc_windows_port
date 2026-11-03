@@ -3,7 +3,9 @@
  * Runs authenticated SHLK4 Noise NK over the real V406 UDP endpoint.
  * Creation and poll require EXPLICIT caller opt-in and complete inputs.
  * Never auto-starts from BBHost plugin init or connects to owner Fornex.
- * Pending Work/Redirect are reported as unsupported rather than skipped.
+ * Authenticated hosted Work executes asynchronously on a cancellable
+ * original-YT SHA256 worker; redirects remain blocked pending shard
+ * ticket validation.
  * Encrypted game packets are QUARANTINED until server room authorization
  * and BBHost guest NetSync callbacks are verified and implemented.
  *
@@ -25,10 +27,11 @@ enum ShytYtServerPhaseV408 {
     SHYT_V408_WAIT_WELCOME=2,
     SHYT_V408_LINKED=3,
     SHYT_V408_QUIET=4,
-    SHYT_V408_REFUSED=5,
-    SHYT_V408_WORK_UNSUPPORTED=6,
-    SHYT_V408_REDIRECT_UNSUPPORTED=7,
-    SHYT_V408_IO_FAILED=8
+    SHYT_V408_SOLVING_WORK=5,
+    SHYT_V408_REFUSED=6,
+    SHYT_V408_WORK_UNSUPPORTED=7,
+    SHYT_V408_REDIRECT_UNSUPPORTED=8,
+    SHYT_V408_IO_FAILED=9
 };
 typedef struct ShytYtServerCountersV408 {
     uint64_t hello_sent;
@@ -38,6 +41,9 @@ typedef struct ShytYtServerCountersV408 {
     uint64_t authenticated_data_quarantined;
     uint64_t authenticated_coop_quarantined;
     uint64_t rejected_control_packets;
+    uint64_t verified_work_challenges;
+    uint64_t work_nonces_solved;
+    uint64_t work_challenges_refused;
 } ShytYtServerCountersV408;
 /* C-string fields must be present, NUL-terminated and 1..255B.
  * No implicit fallback to unsigned/TOFU key, and no credential capture.
