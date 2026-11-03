@@ -19,6 +19,7 @@ import sys
 import time
 
 import compile_private_win64_coff_v217 as coff
+from prepare_private_full_game_v204 import verify_private_109_manifest_claim_v336
 
 MAX_SHARDS=512
 MAX_BATCHES=16
@@ -81,7 +82,8 @@ def verify_original_preparation(generated:Path,names:list[str])->bool:
                 any(ch not in '0123456789abcdef' for ch in digest) or
                 coff.digest(generated/name)!=digest):
             raise ValueError("private original C shard changed since scan")
-    return parsed.get('version_109_verified') is True
+    # V336: an optimistic true flag cannot defeat the exact source hash gate.
+    return verify_private_109_manifest_claim_v336(parsed)
 
 def manifest_for(output:Path)->dict:
     path=coff.private(output)/'private_coff_manifest_v217.json'
