@@ -21,8 +21,9 @@ int shyt_native_dcx_dflt_inflate_v355(
     ShytNativeDcxDfltHeaderV354 meta;
     if (!shyt_native_dcx_dflt_probe_v354(dcx,dcx_bytes,(uint64_t)dcx_bytes,&meta))
         return 0;
+    /* uint32 DCX lengths already fit zlib's uLong on both Windows
+     * (32-bit unsigned long) and Linux (64-bit unsigned long). */
     if (!meta.uncompressed_bytes || out_capacity<(size_t)meta.uncompressed_bytes ||
-        meta.uncompressed_bytes>ULONG_MAX || meta.compressed_bytes>ULONG_MAX ||
         meta.payload_offset>dcx_bytes)
         return 0;
     const unsigned char *p=(const unsigned char *)dcx;
