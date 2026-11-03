@@ -12,6 +12,11 @@ on:
       - 'bbhost-track/apply_bbhost_route_rx_v19.py'
       - 'bbhost-track/shyt_route_telemetry_v13.h'
       - 'bbhost-track/shyt_bbhost_probe_v1.c'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.cpp'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.h'
+      - 'bbhost-track/shyt_yt_game_frame_v362.c'
+      - 'bbhost-track/shyt_yt_game_frame_v362.h'
+      - 'bbhost-track/shyt_yt_packet_routes_v358.h'
       - 'bbhost-track/yt_world_event_ledger_v4.h'
   workflow_dispatch:
 permissions:
@@ -38,14 +43,22 @@ jobs:
           path: pinned-bbhost
           persist-credentials: false
           submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
       - name: Verify and patch authentic BBHost release source
         shell: bash
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE/pinned-bbhost"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/pinned-yt"
           test "$(git -C pinned-bbhost rev-parse HEAD)" = b0098e04b889e2e70b4af84be1ce809d7af3ff95
-          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode check
-          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode apply
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
           python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
