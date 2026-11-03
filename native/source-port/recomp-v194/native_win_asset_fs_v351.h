@@ -26,8 +26,9 @@ int shyt_native_win_asset_mount_v351(ShytNativeWinAssetRootV351 *root,
                                       const wchar_t *root_dir);
 /* Logical path must be absolute /dvdroot_ps4/name.ext with ASCII-only
  * canonical components. No .., hidden ADS, devices, links or writes.
- * Returns 1 on clean read/EOF, 0 on any refusal. On failure the buffer
- * is unmodified, and *got is zero. Offset is an absolute file offset.
+ * Returns 1 on clean read/EOF, 0 on refusal. On failure *got is
+ * zero; when the OS itself aborts a read, caller must discard the output
+ * buffer. Offset is an absolute file offset.
  * This opens one native Windows file handle per call (safe for threads,
  * not yet optimized for the actual game's sustained streaming load).
  */
