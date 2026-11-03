@@ -1,0 +1,57 @@
+name: SHYT V410 source-pinned YT directory PR507 reliable HTTP and secure body parser
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-server-directory-http-v410.yml'
+      - 'server-track/apply_yt_directory_pr507_v410.py'
+      - 'server-track/test_yt_directory_http_v410.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-yt-directory-real-http-regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Source-verify and apply precise upstream YT PR507 HTTP directory fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python server-track/apply_yt_directory_pr507_v410.py --checkout pinned-yt --mode check
+          python server-track/apply_yt_directory_pr507_v410.py --checkout pinned-yt --mode apply
+          python server-track/apply_yt_directory_pr507_v410.py --checkout pinned-yt --mode verify-patched
+          python -m py_compile pinned-yt/server/directory/directory.py
+      - name: Real localhost HTTP socket tests; no external server or game
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHYT_V410_YT_CHECKOUT="$GITHUB_WORKSPACE/pinned-yt" \
+            python server-track/test_yt_directory_http_v410.py
+          echo SHYT_V410_REAL_ORIGINAL_YT_HTTP_PR507_BODY_BEFORE_DENIAL_PASS
+      - name: Retest patch provenance and double-apply refusal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python server-track/apply_yt_directory_pr507_v410.py --checkout pinned-yt --mode verify-patched
+          if python server-track/apply_yt_directory_pr507_v410.py --checkout pinned-yt --mode apply; then
+            echo "refused: double-application was unexpectedly allowed"
+            exit 1
+          fi
+          echo SHYT_V410_NO_UNVERIFIED_SOURCE_OR_REPEAT_PATCH_PASS
