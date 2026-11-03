@@ -32,7 +32,7 @@ static void fake_log(const char *fmt, ...) {
     if (strstr(line,"600-frame engine-main-thread") ||
         strstr(line,"timing unavailable"))
         observed_cadence++;
-    if (strstr(line,"world flags overflow"))
+    if (strstr(line,"world flag stream invalid"))
         observed_world_overflow++;
     if (strstr(line,"incremental flag stream INVALID"))
         observed_load_invalidation++;
