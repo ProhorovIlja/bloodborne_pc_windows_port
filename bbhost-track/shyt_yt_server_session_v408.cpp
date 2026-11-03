@@ -180,15 +180,26 @@ void handle_control(ShytYtServerSessionV408& s,
         (void)start_hello(s,now);
         return;
     }
-    if(kind==10 && (s.phase==SHYT_V408_WAIT_WELCOME ||
-                     s.phase==SHYT_V408_WAIT_COOKIE)) {
-        s.phase=SHYT_V408_WORK_UNSUPPORTED;
-        return;
-    }
-    if(kind==11 && s.phase!=SHYT_V408_NEW) {
-        // Changing shard requires NEW pinned key and trusted redirect
-        // ticket, not a silent switch to an arbitrary network endpoint.
-        s.phase=SHYT_V408_REDIRECT_UNSUPPORTED;
+    if((kind==10 && s.phase==SHYT_V408_WAIT_WELCOME) ||
+       (kind==11 && (s.phase==SHYT_V408_WAIT_WELCOME ||
+                      s.phase==SHYT_V408_LINKED ||
+                      s.phase==SHYT_V408_QUIET))) {
+        // Work and Redirect are Noise NK answers, not plain commands.
+        // A spoofed datagram with KindWork/KindRedirect must NEVER be
+        // allowed to stop login or change server state before MAC check.
+        std::array<uint8_t,kWireLimit> verified{};
+        size_t verified_size=0;
+        if(!shyt_yt_shlk_open_v401(s.auth,raw,n,
+              verified.data(),verified.size(),&verified_size) ||
+           shyt_yt_link_kind_v403(verified.data(),verified_size)!=kind) {
+            ++s.counters.auth_errors;
+            return;
+        }
+        // Work requires background CPU PoW and Redirect requires a
+        // separately pinned/authorized shard ticket. Fail closed until
+        // both handoff protocols are implemented, never skip them.
+        s.phase=(kind==10)?SHYT_V408_WORK_UNSUPPORTED:
+                           SHYT_V408_REDIRECT_UNSUPPORTED;
         return;
     }
     // EVERYTHING else, including Welcome and Data, MUST decrypt before
