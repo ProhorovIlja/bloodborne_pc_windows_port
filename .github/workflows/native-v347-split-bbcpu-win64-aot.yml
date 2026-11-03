@@ -1,0 +1,118 @@
+# Native Bloodborne.exe mission: validate our actual Win64 AOT bootstrap
+# against the NEW publicly split bbcpu runtime, not the legacy embedded copy.
+# Only public toolchains and invented AOT functions. No original-game binary.
+name: Native V347 latest split bbcpu actual Win64 AOT ABI execution
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v347-split-bbcpu-win64-aot.yml'
+      - 'native/source-port/recomp-v194/native_aot_services_bootstrap_v245.*'
+      - 'native/source-port/recomp-v194/native_aot_direct_link_v259.h'
+      - 'native/source-port/recomp-v194/test_native_aot_services_bootstrap_v245.c'
+      - 'native/source-port/recomp-v194/test_native_aot_direct_link_v259.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pinned-public-split-bbcpu-headers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bbcpu
+          ref: 3f9b6c1a11d5a443ee2e556a0d1f3aec4a73f0ca
+          path: public-bbcpu
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: c60ccf8be752b8690f2813505c4daf9eafdb136b
+          path: public-recompiler
+          persist-credentials: false
+      - name: Verify genuine Nov 3 latest split bbcpu ABI source and toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-bbcpu rev-parse HEAD)" = 3f9b6c1a11d5a443ee2e556a0d1f3aec4a73f0ca
+          test "$(git -C public-recompiler rev-parse HEAD)" = c60ccf8be752b8690f2813505c4daf9eafdb136b
+          test "$(git -C public-bbcpu rev-parse HEAD:src/recomp/rc.h)" = 20989474d1b863b2a486912d76fc09b209fb66d0
+          test "$(git -C public-bbcpu rev-parse HEAD:src/cpu/cpu_internal.h)" = bcbd422f92a84087a2e0c2d260ec64040f381540
+          grep -Fq '#define BB_RECOMP_API_VERSION 4u' public-bbcpu/src/recomp/rc.h
+          grep -Fq 'source tools/recomp/host.sh' public-recompiler/build.sh
+      - name: Build actual upstream Zydis dependencies and CPU runtime, no proprietary game
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! (cd public-bbcpu && CC=clang ./build.sh) > "$RUNNER_TEMP/bbcpu-v347.log" 2>&1; then
+            echo 'Pinned PUBLIC split bbcpu dependency compile failed:'
+            grep -E 'error:|CMake Error|FAILED:|fatal error|failed' "$RUNNER_TEMP/bbcpu-v347.log" | tail -n 5 | cut -c1-180 || true
+            exit 1
+          fi
+          test -s public-bbcpu/deps/include/Zydis/Zydis.h
+          test -s public-bbcpu/out/libbbcpu.a
+          test -x public-bbcpu/out/hello
+          public-bbcpu/out/hello
+          echo SHYT_V347_REAL_SPLIT_BBCPU_LIBRARY_PUBLIC_ABI_BUILT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v347-new-bbcpu-public-Zydis-headers
+          path: public-bbcpu/deps/include/
+          retention-days: 2
+          if-no-files-found: error
+  win64-real-split-abi-gamefree-aot:
+    needs: pinned-public-split-bbcpu-headers
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bbcpu
+          ref: 3f9b6c1a11d5a443ee2e556a0d1f3aec4a73f0ca
+          path: public-bbcpu
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v347-new-bbcpu-public-Zydis-headers
+          path: public-bbcpu/deps/include
+      - name: Compile and execute our Win64 AOT services using split RcApi V4/BbCpu
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $src='native/source-port/recomp-v194'
+          $up='public-bbcpu/src'
+          $dep='public-bbcpu/deps/include'
+          $bootstrap=Join-Path $env:RUNNER_TEMP 'native-v347-split-bbcpu-aot.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/FI$src/native_win_rc_time_v270.h" `
+            "/I$src" "/I$up" "/I$dep" `
+            "$src/native_math_shim_v222.c" `
+            "$src/native_math_guest_bridge_v223.c" `
+            "$src/native_math_import_dispatch_v224.c" `
+            "$src/native_math_rcapi_route_v226.c" `
+            "$src/native_win_clock_v236.c" `
+            "$src/native_clock_rcapi_route_v239.c" `
+            "$src/native_aot_services_bootstrap_v245.c" `
+            "$src/test_native_aot_services_bootstrap_v245.c" "/Fe:$bootstrap"
+          if ($LASTEXITCODE -ne 0) { throw 'V347 new bbcpu Win64 AOT bootstrap failed to compile' }
+          $raw=[IO.File]::ReadAllBytes($bootstrap)
+          if ($raw.Length -le 2048 -or $raw[0] -ne 0x4D -or $raw[1] -ne 0x5A) { throw 'Not a real Win64 PE image' }
+          & $bootstrap
+          if ($LASTEXITCODE -ne 0) { throw 'V347 split bbcpu game-free bootstrap runtime FAILED' }
+          $direct=Join-Path $env:RUNNER_TEMP 'native-v347-split-bbcpu-direct.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/FI$src/native_win_rc_time_v270.h" `
+            "/I$src" "/I$up" "/I$dep" `
+            "$src/test_native_aot_direct_link_v259.c" "/Fe:$direct"
+          if ($LASTEXITCODE -ne 0) { throw 'V347 split bbcpu direct RcFunction failed compilation' }
+          & $direct
+          if ($LASTEXITCODE -ne 0) { throw 'V347 direct function attestation failed against split ABI' }
+          'SHYT_V347_REAL_SPLIT_BBCPU_ORIGINAL_API_WINDOWS_NATIVE_AOT_COMPILE_AND_EXECUTE_PASS'
+          'No game data, no runtime original EBOOT, NOT a standalone Bloodborne game.'
