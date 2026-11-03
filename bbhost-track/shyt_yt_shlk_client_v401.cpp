@@ -15,6 +15,10 @@
 
 struct ShytYtShlkClientV401 {
     LinkAuth::Client original;
+    // V404: immutable server identity for the whole client object.
+    // Prevent a redirected/corrupted config from silently repinning
+    // an already-initialized connection before handshake completion.
+    bool explicitly_pinned=false;
 };
 namespace {
 bool valid_prefix(const uint8_t *p,size_t n) noexcept {
@@ -40,12 +44,13 @@ extern "C" void shyt_yt_shlk_free_v401(ShytYtShlkClientV401 *link) {
 extern "C" int shyt_yt_shlk_pin_v401(
     ShytYtShlkClientV401 *link,const uint8_t pub[SHYT_YT_SHLK_KEY_V401]) {
     if(!link || !pub || all_zero(pub,SHYT_YT_SHLK_KEY_V401) ||
-       link->original.Linked())
+       link->original.Linked() || link->explicitly_pinned)
         return 0;
     try {
         LinkAuth::Key key;
         std::copy_n(pub,key.size(),key.begin());
         link->original.Pin(key);
+        link->explicitly_pinned=true;
         return 1;
     }catch(...) {return 0;}
 }
@@ -53,7 +58,7 @@ extern "C" int shyt_yt_shlk_cookie_v401(
     ShytYtShlkClientV401 *link,
     const uint8_t cookie[SHYT_YT_SHLK_COOKIE_V401],
     const uint8_t server_pub[SHYT_YT_SHLK_KEY_V401]) {
-    if(!link || !cookie || !server_pub ||
+    if(!link || !link->explicitly_pinned || !cookie || !server_pub ||
        all_zero(server_pub,SHYT_YT_SHLK_KEY_V401))return 0;
     try {
         LinkAuth::Cookie c;
@@ -68,7 +73,8 @@ extern "C" int shyt_yt_shlk_hello_v401(
     const uint8_t fresh_ephemeral[SHYT_YT_SHLK_KEY_V401],
     uint8_t *wire,size_t cap,size_t *written) {
     clear_out(written);
-    if(!written || !link || !plain || !wire || !fresh_ephemeral ||
+    if(!written || !link || !link->explicitly_pinned ||
+       !plain || !wire || !fresh_ephemeral ||
        plain_len<LinkAuth::HelloClearBytes ||
        plain_len>SHYT_YT_SHLK_MAX_WIRE_V401-64u ||
        cap<plain_len+LinkAuth::HelloSealBytes ||
