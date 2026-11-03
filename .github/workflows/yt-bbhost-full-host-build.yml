@@ -8,6 +8,7 @@ on:
       - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
       - 'bbhost-track/apply_bbhost_os_stun_v2.py'
       - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
+      - 'bbhost-track/apply_bbhost_route_rx_v19.py'
       - 'bbhost-track/shyt_route_telemetry_v13.h'
   workflow_dispatch:
 permissions:
@@ -41,9 +42,13 @@ jobs:
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
           python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
           python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode apply
           grep -Fq 'add_library(bb_plugin_shyt MODULE' pinned-bbhost/CMakeLists.txt
           grep -Fq 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
           grep -Fq 'shyt_route_account_success_v13(shyt_relay_framed_v13,' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'if (hdr) shyt_route_account_received_v19(shyt_rx_relay_v19, shyt_rx_wire_v19);' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'shyt_route_account_received_v19' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
           grep -Fq 'SHYT_ROUTE_AUDIT' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
           echo SHYT_ORIGINAL_BBHOST_FULL_NATIVE_SOURCE_OS_ENTROPY_AND_PLUGIN_APPLIED
       - name: Build full real BBHost engine, render pipeline and original tests
