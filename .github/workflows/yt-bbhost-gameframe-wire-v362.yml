@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           if [ "$RUNNER_OS" = Windows ]; then
             if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
-                 /nologo /TC /std:c11 /W4 /WX /O2 \
+                 /nologo /c /TC /std:c11 /W4 /WX /O2 \
                  /Ibbhost-track \
                  bbhost-track/shyt_yt_game_frame_v362.c \
                  /Fo:./shyt-yt-codec-v362.obj >v362-compile.log 2>&1; then
