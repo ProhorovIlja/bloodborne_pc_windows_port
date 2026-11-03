@@ -28,7 +28,14 @@ int main() {
         cookie[i]=static_cast<u8>(i+20);
     auto *bb=shyt_yt_shlk_new_v401();
     if(!bb || shyt_yt_shlk_linked_v401(bb)) return 1;
+    // V404: the session cannot accept a cookie or trust a remote key
+    // without an explicit launcher-provided pinned server key.
+    if(shyt_yt_shlk_cookie_v401(bb,cookie.data(),server.pub.data()))
+        return 29;
     if(!shyt_yt_shlk_pin_v401(bb,server.pub.data())) return 2;
+    if(shyt_yt_shlk_pin_v401(bb,intruder.pub.data()) ||
+       shyt_yt_shlk_pin_v401(bb,server.pub.data()))
+        return 30;
     if(shyt_yt_shlk_cookie_v401(bb,cookie.data(),intruder.pub.data()))
         return 3;
     if(!shyt_yt_shlk_cookie_v401(bb,cookie.data(),server.pub.data()))
