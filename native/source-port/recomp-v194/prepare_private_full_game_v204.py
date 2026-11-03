@@ -55,8 +55,15 @@ def sha(p):
 
 def private(p):
     p=p.absolute()
-    if p.is_symlink() or any((a/".git").exists() for a in (p,*p.parents)):
-        raise ValueError("private game files must stay outside Git worktrees")
+    # V344: a private path under /tmp/alias -> /repo/game-derived used
+    # to evade the lexical .git ancestor fence. Resolve without requiring
+    # the final output to exist; reject any linked ancestor as well.
+    canonical=p.resolve(strict=False)
+    lexical=(p,*p.parents)
+    actual=(canonical,*canonical.parents)
+    if (any(a.is_symlink() for a in lexical) or
+            any((a/".git").exists() for a in (*lexical,*actual))):
+        raise ValueError("private game files must stay outside Git worktrees and path aliases")
     return p
 
 def upstream(root):
