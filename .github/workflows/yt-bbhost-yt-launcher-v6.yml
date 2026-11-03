@@ -41,7 +41,7 @@ jobs:
           python - <<'PY'
           import ast
           from pathlib import Path
-          s=Path('pinned-yt/bbport/launcher/bbport_launcher_win.py').read_text()
+          s=Path('pinned-yt/bbport/launcher/bbport_launcher_win.py').read_text(encoding='utf-8')
           ast.parse(s)
           assert 'shyt_bbhost_v6.launch_from_yt_v6(self, PORT_DIR, DATA_DIR)' in s
           assert 'shyt_bbhost_v6.read_engine_v6(CONFIG_DIR)' in s
