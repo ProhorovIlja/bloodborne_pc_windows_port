@@ -12,6 +12,12 @@
 #include <string.h>
 static int acceptable_image;
 static int user_opted_in_world_flags;
+static int user_opted_in_packet_channels;
+static int acceptable_prologue;
+static int observed_hook_placements;
+static int observed_packet_cadence;
+static int observed_probe_reads;
+static int (*registered_packet_hook)(BbHookCtx*,void*);
 static int observed_register;
 static int observed_mutations;
 static int observed_cadence;
@@ -36,10 +42,14 @@ static void fake_log(const char *fmt, ...) {
         observed_world_overflow++;
     if (strstr(line,"incremental flag stream INVALID"))
         observed_load_invalidation++;
+    if (strstr(line,"NetSync real outgoing channel observations="))
+        observed_packet_cadence++;
 }
 static const char *fake_config(const char *name) {
-    assert(strcmp(name,"shyt_bbhost_probe.capture_world_flags")==0);
-    return user_opted_in_world_flags ? "true" : "";
+    if (strcmp(name,"shyt_bbhost_probe.capture_world_flags")==0)
+        return user_opted_in_world_flags ? "true" : "";
+    assert(strcmp(name,"shyt_bbhost_probe.observe_netsync_sends")==0);
+    return user_opted_in_packet_channels ? "true" : "";
 }
 static int fake_image(void) { return acceptable_image; }
 static int fake_frame(void (*fn)(void*),void *user) {
@@ -58,6 +68,28 @@ static int fake_world_load(void (*fn)(uint32_t,void*),void *user) {
     assert(fn && !user);
     observed_load_register++;
     registered_world_load=fn;
+    return 0;
+}
+static const unsigned char expected_netsync_head[17] = {
+    0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+    0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x38
+};
+static int fake_net_read(uint64_t address,void *out,size_t n) {
+    assert(address==UINT64_C(0x017894E0)+UINT64_C(0x400000));
+    assert(out && n==sizeof(expected_netsync_head));
+    ++observed_probe_reads;
+    memcpy(out,expected_netsync_head,n);
+    if(!acceptable_prologue) ((unsigned char*)out)[0]=0xcc;
+    return 0;
+}
+static int fake_hook2(uint64_t address,const void *bytes,size_t n,
+                      BbHookFn2 fn,void *user) {
+    assert(address==UINT64_C(0x017894E0)+UINT64_C(0x400000));
+    assert(bytes && n==sizeof(expected_netsync_head));
+    assert(memcmp(bytes,expected_netsync_head,n)==0);
+    assert(fn && !user);
+    ++observed_hook_placements;
+    registered_packet_hook=fn;
     return 0;
 }
 static int fake_stat(const char *key,int64_t *value) {
@@ -90,6 +122,9 @@ int main(int argc,char **argv) {
     assert(settings && settings[0].type==BB_OPT_BOOL);
     assert(strcmp(settings[0].key,"capture_world_flags")==0);
     assert(strcmp(settings[0].def,"false")==0);
+    assert(settings[1].type==BB_OPT_BOOL);
+    assert(strcmp(settings[1].key,"observe_netsync_sends")==0);
+    assert(strcmp(settings[1].def,"false")==0);
     BbHostApi api={0};
     api.version=BB_PLUGIN_API_VERSION;
     api.size=sizeof(api);
@@ -102,6 +137,8 @@ int main(int argc,char **argv) {
     api.player_stat_get=fake_stat;
     api.write=fake_mutation;
     api.hook=fake_hook;
+    api.read=fake_net_read;
+    api.hook2=fake_hook2;
     assert(init(0)!=0);
     api.version=2;
     assert(init(&api)!=0);
@@ -121,6 +158,7 @@ int main(int argc,char **argv) {
     assert(observed_register==1 && registered_frame);
     assert(observed_world_register==0 && !registered_world_flag);
     assert(observed_load_register==0 && !registered_world_load);
+    assert(observed_hook_placements==0 && observed_probe_reads==0);
     /* Explicit opt-in. Reinit is synthetic lifecycle fixture only. */
     user_opted_in_world_flags=1;
     assert(init(&api)==0);
@@ -145,6 +183,33 @@ int main(int argc,char **argv) {
     assert(image(&api)==0);
     assert(observed_world_register==1 && observed_load_register==1);
     api.on_world_load=fake_world_load;
+    /* V17: actual 1.09 exact-prologue-aware hook stays off by default,
+     * and a nonmatching prologue may NEVER be patched. */
+    user_opted_in_packet_channels=1;
+    acceptable_prologue=0;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_probe_reads==1 && observed_hook_placements==0);
+    acceptable_prologue=1;
+    api.version=7;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_probe_reads==1 && observed_hook_placements==0);
+    api.version=BB_PLUGIN_API_VERSION;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_probe_reads==2 && observed_hook_placements==1);
+    assert(registered_packet_hook);
+    BbHookCtx packet={0};
+    packet.arg[0]=0x12345;
+    packet.arg[2]=6; /* player movement channel */
+    packet.arg[4]=128;
+    assert(registered_packet_hook(&packet,0)==0);
+    assert(packet.arg[0]==0x12345 && packet.arg[2]==6 && packet.arg[4]==128);
+    packet.arg[2]=UINT64_C(0xffff);
+    assert(registered_packet_hook(&packet,0)==0); /* invalid never forwarded */
+    for(int i=0;i<600;++i)registered_frame(0);
+    assert(observed_packet_cadence==1);
     for(unsigned i=0;i<130;++i)
         registered_world_flag(100000u+i,i&1u,0);
     for(int i=0;i<600;++i)registered_frame(0);
