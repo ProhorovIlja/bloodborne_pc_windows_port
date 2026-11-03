@@ -7,6 +7,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <wchar.h>
+#endif
 static void be32(unsigned char *p, unsigned n) {
     p[0]=(unsigned char)(n>>24);
     p[1]=(unsigned char)(n>>16);
@@ -63,8 +68,6 @@ int main(void) {
 #ifdef _WIN32
     /* Also read the fictional DCX header through the genuine Win32
      * owner-owned game asset mount built in V351/V352, not fopen(). */
-    #define WIN32_LEAN_AND_MEAN
-    #include <windows.h>
     wchar_t temp[4096], root[4096], path[4096];
     DWORD n=GetTempPathW(4096,temp);
     assert(n>0 && n<3900);
