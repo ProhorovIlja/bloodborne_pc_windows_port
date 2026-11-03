@@ -14,7 +14,10 @@ static int acceptable_image;
 static int observed_register;
 static int observed_mutations;
 static int observed_cadence;
+static int observed_world_overflow;
+static int observed_world_register;
 static void (*registered_frame)(void *);
+static void (*registered_world_flag)(uint32_t,int,void*);
 
 static void fake_log(const char *fmt, ...) {
     char line[512];
@@ -25,12 +28,20 @@ static void fake_log(const char *fmt, ...) {
     if (strstr(line,"600-frame engine-main-thread") ||
         strstr(line,"timing unavailable"))
         observed_cadence++;
+    if (strstr(line,"world flags overflow"))
+        observed_world_overflow++;
 }
 static int fake_image(void) { return acceptable_image; }
 static int fake_frame(void (*fn)(void*),void *user) {
     assert(fn && !user);
     observed_register++;
     registered_frame=fn;
+    return 0;
+}
+static int fake_world_event(void (*fn)(uint32_t,int,void*),void *user) {
+    assert(fn && !user);
+    observed_world_register++;
+    registered_world_flag=fn;
     return 0;
 }
 static int fake_stat(const char *key,int64_t *value) {
@@ -65,6 +76,7 @@ int main(int argc,char **argv) {
     api.log=fake_log;
     api.eboot_is_109=fake_image;
     api.on_frame=fake_frame;
+    api.on_event_flag=fake_world_event;
     api.player_stat_get=fake_stat;
     api.write=fake_mutation;
     api.hook=fake_hook;
@@ -82,7 +94,11 @@ int main(int argc,char **argv) {
     assert(init(&api)==0);
     assert(image(&api)==0);
     assert(observed_register==1 && registered_frame);
+    assert(observed_world_register==1 && registered_world_flag);
+    for(unsigned i=0;i<130;++i)
+        registered_world_flag(100000u+i,i&1u,0);
     for(int i=0;i<600;++i)registered_frame(0);
+    assert(observed_world_overflow==1);
     assert(observed_cadence>=1 && observed_mutations==0);
     dlclose(dll);
     puts("SHYT_BBHOST_V1_REAL_PLUGIN_DLOPEN_API_READONLY_PASS");
