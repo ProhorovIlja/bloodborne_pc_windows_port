@@ -132,6 +132,23 @@ int main() {
     desired.secret="fictional-secret";
     desired.cookie=cookie;
     if(plaintext!=YT::Encode(desired))return bad(14);
+    // An attacker can spoof the actual UDP server IP/port, but cannot
+    // make a valid Noise NK second-handshake MAC. Never allow a fake
+    // Work challenge or Redirect to force terminal login failure.
+    if(!send_to(server,endpoint,YT::EncodeWork(5)) ||
+       shyt_yt_server_tick_v408(client,1150)!=1 ||
+       shyt_yt_server_phase_v408(client)!=SHYT_V408_WAIT_WELCOME)
+        return bad(27);
+    const std::vector<u8> spoof_redirect{
+        0xff,0xff,0xff,0xff,'S','H','L','K',11u,0u};
+    if(!send_to(server,endpoint,spoof_redirect) ||
+       shyt_yt_server_tick_v408(client,1155)!=1 ||
+       shyt_yt_server_phase_v408(client)!=SHYT_V408_WAIT_WELCOME)
+        return bad(28);
+    ShytYtServerCountersV408 before_welcome{};
+    if(!shyt_yt_server_counters_v408(client,&before_welcome) ||
+       before_welcome.auth_errors<2)
+        return bad(29);
     const auto welcome=YT::Encode(YT::Welcome{true,"fictional-joined"});
     auto answer=responder->Answer(welcome,fake_key(55));
     if(!send_to(server,endpoint,answer.datagram))
