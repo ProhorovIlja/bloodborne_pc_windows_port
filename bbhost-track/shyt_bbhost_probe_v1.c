@@ -17,6 +17,7 @@
 #include "shyt_yt_game_frame_v362.h"
 #include "shyt_yt_shlk_client_v401.h"
 #include "shyt_yt_link_wire_v403.h"
+#include "shyt_yt_secure_game_data_v405.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -199,8 +200,18 @@ static int shyt_yt_transport_codec_selfcheck_v363(void) {
     ShytYtShlkClientV401 *auth=shyt_yt_shlk_new_v401();
     if (!auth) return 0;
     const int not_linked=(shyt_yt_shlk_linked_v401(auth)==0);
+    const uint8_t synthetic_game_v405[]={0xff,0xff,0xff,0xff,0x01};
+    uint8_t no_wire_v405[96]={0};
+    size_t no_wire_size_v405=99u;
+    // Never allow original YT encrypted gameplay before an authenticated
+    // room/server session. Actual outbound network IO is still disabled.
+    const int refused_unlinked_v405=
+        !shyt_yt_secure_send_data_v405(auth,0x12345678u,3658u,
+            synthetic_game_v405,sizeof(synthetic_game_v405),
+            no_wire_v405,sizeof(no_wire_v405),&no_wire_size_v405) &&
+        no_wire_size_v405==0u;
     shyt_yt_shlk_free_v401(auth);
-    if (!not_linked) return 0;
+    if (!not_linked || !refused_unlinked_v405) return 0;
     /* Original outer SHLK Ping has its OWN 9-byte header and 12-byte
      * body. The inner V362 game frame must never be sent by itself. */
     uint8_t ping[32]={0};
@@ -268,6 +279,7 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     shyt_world_ledger_reset_v4(&world_events);
     api->log("shyt-bbhost-probe: read-only plugin API accepted; no networking installed");
     api->log("shyt-bbhost-probe: original YT SHLK4 crypto C session linked, local unconnected; NO network socket/login or P2P installed");
+    api->log("shyt-bbhost-probe: encrypted original YT GameData V405 linked; unauthenticated packets refused; NO live forwarding installed");
     api->log("shyt-bbhost-probe: actual YT GameFrame V362 codec + V358 packet policy linked; NO SHLK authentication or P2P installed");
     return 0;
 }
