@@ -39,6 +39,11 @@ jobs:
           grep -q '^#define BB_PLUGIN_API_VERSION 16$' pinned-bbhost/include/bbhost_plugin.h
           test -f pinned-bbhost/plugins/hello/hello.c
           grep -q 'GPL-3.0-or-later' bbhost-track/shyt_bbhost_probe_v1.c
+      - name: Verify owner game compatibility probe never sends or prints game data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/test_owner_eboot_probe_v1.py
       - name: Compile an ACTUAL bbhost .so and exercise real dlopen plugin lifecycle
         shell: bash
         run: |
