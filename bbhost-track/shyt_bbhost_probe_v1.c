@@ -14,6 +14,7 @@
 #include "yt_world_event_ledger_v4.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -87,6 +88,16 @@ BB_PLUGIN_EXPORT const BbPluginInfo bb_plugin_info = {
     "Read-only 1.09 API/cadence probe, not a co-op implementation."
 };
 
+/* V5: use the official BBHost plugin settings menu. This is a restart
+ * option, not a live switch, because callback removal has no host API.
+ * Default OFF: no world-flag hooks or local capture without opt-in. */
+BB_PLUGIN_EXPORT const BbOption bb_plugin_options[] = {
+    {BB_OPT_BOOL, "capture_world_flags", "Capture world flags (diagnostic)",
+     "Records a bounded local YT progression observation stream. No network transmission. Restart required.",
+     "false", 0, 0, 0},
+    {0}
+};
+
 BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     /* Every call below is from the actual public bbhost plugin ABI.
      * API version 3 is the first with player_stat_get. The trailing
@@ -95,7 +106,7 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     if (!api || api->version < 3u ||
         api->size < offsetof(BbHostApi, player_stat_get) +
                     sizeof(api->player_stat_get) ||
-        !api->log || !api->eboot_is_109 || !api->on_frame ||
+        !api->log || !api->config || !api->eboot_is_109 || !api->on_frame ||
         !api->player_stat_get) return 1;
     host = api;
     frame_count = 0;
@@ -117,14 +128,17 @@ BB_PLUGIN_EXPORT int bb_plugin_image(const BbHostApi *api) {
      * Register AFTER on_frame: failure here MUST NOT unload the plugin,
      * otherwise the installed frame callback would dangle.
      * No sync transport is present, and no game state is modified. */
-    if (api->version >= 4u &&
+    const char *capture=api->config("shyt_bbhost_probe.capture_world_flags");
+    const int opt_in=capture &&
+        (strcmp(capture,"true")==0 || strcmp(capture,"1")==0);
+    if (opt_in && api->version >= 4u &&
         api->size >= offsetof(BbHostApi,on_event_flag) +
                      sizeof(api->on_event_flag) &&
         api->on_event_flag &&
         api->on_event_flag(on_world_flag_v4,0)==0) {
-        api->log("shyt-bbhost-probe: world progression callback captured, LOCAL ONLY");
+        api->log("shyt-bbhost-probe: opted-in world progression callback, LOCAL ONLY");
     } else {
-        api->log("shyt-bbhost-probe: world flag callback unavailable; disabled");
+        api->log("shyt-bbhost-probe: world flag capture disabled (default) or unavailable");
     }
     api->log("shyt-bbhost-probe: original Bloodborne 1.09 image accepted; observe-only");
     return 0;
