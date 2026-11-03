@@ -26,7 +26,9 @@ CMAKE_APPEND="""
 # SHYT V3: build an opt-in, source-only real BBHost plugin beside hello.
 # It performs no network injection or game writes and cannot load into
 # a host that doesn't expose the exact verified plugin API.
-add_library(bb_plugin_shyt MODULE plugins/shyt_probe/shyt_bbhost_probe_v1.c)
+add_library(bb_plugin_shyt MODULE
+  plugins/shyt_probe/shyt_bbhost_probe_v1.c
+  plugins/shyt_probe/shyt_yt_game_frame_v362.c)
 target_include_directories(bb_plugin_shyt PRIVATE include)
 set_target_properties(bb_plugin_shyt PROPERTIES
   OUTPUT_NAME shyt_bbhost_probe PREFIX ""
@@ -53,12 +55,18 @@ def main()->None:
     source=Path(__file__).resolve().parent/"shyt_bbhost_probe_v1.c"
     world_header=Path(__file__).resolve().parent/"yt_world_event_ledger_v4.h"
     yt_policy_header=Path(__file__).resolve().parent/"shyt_yt_native_channel_policy_v21.h"
+    yt_routes_header=Path(__file__).resolve().parent/"shyt_yt_packet_routes_v358.h"
+    yt_codec_header=Path(__file__).resolve().parent/"shyt_yt_game_frame_v362.h"
+    yt_codec_source=Path(__file__).resolve().parent/"shyt_yt_game_frame_v362.c"
     if (cmake.is_symlink() or not cmake.is_file() or
         git(root,"rev-parse","HEAD:CMakeLists.txt")!=CMAKE_BLOB or
         git(root,"hash-object","CMakeLists.txt")!=CMAKE_BLOB or
         not source.is_file() or source.is_symlink() or
         not world_header.is_file() or world_header.is_symlink() or
         not yt_policy_header.is_file() or yt_policy_header.is_symlink() or
+        not yt_routes_header.is_file() or yt_routes_header.is_symlink() or
+        not yt_codec_header.is_file() or yt_codec_header.is_symlink() or
+        not yt_codec_source.is_file() or yt_codec_source.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
         raise ValueError("CMake or plugin input not clean and source pinned")
     original=cmake.read_text(encoding="utf-8")
@@ -69,6 +77,9 @@ def main()->None:
         shutil.copyfile(source,plugin)
         shutil.copyfile(world_header,plugin_root/world_header.name)
         shutil.copyfile(yt_policy_header,plugin_root/yt_policy_header.name)
+        shutil.copyfile(yt_routes_header,plugin_root/yt_routes_header.name)
+        shutil.copyfile(yt_codec_header,plugin_root/yt_codec_header.name)
+        shutil.copyfile(yt_codec_source,plugin_root/yt_codec_source.name)
         updated=original.replace(CMAKE_ANCHOR,CMAKE_ANCHOR+CMAKE_APPEND)
         updated=updated.replace(PACKAGE_ANCHOR,
                                 PACKAGE_ANCHOR+" bb_plugin_shyt")
