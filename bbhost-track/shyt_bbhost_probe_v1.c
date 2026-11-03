@@ -13,6 +13,8 @@
 #include "bbhost_plugin.h"
 #include "yt_world_event_ledger_v4.h"
 #include "shyt_yt_native_channel_policy_v21.h"
+#include "shyt_yt_packet_routes_v358.h"
+#include "shyt_yt_game_frame_v362.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -185,6 +187,38 @@ BB_PLUGIN_EXPORT const BbOption bb_plugin_options[] = {
     {0}
 };
 
+/* V363: executable compatibility self-check of the ACTUAL YT frame
+ * codec and server routing imported into this BBHost plugin. No game
+ * packets or network traffic are read or injected at startup. */
+static int shyt_yt_transport_codec_selfcheck_v363(void) {
+    ShytYtGameFrameV362 source={0}, decoded={0};
+    unsigned char wire[64]={0};
+    size_t encoded=0;
+    source.sender_len=4u;
+    memcpy(source.sender,"test",4u);
+    source.instance=0x12345678u;
+    source.peer_instance=0x87654321u;
+    source.ack=3u;
+    source.entries_count=1u;
+    source.entries[0].packet_class=0u;
+    source.entries[0].seq=0u;
+    source.entries[0].packet_size=0u;
+    if (!shyt_yt_game_frame_encode_v362(&source,wire,sizeof(wire),&encoded) ||
+        !shyt_yt_game_frame_decode_v362(wire,encoded,&decoded) ||
+        decoded.sender_len!=4u ||
+        memcmp(decoded.sender,"test",4u)!=0 ||
+        decoded.instance!=source.instance ||
+        decoded.peer_instance!=source.peer_instance ||
+        decoded.ack!=source.ack ||
+        decoded.entries_count!=1u)
+        return 0;
+    const struct ShytYtPacketEndsV358 fake={0};
+    if (shyt_yt_routes_native_packet_v358(0x27u,&fake)!=0 ||
+        shyt_yt_routes_native_packet_v358(0x06u,&fake)==0)
+        return 0;
+    return 1;
+}
+
 BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     /* Every call below is from the actual public bbhost plugin ABI.
      * API version 3 is the first with player_stat_get. The trailing
@@ -195,6 +229,7 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
                     sizeof(api->player_stat_get) ||
         !api->log || !api->config || !api->eboot_is_109 || !api->on_frame ||
         !api->player_stat_get) return 1;
+    if (!shyt_yt_transport_codec_selfcheck_v363()) return 1;
     host = api;
     frame_count = 0;
     window_start_ms = 0;
@@ -209,6 +244,7 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     atomic_store_explicit(&malformed_sends_v17,0u,memory_order_relaxed);
     shyt_world_ledger_reset_v4(&world_events);
     api->log("shyt-bbhost-probe: read-only plugin API accepted; no networking installed");
+    api->log("shyt-bbhost-probe: actual YT GameFrame V362 codec + V358 packet policy linked; NO SHLK authentication or P2P installed");
     return 0;
 }
 
