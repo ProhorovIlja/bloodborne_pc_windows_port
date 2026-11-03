@@ -22,13 +22,17 @@ static LinkAuth::Key fake_key(uint8_t seed) {
 static uint32_t rnd(uint32_t& state) {
     state^=state<<13;state^=state>>17;state^=state<<5;return state;
 }
+static int fail_case_v405(unsigned code) {
+    std::fprintf(stderr,"SHYT_V405_SYNTHETIC_ONLY_TEST_CASE_%u_FAILED\n",code);
+    return static_cast<int>(code);
+}
 int main() {
     const auto server=LinkAuth::ServerKeyOf(fake_key(17));
     LinkAuth::Cookie cookie{};
     for(size_t i=0;i<cookie.size();++i)
         cookie[i]=static_cast<u8>(i+20u);
     ShytYtShlkClientV401* client=shyt_yt_shlk_new_v401();
-    if(!client)return 1;
+    if(!client)return fail_case_v405(1);
     std::array<uint8_t,65536> wire{},received{};
     const std::array<u8,8> fake_header{{0xff,0xff,0xff,0xff,'S','H','L','K'}};
     const std::array<uint8_t,8> fictitious_p2p{{
@@ -37,10 +41,10 @@ int main() {
     if(shyt_yt_secure_send_data_v405(client,0x01020304u,3658u,
           fictitious_p2p.data(),fictitious_p2p.size(),
           wire.data(),wire.size(),&sent) || sent)
-        return 2;
+        return fail_case_v405(2);
     if(!shyt_yt_shlk_pin_v401(client,server.pub.data()) ||
        !shyt_yt_shlk_cookie_v401(client,cookie.data(),server.pub.data()))
-        return 3;
+        return fail_case_v405(3);
     YT::Hello hello{};
     hello.online_id="fictional-hunter";
     hello.build="fictional-109";
@@ -49,24 +53,24 @@ int main() {
     const auto plain_hello=YT::Encode(hello);
     if(plain_hello.size()<LinkAuth::HelloClearBytes ||
        !std::equal(fake_header.begin(),fake_header.end(),plain_hello.begin()))
-        return 4;
+        return fail_case_v405(4);
     const auto fresh=fake_key(47);
     if(!shyt_yt_shlk_hello_v401(client,
          plain_hello.data(),plain_hello.size(),fresh.data(),
          wire.data(),wire.size(),&sent))
-        return 5;
+        return fail_case_v405(5);
     std::vector<u8> incoming(wire.begin(),wire.begin()+sent);
     std::vector<u8> clear;
     auto responder=LinkAuth::Responder::Open(server,incoming,clear);
     if(!responder || clear!=plain_hello)
-        return 6;
+        return fail_case_v405(6);
     const auto welcome=YT::Encode(YT::Welcome{true,"fictional-session"});
     auto answer=responder->Answer(welcome,fake_key(71));
     if(!shyt_yt_shlk_open_v401(client,
          answer.datagram.data(),answer.datagram.size(),
          received.data(),received.size(),&sent) ||
        sent!=welcome.size() || !shyt_yt_shlk_linked_v401(client))
-        return 7;
+        return fail_case_v405(7);
     uint32_t rng=0x17549AC3u;
     for(unsigned i=0;i<256u;++i) {
         // Game's actual vport header, all OTHER bytes fictional.
@@ -80,12 +84,12 @@ int main() {
         if(!shyt_yt_secure_send_data_v405(client,
               sender_addr,sender_port,p2p.data(),p2p.size(),
               wire.data(),wire.size(),&n) || n<24u+15u+4u)
-            return 8;
+            return fail_case_v405(8);
         const auto sealed=std::vector<uint8_t>(wire.begin(),wire.begin()+n);
-        if(std::equal(p2p.begin(),p2p.end(),sealed.begin()))return 9;
+        if(std::equal(p2p.begin(),p2p.end(),sealed.begin()))return fail_case_v405(9);
         auto server_open=sealed;
         if(answer.session.Open(server_open)!=LinkAuth::Session::Verdict::Ok)
-            return 10;
+            return fail_case_v405(10);
         server_open.resize(server_open.size()-LinkAuth::TrailerBytes);
         auto original_data=YT::DecodeData(server_open);
         if(!original_data ||
@@ -94,10 +98,10 @@ int main() {
            original_data->frame.size()!=p2p.size() ||
            !std::equal(original_data->frame.begin(),
                        original_data->frame.end(),p2p.begin()))
-            return 11;
+            return fail_case_v405(11);
         auto repeated=sealed;
         if(answer.session.Open(repeated)!=LinkAuth::Session::Verdict::Replay)
-            return 12;
+            return fail_case_v405(12);
         // Reverse server-to-BBHost direction with its real original YT
         // Noise NK session (server room policy still not implemented).
         auto from_server=YT::EncodeData(sender_addr,sender_port,p2p);
@@ -112,12 +116,12 @@ int main() {
            decoded_addr!=sender_addr || decoded_port!=sender_port ||
            decoded_size!=p2p.size() ||
            std::memcmp(received.data(),p2p.data(),decoded_size)!=0)
-            return 13;
+            return fail_case_v405(13);
         if(shyt_yt_secure_receive_data_v405(client,
             from_server.data(),from_server.size(),&decoded_addr,
             &decoded_port,received.data(),received.size(),&decoded_size) ||
            decoded_size || decoded_addr || decoded_port)
-            return 14;
+            return fail_case_v405(14);
         auto damaged=YT::EncodeData(sender_addr,sender_port,p2p);
         auto next_tag=answer.session.Seal(damaged);
         damaged.insert(damaged.end(),next_tag.begin(),next_tag.end());
@@ -126,10 +130,10 @@ int main() {
             damaged.data(),damaged.size(),&decoded_addr,
             &decoded_port,received.data(),received.size(),&decoded_size) ||
            decoded_size || decoded_addr || decoded_port)
-            return 15;
+            return fail_case_v405(15);
         if(shyt_yt_secure_send_data_v405(client,sender_addr,sender_port,
              p2p.data(),p2p.size(),wire.data(),16u,&n) || n)
-            return 16;
+            return fail_case_v405(16);
     }
     shyt_yt_shlk_free_v401(client);
     std::puts("SHYT_V405_ORIGINAL_YT_SERVER_VS_BBHOST_AUTHENTICATED_GAMEDATA_256_ROUNDS_PASS");
