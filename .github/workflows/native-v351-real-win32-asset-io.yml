@@ -27,7 +27,7 @@ jobs:
           set -euo pipefail
           src=native/source-port/recomp-v194
           if [ "$RUNNER_OS" = Windows ]; then
-            if ! clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$src" \
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$src" \
                   "$src/native_win_asset_fs_v351.c" \
                   "$src/test_native_win_asset_fs_v351.c" \
                   /Fe:./v351-real-native-win-asset.exe >v351-compiler.log 2>&1; then
