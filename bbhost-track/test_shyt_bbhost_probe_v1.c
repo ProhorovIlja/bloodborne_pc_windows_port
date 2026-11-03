@@ -17,6 +17,9 @@ static int observed_mutations;
 static int observed_cadence;
 static int observed_world_overflow;
 static int observed_world_register;
+static int observed_load_register;
+static int observed_load_invalidation;
+static void (*registered_world_load)(uint32_t,void*);
 static void (*registered_frame)(void *);
 static void (*registered_world_flag)(uint32_t,int,void*);
 
@@ -31,6 +34,8 @@ static void fake_log(const char *fmt, ...) {
         observed_cadence++;
     if (strstr(line,"world flags overflow"))
         observed_world_overflow++;
+    if (strstr(line,"incremental flag stream INVALID"))
+        observed_load_invalidation++;
 }
 static const char *fake_config(const char *name) {
     assert(strcmp(name,"shyt_bbhost_probe.capture_world_flags")==0);
@@ -47,6 +52,12 @@ static int fake_world_event(void (*fn)(uint32_t,int,void*),void *user) {
     assert(fn && !user);
     observed_world_register++;
     registered_world_flag=fn;
+    return 0;
+}
+static int fake_world_load(void (*fn)(uint32_t,void*),void *user) {
+    assert(fn && !user);
+    observed_load_register++;
+    registered_world_load=fn;
     return 0;
 }
 static int fake_stat(const char *key,int64_t *value) {
@@ -87,6 +98,7 @@ int main(int argc,char **argv) {
     api.eboot_is_109=fake_image;
     api.on_frame=fake_frame;
     api.on_event_flag=fake_world_event;
+    api.on_world_load=fake_world_load;
     api.player_stat_get=fake_stat;
     api.write=fake_mutation;
     api.hook=fake_hook;
@@ -108,12 +120,31 @@ int main(int argc,char **argv) {
     assert(image(&api)==0);
     assert(observed_register==1 && registered_frame);
     assert(observed_world_register==0 && !registered_world_flag);
+    assert(observed_load_register==0 && !registered_world_load);
     /* Explicit opt-in. Reinit is synthetic lifecycle fixture only. */
     user_opted_in_world_flags=1;
     assert(init(&api)==0);
     assert(image(&api)==0);
     assert(observed_register==2 && registered_frame);
     assert(observed_world_register==1 && registered_world_flag);
+    assert(observed_load_register==1 && registered_world_load);
+    /* Any real world load invalidates old deltas until a future
+     * authenticated full snapshot. No gameplay state is modified. */
+    registered_world_load(0x18010000u,0);
+    assert(observed_load_invalidation==1);
+    /* Version 7 host lacks on_world_load. In strict mode capture MUST
+     * fail closed; no orphan flag callback may be registered. */
+    api.version=7;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_world_register==1 && observed_load_register==1);
+    api.version=BB_PLUGIN_API_VERSION;
+    user_opted_in_world_flags=1;
+    api.on_world_load=0;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_world_register==1 && observed_load_register==1);
+    api.on_world_load=fake_world_load;
     for(unsigned i=0;i<130;++i)
         registered_world_flag(100000u+i,i&1u,0);
     for(int i=0;i<600;++i)registered_frame(0);
