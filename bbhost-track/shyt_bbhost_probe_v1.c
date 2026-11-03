@@ -7,6 +7,9 @@
  * gather independently comparable main-thread frame cadence samples.
  * This is NOT presented FPS (does not include frame generation).
  */
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "bbhost_plugin.h"
 #include <stddef.h>
 #include <stdint.h>
