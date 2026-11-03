@@ -33,8 +33,10 @@ int shyt_yt_udp_local_port_v406(
  */
 int shyt_yt_udp_send_server_v406(
     ShytYtUdpEndpointV406 *socket,const uint8_t *packet,size_t size);
-/* Nonblocking 1 packet received from the exact configured server.
- * Returns 1 with *got>0, 0 for no packet or any rejected datagram,
+/* Nonblocking receive from the exact configured server. V411 skips
+ * up to eight foreign/malformed datagrams in a bounded call, so one
+ * spoof cannot hide a valid server packet queued behind it.
+ * Returns 1 with *got>0, 0 for no accepted packet in this call,
  * -1 for genuine local OS socket failure. Always *got=0 otherwise.
  * A valid SHLK header does NOT imply a valid encrypted session.
  */
