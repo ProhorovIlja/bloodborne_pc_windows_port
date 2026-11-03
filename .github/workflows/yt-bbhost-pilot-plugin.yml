@@ -107,3 +107,36 @@ jobs:
             ${{ runner.temp }}/shyt_bbhost_probe.so
           retention-days: 7
           if-no-files-found: error
+
+  bbhost-stun-real-windows:
+    runs-on: windows-2022
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: false
+      - name: Apply exact BBHost STUN/HLE CSPRNG patches on Windows
+        shell: pwsh
+        run: |
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          exit $LASTEXITCODE
+      - name: Run original Windows BBHost STUN protocol regression using real OS entropy
+        shell: pwsh
+        run: |
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src pinned-bbhost/src/net/stun.cpp pinned-bbhost/tests/stun_test.cpp -o "$env:RUNNER_TEMP\bbhost-stun-v2.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:RUNNER_TEMP\bbhost-stun-v2.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -DBBHOST_V2_TEST_ENTROPY_FAIL -Ipinned-bbhost/src pinned-bbhost/src/net/stun.cpp bbhost-track/test_bbhost_stun_entropy_failure_v2.cpp -o "$env:RUNNER_TEMP\bbhost-entropy-fail-v2.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:RUNNER_TEMP\bbhost-entropy-fail-v2.exe"
+          exit $LASTEXITCODE
