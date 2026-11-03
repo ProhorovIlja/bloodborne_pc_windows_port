@@ -27,12 +27,23 @@ jobs:
           set -euo pipefail
           src=native/source-port/recomp-v194
           if [ "$RUNNER_OS" = Windows ]; then
-            clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$src" \
-              "$src/native_win_asset_fs_v351.c" \
-              "$src/test_native_win_asset_fs_v351.c" \
-              /Fe:./v351-real-native-win-asset.exe
+            if ! clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$src" \
+                  "$src/native_win_asset_fs_v351.c" \
+                  "$src/test_native_win_asset_fs_v351.c" \
+                  /Fe:./v351-real-native-win-asset.exe >v351-compiler.log 2>&1; then
+              echo 'V351 original Win32 backend compiler failed (bounded)'
+              tail -n 6 v351-compiler.log | cut -c1-165 > v351-brief.txt
+              cat v351-brief.txt
+              exit 1
+            fi
             test -s v351-real-native-win-asset.exe
-            ./v351-real-native-win-asset.exe
+            if ! ./v351-real-native-win-asset.exe >v351-runtime.log 2>&1; then
+              echo 'V351 local invented assets Windows runtime test failed (bounded)'
+              tail -n 6 v351-runtime.log | cut -c1-165 > v351-brief.txt
+              cat v351-brief.txt
+              exit 1
+            fi
+            cat v351-runtime.log
           else
             clang -std=c11 -O2 -Wall -Wextra -Werror -I"$src" \
               "$src/native_win_asset_fs_v351.c" \
@@ -41,3 +52,11 @@ jobs:
             ./v351-linux-no-ps4-io
           fi
           echo SHYT_V351_NO_ORIGINAL_GAME_RUNTIME_OR_PUBLIC_ASSETS_PASS
+      - name: Upload only bounded invented-file Win32 diagnostic
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Native-V351-Win32-Error-Max6Lines
+          path: v351-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore
