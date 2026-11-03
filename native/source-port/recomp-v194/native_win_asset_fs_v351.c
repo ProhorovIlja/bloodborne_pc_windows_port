@@ -146,9 +146,98 @@ cleanup:
     CloseHandle(h);
     return result;
 }
+
+int shyt_native_win_asset_stream_open_v352(
+    const ShytNativeWinAssetRootV351 *root,const char *logical_path,
+    ShytNativeWinAssetStreamV352 *stream) {
+    if (!stream || stream->open || stream->native_handle) return 0;
+    wchar_t path[SHYT_WIN_ASSET_PATH_CAP_V351];
+    if (!logical_asset_path_v351(root,logical_path,path)) return 0;
+    HANDLE h=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,0,OPEN_EXISTING,
+                         FILE_FLAG_OPEN_REPARSE_POINT|FILE_FLAG_OVERLAPPED,0);
+    if (h==INVALID_HANDLE_VALUE) return 0;
+    BY_HANDLE_FILE_INFORMATION info;
+    wchar_t final[SHYT_WIN_ASSET_PATH_CAP_V351];
+    const DWORD len=GetFinalPathNameByHandleW(
+        h,final,SHYT_WIN_ASSET_PATH_CAP_V351,FILE_NAME_NORMALIZED);
+    LARGE_INTEGER size;
+    if (!GetFileInformationByHandle(h,&info) ||
+        (info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY)) ||
+        info.nNumberOfLinks!=1 ||
+        !len || len>=SHYT_WIN_ASSET_PATH_CAP_V351 ||
+        len<=root->prefix_chars ||
+        _wcsnicmp(final,root->canonical_prefix,root->prefix_chars)!=0 ||
+        !GetFileSizeEx(h,&size) || size.QuadPart<0) {
+        CloseHandle(h);
+        return 0;
+    }
+    stream->native_handle=(void*)h;
+    stream->file_size=(uint64_t)size.QuadPart;
+    stream->open=1;
+    return 1;
+}
+
+int shyt_native_win_asset_stream_read_v352(
+    const ShytNativeWinAssetStreamV352 *stream,
+    uint64_t offset,void *out,size_t max_bytes,size_t *got) {
+    if (!got) return 0;
+    *got=0;
+    if (!stream || !stream->open || !stream->native_handle ||
+        !out || !max_bytes || max_bytes>SHYT_WIN_ASSET_MAX_READ_V351 ||
+        offset>INT64_MAX) return 0;
+    if (offset>=stream->file_size) return 1;
+    const uint64_t left=stream->file_size-offset;
+    const DWORD take=(DWORD)(left<max_bytes ? left : max_bytes);
+    OVERLAPPED operation;
+    memset(&operation,0,sizeof(operation));
+    operation.Offset=(DWORD)offset;
+    operation.OffsetHigh=(DWORD)(offset>>32);
+    HANDLE h=(HANDLE)stream->native_handle;
+    const BOOL started=ReadFile(h,out,take,NULL,&operation);
+    if (!started) {
+        const DWORD error=GetLastError();
+        if (error==ERROR_HANDLE_EOF) return 1;
+        if (error!=ERROR_IO_PENDING) return 0;
+    }
+    DWORD transferred=0;
+    if (!GetOverlappedResult(h,&operation,&transferred,TRUE))
+        return 0;
+    if (transferred>take) return 0;
+    *got=(size_t)transferred;
+    return 1;
+}
+
+void shyt_native_win_asset_stream_close_v352(
+    ShytNativeWinAssetStreamV352 *stream) {
+    if (!stream) return;
+    if (stream->open && stream->native_handle)
+        CloseHandle((HANDLE)stream->native_handle);
+    stream->native_handle=NULL;
+    stream->file_size=0;
+    stream->open=0;
+}
+
 #else
 /* Non-Windows builds may link headers to type-check their callers.
  * The native file handler never silently uses POSIX as a PS4 runtime. */
+int shyt_native_win_asset_stream_open_v352(
+    const ShytNativeWinAssetRootV351 *root,const char *logical_path,
+    ShytNativeWinAssetStreamV352 *stream) {
+    (void)root;(void)logical_path;
+    if (stream) memset(stream,0,sizeof(*stream));
+    return 0;
+}
+int shyt_native_win_asset_stream_read_v352(
+    const ShytNativeWinAssetStreamV352 *stream,
+    uint64_t offset,void *out,size_t max_bytes,size_t *got) {
+    (void)stream;(void)offset;(void)out;(void)max_bytes;
+    if (got) *got=0;
+    return 0;
+}
+void shyt_native_win_asset_stream_close_v352(
+    ShytNativeWinAssetStreamV352 *stream) {
+    if (stream) memset(stream,0,sizeof(*stream));
+}
 int shyt_native_win_asset_mount_v351(ShytNativeWinAssetRootV351 *root,
                                      const wchar_t *root_dir) {
     (void)root;(void)root_dir;
