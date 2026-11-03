@@ -76,7 +76,7 @@ static void on_game_frame(void *user) {
     ++frame_count;
     if ((frame_count % 600u) != 0u) return;
     if (world_events.invalid_incremental && !reported_world_overflow) {
-        host->log("shyt-bbhost-probe: world flags overflow, incremental stream INVALID; future signed full snapshot required");
+        host->log("shyt-bbhost-probe: world flag stream invalid (overflow or world load); future authenticated full snapshot required");
         reported_world_overflow=1;
     }
     if (!now || !window_start_ms || now <= window_start_ms) {
