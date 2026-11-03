@@ -16,6 +16,7 @@
 #include "shyt_yt_packet_routes_v358.h"
 #include "shyt_yt_game_frame_v362.h"
 #include "shyt_yt_shlk_client_v401.h"
+#include "shyt_yt_link_wire_v403.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -200,6 +201,19 @@ static int shyt_yt_transport_codec_selfcheck_v363(void) {
     const int not_linked=(shyt_yt_shlk_linked_v401(auth)==0);
     shyt_yt_shlk_free_v401(auth);
     if (!not_linked) return 0;
+    /* Original outer SHLK Ping has its OWN 9-byte header and 12-byte
+     * body. The inner V362 game frame must never be sent by itself. */
+    uint8_t ping[32]={0};
+    size_t ping_size=0;
+    uint32_t ping_seq=0;
+    uint64_t ping_time=0;
+    if (!shyt_yt_link_encode_ping_v403(4u,17u,12345u,
+            ping,sizeof(ping),&ping_size) ||
+        ping_size!=21u || shyt_yt_link_kind_v403(ping,ping_size)!=4 ||
+        !shyt_yt_link_decode_ping_v403(4u,ping,ping_size,
+            &ping_seq,&ping_time) ||
+        ping_seq!=17u || ping_time!=12345u)
+        return 0;
     ShytYtGameFrameV362 source={0}, decoded={0};
     unsigned char wire[64]={0};
     size_t encoded=0;
