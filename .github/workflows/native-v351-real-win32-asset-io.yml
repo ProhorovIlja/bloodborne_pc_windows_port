@@ -1,0 +1,43 @@
+name: Native V351 real Win32 dvdroot asset IO no guest executable
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v351-real-win32-asset-io.yml'
+      - 'native/source-port/recomp-v194/native_win_asset_fs_v351.*'
+      - 'native/source-port/recomp-v194/test_native_win_asset_fs_v351.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-native-win32-resource-files:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and run Win32-only native asset IO or fail-closed Linux stub
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          if [ "$RUNNER_OS" = Windows ]; then
+            clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$src" \
+              "$src/native_win_asset_fs_v351.c" \
+              "$src/test_native_win_asset_fs_v351.c" \
+              /Fe:./v351-real-native-win-asset.exe
+            test -s v351-real-native-win-asset.exe
+            ./v351-real-native-win-asset.exe
+          else
+            clang -std=c11 -O2 -Wall -Wextra -Werror -I"$src" \
+              "$src/native_win_asset_fs_v351.c" \
+              "$src/test_native_win_asset_fs_v351.c" \
+              -o ./v351-linux-no-ps4-io
+            ./v351-linux-no-ps4-io
+          fi
+          echo SHYT_V351_NO_ORIGINAL_GAME_RUNTIME_OR_PUBLIC_ASSETS_PASS
