@@ -49,7 +49,7 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
           clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src \
             bbhost-track/test_shyt_route_telemetry_v13.cpp \
-            -o "$RUNNER_TEMP/shyt-v13-route-test$suffix"
-          SHYT_ROUTE_AUDIT=0 "$RUNNER_TEMP/shyt-v13-route-test$suffix" disabled
-          SHYT_ROUTE_AUDIT=1 "$RUNNER_TEMP/shyt-v13-route-test$suffix" enabled
+            -o "./shyt-v13-route-test$suffix"
+          SHYT_ROUTE_AUDIT=0 "./shyt-v13-route-test$suffix" disabled
+          SHYT_ROUTE_AUDIT=1 "./shyt-v13-route-test$suffix" enabled
           echo SHYT_V13_SOURCE_PINNED_OPTIN_P2P_ROUTE_COUNTERS_PASS
