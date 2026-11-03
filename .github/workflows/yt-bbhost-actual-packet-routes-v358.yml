@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           if [ "$RUNNER_OS" = Windows ]; then
             if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
-                 /nologo /TP /std:c++20 /EHsc /W4 /WX /O2 \
+                 /nologo /TP /std:c++20 /EHsc /W4 /WX /O2 -Wno-missing-field-initializers \
                  /Ibbhost-track /Ioriginal-yt/server \
                  bbhost-track/test_yt_packet_routes_parity_v358.cpp \
                  /Fe:./shyt-yt-routes-v358.exe >v358-compile.log 2>&1; then
@@ -56,7 +56,7 @@ jobs:
             fi
             cat v358-run.log
           else
-            if ! clang++ -std=c++20 -Wall -Wextra -Werror -O2 \
+            if ! clang++ -std=c++20 -Wall -Wextra -Werror -Wno-missing-field-initializers -O2 \
                  -Ibbhost-track -Ioriginal-yt/server \
                  bbhost-track/test_yt_packet_routes_parity_v358.cpp \
                  -o ./shyt-yt-routes-v358 >v358-compile.log 2>&1; then
