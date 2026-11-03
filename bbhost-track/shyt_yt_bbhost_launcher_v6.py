@@ -90,26 +90,38 @@ def owner_game_image_v6(settings: dict) -> tuple[Path, Path]:
         game = Path(settings["game_dir"]).resolve(strict=True)
     except (KeyError, TypeError, OSError) as error:
         raise EngineSetupError("Select a valid Bloodborne game folder") from error
-    source = game / "eboot.bin"
-    if source.is_symlink() or not source.is_file():
-        raise EngineSetupError("A decrypted Bloodborne 1.09 ELF is required")
-    size = source.stat().st_size
-    if size < 65 or size > MAX_ELF_BYTES:
-        raise EngineSetupError("Unsupported Bloodborne ELF file size")
-    digest = hashlib.sha256()
-    with source.open("rb") as stream:
-        if stream.read(5) != b"\x7fELF\x02":
-            raise EngineSetupError("The original game executable must be decrypted ELF64")
-        stream.seek(0)
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    if digest.hexdigest() != EXPECTED_GAME_109:
-        raise EngineSetupError(
-            "This 1.09 executable does not match the exact BBHost-supported build. "
-            "Check your region/update; BBHost has not been verified on this game image."
-        )
-    return game, source
-
+    # V9: historical CUSA03173-patch/eboot.bin-decrypted was accepted by
+    # BBHost. Search only explicit local game/update siblings, never disk.
+    candidate_dirs = (game, game.parent / (game.name + "-patch"),
+                      game.parent / (game.name + "-UPDATE"))
+    seen = set()
+    for directory in candidate_dirs:
+        if directory != game and (directory.is_symlink() or not directory.is_dir()):
+            continue
+        for filename in ("eboot.bin-decrypted", "eboot.bin"):
+            source = directory / filename
+            if source in seen:
+                continue
+            seen.add(source)
+            if source.is_symlink() or not source.is_file():
+                continue
+            size = source.stat().st_size
+            if size < 65 or size > MAX_ELF_BYTES:
+                continue
+            digest = hashlib.sha256()
+            with source.open("rb") as stream:
+                if stream.read(5) != b"\x7fELF\x02":
+                    continue  # wrapped/encrypted: never use it
+                stream.seek(0)
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+            if digest.hexdigest() == EXPECTED_GAME_109:
+                return game, source.resolve(strict=True)
+    raise EngineSetupError(
+        "No supported decrypted Bloodborne 1.09 ELF found in selected "
+        "game folder or adjacent -patch/-UPDATE folder. Check exact "
+        "BBHost SHA-256; region and update names are not proof."
+    )
 
 def command_v6(port_dir: Path, data_dir: Path, settings: dict) -> list[str]:
     host = host_binary_v6(port_dir)
