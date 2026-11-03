@@ -89,8 +89,69 @@ def exercise(fake_matching_input: bool, drift: bool = False) -> None:
         assert not (work / "original.elf").exists()
 
 
+
+def check_v336_digest_vs_manifest_claim() -> None:
+    """Ensure downstream COFF link guard recomputes provenance, not flag."""
+    import private_coff_batch_runner_v273 as batch
+    exact=prep.ORIGINAL_109_SHA256
+    fictional="1"*64
+    assert prep.verify_private_109_manifest_claim_v336({
+        "input_sha256": exact, "version_109_verified": True}) is True
+    assert prep.verify_private_109_manifest_claim_v336({
+        "input_sha256": fictional, "version_109_verified": False}) is False
+    for manifest in (
+        {"input_sha256": fictional, "version_109_verified": True},
+        {"input_sha256": exact, "version_109_verified": False},
+        {"input_sha256": exact.upper(), "version_109_verified": True},
+        {"input_sha256": exact, "version_109_verified": 1},
+        {"input_sha256": exact},
+        {"input_sha256": "x"*64, "version_109_verified": True},
+    ):
+        try:
+            prep.verify_private_109_manifest_claim_v336(manifest)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("forged input identity passed manifest check")
+    with tempfile.TemporaryDirectory(prefix="fictional-full-coff-v336-") as tmp:
+        root=Path(tmp)
+        gen=root/"generated"
+        scan=root/"scan"
+        gen.mkdir();scan.mkdir()
+        sample=gen/"recomp.c"
+        sample.write_text("/* imaginary example C; no copyrighted code */\n")
+        index=scan/"functions.tsv"
+        index.write_text(
+            "address\tsize\tinstructions\tundecodable\n"
+            "0x1\t2\t1\t0\n")
+        meta={
+            "format":prep.STAMP,
+            "upstream":prep.PIN,
+            "scanner_index_sha256":prep.sha(index),
+            "functions_scanned":1,
+            "c_hashes":{"recomp.c":prep.sha(sample)},
+            "input_sha256":fictional,
+            "version_109_verified":False
+        }
+        record=root/"full-original-preparation.json"
+        import json
+        record.write_text(json.dumps(meta))
+        assert batch.verify_original_preparation(gen,["recomp.c"]) is False
+        meta["version_109_verified"]=True
+        record.write_text(json.dumps(meta))
+        try:
+            batch.verify_original_preparation(gen,["recomp.c"])
+        except ValueError as error:
+            assert "disagrees" in str(error)
+        else:
+            raise AssertionError("COFF original 1.09 link gate trusted a forged flag")
+        meta["input_sha256"]=exact
+        record.write_text(json.dumps(meta))
+        assert batch.verify_original_preparation(gen,["recomp.c"]) is True
+
 if __name__ == "__main__":
     exercise(False)
     exercise(True)
     exercise(True, drift=True)
-    print("SHYT_NATIVE_V335_EXACT_109_OWNER_INPUT_ATTESTATION_SYNTHETIC_PASS")
+    check_v336_digest_vs_manifest_claim()
+    print("SHYT_NATIVE_V336_ORIGINAL_INPUT_SHA256_COFF_LINK_GATE_SYNTHETIC_PASS")
