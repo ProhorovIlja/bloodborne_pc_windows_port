@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 100
     steps:
       - name: Install checkout dependencies
-        run: pacman -Syu --noconfirm --needed git ca-certificates python
+        run: pacman -Syu --noconfirm --needed git ca-certificates python github-cli 7zip
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
