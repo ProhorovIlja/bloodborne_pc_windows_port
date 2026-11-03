@@ -1,0 +1,60 @@
+name: Native V354 BB/DS3 DCX DFLT header + real Win32 resource IO
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v354-dcx-dflt-header-win64.yml'
+      - 'native/source-port/recomp-v194/native_dcx_dflt_header_v354.*'
+      - 'native/source-port/recomp-v194/test_native_dcx_dflt_header_v354.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-format-bounded-dcx-validation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Execute fake-but-format-faithful Bloodborne/DS3 DCX DFLT parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          if [ "$RUNNER_OS" = Windows ]; then
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+               /nologo /TC /std:c11 /W4 /WX /O2 "/I$src" \
+               "$src/native_win_asset_fs_v351.c" \
+               "$src/native_dcx_dflt_header_v354.c" \
+               "$src/test_native_dcx_dflt_header_v354.c" \
+               /Fe:./shyt-v354-dcx-win64.exe > v354-build.log 2>&1; then
+              tail -n 5 v354-build.log | cut -c1-170 > v354-short-diagnostic.txt
+              exit 1
+            fi
+            if ! ./shyt-v354-dcx-win64.exe >v354-execution.log 2>&1; then
+              tail -n 5 v354-execution.log | cut -c1-170 > v354-short-diagnostic.txt
+              exit 1
+            fi
+            cat v354-execution.log
+          else
+            clang -std=c11 -O2 -Wall -Wextra -Werror "-I$src" \
+              "$src/native_win_asset_fs_v351.c" \
+              "$src/native_dcx_dflt_header_v354.c" \
+              "$src/test_native_dcx_dflt_header_v354.c" \
+              -o ./shyt-v354-dcx-linux
+            ./shyt-v354-dcx-linux
+          fi
+          echo SHYT_V354_REAL_NATIVE_PARSER_FAKE_ASSETS_BB_DS3_FORMAT_PASS
+      - name: Preserve only five lines of synthetic-source compiler feedback
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-v354-win64-dcx-error-max5lines
+          path: v354-short-diagnostic.txt
+          retention-days: 2
+          if-no-files-found: ignore
