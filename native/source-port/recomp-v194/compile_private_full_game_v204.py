@@ -16,7 +16,7 @@ import sys
 import audit_native_runtime_v202 as audit
 import build_incremental_coff_v198 as coff
 import verify_generated_coverage_v207 as coverage
-from prepare_private_full_game_v204 import PIN,STAMP,sha,private
+from prepare_private_full_game_v204 import PIN,STAMP,sha,private,verify_private_109_manifest_claim_v336
 
 def build(root:Path,work:Path,jobs:int,research:bool)->dict:
     work=private(work)
@@ -30,6 +30,7 @@ def build(root:Path,work:Path,jobs:int,research:bool)->dict:
     manifest=json.loads(metadata.read_text(encoding="utf-8"))
     if manifest.get("format")!=STAMP or manifest.get("upstream")!=PIN:
         raise ValueError("unrecognized private complete-game source manifest")
+    proven_109=verify_private_109_manifest_claim_v336(manifest)
     root=root.resolve(strict=True)
     rev=subprocess.check_output(["git","-C",str(root),"rev-parse","HEAD"],
                                 stderr=subprocess.DEVNULL,text=True).strip()
@@ -71,7 +72,7 @@ def build(root:Path,work:Path,jobs:int,research:bool)->dict:
             "objects_reused":results["reused"],
             "legacy_guest_callback_sites":status["callback_total"],
             "strict_native_runtime_ready":status["strict_native_runtime_ready"],
-            "original_version_109_verified":manifest["version_109_verified"],
+            "original_version_109_verified":proven_109,
             "real_game_windows_pe_linked":False,
             "game_boot_proven":False}
 
