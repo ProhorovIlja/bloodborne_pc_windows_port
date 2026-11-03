@@ -1,0 +1,47 @@
+name: Native V194 complete Bloodborne-recomp CPU ABI and no-EBOOT PE EXE
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v194-full-cpu-exe.yml'
+      - 'native/source-port/recomp-v194/**'
+      - 'native/source-port/recomp-v187/recomp_abi.h'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-abi-and-exe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Exact all-field CPU and upstream RcApi ABI source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python native/source-port/recomp-v194/check_upstream_full_abi_v194.py --upstream-checkout public-upstream-recomp
+          test "$(git -C public-upstream-recomp rev-parse HEAD:src/cpu/cpu_internal.h)" = bcbd422f92a84087a2e0c2d260ec64040f381540
+          test "$(git -C public-upstream-recomp rev-parse HEAD:src/recomp/rc.h)" = a27b8f5fc872c75bd08f6788d716b6856c9e2309
+          echo SHYT_V194_UPSTREAM_COMPLETE_CPU_ABI_SOURCE_LOCK_PASS
+      - name: Compile and run native Windows or Linux EXE without guest EBOOT
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S native/source-port/recomp-v194 -B "$RUNNER_TEMP/v194-native-build" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/v194-native-build" --config Release --parallel 2
+          ctest --test-dir "$RUNNER_TEMP/v194-native-build" -C Release --output-on-failure
+          echo SHYT_V194_NATIVE_EXE_NO_EBOOT_SYNTHETIC_PASS
+          echo 'Not a playable game. No original Bloodborne executable, game data, PS4 runtime or generated private source used.'

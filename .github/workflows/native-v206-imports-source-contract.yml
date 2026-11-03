@@ -1,0 +1,48 @@
+name: V206 original-game import profile code contract (no game data)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v206-imports-source-contract.yml'
+      - 'native/source-port/recomp-v194/profile_private_original_imports_v206.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-only-import-audit-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify imported original-game classifier and safe fail-closed input handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOL=native/source-port/recomp-v194/profile_private_original_imports_v206.py
+          python3 -m py_compile "$TOOL"
+          python3 - <<'PY'
+          import pathlib, sys
+          sys.path.insert(0,'native/source-port/recomp-v194')
+          import profile_private_original_imports_v206 as p
+          assert p.name_key(0)=='A'
+          assert p.name_key(1)=='B'
+          assert p.name_key(63)=='-'
+          assert p.family('libc')=='win32_crt_kernel_time'
+          assert p.family('libSceGnmDriver')=='windows_gpu_present'
+          assert p.family('libSceFios2')=='windows_asset_io_save_data'
+          assert p.family('libSceNpMatching2')=='account_multiplayer_social'
+          assert p.family('libSceNet')=='windows_network_http_tls'
+          try:
+              p.inspect(pathlib.Path('/no-private-original-game-file-on-actions'))
+          except ValueError:
+              pass
+          else:
+              raise AssertionError('private game executable was not required')
+          print('SHYT_NATIVE_V206_ORIGINAL_IMPORT_CLASSIFIER_SOURCE_GATE_PASS')
+          PY
+          # Public CI MUST never contain a user game binary, proprietary
+          # generated original C or original executable profiling output.
+          test ! -e eboot.bin
+          test ! -e eboot.bin-decrypted

@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""V204: private, original full-game ELF -> full native function-C preparation.
+Run on Linux/WSL2 only. Uses the player's decrypted EBOOT as build input,
+never GitHub CI or a runtime game dependency. This is NOT game boot.
+"""
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import audit_native_runtime_v202 as auditor
+import verify_generated_coverage_v207 as coverage
+from bounded_private_subprocess_v210 import run_stage
+import private_original_preflight_v212 as preflight
+
+PIN="8f31ec7c41f252730c6325d52647046baef7549f"
+STAMP="SHYT_PRIVATE_FULL_IMAGE_V204"
+# Published BBHost 1.09 decrypted ELF identity, used ONLY as a build-time
+# exact-match attestation. No original game data enters the repository.
+ORIGINAL_109_SHA256="941f887a562aae054fac35af8cc8f27cf075f3d4cc2e029fb5ae2a663aaa5ae7"
+
+def verified_original_109_digest(digest: str)->bool:
+    return type(digest) is str and digest==ORIGINAL_109_SHA256
+
+def verify_private_109_manifest_claim_v336(manifest: dict)->bool:
+    """Recompute the original-input identity from the recorded digest.
+
+    A boolean in a copied/stale manifest must never become a substitute for
+    the exact 1.09 image's provenance in full COFF/link preparation.
+    SHA alone is not proof of executable boot or unmodified code generation.
+    """
+    if not isinstance(manifest,dict):
+        raise ValueError("missing original image provenance")
+    digest=manifest.get("input_sha256")
+    claimed=manifest.get("version_109_verified")
+    if (type(digest) is not str or len(digest)!=64 or
+            any(c not in "0123456789abcdef" for c in digest) or
+            type(claimed) is not bool):
+        raise ValueError("invalid private original image manifest identity")
+    proven=verified_original_109_digest(digest)
+    if claimed is not proven:
+        raise ValueError("private original 1.09 identity claim disagrees with SHA-256")
+    return proven
+
+
+def sha(p):
+    h=hashlib.sha256()
+    with p.open("rb") as f:
+        for b in iter(lambda:f.read(1<<20),b""):h.update(b)
+    return h.hexdigest()
+
+def private(p):
+    p=p.absolute()
+    # V344: a private path under /tmp/alias -> /repo/game-derived used
+    # to evade the lexical .git ancestor fence. Resolve without requiring
+    # the final output to exist; reject any linked ancestor as well.
+    canonical=p.resolve(strict=False)
+    lexical=(p,*p.parents)
+    actual=(canonical,*canonical.parents)
+    if (any(a.is_symlink() for a in lexical) or
+            any((a/".git").exists() for a in (*lexical,*actual))):
+        raise ValueError("private game files must stay outside Git worktrees and path aliases")
+    return p
+
+def upstream(root):
+    root=root.resolve(strict=True)
+    head=subprocess.check_output(["git","-C",str(root),"rev-parse","HEAD"],
+                                 text=True,stderr=subprocess.DEVNULL).strip()
+    if head!=PIN:raise ValueError("original recomp source SHA changed")
+    for tool in ("ps4elf.py","pointers.py","imports.py","import_names.inc"):
+        if not (root/"tools/recomp"/tool).is_file():
+            raise ValueError("missing original source-recomp executable analyzer")
+    for exe in ("scan","bbrecomp"):
+        if not (root/"out/recomp"/exe).is_file():
+            raise ValueError("original full scanner/recompiler must be built on Linux")
+    src=(root/"tools/recomp/bbrecomp.c").read_text(encoding="utf-8")
+    for marker in ("SHYT_NATIVE_V199_GUEST_RET_FLAGS_FLUSH",
+                   "SHYT_NATIVE_V200_INDIRECT_CALL_NATIVE_DISPATCH",
+                   "SHYT_NATIVE_V201_INDIRECT_JMP_NATIVE_DISPATCH",
+                   "SHYT_NATIVE_V203_GENERIC_TAIL_DIRECT_AOT"):
+        if marker not in src:raise ValueError("pinned full native generator patch missing")
+    return root
+
+def run(cmd,step,log_dir,env=None):
+    # Bounded streaming: no 2-hour capture_output memory growth, no chat logs.
+    run_stage(cmd,step,log_dir,env=env,timeout=7200)
+
+def prepare(root,eboot,work):
+    if not sys.platform.startswith("linux"):
+        raise ValueError("run original scanner/generator only under Linux or WSL2")
+    root=upstream(root)
+    eboot=private(eboot)
+    work=private(work)
+    # Reject incorrect original image, an unbuilt/stale patched generator,
+    # or inadequate private workspace before spending hours on a full scan.
+    if not eboot.is_file():raise ValueError("decrypted original eboot.bin missing")
+    size=eboot.stat().st_size
+    if not 1000000<=size<=512*1024*1024:
+        raise ValueError("executable size is invalid for original game")
+    preflight.check(eboot,work,root,16)
+    with eboot.open("rb") as f:magic=f.read(4)
+    if magic not in (b"\x7fELF",b"O\x15=\x1d"):
+        raise ValueError("original PS4 SELF/plain ELF header required; no encrypted dump")
+    # V335: hash the actual build input, not a name or SFO version string.
+    # The old V204 writer unconditionally set version_109_verified=False,
+    # making the strict V311 original-only link gate impossible to satisfy.
+    original=eboot.resolve(strict=True)
+    original_digest=sha(original)
+    version_109_verified=verified_original_109_digest(original_digest)
+    if work.exists() and any(work.iterdir()):
+        raise ValueError("private output is not empty; use a new work folder")
+    work.mkdir(parents=True,exist_ok=True)
+    scan=work/"scan"; gen=work/"generated"
+    private_logs=work/"_private_stage_logs"
+    scan.mkdir();gen.mkdir()
+    t=root/"tools/recomp"
+    elf=work/"original.elf"
+    run([sys.executable,t/"ps4elf.py",original,elf],"extract_elf",private_logs)
+    run([sys.executable,t/"pointers.py",original,scan/"pointers.txt"],"pointers",private_logs)
+    run([root/"out/recomp/scan",elf,scan,scan/"pointers.txt"],"function_scan",private_logs)
+    tab=scan/"functions.tsv"
+    count=0;prev=-1
+    with tab.open(encoding="utf-8") as f, (scan/"all.txt").open("w") as out:
+        if f.readline().strip()!="address\tsize\tinstructions\tundecodable":
+            raise ValueError("original full scanner's function format changed")
+        for line in f:
+            row=line.strip().split("\t")
+            if len(row)!=4:raise ValueError("original function row invalid")
+            addr=int(row[0],16)
+            if addr<=prev or int(row[1])<=0:
+                raise ValueError("original function index invalid")
+            out.write(row[0]+"\n")
+            prev=addr;count+=1
+            if count>1000000:raise ValueError("original function count exceeds safety bound")
+    if not count:raise ValueError("original scanner discovered no function")
+    run([sys.executable,t/"imports.py",original,scan],"original_imports",private_logs)
+    annotations=root/"annotations/functions.tsv"
+    if not annotations.is_file():raise ValueError("upstream annotations missing")
+    env={**os.environ,"BB_JIT":"0",
+         "BB_RECOMP_ANNOTATIONS":str(annotations)}
+    run([root/"out/recomp/bbrecomp",elf,tab,gen/"recomp.c",
+         "@"+str(scan/"all.txt")],"generate_functions",private_logs,env)
+    # The upstream generator excludes import stubs and setjmp callers.
+    # Scanner rows are NOT the same as registered natively compiled functions.
+    registration=coverage.inspect_file(gen/"recomp.c",count,tab)
+    hashes={p.name:sha(p) for p in auditor.sources(gen)}
+    audit=auditor.audit(gen)
+    # Fail closed if the owner's local input was replaced during generation.
+    # A known checksum attests the *input identity*, NOT correct AOT coverage,
+    # no guest callbacks, complete imports, a linkable PE or a game boot.
+    if sha(original)!=original_digest:
+        raise ValueError("original private game image changed during AOT preparation")
+    metadata={"format":STAMP,"upstream":PIN,
+              "input_sha256":original_digest,"original_size_bytes":size,
+              "version_109_verified":version_109_verified,
+              **registration,"c_hashes":hashes,
+              "scanner_index_sha256":sha(tab),
+              "fallback_calls":audit["callback_total"],
+              "strict_no_guest_runtime":audit["strict_native_runtime_ready"],
+              "native_game_boot_proven":False}
+    stage=work/"full-original-preparation.json.partial"
+    stage.write_text(json.dumps(metadata,sort_keys=True,indent=2)+"\n")
+    os.replace(stage,work/"full-original-preparation.json")
+    elf.unlink()
+    return {**registration,"generated_c_modules":len(hashes),
+            "fallback_calls":audit["callback_total"],
+            "strict_no_guest_runtime":audit["strict_native_runtime_ready"],
+            "version_109_verified":version_109_verified,"game_boot_proven":False}
+
+if __name__=="__main__":
+    a=argparse.ArgumentParser()
+    a.add_argument("--upstream",required=True,type=Path)
+    a.add_argument("--eboot",required=True,type=Path)
+    a.add_argument("--work",required=True,type=Path)
+    o=a.parse_args()
+    try:
+        result=prepare(o.upstream,o.eboot,o.work)
+        print("SHYT_V204_FULL_PRIVATE_ORIGINAL_GAME_C_GENERATION_PASS")
+        print(json.dumps(result,sort_keys=True))
+    except (ValueError,OSError,RuntimeError,subprocess.SubprocessError) as e:
+        print("SHYT_V204_PRIVATE_FULL_IMAGE_BLOCKED: "+str(e)[:180],file=sys.stderr)
+        raise SystemExit(2)

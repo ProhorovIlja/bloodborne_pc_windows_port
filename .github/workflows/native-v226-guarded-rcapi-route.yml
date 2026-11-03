@@ -1,0 +1,107 @@
+name: Native V226 guarded RcApi V4 math-route contract (public test only)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v226-guarded-rcapi-route.yml'
+      - 'native/source-port/recomp-v194/native_math_import_dispatch_v224.c'
+      - 'native/source-port/recomp-v194/native_math_import_dispatch_v224.h'
+      - 'native/source-port/recomp-v194/native_math_rcapi_route_v226.c'
+      - 'native/source-port/recomp-v194/native_math_rcapi_route_v226.h'
+      - 'native/source-port/recomp-v194/test_native_math_rcapi_route_v226.c'
+      - 'native/source-port/recomp-v194/native_math_arena_route_v229.h'
+      - 'native/source-port/recomp-v194/native_math_arena_route_v229.c'
+      - 'native/source-port/recomp-v194/native_guest_arena_v228.h'
+      - 'native/source-port/recomp-v194/native_guest_arena_v228.c'
+      - 'native/source-port/recomp-v194/test_native_math_import_dispatch_v224.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pinned-original-bbcpu-v4-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Prepare original pinned Zydis and runtime headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream
+          if ! (cd public-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v226-public-build.log" 2>&1; then
+            echo '::error title=V226::Public upstream header preparation failed'
+            exit 1
+          fi
+          test -s public-upstream/deps/include/Zydis/Zydis.h
+      - name: Execute guest memory, unknown-target and RcApi dispatch tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=native/source-port/recomp-v194
+          UP=public-upstream
+          FLAGS="-D_POSIX_C_SOURCE=200809L -std=c11 -O1 -Wall -Wextra -Werror -pedantic"
+          clang $FLAGS -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
+            "$SRC/native_math_shim_v222.c" "$SRC/native_math_guest_bridge_v223.c" \
+            "$SRC/native_math_import_dispatch_v224.c" \
+            "$SRC/test_native_math_import_dispatch_v224.c" \
+            -lm -o "$RUNNER_TEMP/v226-v224-checked"
+          "$RUNNER_TEMP/v226-v224-checked"
+          clang $FLAGS -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
+            "$SRC/native_math_shim_v222.c" "$SRC/native_math_guest_bridge_v223.c" \
+            "$SRC/native_math_import_dispatch_v224.c" \
+            "$SRC/native_math_rcapi_route_v226.c" \
+            "$SRC/test_native_math_rcapi_route_v226.c" \
+            -lm -o "$RUNNER_TEMP/v226-routed"
+          "$RUNNER_TEMP/v226-routed"
+          echo SHYT_V226_PINNED_REAL_BBCPU_RCAPI_SAFE_ROUTE_PASS
+      - name: Build actual AMD64 Win64 COFF route and guarded dispatcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq > /dev/null 2>&1
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            mingw-w64-common mingw-w64-x86-64-dev > /dev/null 2>&1
+          SRC=native/source-port/recomp-v194
+          UP=public-upstream
+          for stem in native_math_rcapi_route_v226 native_math_import_dispatch_v224 native_guest_memory_v227 native_guest_arena_v228 native_math_arena_route_v229; do
+            clang --target=x86_64-w64-windows-gnu -std=gnu11 -O0 \
+              -ffp-contract=off -Wall -Wextra -Werror \
+              -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
+              -isystem /usr/x86_64-w64-mingw32/include \
+              -c "$SRC/$stem.c" -o "$RUNNER_TEMP/$stem.obj" \
+              2> "$RUNNER_TEMP/v229-compiler-local-only.log" || {
+                printf 'stage=%s\n' "$stem" > "$RUNNER_TEMP/v229-compile-error.txt"
+                head -n 5 "$RUNNER_TEMP/v229-compiler-local-only.log" | cut -c1-180 \
+                  >> "$RUNNER_TEMP/v229-compile-error.txt"
+                exit 1
+              }
+          done
+          python - <<'PY'
+          from pathlib import Path
+          import os,struct
+          base=Path(os.environ['RUNNER_TEMP'])
+          for stem in ('native_math_rcapi_route_v226','native_math_import_dispatch_v224','native_guest_memory_v227','native_guest_arena_v228','native_math_arena_route_v229'):
+              data=(base/(stem+'.obj')).read_bytes()
+              assert len(data)>1000
+              assert struct.unpack_from('<H',data)[0]==0x8664
+          print('SHYT_V229_ACTUAL_WIN64_COFF_PINNED_RCAPIV4_ROUTE_PASS')
+          PY
+          echo 'No original game, address mapping, private C or COFF in CI.'
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-v229-public-only-compile-error-under-1kb
+          path: ${{ runner.temp }}/v229-compile-error.txt
+          if-no-files-found: warn
+          retention-days: 1

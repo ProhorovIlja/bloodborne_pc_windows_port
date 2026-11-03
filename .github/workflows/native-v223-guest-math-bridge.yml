@@ -1,0 +1,121 @@
+name: Native V223 original BbCpu to Win64 math import ABI bridge
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v223-guest-math-bridge.yml'
+      - 'native/source-port/recomp-v194/native_math_guest_bridge_v223.h'
+      - 'native/source-port/recomp-v194/native_math_guest_bridge_v223.c'
+      - 'native/source-port/recomp-v194/test_native_math_guest_bridge_v223.c'
+      - 'native/source-port/recomp-v194/native_math_import_dispatch_v224.h'
+      - 'native/source-port/recomp-v194/native_math_import_dispatch_v224.c'
+      - 'native/source-port/recomp-v194/test_native_math_import_dispatch_v224.c'
+      - 'native/source-port/recomp-v194/build_private_math_imports_v224.py'
+      - 'native/source-port/recomp-v194/native_math_shim_v222.h'
+      - 'native/source-port/recomp-v194/native_math_shim_v222.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-pinned-BbCpu-abi-and-Win64-coff:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Prepare original PUBLIC BbCpu/Zydis source headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout pinned-upstream
+          if ! (cd pinned-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v223-public-build.log" 2>&1; then
+            echo "::error title=V223::Pinned PUBLIC Zydis header preparation failed"
+            exit 1
+          fi
+          test -f pinned-upstream/deps/include/Zydis/Zydis.h
+      - name: Compile and execute original upstream BbCpu synthetic guest-call tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=native/source-port/recomp-v194
+          UP=pinned-upstream
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
+            "$SRC/native_math_guest_bridge_v223.c" \
+            "$SRC/native_math_shim_v222.c" \
+            "$SRC/test_native_math_guest_bridge_v223.c" \
+            -lm -o "$RUNNER_TEMP/shyt-v223-test"
+          "$RUNNER_TEMP/shyt-v223-test"
+          echo SHYT_V223_PINNED_ORIGINAL_BBCPU_XMM_RDI_RET_TEST_PASS
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
+            "$SRC/native_math_import_dispatch_v224.c" \
+            "$SRC/native_math_guest_bridge_v223.c" \
+            "$SRC/native_math_shim_v222.c" \
+            "$SRC/test_native_math_import_dispatch_v224.c" \
+            -lm -o "$RUNNER_TEMP/shyt-v224-test"
+          "$RUNNER_TEMP/shyt-v224-test"
+          echo SHYT_V224_PINNED_GUEST_RCAPI_IMPORT_DISPATCH_PASS
+          python - <<'PY'
+          import os,sys,tempfile
+          from pathlib import Path
+          sys.path.insert(0,'native/source-port/recomp-v194')
+          from build_private_math_imports_v224 import make,NAMES
+          with tempfile.TemporaryDirectory() as tmp:
+              root=Path(tmp)
+              index=root/'fictional-imports.tsv'
+              index.write_text('stub\tname\n'+''.join(
+                  f'0x{256+16*i:x}\t{name}\n' for i,name in enumerate(NAMES)))
+              out=root/'synthetic-only.c'
+              assert make(index,out)==23
+              assert out.is_file() and out.read_text().count('UINT64_C')==23
+              index.write_text(index.read_text().replace('acos','unimplemented',1))
+              try: make(index,out)
+              except ValueError: pass
+              else: raise AssertionError('missing original import not rejected')
+          print('SHYT_V224_SYNTHETIC_PRIVATE_IMPORT_GENERATOR_PASS')
+          PY
+      - name: Compile same bridge as actual native AMD64 Windows COFF
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq > /dev/null 2>&1
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            mingw-w64-common mingw-w64-x86-64-dev > /dev/null 2>&1
+          SRC=native/source-port/recomp-v194
+          UP=pinned-upstream
+          clang --target=x86_64-w64-windows-gnu -std=gnu11 \
+            -O0 -ffp-contract=off -Wall -Wextra -Werror \
+            -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
+            -isystem /usr/x86_64-w64-mingw32/include \
+            -c "$SRC/native_math_guest_bridge_v223.c" \
+            -o "$RUNNER_TEMP/shyt-v223-bridge.obj"
+          clang --target=x86_64-w64-windows-gnu -std=gnu11 \
+            -O0 -ffp-contract=off -Wall -Wextra -Werror \
+            -I"$SRC" -I"$UP/src" -I"$UP/deps/include" \
+            -isystem /usr/x86_64-w64-mingw32/include \
+            -c "$SRC/native_math_import_dispatch_v224.c" \
+            -o "$RUNNER_TEMP/shyt-v224-dispatch.obj"
+          python - <<'PY'
+          from pathlib import Path
+          import os, struct
+          p=Path(os.environ['RUNNER_TEMP'])/'shyt-v223-bridge.obj'
+          data=p.read_bytes()
+          assert len(data)>2000
+          assert struct.unpack_from('<H',data)[0]==0x8664
+          q=Path(os.environ['RUNNER_TEMP'])/'shyt-v224-dispatch.obj'
+          target=q.read_bytes()
+          assert len(target)>1000
+          assert struct.unpack_from('<H',target)[0]==0x8664
+          print('SHYT_V223_V224_ACTUAL_AMD64_WIN64_COFF_PASS')
+          PY
+          echo 'Original source/ELF, generated game C and private code absent from public CI.'

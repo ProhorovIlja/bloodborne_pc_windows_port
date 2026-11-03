@@ -1,0 +1,107 @@
+name: Native V359 Win32 streaming Bloodborne DS3 DCX zlib no EBOOT
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v355-real-dcx-deflate-win64.yml'
+      - 'native/source-port/recomp-v194/native_dcx_dflt_inflate_v355.*'
+      - 'native/source-port/recomp-v194/native_win_dcx_stream_v359.*'
+      - 'native/source-port/recomp-v194/test_native_dcx_dflt_inflate_v355.c'
+      - 'native/source-port/recomp-v194/native_dcx_dflt_header_v354.*'
+      - 'native/source-port/recomp-v194/native_win_asset_fs_v351.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-verified-zlib-inflation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: madler/zlib
+          ref: 51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf
+          path: public-zlib-v131
+          persist-credentials: false
+      - name: Pin authentic public zlib v1.3.1 source, build static library for OS
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-zlib-v131 rev-parse HEAD)" = 51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf
+          grep -Fq '#define ZLIB_VERSION "1.3.1"' public-zlib-v131/zlib.h
+          if [ "$RUNNER_OS" = Windows ]; then
+            cmake -S public-zlib-v131 -B zlib-build \
+              -G "Visual Studio 17 2022" -A x64 \
+              -DZLIB_BUILD_EXAMPLES=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+              > v355-dep-build.log 2>&1 || { tail -n 5 v355-dep-build.log | cut -c1-160 > v355-brief.txt; exit 1; }
+            cmake --build zlib-build --config Release --target zlibstatic \
+              >> v355-dep-build.log 2>&1 || { tail -n 5 v355-dep-build.log | cut -c1-160 > v355-brief.txt; exit 1; }
+            test -s zlib-build/Release/zlibstatic.lib
+          else
+            cmake -S public-zlib-v131 -B zlib-build \
+              -DCMAKE_BUILD_TYPE=Release -DZLIB_BUILD_EXAMPLES=OFF \
+              -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+              >v355-dep-build.log 2>&1 || { tail -n 5 v355-dep-build.log | cut -c1-160 > v355-brief.txt; exit 1; }
+            cmake --build zlib-build --target zlibstatic --parallel 2 \
+              >>v355-dep-build.log 2>&1 || { tail -n 5 v355-dep-build.log | cut -c1-160 > v355-brief.txt; exit 1; }
+            test -s zlib-build/libz.a
+          fi
+      - name: Compile real BB/DS3 Deflate payload decoder and execute malformed/truncated/checksum regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          if [ "$RUNNER_OS" = Windows ]; then
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+                 /nologo /TC /std:c11 /W4 /WX /O2 \
+                 "/I$src" /Ipublic-zlib-v131 /Izlib-build \
+                 "$src/native_win_asset_fs_v351.c" \
+                 "$src/native_dcx_dflt_header_v354.c" \
+                 "$src/native_dcx_dflt_inflate_v355.c" \
+                 "$src/native_win_dcx_stream_v359.c" \
+                 "$src/test_native_dcx_dflt_inflate_v355.c" \
+                 zlib-build/Release/zlibstatic.lib \
+                 /Fe:./shyt-v355-native-win64.exe >v355-compiler.log 2>&1; then
+              tail -n 5 v355-compiler.log | cut -c1-160 > v355-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-v355-native-win64.exe > v355-run.log 2>&1; then
+              tail -n 5 v355-run.log | cut -c1-160 > v355-brief.txt
+              exit 1
+            fi
+            cat v355-run.log
+          else
+            if ! clang -std=c11 -O2 -Wall -Wextra -Werror \
+                 "-I$src" -Ipublic-zlib-v131 -Izlib-build \
+                 "$src/native_win_asset_fs_v351.c" \
+                 "$src/native_dcx_dflt_header_v354.c" \
+                 "$src/native_dcx_dflt_inflate_v355.c" \
+                 "$src/native_win_dcx_stream_v359.c" \
+                 "$src/test_native_dcx_dflt_inflate_v355.c" \
+                 zlib-build/libz.a -o ./shyt-v355-native-linux \
+                 > v355-compiler.log 2>&1; then
+              tail -n 5 v355-compiler.log | cut -c1-160 > v355-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-v355-native-linux > v355-run.log 2>&1; then
+              tail -n 5 v355-run.log | cut -c1-160 > v355-brief.txt
+              exit 1
+            fi
+            cat v355-run.log
+          fi
+          echo SHYT_V359_NATIVE_WIN32_MULTI_CHUNK_BB_DS3_DCX_STREAMING_PASS
+      - name: Upload only bounded public compiler and invented-asset diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-v355-source-only-failure-max5lines
+          path: v355-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore

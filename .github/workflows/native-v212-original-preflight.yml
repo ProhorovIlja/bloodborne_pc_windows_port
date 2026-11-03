@@ -1,0 +1,76 @@
+name: Native V212 private original ELF/toolchain preflight contract
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v212-original-preflight.yml'
+      - 'native/source-port/recomp-v194/private_original_preflight_v212.py'
+      - 'native/source-port/recomp-v194/prepare_private_full_game_v204.py'
+      - 'native/source-port/recomp-v194/test_private_original_attestation_v335.py'
+      - 'native/source-port/recomp-v194/test_private_worktree_isolation_v344.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-preflight-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify real-game version admission propagation with synthetic-only inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile native/source-port/recomp-v194/test_private_original_attestation_v335.py
+          python native/source-port/recomp-v194/test_private_original_attestation_v335.py
+          python native/source-port/recomp-v194/test_private_worktree_isolation_v344.py
+      - name: Synthetic-only PS4 ELF header and fail-closed source checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile native/source-port/recomp-v194/private_original_preflight_v212.py native/source-port/recomp-v194/prepare_private_full_game_v204.py
+          python - <<'PY'
+          import struct,sys,tempfile
+          from pathlib import Path
+          sys.path.insert(0, 'native/source-port/recomp-v194')
+          import private_original_preflight_v212 as gate
+          import prepare_private_full_game_v204 as prep
+          with tempfile.TemporaryDirectory() as tmp:
+              root=Path(tmp)
+              elf=root/'fictional-ps4.elf'
+              blob=bytearray(1100000)
+              blob[:7]=b'\x7fELF\x02\x01\x01'
+              struct.pack_into('<HH',blob,16,0xfe10,62)
+              struct.pack_into('<Q',blob,32,64)
+              struct.pack_into('<HH',blob,54,56,2)
+              struct.pack_into('<IIQQQQQQ',blob,64,1,5,0x1000,0,0,0x2000,0x2000,0x1000)
+              struct.pack_into('<IIQQQQQQ',blob,120,0x6474e550,4,0x4000,0x3000,0,0x100,0x100,4)
+              blob[0x4000:0x4004]=b'\x01\x1b\x03\x3b'
+              struct.pack_into('<I',blob,0x4008,1)
+              elf.write_bytes(blob)
+              basic=gate.file_check(elf)
+              assert basic['fde_entries_declared']==1
+              assert basic['fde_entries_fully_verified'] is False
+              minimal=gate.check(elf,None,None,16)
+              assert not minimal['ready_to_start_private_full_scan']
+              for broken in (bytes(blob[:2000]), b'not-an-ELF'):
+                  elf.write_bytes(broken)
+                  try: gate.file_check(elf)
+                  except ValueError: pass
+                  else: raise AssertionError('corrupt input passed')
+              elf.write_bytes(blob)
+              try: gate.upstream_check(root)
+              except ValueError: pass
+              else: raise AssertionError('unverified upstream checkout accepted')
+              source=Path('native/source-port/recomp-v194/prepare_private_full_game_v204.py').read_text()
+              assert 'preflight.check(eboot,work,root,16)' in source
+              assert prep.PIN==gate.PIN
+          print('SHYT_NATIVE_V212_ELF_AND_TOOLCHAIN_PREFLIGHT_SELFTEST_PASS')
+          PY
+          echo 'No original user executable, game code or private toolchain binaries in CI.'

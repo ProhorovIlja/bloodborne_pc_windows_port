@@ -1,0 +1,52 @@
+name: Native V227 actual Win64 guest-memory page permits
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v227-guest-memory.yml'
+      - 'native/source-port/recomp-v194/native_guest_memory_v227.h'
+      - 'native/source-port/recomp-v194/native_guest_memory_v227.c'
+      - 'native/source-port/recomp-v194/test_native_guest_memory_v227.c'
+      - 'native/source-port/recomp-v194/native_math_import_dispatch_v224.c'
+      - 'native/source-port/recomp-v194/native_math_rcapi_route_v226.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-platform-fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Range validation and reject OS permission bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC=native/source-port/recomp-v194
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            "$SRC/native_guest_memory_v227.c" "$SRC/test_native_guest_memory_v227.c" \
+            -o "$RUNNER_TEMP/v227-guest-memory-linux"
+          "$RUNNER_TEMP/v227-guest-memory-linux"
+          echo SHYT_V227_NON_WINDOWS_OS_PROTECTION_FAIL_CLOSED_PASS
+  actual-windows-virtualquery:
+    runs-on: windows-2022
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Real VirtualAlloc, VirtualProtect and full-span VirtualQuery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $src = "native/source-port/recomp-v194"
+          $exe = Join-Path $env:RUNNER_TEMP "shyt-v227-windows-test.exe"
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+             "$src/native_guest_memory_v227.c" `
+             "$src/test_native_guest_memory_v227.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw "V227 Windows build failed" }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw "V227 Windows page permission tests failed" }
+          "SHYT_V227_ACTUAL_WIN64_VIRTUALQUERY_PAGE_GUARD_AND_RO_PASS"

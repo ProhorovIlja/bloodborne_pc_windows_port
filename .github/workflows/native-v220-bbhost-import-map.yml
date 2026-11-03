@@ -1,0 +1,74 @@
+name: Native V220 public BBHost PLT/real import comparison (private input never in CI)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v220-bbhost-import-map.yml'
+      - 'native/source-port/recomp-v194/compare_private_imports_bbhost_v220.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-parser:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Original scanner/private data never used
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=native/source-port/recomp-v194/compare_private_imports_bbhost_v220.py
+          python -m py_compile "$BASE"
+          python "$BASE" --self-test
+  pinned-bbhost-public-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          path: bbhost-public
+          persist-credentials: false
+          submodules: false
+      - name: Validate BBHost upstream import map without private Bloodborne
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C bbhost-public rev-parse HEAD)" = 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          test -s bbhost-public/src/core/plt_names.inc
+          python - <<'PY'
+          import sys
+          sys.path.insert(0,'native/source-port/recomp-v194')
+          import compare_private_imports_bbhost_v220 as v
+          names=v.public_names(__import__('pathlib').Path('bbhost-public/src/core/plt_names.inc'))
+          assert len(names)==661
+          assert names[0]=='_init_env'
+          print('SHYT_V220_PINNED_BBHOST_PUBLIC_PLT_661_PASS')
+          PY
+      - name: Publish ONLY two publicly licensed research references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public-maps
+          cp bbhost-public/src/core/plt_names.inc public-maps/
+          cp bbhost-public/LICENSE public-maps/BBHOST-GPL-3.0-LICENSE
+          echo 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd > public-maps/BBHOST_UPSTREAM_COMMIT
+          test "$(find public-maps -maxdepth 1 -type f | wc -l)" = 3
+          echo 'ONLY public BBHost names. No private original imports, games or patches.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v220-bbhost-public-plt-only
+          path: public-maps/
+          if-no-files-found: error
+          retention-days: 7

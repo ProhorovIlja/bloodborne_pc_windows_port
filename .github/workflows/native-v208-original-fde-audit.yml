@@ -1,0 +1,29 @@
+name: Native V208 original Bloodborne FDE parser contract (synthetic only)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v208-original-fde-audit.yml'
+      - 'native/source-port/recomp-v194/audit_private_original_fde_v208.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate-fde-parser:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Python syntax and fully invented ELF/FDE/CIE fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile native/source-port/recomp-v194/audit_private_original_fde_v208.py
+          python native/source-port/recomp-v194/audit_private_original_fde_v208.py --self-test
+          echo "No original game image, extracted ranges, decrypted bytes or original binary in public CI."

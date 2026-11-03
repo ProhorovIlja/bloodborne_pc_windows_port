@@ -1,0 +1,92 @@
+name: Native V230 real Windows pinned RcApi executable smoke (public only)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v230-windows-guest-math-exe.yml'
+      - 'native/source-port/recomp-v194/test_native_math_arena_route_v230.c'
+      - 'native/source-port/recomp-v194/native_math_arena_route_v229.c'
+      - 'native/source-port/recomp-v194/native_math_rcapi_route_v226.c'
+      - 'native/source-port/recomp-v194/native_guest_arena_v228.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare-public-upstream-zys:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Generate only upstream PUBLIC Zydis headers for Windows tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream
+          if ! (cd public-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v230-public-upstream.log" 2>&1; then
+            echo '::error title=V230::Public upstream dependency preparation failed'
+            exit 1
+          fi
+          test -s public-upstream/deps/include/Zydis/Zydis.h
+          echo SHYT_V230_PUBLIC_ZYDIS_PREPARED_NO_GAME
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v230-public-upstream-dependency-headers
+          path: public-upstream/deps/include/
+          if-no-files-found: error
+          retention-days: 1
+  execute-real-win64:
+    needs: prepare-public-upstream-zys
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v230-public-upstream-dependency-headers
+          path: public-upstream/deps/include
+      - name: Patch public original Win32 QPC clock and run native host guest ABI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python native/source-port/recomp-v194/patch_upstream_win32_clock_v195.py --upstream-checkout public-upstream
+          if ($LASTEXITCODE -ne 0) { throw 'Original upstream Win32 QPC patch failed' }
+          $src='native/source-port/recomp-v194'
+          $exe=Join-Path $env:RUNNER_TEMP 'v230-real-win64-pinned-rcapi.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/I$src" "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/native_math_shim_v222.c" `
+            "$src/native_math_guest_bridge_v223.c" `
+            "$src/native_math_import_dispatch_v224.c" `
+            "$src/native_math_rcapi_route_v226.c" `
+            "$src/native_guest_memory_v227.c" `
+            "$src/native_guest_arena_v228.c" `
+            "$src/native_math_arena_route_v229.c" `
+            "$src/test_native_math_arena_route_v230.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'V230 Win64 original-BbCpu native integration compile failed' }
+          $raw=[IO.File]::ReadAllBytes($exe)
+          if ($raw.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($raw,0,2) -ne 'MZ') {
+            throw 'V230 output is not Windows PE'
+          }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'V230 native Win64 pinned math import execution failed' }
+          'SHYT_V230_ACTUAL_NATIVE_WINDOWS_PINNED_BBCPU_MATH_EXE_PASS'
+          'No original retail Bloodborne executable, game assets or imported address table in public CI.'

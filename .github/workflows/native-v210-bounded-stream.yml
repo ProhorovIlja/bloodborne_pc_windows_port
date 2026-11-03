@@ -1,0 +1,43 @@
+name: Native V210 bounded private scanner stream (synthetic)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v210-bounded-stream.yml'
+      - 'native/source-port/recomp-v194/bounded_private_subprocess_v210.py'
+      - 'native/source-port/recomp-v194/prepare_private_full_game_v204.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded-private-stream:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test bounded output, process error, timeout and V204 integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIR=native/source-port/recomp-v194
+          python -m py_compile "$DIR/bounded_private_subprocess_v210.py" "$DIR/prepare_private_full_game_v204.py"
+          python "$DIR/bounded_private_subprocess_v210.py" --self-test
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'native/source-port/recomp-v194')
+          import prepare_private_full_game_v204 as prep
+          import bounded_private_subprocess_v210 as runner
+          src=Path('native/source-port/recomp-v194/prepare_private_full_game_v204.py').read_text()
+          assert 'capture_output=True' not in src
+          assert src.count('run([') >= 5
+          assert callable(prep.prepare) and callable(runner.run_stage)
+          print('SHYT_NATIVE_V210_PRIVATE_PREP_SOURCE_STREAM_CONTRACT_PASS')
+          PY
+          echo 'No original executable or raw logs in CI.'

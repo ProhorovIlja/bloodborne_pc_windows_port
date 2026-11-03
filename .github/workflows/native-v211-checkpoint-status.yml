@@ -1,0 +1,29 @@
+name: Native V211 private preparation checkpoint status (synthetic)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v211-checkpoint-status.yml'
+      - 'native/source-port/recomp-v194/private_pipeline_status_v211.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-log-checkpoint-recovery:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Private-stage metadata recovery, no raw logs, synthetic only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile native/source-port/recomp-v194/private_pipeline_status_v211.py
+          python native/source-port/recomp-v194/private_pipeline_status_v211.py --self-test
+          echo 'Original game, raw log stream, addresses, hashes and user data not present.'

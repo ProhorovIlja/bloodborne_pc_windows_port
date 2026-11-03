@@ -1,0 +1,100 @@
+name: Native V287 private COFF prelink fast checks
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-private-coff-prelink-fast.yml'
+      - 'native/source-port/recomp-v194/private_coff_*'
+      - 'native/source-port/recomp-v194/private_native_link_probe_v309.py'
+      - 'native/source-port/recomp-v194/audit_current_recompiler_abi_v333.py'
+      - 'native/source-port/recomp-v194/audit_split_bbcpu_abi_v334.py'
+      - 'native/source-port/recomp-v194/test_private_native_link_probe_v309.py'
+      - 'native/source-port/recomp-v194/test_private_native_link_invocation_v317.py'
+      - 'native/source-port/recomp-v194/test_private_coff_*'
+      - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
+      - 'native/source-port/recomp-v194/verify_coff_dependencies_v219.py'
+  pull_request:
+    paths:
+      - '.github/workflows/native-private-coff-prelink-fast.yml'
+      - 'native/source-port/recomp-v194/private_coff_*'
+      - 'native/source-port/recomp-v194/private_native_link_probe_v309.py'
+      - 'native/source-port/recomp-v194/audit_current_recompiler_abi_v333.py'
+      - 'native/source-port/recomp-v194/audit_split_bbcpu_abi_v334.py'
+      - 'native/source-port/recomp-v194/test_private_native_link_probe_v309.py'
+      - 'native/source-port/recomp-v194/test_private_native_link_invocation_v317.py'
+      - 'native/source-port/recomp-v194/test_private_coff_*'
+      - 'native/source-port/recomp-v194/compile_private_win64_coff_v217.py'
+      - 'native/source-port/recomp-v194/verify_coff_dependencies_v219.py'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  python-coff-prelink:
+    name: Original COFF safety fixtures (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout updated PUBLIC bloodborne-recomp for ABI drift inspection
+        uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 222db5101170135c8ee854bcf338237477bf4ae9
+          path: public-recompiler-abi-check
+          persist-credentials: false
+      - name: Verify upstream unchanged native x64 BbCpu and RcApi contracts
+        shell: bash
+        run: |
+          python native/source-port/recomp-v194/audit_current_recompiler_abi_v333.py \
+            --upstream public-recompiler-abi-check
+      - name: Checkout standalone bbcpu CPU/runtime after November upstream split
+        uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bbcpu
+          ref: 3f9b6c1a11d5a443ee2e556a0d1f3aec4a73f0ca
+          path: public-split-bbcpu
+          persist-credentials: false
+      - name: Verify old Windows AOT RcApi4 is semantically identical after CPU split
+        shell: bash
+        run: |
+          python native/source-port/recomp-v194/audit_split_bbcpu_abi_v334.py \
+            --old-recompiler public-recompiler-abi-check \
+            --split-bbcpu public-split-bbcpu
+      - name: Install actual lld linker for Linux-only synthetic PE smoke
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lld
+          command -v clang >/dev/null
+          command -v lld-link >/dev/null
+      - name: Synthetic private original-game COFF safety checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile             native/source-port/recomp-v194/compile_private_win64_coff_v217.py             native/source-port/recomp-v194/private_coff_batch_runner_v273.py             native/source-port/recomp-v194/private_coff_symbol_closure_v287.py
+          # V297: retain coverage for the ORIGINAL V217 compiler CLI
+          # self-test, not just later standalone COFF parsing fixtures.
+          python native/source-port/recomp-v194/compile_private_win64_coff_v217.py --self-test
+          python native/source-port/recomp-v194/test_private_coff_validation_v281.py
+          python native/source-port/recomp-v194/test_private_coff_symbol_closure_v287.py
+          # V342: source-only cross-game owner-private native asset census,
+          # invented fixtures only; never upload either original title.
+          python native/source-port/recomp-v194/test_private_asset_census_v342.py
+          python native/source-port/recomp-v194/test_private_coff_batch_runner_v273.py
+          python native/source-port/recomp-v194/test_private_worktree_isolation_v344.py
+          python -m py_compile native/source-port/recomp-v194/private_native_link_probe_v309.py
+          python native/source-port/recomp-v194/test_private_native_link_probe_v309.py
+          # V317: real LLVM lld-link invocation on disposable synthetic
+          # COFF objects; does not use or link game binary contents.
+          python native/source-port/recomp-v194/test_private_native_link_invocation_v317.py
+          echo SHYT_V287_PRIVATE_COFF_PRELINK_FAST_PASS

@@ -1,0 +1,75 @@
+name: Native V213 offline pinned Bloodborne generator bundle (NO GAME INPUT)
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v213-private-offline-toolchain.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pack-pinned-upstream-tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Our review-only patch scripts
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pinned public recomp source; exact original Git HEAD
+        uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: upstream
+          persist-credentials: false
+          submodules: false
+      - name: Apply pinned source-checked Linux and native AOT patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=native/source-port/recomp-v194
+          python3 "$BASE/patch_upstream_linux_generator_v196.py" --upstream-checkout upstream
+          python3 "$BASE/patch_upstream_ret_flags_v199.py" --upstream-checkout upstream
+          python3 "$BASE/patch_upstream_indirect_call_v200.py" --upstream-checkout upstream
+          python3 "$BASE/patch_upstream_indirect_jump_v201.py" --upstream-checkout upstream
+          python3 "$BASE/patch_upstream_fallthrough_v203.py" --upstream-checkout upstream
+          test "$(git -C upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          git -C upstream diff --check
+      - name: Build REAL upstream scan and bbrecomp with dependency libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! (cd upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/bb-v213-build.log" 2>&1; then
+            echo '::error title=V213::Original pinned upstream Linux tool build failed (logs kept runner-local)'
+            exit 1
+          fi
+          test -x upstream/out/recomp/scan
+          test -x upstream/out/recomp/bbrecomp
+          test -s upstream/deps/include/zydis/Zydis.h || test -d upstream/deps/include
+      - name: Make verified private-use package with NO original game
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/verified"
+          # Include public source checkout and its original shallow .git so
+          # V204's pinned HEAD and V203's source-anchor checks still work.
+          # Do not include large build scratch or unrelated caches.
+          test ! -e upstream/eboot.bin
+          test ! -e upstream/eboot.bin-decrypted
+          test ! -e upstream/out/eboot.elf
+          git -C upstream diff --check
+          find upstream -type f \( -name 'eboot.bin*' -o -name 'CUSA03173*' \) -print -quit | grep -q . && exit 1 || true
+          tar -C upstream --exclude=out/eboot.elf --exclude='*.log' \
+            -czf "$RUNNER_TEMP/verified/public-pinned-tools.tar.gz" .
+          sha256sum "$RUNNER_TEMP/verified/public-pinned-tools.tar.gz" \
+            > "$RUNNER_TEMP/verified/public-pinned-tools.tar.gz.sha256"
+          test "$(stat -c %s "$RUNNER_TEMP/verified/public-pinned-tools.tar.gz")" -lt 536870912
+          echo SHYT_NATIVE_V213_PINNED_PUBLIC_TOOLCHAIN_ONLY_PACKAGE_PASS
+      - name: Publish public compiler-only bundle, no retail bytes
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-v213-pinned-public-linux-toolchain-no-game
+          path: ${{ runner.temp }}/verified/
+          if-no-files-found: error
+          retention-days: 7

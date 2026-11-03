@@ -1,0 +1,42 @@
+name: Native V228 pinned Windows guest arena lifetime
+on:
+  push:
+    branches: [feature/native-bulk-9955-fde-aot-v193-20261101]
+    paths:
+      - '.github/workflows/native-v228-pinned-guest-arena.yml'
+      - 'native/source-port/recomp-v194/native_guest_arena_v228.c'
+      - 'native/source-port/recomp-v194/native_guest_arena_v228.h'
+      - 'native/source-port/recomp-v194/test_native_guest_arena_v228.c'
+      - 'native/source-port/recomp-v194/native_guest_memory_v227.c'
+      - 'native/source-port/recomp-v194/native_guest_memory_v227.h'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-win64-owned-allocation-lifetime:
+    runs-on: windows-2022
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Win32 pinned guest allocator, concurrent VirtualFree and page protection test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = 'native/source-port/recomp-v194'
+          $exe = Join-Path $env:RUNNER_TEMP 'shyt-v228-native-arena-test.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$src/native_guest_memory_v227.c" `
+            "$src/native_guest_arena_v228.c" `
+            "$src/test_native_guest_arena_v228.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Win64 native allocator compile failed' }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'Win64 pinned guest allocation lifetime test failed' }
+          'SHYT_V228_REAL_WINDOWS_PINNED_ALLOCATOR_LIFETIME_PASS'
+      - name: No original game required by allocator
+        shell: pwsh
+        run: |
+          $original = Get-ChildItem -Path native/source-port/recomp-v194 -Filter eboot.bin-decrypted -ErrorAction SilentlyContinue
+          if ($original) { throw 'Unexpected private game in public workflow' }
+          'SHYT_V228_PUBLIC_ONLY_ENGINE_COMPONENT_PASS'
