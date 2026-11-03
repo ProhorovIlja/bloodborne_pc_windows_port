@@ -105,6 +105,36 @@ jobs:
           path: ${{ runner.temp }}/shyt-brief-diagnosis.txt
           retention-days: 3
           if-no-files-found: ignore
+      - name: Stage reproducible custom Windows CI binary inventory (no game input)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-v10-modified
+          cp pinned-bbhost/build-win/bbhost.exe ci-v10-modified/bbhost.exe
+          cp pinned-bbhost/build-win/plugins/shyt_bbhost_probe.dll ci-v10-modified/shyt_bbhost_probe.dll
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path("ci-v10-modified")
+          data={
+              "kind":"SHYT_V10_MODIFIED_BBHOST_WINDOWS_CI",
+              "upstream_commit":"b0098e04b889e2e70b4af84be1ce809d7af3ff95",
+              "source_commit":os.environ["GITHUB_SHA"],
+              "workflow_run_id":int(os.environ["GITHUB_RUN_ID"]),
+              "host_sha256":hashlib.sha256((root/"bbhost.exe").read_bytes()).hexdigest(),
+              "plugin_sha256":hashlib.sha256((root/"shyt_bbhost_probe.dll").read_bytes()).hexdigest()
+          }
+          (root/"shyt-modified-build-v10.json").write_text(
+              json.dumps(data,sort_keys=True,indent=2)+"\n")
+          print("SHYT_V10_MODIFIED_GAME_FREE_WINDOWS_BINARY_SHA256_INVENTORY_PASS")
+          PY
+      - name: Upload source-attributed modified engine + DLL for BLauncher integration
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V10-CI-MODIFIED-WINDOWS-HOST-AND-PLUGIN
+          path: ci-v10-modified/
+          retention-days: 7
+          if-no-files-found: error
       - name: Upload strictly experimental Windows binaries
         uses: actions/upload-artifact@v4
         with:
@@ -112,5 +142,86 @@ jobs:
           path: |
             pinned-bbhost/build-win/bbhost.exe
             pinned-bbhost/build-win/plugins/shyt_bbhost_probe.dll
+          retention-days: 7
+          if-no-files-found: error
+
+  modified-bbhost-plus-yt-windows-gui:
+    needs: windows-cross
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: SHYT-V10-CI-MODIFIED-WINDOWS-HOST-AND-PLUGIN
+          path: modified-asset-input
+      - name: Verify artifact belongs to this exact successful Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s modified-asset-input/bbhost.exe
+          test -s modified-asset-input/shyt_bbhost_probe.dll
+          test -s modified-asset-input/shyt-modified-build-v10.json
+          python bbhost-track/test_modded_bbhost_assembler_v10.py
+      - name: Rebuild original Yharnam Together 1.3.1 GUI with BBHost selector
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_yt_bbhost_launcher_v6.py --upstream-checkout pinned-yt --mode check
+          python bbhost-track/apply_yt_bbhost_launcher_v6.py --upstream-checkout pinned-yt --mode apply
+          python bbhost-track/test_shyt_yt_bbhost_launcher_v6.py
+          python -m pip install --disable-pip-version-check --quiet pyinstaller==6.22.3 pillow truststore pynacl
+          python -m PyInstaller --noconfirm --clean --log-level WARN --windowed --noupx --name BLauncher --distpath candidate-dist --workpath candidate-build --specpath candidate-build --paths pinned-yt/bbport/scripts --paths pinned-yt/bbport/tools --hidden-import fetch_fsr4vk --hidden-import bbport_icons --hidden-import truststore --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox --runtime-hook pinned-yt/bbport/packaging/windows/tk_runtime_hook.py pinned-yt/bbport/launcher/bbport_launcher_win.py
+          python -c "from pathlib import Path; p=Path('candidate-dist/BLauncher/BLauncher.exe'); assert p.is_file() and p.stat().st_size>100000 and p.open('rb').read(2)==b'MZ'"
+      - name: Verify official signed dependencies, THEN overlay exact CI-modified engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p signed-asset-input
+          origin=https://github.com/droogie/bbhost/releases/download/v0.2.24
+          for asset in SHA256SUMS SHA256SUMS.sig bbhost-win-v0.2.24.zip; do
+            curl --retry 3 --connect-timeout 12 --max-time 200 --max-filesize 80000000 -fLsS \
+              "$origin/$asset" -o "signed-asset-input/$asset"
+          done
+          python bbhost-track/assemble_verified_upstream_bbhost_v7.py \
+            --upstream-archive signed-asset-input/bbhost-win-v0.2.24.zip \
+            --sha256sums signed-asset-input/SHA256SUMS \
+            --signature signed-asset-input/SHA256SUMS.sig \
+            --launcher-folder candidate-dist/BLauncher
+          python bbhost-track/assemble_modded_bbhost_v10.py \
+            --launcher-folder candidate-dist/BLauncher \
+            --modified-artifact modified-asset-input \
+            --source-commit "${{ github.sha }}"
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path("candidate-dist/BLauncher")
+          info=json.loads((root/"bbhost/SHYT-V10-UNSIGNED-BUILD.json").read_text())
+          files={"host_sha256":root/"bbhost/bbhost.exe",
+                 "plugin_sha256":root/"bbhost/plugins/shyt_bbhost_probe.dll"}
+          for key,file in files.items():
+              assert hashlib.sha256(file.read_bytes()).hexdigest()==info[key]
+          assert (root/"BLauncher.exe").is_file()
+          assert "NOT SIGNED" in (root/"bbhost/SHYT-EXPERIMENTAL.txt").read_text()
+          print("SHYT_V10_REAL_MODIFIED_UNSIGNED_BBHOST_PLUS_YT_GUI_BUNDLE_INTEGRITY_PASS")
+          PY
+      - name: Upload game-free experimental YT GUI plus CUSTOM BBHost Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V10-YT-GUI-PLUS-CUSTOM-BBHOST-WIN64-UNSIGNED-EXPERIMENTAL
+          path: candidate-dist/BLauncher/
           retention-days: 7
           if-no-files-found: error
