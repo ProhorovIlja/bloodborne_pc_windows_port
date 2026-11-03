@@ -6,6 +6,7 @@ on:
       - '.github/workflows/native-v212-original-preflight.yml'
       - 'native/source-port/recomp-v194/private_original_preflight_v212.py'
       - 'native/source-port/recomp-v194/prepare_private_full_game_v204.py'
+      - 'native/source-port/recomp-v194/test_private_original_attestation_v335.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,6 +22,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Verify real-game version admission propagation with synthetic-only inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile native/source-port/recomp-v194/test_private_original_attestation_v335.py
+          python native/source-port/recomp-v194/test_private_original_attestation_v335.py
       - name: Synthetic-only PS4 ELF header and fail-closed source checks
         shell: bash
         run: |
