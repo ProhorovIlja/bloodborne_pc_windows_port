@@ -15,6 +15,10 @@ import subprocess
 
 UPSTREAM="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
 YT_UPSTREAM="5d2305ee611ef1e03be39ff925f0da75c9a70393"
+YT_NET_BLOBS={
+    "emulator/src/core/libraries/network/net_link.h":"7f56fd1a5215eddb9edd9f13c91b216c16bc1651",
+    "emulator/src/common/types.h":"c2b7bd35ea2767287a80b84dc756394c72a7af03"
+}
 YT_CRYPTO_BLOBS={
     "coop/coop_types.h":"457f7c7126868d81052fb492dea772ffbf6a18b1",
     "coop/link_auth.h":"589b823ae0733e9104fcc0140726c8080ade20db",
@@ -40,9 +44,11 @@ add_library(bb_plugin_shyt MODULE
   plugins/shyt_probe/shyt_bbhost_probe_v1.c
   plugins/shyt_probe/shyt_yt_game_frame_v362.c
   plugins/shyt_probe/shyt_yt_shlk_client_v401.cpp
+  plugins/shyt_probe/shyt_yt_link_wire_v403.cpp
   plugins/shyt_probe/yt_original/coop/link_crypto.cpp)
 target_include_directories(bb_plugin_shyt PRIVATE
-  include plugins/shyt_probe/yt_original)
+  include plugins/shyt_probe/yt_original
+  plugins/shyt_probe/yt_original/emu)
 # Match upstream's real C++ Windows plugin runtime packaging. Do not ship
 # a custom DLL that secretly depends on a missing MinGW libstdc++ DLL.
 if(WIN32)
@@ -76,6 +82,12 @@ def main()->None:
             git(yt,"rev-parse","HEAD:server/"+file)!=expected_blob or
             git(yt,"hash-object","server/"+file)!=expected_blob):
             raise ValueError("original YT crypto source pin drift")
+    for file,expected_blob in YT_NET_BLOBS.items():
+        item=yt/file
+        if (not item.is_file() or item.is_symlink() or
+            git(yt,"rev-parse","HEAD:"+file)!=expected_blob or
+            git(yt,"hash-object",file)!=expected_blob):
+            raise ValueError("original YT outer link source pin drift")
     if git(root,"rev-parse","HEAD")!=UPSTREAM:
         raise ValueError("unverified BBHost release")
     cmake=root/"CMakeLists.txt"
@@ -89,6 +101,8 @@ def main()->None:
     yt_codec_source=Path(__file__).resolve().parent/"shyt_yt_game_frame_v362.c"
     yt_shlk_source=Path(__file__).resolve().parent/"shyt_yt_shlk_client_v401.cpp"
     yt_shlk_header=Path(__file__).resolve().parent/"shyt_yt_shlk_client_v401.h"
+    yt_wire_source=Path(__file__).resolve().parent/"shyt_yt_link_wire_v403.cpp"
+    yt_wire_header=Path(__file__).resolve().parent/"shyt_yt_link_wire_v403.h"
     if (cmake.is_symlink() or not cmake.is_file() or
         git(root,"rev-parse","HEAD:CMakeLists.txt")!=CMAKE_BLOB or
         git(root,"hash-object","CMakeLists.txt")!=CMAKE_BLOB or
@@ -100,6 +114,8 @@ def main()->None:
         not yt_codec_source.is_file() or yt_codec_source.is_symlink() or
         not yt_shlk_source.is_file() or yt_shlk_source.is_symlink() or
         not yt_shlk_header.is_file() or yt_shlk_header.is_symlink() or
+        not yt_wire_source.is_file() or yt_wire_source.is_symlink() or
+        not yt_wire_header.is_file() or yt_wire_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
         raise ValueError("CMake or plugin input not clean and source pinned")
     original=cmake.read_text(encoding="utf-8")
@@ -115,12 +131,20 @@ def main()->None:
         shutil.copyfile(yt_codec_source,plugin_root/yt_codec_source.name)
         shutil.copyfile(yt_shlk_source,plugin_root/yt_shlk_source.name)
         shutil.copyfile(yt_shlk_header,plugin_root/yt_shlk_header.name)
+        shutil.copyfile(yt_wire_source,plugin_root/yt_wire_source.name)
+        shutil.copyfile(yt_wire_header,plugin_root/yt_wire_header.name)
         vendored=plugin_root/"yt_original"/"coop"
         (vendored/"monocypher").mkdir(parents=True)
         for file in YT_CRYPTO_BLOBS:
             original_src=yt/"server"/file
             copy_dest=plugin_root/"yt_original"/file
             shutil.copyfile(original_src,copy_dest)
+        emu_root=plugin_root/"yt_original"/"emu"
+        for file in YT_NET_BLOBS:
+            relative=Path(file).relative_to("emulator/src")
+            copy_dest=emu_root/relative
+            copy_dest.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(yt/file,copy_dest)
         updated=original.replace(CMAKE_ANCHOR,CMAKE_ANCHOR+CMAKE_APPEND)
         updated=updated.replace(PACKAGE_ANCHOR,
                                 PACKAGE_ANCHOR+" bb_plugin_shyt")
