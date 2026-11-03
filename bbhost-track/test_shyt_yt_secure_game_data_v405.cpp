@@ -86,7 +86,13 @@ int main() {
               wire.data(),wire.size(),&n) || n<24u+15u+4u)
             return fail_case_v405(8);
         const auto sealed=std::vector<uint8_t>(wire.begin(),wire.begin()+n);
-        if(std::equal(p2p.begin(),p2p.end(),sealed.begin()))return fail_case_v405(9);
+        // SHLK's outer 4-byte signaling vport header is the SAME as
+        // the guest P2P header. Compare complete original YT Data
+        // PLAINTEXT against ciphertext, never the first 4 bytes alone.
+        const auto original_plain=YT::EncodeData(sender_addr,sender_port,p2p);
+        if(sealed.size()!=original_plain.size()+LinkAuth::TrailerBytes ||
+           std::equal(original_plain.begin(),original_plain.end(),sealed.begin()))
+            return fail_case_v405(9);
         auto server_open=sealed;
         if(answer.session.Open(server_open)!=LinkAuth::Session::Verdict::Ok)
             return fail_case_v405(10);
