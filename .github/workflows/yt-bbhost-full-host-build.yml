@@ -5,6 +5,11 @@ on:
     paths:
       - '.github/workflows/yt-bbhost-full-host-build.yml'
       - 'bbhost-track/shyt_bbhost_probe_v1.c'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.cpp'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.h'
+      - 'bbhost-track/shyt_yt_game_frame_v362.c'
+      - 'bbhost-track/shyt_yt_game_frame_v362.h'
+      - 'bbhost-track/shyt_yt_packet_routes_v358.h'
       - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
       - 'bbhost-track/apply_bbhost_os_stun_v2.py'
       - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
@@ -32,12 +37,19 @@ jobs:
           path: pinned-bbhost
           persist-credentials: false
           submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
       - name: Integrate actual SHYT plugin and OS-entropy STUN into original source
         shell: bash
         run: |
           set -euo pipefail
-          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode check
-          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode apply
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
           python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
