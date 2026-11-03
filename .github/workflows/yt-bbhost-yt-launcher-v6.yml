@@ -7,6 +7,8 @@ on:
       - 'bbhost-track/shyt_yt_bbhost_launcher_v6.py'
       - 'bbhost-track/test_shyt_yt_bbhost_launcher_v6.py'
       - 'bbhost-track/apply_yt_bbhost_launcher_v6.py'
+      - 'bbhost-track/assemble_verified_upstream_bbhost_v7.py'
+      - 'bbhost-track/test_signed_bbhost_assembler_v7.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -69,10 +71,29 @@ jobs:
           PY
           python -c "from pathlib import Path; import subprocess; exe=Path('candidate-dist/BLauncher/BLauncher.exe').resolve(); fixture=Path('yt-bbhost-v6-smoke.py').resolve(); result=Path('yt-bbhost-v6.pass').resolve(); p=subprocess.run([str(exe),'--script',str(fixture),str(result)],capture_output=True,timeout=40); assert p.returncode==0 and result.read_text()=='SHYT_V6_REAL_WINDOWS_LAUNCHER_EXECUTED'"
           echo SHYT_V6_REAL_YT_BBHOST_WINDOWS_EXECUTION_PASS
+      - name: Verify and assemble signed upstream BBHost Windows client alongside YT GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet pynacl
+          python bbhost-track/test_signed_bbhost_assembler_v7.py
+          mkdir -p signed-asset-input
+          origin=https://github.com/droogie/bbhost/releases/download/v0.2.24
+          for asset in SHA256SUMS SHA256SUMS.sig bbhost-win-v0.2.24.zip; do
+            curl --retry 3 --connect-timeout 12 --max-time 200 --max-filesize 80000000 -fLsS \
+              "$origin/$asset" -o "signed-asset-input/$asset"
+          done
+          python bbhost-track/assemble_verified_upstream_bbhost_v7.py \
+            --upstream-archive signed-asset-input/bbhost-win-v0.2.24.zip \
+            --sha256sums signed-asset-input/SHA256SUMS \
+            --signature signed-asset-input/SHA256SUMS.sig \
+            --launcher-folder candidate-dist/BLauncher
+          python -c "from pathlib import Path; root=Path('candidate-dist/BLauncher'); p=root/'bbhost'/'bbhost.exe'; assert p.is_file() and p.stat().st_size>65536 and p.open('rb').read(2)==b'MZ' and (root/'BLauncher.exe').is_file()"
+          echo SHYT_V7_ORIGINAL_YT_GUI_PLUS_SIGNED_BBHOST_WINDOWS_RUNTIME_READY_NO_GAME_ASSETS
       - name: Upload unsigned launcher-only evaluation package
         uses: actions/upload-artifact@v4
         with:
-          name: SHYT-V6-YT-GUI-BBHost-Windows-launcher-only-EXPERIMENTAL
+          name: SHYT-V7-YT-Launcher-plus-SIGNED-BBHost-Windows-EXPERIMENTAL
           path: candidate-dist/BLauncher/
           retention-days: 7
           if-no-files-found: error
