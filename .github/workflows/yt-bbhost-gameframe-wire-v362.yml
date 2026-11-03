@@ -1,0 +1,89 @@
+name: BBHost V362 exact original YT GameFrame wire codec compatibility
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-gameframe-wire-v362.yml'
+      - 'bbhost-track/shyt_yt_game_frame_v362.*'
+      - 'bbhost-track/test_yt_game_frame_interop_v362.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-yt-game-link-vs-bbhost-c-codec:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: original-yt
+          persist-credentials: false
+      - name: Pin EXACT original YT 1.3.1 GameFrame encoder and decoder
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test "$(git -C original-yt rev-parse HEAD:server/coop/game_link.h)" = 5029581251bfe5decf562c19a10bdd079150cdad
+          grep -Fq 'constexpr u8 GamePacketsType = 0x40;' original-yt/server/coop/game_link.h
+      - name: Compile actual portable C codec plus original C++ YT and execute 768 byte-level round trips
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Windows ]; then
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+                 /nologo /TC /std:c11 /W4 /WX /O2 \
+                 /Ibbhost-track \
+                 bbhost-track/shyt_yt_game_frame_v362.c \
+                 /Fo:./shyt-yt-codec-v362.obj >v362-compile.log 2>&1; then
+              tail -n 6 v362-compile.log | cut -c1-160 >v362-brief.txt
+              exit 1
+            fi
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+                 /nologo /TP /std:c++20 /EHsc /W4 /WX /O2 \
+                 -Wno-missing-field-initializers \
+                 /Ibbhost-track /Ioriginal-yt/server \
+                 bbhost-track/test_yt_game_frame_interop_v362.cpp \
+                 shyt-yt-codec-v362.obj \
+                 /Fe:./shyt-v362-yt-gameframe.exe >>v362-compile.log 2>&1; then
+              tail -n 6 v362-compile.log | cut -c1-160 >v362-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-v362-yt-gameframe.exe >v362-run.log 2>&1; then
+              tail -n 6 v362-run.log | cut -c1-160 >v362-brief.txt
+              exit 1
+            fi
+            cat v362-run.log
+          else
+            if ! (clang -std=c11 -O2 -Wall -Wextra -Werror -Ibbhost-track \
+                   -c bbhost-track/shyt_yt_game_frame_v362.c -o v362-codec.o &&
+                 clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+                   -Ibbhost-track -Ioriginal-yt/server \
+                   bbhost-track/test_yt_game_frame_interop_v362.cpp v362-codec.o \
+                   -o shyt-v362-yt-gameframe) >v362-compile.log 2>&1; then
+              tail -n 6 v362-compile.log | cut -c1-160 >v362-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-v362-yt-gameframe >v362-run.log 2>&1; then
+              tail -n 6 v362-run.log | cut -c1-160 >v362-brief.txt
+              exit 1
+            fi
+            cat v362-run.log
+          fi
+          echo SHYT_V362_ORIGINAL_YT_GAMEFRAME_LE_WIRE_FORMAT_BBHOST_C_PASS
+      - name: Upload only short public compiler/fictional-gameframe diagnostic
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BBHost-V362-YT-Wire-Error-6lines
+          path: v362-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore
