@@ -92,13 +92,28 @@ jobs:
             bbhost-track/test_yt_world_event_ledger_v4.c \
             -o "$RUNNER_TEMP/bbhost-world-ledger-v4"
           "$RUNNER_TEMP/bbhost-world-ledger-v4"
-      - name: Compile an ACTUAL bbhost .so and exercise real dlopen plugin lifecycle
+      - name: Compile an ACTUAL BBHost plugin with original YT SHLK4 crypto, run dlopen lifecycle
         shell: bash
         run: |
           set -euo pipefail
-          gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared \
-            -Ipinned-bbhost/include bbhost-track/shyt_bbhost_probe_v1.c \
-            bbhost-track/shyt_yt_game_frame_v362.c \
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/link_auth.h)" = 589b823ae0733e9104fcc0140726c8080ade20db
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/link_crypto.cpp)" = b91b3affaca7e2da0a357f1a747a90246b167b79
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/monocypher/monocypher.c)" = fe5bbdc8bde356ae80fe0b136d8c8e9212c15db8
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ipinned-bbhost/include -Ibbhost-track \
+            -c bbhost-track/shyt_bbhost_probe_v1.c -o "$RUNNER_TEMP/shyt-plugin.o"
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -c bbhost-track/shyt_yt_game_frame_v362.c \
+            -o "$RUNNER_TEMP/shyt-frame.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_shlk_client_v401.cpp \
+            -o "$RUNNER_TEMP/shyt-crypto-client.o"
+          g++ -std=c++20 -O2 -w -fPIC \
+            -Ipinned-yt/server -c pinned-yt/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-original-crypto.o"
+          g++ -shared "$RUNNER_TEMP/shyt-plugin.o" "$RUNNER_TEMP/shyt-frame.o" \
+            "$RUNNER_TEMP/shyt-crypto-client.o" "$RUNNER_TEMP/yt-original-crypto.o" \
             -o "$RUNNER_TEMP/shyt_bbhost_probe.so"
           gcc -std=c11 -O2 -Wall -Wextra -Werror \
             -Ipinned-bbhost/include bbhost-track/test_shyt_bbhost_probe_v1.c \
@@ -107,27 +122,41 @@ jobs:
           nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_init
           nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_image
           nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_game_frame_encode_v362
-          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_game_frame_decode_v362
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_shlk_new_v401
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_shlk_seal_v401
       - name: Install cross compiler for REAL Windows BBHost plugin DLL
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -qq -y gcc-mingw-w64-x86-64
-      - name: Cross compile original BBHost public ABI Windows plugin PE DLL
+          sudo apt-get install -qq -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+      - name: Cross compile original BBHost public ABI Windows DLL WITH original YT crypto
         shell: bash
         run: |
           set -euo pipefail
-          x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -shared \
-            -Ipinned-bbhost/include bbhost-track/shyt_bbhost_probe_v1.c \
-            bbhost-track/shyt_yt_game_frame_v362.c \
+          x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ipinned-bbhost/include -Ibbhost-track \
+            -c bbhost-track/shyt_bbhost_probe_v1.c -o "$RUNNER_TEMP/shyt-plugin-win.o"
+          x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -c bbhost-track/shyt_yt_game_frame_v362.c \
+            -o "$RUNNER_TEMP/shyt-frame-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_shlk_client_v401.cpp \
+            -o "$RUNNER_TEMP/shyt-crypto-client-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -w -Ipinned-yt/server \
+            -c pinned-yt/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-original-crypto-win.o"
+          x86_64-w64-mingw32-g++ -shared \
+            "$RUNNER_TEMP/shyt-plugin-win.o" "$RUNNER_TEMP/shyt-frame-win.o" \
+            "$RUNNER_TEMP/shyt-crypto-client-win.o" "$RUNNER_TEMP/yt-original-crypto-win.o" \
             -o "$RUNNER_TEMP/shyt_bbhost_probe.dll"
           file "$RUNNER_TEMP/shyt_bbhost_probe.dll" | grep -Eq 'PE32\+.*DLL'
           x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" \
             | grep -q bb_plugin_image
           x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" \
             | grep -q bb_plugin_init
-          echo SHYT_BBHOST_V1_RELEASE_PINNED_REAL_WINDOWS_AND_LINUX_PLUGIN_BUILT_PASS
+          echo SHYT_BBHOST_V402_REAL_WINDOWS_LINUX_CRYPTOLINK_PLUGIN_BUILT_PASS
       - name: Preserve ONLY optional experimental DLL and SO, no original game
         uses: actions/upload-artifact@v4
         with:
