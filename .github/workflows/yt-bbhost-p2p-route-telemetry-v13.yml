@@ -1,0 +1,55 @@
+name: BBHost V13 source-pinned direct UDP vs relay framed transport audit
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-p2p-route-telemetry-v13.yml'
+      - 'bbhost-track/shyt_route_telemetry_v13.h'
+      - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
+      - 'bbhost-track/test_shyt_route_telemetry_v13.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-host-source-patch-and-native-counter-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: false
+      - name: Apply authentic hardened STUN + opt-in route audit to original BBHost net.cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
+          grep -Fq 'shyt_route_account_success_v13(shyt_relay_framed_v13,' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'if (shyt_relay_framed_v13)' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'SHYT_ROUTE_AUDIT' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
+          echo SHYT_V13_AUTHENTIC_BBHOST_NET_CPP_HOOKS_PINNED_PASS
+      - name: Test no-IP, no-payload counters with actual Windows/Linux C++ compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix=''
+          if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src \
+            bbhost-track/test_shyt_route_telemetry_v13.cpp \
+            -o "$RUNNER_TEMP/shyt-v13-route-test$suffix"
+          SHYT_ROUTE_AUDIT=0 "$RUNNER_TEMP/shyt-v13-route-test$suffix" disabled
+          SHYT_ROUTE_AUDIT=1 "$RUNNER_TEMP/shyt-v13-route-test$suffix" enabled
+          echo SHYT_V13_SOURCE_PINNED_OPTIN_P2P_ROUTE_COUNTERS_PASS
