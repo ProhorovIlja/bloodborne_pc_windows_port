@@ -6,6 +6,7 @@ on:
       - '.github/workflows/yt-bbhost-p2p-route-telemetry-v13.yml'
       - 'bbhost-track/shyt_route_telemetry_v13.h'
       - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
+      - 'bbhost-track/apply_bbhost_route_rx_v19.py'
       - 'bbhost-track/test_shyt_route_telemetry_v13.cpp'
   workflow_dispatch:
 permissions:
@@ -38,7 +39,11 @@ jobs:
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
           python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
           python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode apply
           grep -Fq 'shyt_route_account_success_v13(shyt_relay_framed_v13,' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'if (hdr) shyt_route_account_received_v19(shyt_rx_relay_v19, shyt_rx_wire_v19);' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'shyt_route_account_received_v19' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
           grep -Fq 'if (shyt_relay_framed_v13)' pinned-bbhost/src/hle/net.cpp
           grep -Fq 'SHYT_ROUTE_AUDIT' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
           echo SHYT_V13_AUTHENTIC_BBHOST_NET_CPP_HOOKS_PINNED_PASS
