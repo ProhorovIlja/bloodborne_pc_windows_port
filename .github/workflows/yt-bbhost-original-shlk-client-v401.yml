@@ -1,0 +1,94 @@
+name: SHYT V401 real BBHost C ABI to original YT SHLK4 crypto interop
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-original-shlk-client-v401.yml'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.*'
+      - 'bbhost-track/test_shyt_yt_shlk_client_v401.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-yt-server-to-bbhost-cryptographic-client:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - name: Verify original 1.3.1 crypto, source and Monocypher blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/link_auth.h)" = 589b823ae0733e9104fcc0140726c8080ade20db
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/link_crypto.cpp)" = b91b3affaca7e2da0a357f1a747a90246b167b79
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/monocypher/monocypher.c)" = fe5bbdc8bde356ae80fe0b136d8c8e9212c15db8
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/monocypher/monocypher.h)" = 291b8b9e6f9187e4df715227047c83ee88c95959
+      - name: Build original YT SHLK4 plus BBHost C ABI, exercise real encrypted client/server link
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Windows ]; then
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+                 /nologo /c /TP /std:c++20 /EHsc /O2 /W0 \
+                 /Ipinned-yt/server \
+                 pinned-yt/server/coop/link_crypto.cpp \
+                 /Fo:./v401-yt-original-crypto.obj >v401-build.log 2>&1; then
+              tail -n 5 v401-build.log | cut -c1-160 >v401-brief.txt
+              exit 1
+            fi
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+                 /nologo /TP /std:c++20 /EHsc /O2 /W4 /WX \
+                 -Wno-missing-field-initializers \
+                 /Ibbhost-track /Ipinned-yt/server \
+                 bbhost-track/shyt_yt_shlk_client_v401.cpp \
+                 bbhost-track/test_shyt_yt_shlk_client_v401.cpp \
+                 v401-yt-original-crypto.obj \
+                 /Fe:./v401-real-original-client.exe >>v401-build.log 2>&1; then
+              tail -n 5 v401-build.log | cut -c1-160 >v401-brief.txt
+              exit 1
+            fi
+            if ! ./v401-real-original-client.exe >v401-run.log 2>&1; then
+              tail -n 5 v401-run.log | cut -c1-160 >v401-brief.txt
+              exit 1
+            fi
+          else
+            if ! (clang++ -std=c++20 -O2 -w -Ipinned-yt/server \
+                  -c pinned-yt/server/coop/link_crypto.cpp -o v401-original.o &&
+                 clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
+                  -Wno-missing-field-initializers \
+                  -Ibbhost-track -Ipinned-yt/server \
+                  bbhost-track/shyt_yt_shlk_client_v401.cpp \
+                  bbhost-track/test_shyt_yt_shlk_client_v401.cpp \
+                  v401-original.o -o v401-real-original-client) >v401-build.log 2>&1; then
+              tail -n 5 v401-build.log | cut -c1-160 >v401-brief.txt
+              exit 1
+            fi
+            if ! ./v401-real-original-client >v401-run.log 2>&1; then
+              tail -n 5 v401-run.log | cut -c1-160 >v401-brief.txt
+              exit 1
+            fi
+          fi
+          cat v401-run.log
+          echo SHYT_V401_REAL_YT_ORIGINAL_ENCRYPTED_LINK_BBHOST_C_ABI_PASS
+      - name: Upload only bounded fictional-key build feedback
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V401-Crypto-CBridge-Diagnostic-5lines
+          path: v401-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore
