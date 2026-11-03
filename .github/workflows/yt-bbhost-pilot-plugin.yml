@@ -44,6 +44,28 @@ jobs:
         run: |
           set -euo pipefail
           python bbhost-track/test_owner_eboot_probe_v1.py
+      - name: Overlay hardened transaction IDs into original pinned BBHost STUN and HLE
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          grep -q 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
+          ! grep -q mt19937 pinned-bbhost/src/net/stun.cpp
+      - name: Run ACTUAL original BBHost STUN suite with OS entropy and fail-closed synthetic outage
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src \
+            pinned-bbhost/src/net/stun.cpp pinned-bbhost/tests/stun_test.cpp \
+            -o "$RUNNER_TEMP/bbhost-original-stun-v2"
+          "$RUNNER_TEMP/bbhost-original-stun-v2"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -DBBHOST_V2_TEST_ENTROPY_FAIL -Ipinned-bbhost/src \
+            pinned-bbhost/src/net/stun.cpp \
+            bbhost-track/test_bbhost_stun_entropy_failure_v2.cpp \
+            -o "$RUNNER_TEMP/bbhost-os-entropy-fail-v2"
+          "$RUNNER_TEMP/bbhost-os-entropy-fail-v2"
       - name: Compile an ACTUAL bbhost .so and exercise real dlopen plugin lifecycle
         shell: bash
         run: |
