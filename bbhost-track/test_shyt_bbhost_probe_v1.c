@@ -16,6 +16,8 @@ static int user_opted_in_packet_channels;
 static int acceptable_prologue;
 static int observed_hook_placements;
 static int observed_packet_cadence;
+static int observed_yt_policy_v21;
+static unsigned long long classified_policy_v21[4];
 static int observed_probe_reads;
 static int (*registered_packet_hook)(BbHookCtx*,void*);
 static int observed_register;
@@ -44,6 +46,13 @@ static void fake_log(const char *fmt, ...) {
         observed_load_invalidation++;
     if (strstr(line,"NetSync real outgoing channel observations="))
         observed_packet_cadence++;
+    if (strstr(line,"shyt-yt-policy-v21: outgoing observed")) {
+        observed_yt_policy_v21++;
+        assert(sscanf(line,
+          "shyt-yt-policy-v21: outgoing observed pass=%llu same-map=%llu ours=%llu drop=%llu",
+          &classified_policy_v21[0],&classified_policy_v21[1],
+          &classified_policy_v21[2],&classified_policy_v21[3])==4);
+    }
 }
 static const char *fake_config(const char *name) {
     if (strcmp(name,"shyt_bbhost_probe.capture_world_flags")==0)
@@ -206,10 +215,18 @@ int main(int argc,char **argv) {
     packet.arg[4]=128;
     assert(registered_packet_hook(&packet,0)==0);
     assert(packet.arg[0]==0x12345 && packet.arg[2]==6 && packet.arg[4]==128);
+    for (unsigned i=0;i<3;++i) {
+        static const uint64_t policies[]={0x10u,0x2Cu,0x27u};
+        packet.arg[2]=policies[i];
+        assert(registered_packet_hook(&packet,0)==0);
+    }
     packet.arg[2]=UINT64_C(0xffff);
     assert(registered_packet_hook(&packet,0)==0); /* invalid never forwarded */
     for(int i=0;i<600;++i)registered_frame(0);
     assert(observed_packet_cadence==1);
+    assert(observed_yt_policy_v21==1);
+    for (unsigned i=0;i<4;++i)
+        assert(classified_policy_v21[i]==1u);
     for(unsigned i=0;i<130;++i)
         registered_world_flag(100000u+i,i&1u,0);
     for(int i=0;i<600;++i)registered_frame(0);
