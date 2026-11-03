@@ -112,8 +112,14 @@ jobs:
           g++ -std=c++20 -O2 -w -fPIC \
             -Ipinned-yt/server -c pinned-yt/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-original-crypto.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+            -c bbhost-track/shyt_yt_link_wire_v403.cpp \
+            -o "$RUNNER_TEMP/shyt-outer-link.o"
           g++ -shared "$RUNNER_TEMP/shyt-plugin.o" "$RUNNER_TEMP/shyt-frame.o" \
             "$RUNNER_TEMP/shyt-crypto-client.o" "$RUNNER_TEMP/yt-original-crypto.o" \
+            "$RUNNER_TEMP/shyt-outer-link.o" \
             -o "$RUNNER_TEMP/shyt_bbhost_probe.so"
           gcc -std=c11 -O2 -Wall -Wextra -Werror \
             -Ipinned-bbhost/include bbhost-track/test_shyt_bbhost_probe_v1.c \
@@ -124,6 +130,7 @@ jobs:
           nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_game_frame_encode_v362
           nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_shlk_new_v401
           nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_shlk_seal_v401
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_link_encode_data_v403
       - name: Install cross compiler for REAL Windows BBHost plugin DLL
         shell: bash
         run: |
@@ -147,9 +154,15 @@ jobs:
           x86_64-w64-mingw32-g++ -std=c++20 -O2 -w -Ipinned-yt/server \
             -c pinned-yt/server/coop/link_crypto.cpp \
             -o "$RUNNER_TEMP/yt-original-crypto-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+            -c bbhost-track/shyt_yt_link_wire_v403.cpp \
+            -o "$RUNNER_TEMP/shyt-outer-link-win.o"
           x86_64-w64-mingw32-g++ -shared -static -static-libgcc -static-libstdc++ \
             "$RUNNER_TEMP/shyt-plugin-win.o" "$RUNNER_TEMP/shyt-frame-win.o" \
             "$RUNNER_TEMP/shyt-crypto-client-win.o" "$RUNNER_TEMP/yt-original-crypto-win.o" \
+            "$RUNNER_TEMP/shyt-outer-link-win.o" \
             -o "$RUNNER_TEMP/shyt_bbhost_probe.dll"
           file "$RUNNER_TEMP/shyt_bbhost_probe.dll" | grep -Eq 'PE32\+.*DLL'
           if x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" |
@@ -173,8 +186,12 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/link_auth.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/link_crypto.cpp
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/monocypher/monocypher.c
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/emu/common/types.h
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/emu/core/libraries/network/net_link.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_link_wire_v403.cpp
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_shlk_client_v401.cpp
           grep -Fq 'plugins/shyt_probe/yt_original/coop/link_crypto.cpp' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'plugins/shyt_probe/shyt_yt_link_wire_v403.cpp' pinned-bbhost/CMakeLists.txt
           grep -Fq 'bb_plugin_shyt PRIVATE' pinned-bbhost/CMakeLists.txt
           grep -Fq -- '-static-libstdc++' pinned-bbhost/CMakeLists.txt
           echo SHYT_V402_PINNED_ORIGINAL_YT_CRYPTO_INCLUDED_IN_ACTUAL_BBHOST_PLUGIN_BUILD_GRAPH
