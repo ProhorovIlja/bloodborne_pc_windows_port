@@ -144,6 +144,29 @@ int main() {
        work || !std::equal(cookie.begin(),cookie.end(),said_cookie) ||
        !std::equal(pub.begin(),pub.end(),said_pub))
         return failed(17);
+    // V411 regression: a forged packet is ALREADY queued before a
+    // genuine server response. One receive call must skip the spoof
+    // and deliver the genuine packet, without waiting for another frame.
+    const test_fd noisy=socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);
+    if(noisy==bad_fd)return failed(19);
+    if(sendto(noisy,reinterpret_cast<const char*>(first.data()),
+              static_cast<int>(first.size()),0,
+              reinterpret_cast<const sockaddr*>(&loopback),sizeof(loopback))
+           !=static_cast<int>(first.size()))
+        return failed(20);
+    if(sendto(server,reinterpret_cast<const char*>(original_cookie.data()),
+              static_cast<int>(original_cookie.size()),0,
+              reinterpret_cast<const sockaddr*>(&loopback),sizeof(loopback))
+           !=static_cast<int>(original_cookie.size()))
+        return failed(21);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    got=0;
+    if(shyt_yt_udp_receive_server_v406(
+           client,incoming.data(),incoming.size(),&got)!=1 ||
+       got!=original_cookie.size() ||
+       !std::equal(original_cookie.begin(),original_cookie.end(),incoming.begin()))
+        return failed(22);
+    close_test_socket(noisy);
     // Socket returns UNAUTHENTICATED SHLK; the caller has to verify a
     // pinned server key and the Noise NK tag before game delivery.
     if(shyt_yt_udp_receive_server_v406(client,incoming.data(),incoming.size(),&got)!=0)
