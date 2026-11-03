@@ -47,7 +47,9 @@ jobs:
           test "$(git -C pinned-bbhost rev-parse HEAD)" = b0098e04b889e2e70b4af84be1ce809d7af3ff95
           mkdir -p pinned-bbhost/build-ci
           if ! (cd pinned-bbhost && tools/ci_build.sh) >"$RUNNER_TEMP/shyt-bbhost-full-build.log" 2>&1; then
-            grep -E 'CMake Error:|fatal error:|error:|FAILED:|Failed|failed' "$RUNNER_TEMP/shyt-bbhost-full-build.log" | tail -10 | cut -c1-180 || true
+            echo "BBHost real build failed; only bounded redacted public dependency diagnosis follows:"
+            (grep -E 'CMake Error:|fatal error:|error:|FAILED:|Failed|failed|curl:|404|403' "$RUNNER_TEMP/shyt-bbhost-full-build.log" | tail -8 | cut -c1-160 || true)
+            tail -8 "$RUNNER_TEMP/shyt-bbhost-full-build.log" | cut -c1-160
             exit 1
           fi
           test -x pinned-bbhost/build-ci/build/bbhost
