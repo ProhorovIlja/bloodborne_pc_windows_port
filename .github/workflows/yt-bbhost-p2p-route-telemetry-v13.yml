@@ -72,6 +72,23 @@ jobs:
             exit 1
           fi
           echo SHYT_V13_SOURCE_PINNED_OPTIN_P2P_ROUTE_COUNTERS_PASS
+      - name: Save ONLY 4 lines of fictional C++ compilation error
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > shyt-v13-4-line-error.txt
+          if [ -f shyt-v13-build.log ]; then
+            tail -n 4 shyt-v13-build.log | cut -c1-160 > shyt-v13-4-line-error.txt
+          fi
+      - name: Upload <=640 bytes of game-free compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V13-BOUNDED-WINDOWS-CPP-DIAGNOSTIC
+          path: shyt-v13-4-line-error.txt
+          retention-days: 3
+          if-no-files-found: ignore
       - name: Report bounded, game-free failure to Draft PR for diagnosis
         if: failure()
         shell: bash
