@@ -48,7 +48,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! (cd public-bbcpu && CC=clang ./build.sh) > "$RUNNER_TEMP/bbcpu-v347.log" 2>&1; then
+          if ! (cd public-bbcpu && CC=clang bash ./build.sh) > "$RUNNER_TEMP/bbcpu-v347.log" 2>&1; then
             echo 'Pinned PUBLIC split bbcpu dependency compile failed:'
             (grep -E 'error:|CMake Error|FAILED:|fatal error|failed' "$RUNNER_TEMP/bbcpu-v347.log" | tail -n 4 || true;
              tail -n 3 "$RUNNER_TEMP/bbcpu-v347.log") | cut -c1-160 | tail -n 6 > split-bbcpu-v347-brief.txt
