@@ -43,6 +43,12 @@ add_library(bb_plugin_shyt MODULE
   plugins/shyt_probe/yt_original/coop/link_crypto.cpp)
 target_include_directories(bb_plugin_shyt PRIVATE
   include plugins/shyt_probe/yt_original)
+# Match upstream's real C++ Windows plugin runtime packaging. Do not ship
+# a custom DLL that secretly depends on a missing MinGW libstdc++ DLL.
+if(WIN32)
+  target_link_options(bb_plugin_shyt PRIVATE
+    -static -static-libgcc -static-libstdc++)
+endif()
 set_target_properties(bb_plugin_shyt PROPERTIES
   OUTPUT_NAME shyt_bbhost_probe PREFIX ""
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
