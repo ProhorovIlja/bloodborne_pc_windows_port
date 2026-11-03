@@ -20,10 +20,10 @@ def exercise(fake_matching_input: bool, drift: bool = False) -> None:
         base = Path(tmp)
         source = base / "synthetic.elf"
         # 1 MiB+ entirely invented image, enough for the size and magic fence.
-        source.write_bytes(b"\\x7fELF" + b"x" * 1_099_996)
+        source.write_bytes(b"\x7fELF" + b"x" * 1_099_996)
         root = base / "fake-public-tools"
         (root / "annotations").mkdir(parents=True)
-        (root / "annotations/functions.tsv").write_text("synthetic\\n")
+        (root / "annotations/functions.tsv").write_text("synthetic\n")
         work = base / "private-output"
         expected = prep.ORIGINAL_109_SHA256
         ordinary = prep.sha(source)
@@ -49,11 +49,11 @@ def exercise(fake_matching_input: bool, drift: bool = False) -> None:
                 (work / "original.elf").write_bytes(b"synthetic extracted")
             elif stage == "function_scan":
                 (work / "scan/functions.tsv").write_text(
-                    "address\\tsize\\tinstructions\\tundecodable\\n"
-                    "0x1\\t2\\t1\\t0\\n")
+                    "address\tsize\tinstructions\tundecodable\n"
+                    "0x1\t2\t1\t0\n")
             elif stage == "generate_functions":
                 (work / "generated/recomp.c").write_text(
-                    "static const int synthetic = 1;\\n")
+                    "static const int synthetic = 1;\n")
 
         reg = {"functions_scanned": 1, "aot_functions_registered": 1,
                "functions_not_in_aot_table": 0}
