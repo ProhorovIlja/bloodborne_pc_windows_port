@@ -24,38 +24,54 @@ def read(path:Path,cap:int)->str:
         raise ValueError("invalid source-only channel policy input")
     return path.read_text(encoding="utf-8")
 
+def parse_switch(text:str, cls:str)->dict[str,set[int]]:
+    """Single-pass scanner: source comments/whitespace cannot induce regex backtracking."""
+    if cls=="yt":
+        targets={"SameMap":"SameMap","Ours":"Ours","Drop":"Drop"}
+        marker="return ChannelPolicy::"
+    else:
+        targets={"SAME_MAP":"SameMap","OURS":"Ours","DROP":"Drop"}
+        marker="return SHYT_YT_CHANNEL_"
+    mapping={"SameMap":set(),"Ours":set(),"Drop":set()}
+    pending:list[int]=[]
+    for line in text.splitlines():
+        # The original C++ uses one case per line; C shim has several.
+        pending.extend(int(t,16) for t in CASE.findall(line))
+        if marker not in line:
+            continue
+        for tag,bucket in targets.items():
+            suffix=("" if cls=="yt" else "_V21")
+            if marker+tag+suffix+";" in line:
+                if not pending:
+                    raise ValueError("channel cases missing before return")
+                mapping[bucket].update(pending)
+                pending=[]
+                break
+    if pending:
+        raise ValueError("unmapped YT native channel cases")
+    return mapping
+
 def groups(original:str,header:str):
     if "constexpr u32 NativeChannelCount = 0x44;" not in original:
         raise ValueError("native channel range drift")
     start=original.index("constexpr ChannelPolicy NativeChannelPolicy(u32 channel)")
     stop=original.index("constexpr std::string_view ChannelPolicyName(",start)
     source=original[start:stop]
-    start=header.index("shyt_yt_channel_policy_v21(uint32_t channel)")
-    stop=header.index("#endif",start)
-    derived=header[start:stop]
-    yt=[]
-    for name in TAGS:
-        match=re.search(r"((?:\s*case\s+0x[0-9A-Fa-f]+:[^\n]*\n)+)"
-                        r"\s*return ChannelPolicy::"+name+r"\s*;",source)
-        if not match:
-            raise ValueError("original YT channel policy structure drift")
-        yt.append({int(x,16) for x in CASE.findall(match.group(1))})
-    ours=[]
-    for name in TAGS.values():
-        match=re.search(r"((?:\s*case\s+0x[0-9A-Fa-f]+:\s*)+)"
-                        r"return SHYT_YT_CHANNEL_"+name+r"_V21\s*;",derived)
-        if not match:
-            raise ValueError("BBHost C policy mapping drift")
-        ours.append({int(x,16) for x in CASE.findall(match.group(1))})
-    if yt!=ours or sum(len(x) for x in yt)!=len(set.union(*yt)):
+    begin=header.index("switch(channel) {",header.index("shyt_yt_channel_policy_v21(uint32_t channel)"))
+    derived=header[begin:header.index("default:",begin)]
+    yt=parse_switch(source,"yt")
+    ours=parse_switch(derived,"c")
+    if yt!=ours:
         raise ValueError("BBHost and original YT native channel tables differ")
-    if any(c>=CHANNELS for group in yt for c in group):
-        raise ValueError("unrecognized YT channel outside native range")
+    every=[n for group in yt.values() for n in group]
+    if len(every)!=len(set(every)) or any(c>=CHANNELS for c in every):
+        raise ValueError("invalid duplicate or out-of-range channel")
     if ("default:" not in source or "return ChannelPolicy::Pass;" not in source or
-        "default:" not in derived or "return SHYT_YT_CHANNEL_PASS_V21;" not in derived):
-        raise ValueError("unknown original native channel default is not PASS")
-    if ("if(channel>=SHYT_YT_NATIVE_CHANNEL_COUNT_V21)" not in derived or
-        "return SHYT_YT_CHANNEL_DROP_V21;" not in derived):
+        "default:" not in header[begin:] or
+        "return SHYT_YT_CHANNEL_PASS_V21;" not in header[begin:]):
+        raise ValueError("unrecognized original native channel default")
+    if ("if(channel>=SHYT_YT_NATIVE_CHANNEL_COUNT_V21)" not in header or
+        "return SHYT_YT_CHANNEL_DROP_V21;" not in header):
         raise ValueError("out-of-range channels must be refused")
     return yt
 
