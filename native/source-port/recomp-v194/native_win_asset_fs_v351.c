@@ -173,17 +173,31 @@ int shyt_native_win_asset_stream_read_v352(
     memset(&operation,0,sizeof(operation));
     operation.Offset=(DWORD)offset;
     operation.OffsetHigh=(DWORD)(offset>>32);
+    /* V353: with concurrent OVERLAPPED reads on one native handle,
+     * waiting on the shared FILE HANDLE cannot identify one operation's
+     * completion. Win32 requires a separate manual-reset event per
+     * in-flight operation. Keep stack OVERLAPPED alive until completion;
+     * don't accidentally close it while kernel IO still owns the pointer.
+     */
+    operation.hEvent=CreateEventW(NULL,TRUE,FALSE,NULL);
+    if (!operation.hEvent) return 0;
     HANDLE h=(HANDLE)stream->native_handle;
     const BOOL started=ReadFile(h,out,take,NULL,&operation);
+    DWORD transferred=0;
     if (!started) {
         const DWORD error=GetLastError();
-        if (error==ERROR_HANDLE_EOF) return 1;
-        if (error!=ERROR_IO_PENDING) return 0;
+        if (error==ERROR_HANDLE_EOF) {
+            CloseHandle(operation.hEvent);
+            return 1;
+        }
+        if (error!=ERROR_IO_PENDING) {
+            CloseHandle(operation.hEvent);
+            return 0;
+        }
     }
-    DWORD transferred=0;
-    if (!GetOverlappedResult(h,&operation,&transferred,TRUE))
-        return 0;
-    if (transferred>take) return 0;
+    const BOOL finished=GetOverlappedResult(h,&operation,&transferred,TRUE);
+    CloseHandle(operation.hEvent);
+    if (!finished || transferred>take) return 0;
     *got=(size_t)transferred;
     return 1;
 }
