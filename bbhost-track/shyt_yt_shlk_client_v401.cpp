@@ -5,6 +5,7 @@
 // server/coop/link_crypto.cpp b91b3affaca7e2da0a357f1a747a90246b167b79
 // monocypher 4.0.3. NO sockets / remote endpoints / game code here.
 #include "shyt_yt_shlk_client_v401.h"
+#include "shyt_yt_signup_work_v409.h"
 #include "coop/link_auth.h"
 #include <algorithm>
 #include <array>
@@ -143,4 +144,46 @@ extern "C" int shyt_yt_shlk_seal_v401(
 extern "C" int shyt_yt_shlk_linked_v401(
     const ShytYtShlkClientV401 *link) {
     return link && link->original.Linked()?1:0;
+}
+
+/* V409: keep work challenge, pending Noise handshake, cookie and
+ * acknowledged work nonce inside the ORIGINAL YT LinkAuth::Client.
+ * Work validation uses the exact upstream SHA256(cookie, id, nonce). */
+extern "C" int shyt_yt_shlk_work_challenge_v409(
+    ShytYtShlkClientV401* link,int bits) {
+    if(!link || !link->explicitly_pinned ||
+       !link->original.HasCookie() || link->original.Linked() ||
+       bits<1 || bits>28 || bits>LinkAuth::MaxWorkBits)return 0;
+    try {
+        return link->original.WorkAsked(bits)?1:0;
+    }catch(...){return 0;}
+}
+extern "C" int shyt_yt_shlk_work_complete_v409(
+    ShytYtShlkClientV401* link,const uint8_t cookie[16],
+    const char* online_id,int bits,uint64_t nonce) {
+    if(!link || !cookie || !online_id || !link->explicitly_pinned ||
+       link->original.Linked() || !link->original.HasCookie() ||
+       !link->original.Working() ||
+       link->original.WorkBits()!=bits || bits<1 || bits>28)
+        return 0;
+    try {
+        LinkAuth::Cookie actual{};
+        std::copy_n(cookie,actual.size(),actual.begin());
+        if(actual!=link->original.CookieToEcho() ||
+           !LinkAuth::WorkDone(actual,online_id,nonce,bits))
+            return 0;
+        link->original.TakeWork(actual,bits,nonce);
+        return link->original.WorkToSend()==nonce?1:0;
+    }catch(...){return 0;}
+}
+extern "C" int shyt_yt_shlk_work_nonce_v409(
+    const ShytYtShlkClientV401* link,uint64_t* nonce) {
+    if(nonce)*nonce=0;
+    if(!link || !nonce || !link->original.HasCookie())return 0;
+    try {
+        const auto value=link->original.WorkToSend();
+        if(!value)return 0;
+        *nonce=*value;
+        return 1;
+    }catch(...){return 0;}
 }
