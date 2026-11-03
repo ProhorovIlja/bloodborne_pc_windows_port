@@ -10,6 +10,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  issues: write
 jobs:
   real-host-source-patch-and-native-counter-test:
     strategy:
@@ -41,15 +42,50 @@ jobs:
           grep -Fq 'if (shyt_relay_framed_v13)' pinned-bbhost/src/hle/net.cpp
           grep -Fq 'SHYT_ROUTE_AUDIT' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
           echo SHYT_V13_AUTHENTIC_BBHOST_NET_CPP_HOOKS_PINNED_PASS
-      - name: Test no-IP, no-payload counters with actual Windows/Linux C++ compiler
+      - name: Compile C++ route-accounting proof on Windows and Linux
         shell: bash
         run: |
           set -euo pipefail
           suffix=''
           if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
-          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src \
-            bbhost-track/test_shyt_route_telemetry_v13.cpp \
-            -o "./shyt-v13-route-test$suffix"
-          SHYT_ROUTE_AUDIT=0 "./shyt-v13-route-test$suffix" disabled
-          SHYT_ROUTE_AUDIT=1 "./shyt-v13-route-test$suffix" enabled
+          if ! clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src \
+               bbhost-track/test_shyt_route_telemetry_v13.cpp \
+               -o "./shyt-v13-route-test$suffix" >shyt-v13-build.log 2>&1; then
+            echo 'COMPILE FAILED (only last 4 synthetic-source lines):'
+            tail -n 4 shyt-v13-build.log | cut -c1-170
+            exit 1
+          fi
+      - name: Run no-IP/no-payload direct and relay counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix=''
+          if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
+          if ! SHYT_ROUTE_AUDIT=0 "./shyt-v13-route-test$suffix" disabled >shyt-v13-disabled.log 2>&1; then
+            echo 'DISABLED COUNTER FIXTURE FAILED'
+            tail -n 3 shyt-v13-disabled.log | cut -c1-170
+            exit 1
+          fi
+          if ! SHYT_ROUTE_AUDIT=1 "./shyt-v13-route-test$suffix" enabled >shyt-v13-enabled.log 2>&1; then
+            echo 'ENABLED COUNTER FIXTURE FAILED'
+            tail -n 3 shyt-v13-enabled.log | cut -c1-170
+            exit 1
+          fi
           echo SHYT_V13_SOURCE_PINNED_OPTIN_P2P_ROUTE_COUNTERS_PASS
+      - name: Report bounded, game-free failure to Draft PR for diagnosis
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          found='no local diagnostic'
+          for file in shyt-v13-build.log shyt-v13-disabled.log shyt-v13-enabled.log; do
+            if [ -f "$file" ]; then
+              found=$(tail -n 4 "$file" | cut -c1-160 | tr '\r' ' ' | tr -d '\000' )
+              if [ -n "$found" ]; then break; fi
+            fi
+          done
+          msg=$(printf 'V13 Windows/Linux synthetic route-counter check failed in Actions run %s (%s). Bounded compile/test diagnosis (no owner data):\n\`\`\`text\n%s\n\`\`\`' "$GITHUB_RUN_ID" "$RUNNER_OS" "$found")
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/86/comments" -f body="$msg" >/dev/null 2>&1 || true
+          printf '%s\n' "$found" | head -n 4 | cut -c1-160
