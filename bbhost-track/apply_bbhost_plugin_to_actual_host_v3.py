@@ -14,6 +14,14 @@ import shutil
 import subprocess
 
 UPSTREAM="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
+YT_UPSTREAM="5d2305ee611ef1e03be39ff925f0da75c9a70393"
+YT_CRYPTO_BLOBS={
+    "coop/coop_types.h":"457f7c7126868d81052fb492dea772ffbf6a18b1",
+    "coop/link_auth.h":"589b823ae0733e9104fcc0140726c8080ade20db",
+    "coop/link_crypto.cpp":"b91b3affaca7e2da0a357f1a747a90246b167b79",
+    "coop/monocypher/monocypher.c":"fe5bbdc8bde356ae80fe0b136d8c8e9212c15db8",
+    "coop/monocypher/monocypher.h":"291b8b9e6f9187e4df715227047c83ee88c95959"
+}
 CMAKE_BLOB="672a3c1c3b9264cf3cc34d4606b844e5cba87717"
 CMAKE_ANCHOR="""set_target_properties(bb_plugin_hello PROPERTIES OUTPUT_NAME hello PREFIX ""
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)"""
@@ -26,10 +34,15 @@ CMAKE_APPEND="""
 # SHYT V3: build an opt-in, source-only real BBHost plugin beside hello.
 # It performs no network injection or game writes and cannot load into
 # a host that doesn't expose the exact verified plugin API.
+# V401 adds real original YT SHLK4 session crypto as a dormant in-process
+# library; sockets, credentials, P2P and game hooks are NOT connected.
 add_library(bb_plugin_shyt MODULE
   plugins/shyt_probe/shyt_bbhost_probe_v1.c
-  plugins/shyt_probe/shyt_yt_game_frame_v362.c)
-target_include_directories(bb_plugin_shyt PRIVATE include)
+  plugins/shyt_probe/shyt_yt_game_frame_v362.c
+  plugins/shyt_probe/shyt_yt_shlk_client_v401.cpp
+  plugins/shyt_probe/yt_original/coop/link_crypto.cpp)
+target_include_directories(bb_plugin_shyt PRIVATE
+  include plugins/shyt_probe/yt_original)
 set_target_properties(bb_plugin_shyt PROPERTIES
   OUTPUT_NAME shyt_bbhost_probe PREFIX ""
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
@@ -44,9 +57,19 @@ def git(root:Path,*args:str)->str:
 def main()->None:
     p=argparse.ArgumentParser()
     p.add_argument("--upstream-checkout",required=True,type=Path)
+    p.add_argument("--original-yt-checkout",required=True,type=Path)
     p.add_argument("--mode",choices=("check","apply"),default="check")
     a=p.parse_args()
     root=a.upstream_checkout.resolve(strict=True)
+    yt=a.original_yt_checkout.resolve(strict=True)
+    if git(yt,"rev-parse","HEAD")!=YT_UPSTREAM:
+        raise ValueError("unverified original YT 1.3.1 source")
+    for file,expected_blob in YT_CRYPTO_BLOBS.items():
+        item=yt/"server"/file
+        if (not item.is_file() or item.is_symlink() or
+            git(yt,"rev-parse","HEAD:server/"+file)!=expected_blob or
+            git(yt,"hash-object","server/"+file)!=expected_blob):
+            raise ValueError("original YT crypto source pin drift")
     if git(root,"rev-parse","HEAD")!=UPSTREAM:
         raise ValueError("unverified BBHost release")
     cmake=root/"CMakeLists.txt"
@@ -58,6 +81,8 @@ def main()->None:
     yt_routes_header=Path(__file__).resolve().parent/"shyt_yt_packet_routes_v358.h"
     yt_codec_header=Path(__file__).resolve().parent/"shyt_yt_game_frame_v362.h"
     yt_codec_source=Path(__file__).resolve().parent/"shyt_yt_game_frame_v362.c"
+    yt_shlk_source=Path(__file__).resolve().parent/"shyt_yt_shlk_client_v401.cpp"
+    yt_shlk_header=Path(__file__).resolve().parent/"shyt_yt_shlk_client_v401.h"
     if (cmake.is_symlink() or not cmake.is_file() or
         git(root,"rev-parse","HEAD:CMakeLists.txt")!=CMAKE_BLOB or
         git(root,"hash-object","CMakeLists.txt")!=CMAKE_BLOB or
@@ -67,6 +92,8 @@ def main()->None:
         not yt_routes_header.is_file() or yt_routes_header.is_symlink() or
         not yt_codec_header.is_file() or yt_codec_header.is_symlink() or
         not yt_codec_source.is_file() or yt_codec_source.is_symlink() or
+        not yt_shlk_source.is_file() or yt_shlk_source.is_symlink() or
+        not yt_shlk_header.is_file() or yt_shlk_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
         raise ValueError("CMake or plugin input not clean and source pinned")
     original=cmake.read_text(encoding="utf-8")
@@ -80,6 +107,14 @@ def main()->None:
         shutil.copyfile(yt_routes_header,plugin_root/yt_routes_header.name)
         shutil.copyfile(yt_codec_header,plugin_root/yt_codec_header.name)
         shutil.copyfile(yt_codec_source,plugin_root/yt_codec_source.name)
+        shutil.copyfile(yt_shlk_source,plugin_root/yt_shlk_source.name)
+        shutil.copyfile(yt_shlk_header,plugin_root/yt_shlk_header.name)
+        vendored=plugin_root/"yt_original"/"coop"
+        (vendored/"monocypher").mkdir(parents=True)
+        for file in YT_CRYPTO_BLOBS:
+            original_src=yt/"server"/file
+            copy_dest=plugin_root/"yt_original"/file
+            shutil.copyfile(original_src,copy_dest)
         updated=original.replace(CMAKE_ANCHOR,CMAKE_ANCHOR+CMAKE_APPEND)
         updated=updated.replace(PACKAGE_ANCHOR,
                                 PACKAGE_ANCHOR+" bb_plugin_shyt")
