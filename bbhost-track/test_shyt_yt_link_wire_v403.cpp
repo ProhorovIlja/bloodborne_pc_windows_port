@@ -56,10 +56,17 @@ int main() {
            !std::equal(decoded_by_original->frame.begin(),
                        decoded_by_original->frame.end(),p2p.begin()))
             return 13;
+        // YT Data does not have a payload length field: trimming a
+        // datagram can still form a smaller valid Data. Instead require
+        // the complete frame to be rejected when destination is too small.
         if(shyt_yt_link_decode_data_v403(
-             a.data(),used-1,&read_addr,&read_port,
+             a.data(),used,&read_addr,&read_port,
              received.data(),p2p.size()-1,&got) || got)
             return 14;
+        if(shyt_yt_link_decode_data_v403(
+             a.data(),YT::DataHeaderSize+3u,&read_addr,&read_port,
+             received.data(),received.size(),&got) || got)
+            return 24;
         const auto native_ping=YT::Encode(YT::Kind::Ping,YT::Ping{seq,sent});
         if(!shyt_yt_link_encode_ping_v403(
               4,seq,sent,b.data(),b.size(),&got) ||
