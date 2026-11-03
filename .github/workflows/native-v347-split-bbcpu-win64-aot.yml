@@ -44,22 +44,45 @@ jobs:
           test "$(git -C public-bbcpu rev-parse HEAD:src/cpu/cpu_internal.h)" = bcbd422f92a84087a2e0c2d260ec64040f381540
           grep -Fq '#define BB_RECOMP_API_VERSION 4u' public-bbcpu/src/recomp/rc.h
           grep -Fq 'source tools/recomp/host.sh' public-recompiler/build.sh
-      - name: Build actual upstream Zydis dependencies and CPU runtime, no proprietary game
+      - name: Build pinned Zydis headers required by real split bbcpu RcApi (no runtime reimplementation)
         shell: bash
         run: |
           set -euo pipefail
-          if ! (cd public-bbcpu && CC=clang bash ./build.sh) > "$RUNNER_TEMP/bbcpu-v347.log" 2>&1; then
-            echo 'Pinned PUBLIC split bbcpu dependency compile failed:'
-            (grep -E 'error:|CMake Error|FAILED:|fatal error|failed' "$RUNNER_TEMP/bbcpu-v347.log" | tail -n 4 || true;
-             tail -n 3 "$RUNNER_TEMP/bbcpu-v347.log") | cut -c1-160 | tail -n 6 > split-bbcpu-v347-brief.txt
-            cat split-bbcpu-v347-brief.txt
+          # bbcpu's own build.sh compiles its interpreter on Linux even though
+          # BB_HAVE_BBCPU is normally Apple-only; its Linux fallback declarations
+          # clash with cpu.c. We deliberately build ONLY its pinned Zydis
+          # dependency and compile our own Windows AOT against original
+          # bbcpu headers. This does NOT claim a working Linux bbcpu runtime.
+          prefix="$PWD/public-bbcpu/deps"
+          mkdir -p "$prefix/build"
+          zydis="$prefix/build/zydis"
+          if ! (git clone -q --recursive https://github.com/zyantific/zydis.git "$zydis" &&
+                git -C "$zydis" checkout -q a2278f1d254e492f6a6b39f6cb5d1f5d515659dc &&
+                git -C "$zydis" submodule update -q --init --recursive) > "$RUNNER_TEMP/bbcpu-v347.log" 2>&1; then
+            tail -n 5 "$RUNNER_TEMP/bbcpu-v347.log" | cut -c1-160 > split-bbcpu-v347-brief.txt
             exit 1
           fi
-          test -s public-bbcpu/deps/include/Zydis/Zydis.h
-          test -s public-bbcpu/out/libbbcpu.a
-          test -x public-bbcpu/out/hello
-          public-bbcpu/out/hello
-          echo SHYT_V347_REAL_SPLIT_BBCPU_LIBRARY_PUBLIC_ABI_BUILT
+          test "$(git -C "$zydis" rev-parse HEAD)" = a2278f1d254e492f6a6b39f6cb5d1f5d515659dc
+          common=(-G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_INSTALL_PREFIX=$prefix"
+                  -DBUILD_SHARED_LIBS=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.10)
+          if ! (cmake -S "$zydis/dependencies/zycore" -B "$prefix/build/zycore-build" "${common[@]}" &&
+                cmake --build "$prefix/build/zycore-build" --parallel 2 &&
+                cmake --install "$prefix/build/zycore-build" &&
+                cmake -S "$zydis" -B "$prefix/build/zydis-build" "${common[@]}" \
+                  -DZYAN_SYSTEM_ZYCORE=ON "-DCMAKE_C_FLAGS=-I$prefix/include" \
+                  -DZYDIS_BUILD_TOOLS=OFF -DZYDIS_BUILD_EXAMPLES=OFF -DZYDIS_BUILD_DOXYGEN=OFF &&
+                cmake --build "$prefix/build/zydis-build" --parallel 2 &&
+                cmake --install "$prefix/build/zydis-build") > "$RUNNER_TEMP/bbcpu-v347.log" 2>&1; then
+            (grep -E 'error:|CMake Error|FAILED:|fatal error' "$RUNNER_TEMP/bbcpu-v347.log" | tail -n 3 || true;
+             tail -n 3 "$RUNNER_TEMP/bbcpu-v347.log") | cut -c1-160 | tail -n 6 > split-bbcpu-v347-brief.txt
+            exit 1
+          fi
+          test -s "$prefix/include/Zydis/Zydis.h"
+          test -s "$prefix/lib/libZydis.a"
+          printf '#include "recomp/rc.h"\n_Static_assert(BB_RECOMP_API_VERSION == 4u, "RcApi drift");\nint main(void){return 0;}\n' |
+            clang -std=c11 -Wall -Wextra -Werror -fsyntax-only -x c \
+              -Ipublic-bbcpu/src "-I$prefix/include" -
+          echo SHYT_V347_REAL_PINNED_SPLIT_BBCPU_HEADERS_AND_ZYDIS_COMPILED
       - name: Preserve only six short lines of public toolchain diagnosis
         if: failure()
         uses: actions/upload-artifact@v4
