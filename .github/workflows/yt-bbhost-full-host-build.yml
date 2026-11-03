@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/yt-bbhost-full-host-build.yml'
       - 'bbhost-track/shyt_bbhost_probe_v1.c'
+      - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
+      - 'bbhost-track/apply_bbhost_os_stun_v2.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,6 +29,17 @@ jobs:
           path: pinned-bbhost
           persist-credentials: false
           submodules: true
+      - name: Integrate actual SHYT plugin and OS-entropy STUN into original source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          grep -Fq 'add_library(bb_plugin_shyt MODULE' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
+          echo SHYT_ORIGINAL_BBHOST_FULL_NATIVE_SOURCE_OS_ENTROPY_AND_PLUGIN_APPLIED
       - name: Build full real BBHost engine, render pipeline and original tests
         shell: bash
         run: |
@@ -38,21 +51,24 @@ jobs:
             exit 1
           fi
           test -x pinned-bbhost/build-ci/build/bbhost
+          test -s pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so
+          grep -Fq 'SHYT' pinned-bbhost/plugins/shyt_probe/shyt_bbhost_probe_v1.c
+
           echo SHYT_BBHOST_V1_COMPLETE_PINNED_HOST_ENGINE_RENDERER_AND_TESTS_PASS
-      - name: Build BBHost runtime experiment plugin against same source
+      - name: Verify actual full-host-linked plugin exports, no original game content
         shell: bash
         run: |
           set -euo pipefail
-          cc -O2 -std=c11 -Wall -Wextra -Werror -fPIC -shared \
-            -Ipinned-bbhost/include bbhost-track/shyt_bbhost_probe_v1.c \
-            -o "$RUNNER_TEMP/shyt_bbhost_probe.so"
-          test -s "$RUNNER_TEMP/shyt_bbhost_probe.so"
+          file pinned-bbhost/build-ci/build/bbhost | grep -q 'ELF 64-bit'
+          nm -D --defined-only pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so | grep -q bb_plugin_init
+          nm -D --defined-only pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so | grep -q bb_plugin_image
+          echo SHYT_BBHOST_V3_FULL_HOST_STUN_CSPRNG_AND_PLUGIN_REAL_COMPILE_PASS
       - name: Upload nonportable host-compile proof, no original game binaries
         uses: actions/upload-artifact@v4
         with:
           name: SHYT-BBHost-v0.2.24-Linux-host-and-probe-COMPILE-test-only
           path: |
             pinned-bbhost/build-ci/build/bbhost
-            ${{ runner.temp }}/shyt_bbhost_probe.so
+            pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so
           retention-days: 7
           if-no-files-found: error
