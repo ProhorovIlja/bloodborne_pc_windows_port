@@ -12,6 +12,7 @@
 #endif
 #include "bbhost_plugin.h"
 #include "yt_world_event_ledger_v4.h"
+#include "shyt_yt_native_channel_policy_v21.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -39,6 +40,9 @@ static uint32_t world_last_block;
 #define SHYT_V17_NETSYNC_SEND_BN (UINT64_C(0x017894E0)+UINT64_C(0x400000))
 #define SHYT_V17_GAME_CHANNELS 68u
 static atomic_ullong outgoing_channels_v17[SHYT_V17_GAME_CHANNELS];
+/* V21: exact YT channel policies, to estimate the *candidate* data
+ * needing map/owner/invasion-filtered relay. NOT a P2P authorization. */
+static atomic_ullong outgoing_policy_v21[4];
 static atomic_ullong malformed_sends_v17;
 static int packet_hook_enabled_v17;
 static const unsigned char netsync_prologue_v17[16] = {
@@ -57,6 +61,9 @@ static int on_netsync_send_v17(BbHookCtx *ctx,void *user) {
     const uint64_t size=ctx->arg[4];    /* r8d; no dereference of rcx */
     if (channel<SHYT_V17_GAME_CHANNELS && size<=0x6400u) {
         atomic_fetch_add_explicit(&outgoing_channels_v17[channel],1u,memory_order_relaxed);
+        const enum ShytYtNativeChannelPolicyV21 policy =
+            shyt_yt_channel_policy_v21((uint32_t)channel);
+        atomic_fetch_add_explicit(&outgoing_policy_v21[(unsigned)policy],1u,memory_order_relaxed);
     } else {
         atomic_fetch_add_explicit(&malformed_sends_v17,1u,memory_order_relaxed);
     }
@@ -131,6 +138,11 @@ static void on_game_frame(void *user) {
                   total,
                   atomic_load_explicit(&outgoing_channels_v17[6],memory_order_relaxed),
                   atomic_load_explicit(&malformed_sends_v17,memory_order_relaxed));
+        host->log("shyt-yt-policy-v21: outgoing observed pass=%llu same-map=%llu ours=%llu drop=%llu; pre-server, no auth/route decision",
+                  atomic_load_explicit(&outgoing_policy_v21[SHYT_YT_CHANNEL_PASS_V21],memory_order_relaxed),
+                  atomic_load_explicit(&outgoing_policy_v21[SHYT_YT_CHANNEL_SAME_MAP_V21],memory_order_relaxed),
+                  atomic_load_explicit(&outgoing_policy_v21[SHYT_YT_CHANNEL_OURS_V21],memory_order_relaxed),
+                  atomic_load_explicit(&outgoing_policy_v21[SHYT_YT_CHANNEL_DROP_V21],memory_order_relaxed));
     }
     if (world_events.invalid_incremental && !reported_world_overflow) {
         host->log("shyt-bbhost-probe: world flag stream invalid (overflow or world load); future authenticated full snapshot required");
@@ -192,6 +204,8 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     packet_hook_enabled_v17=0;
     for (unsigned i=0;i<SHYT_V17_GAME_CHANNELS;++i)
         atomic_store_explicit(&outgoing_channels_v17[i],0u,memory_order_relaxed);
+    for (unsigned i=0;i<4u;++i)
+        atomic_store_explicit(&outgoing_policy_v21[i],0u,memory_order_relaxed);
     atomic_store_explicit(&malformed_sends_v17,0u,memory_order_relaxed);
     shyt_world_ledger_reset_v4(&world_events);
     api->log("shyt-bbhost-probe: read-only plugin API accepted; no networking installed");
