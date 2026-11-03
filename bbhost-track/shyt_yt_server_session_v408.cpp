@@ -1,0 +1,364 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// V408: explicit-opt-in original YT SHLK4 session controller over native UDP.
+// NO network at BBHost plugin load. NO Fornex address, account or retail data.
+// Authentication via original YT Noise NK; received guest Data/Coop kept
+// QUARANTINED until original room and map/owner permission verification.
+#include "shyt_yt_server_session_v408.h"
+#include "shyt_yt_udp_endpoint_v406.h"
+#include "shyt_yt_shlk_client_v401.h"
+#include "shyt_yt_link_wire_v403.h"
+#include "core/libraries/network/net_link.h"
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <new>
+#include <string>
+#include <vector>
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <bcrypt.h>
+#elif defined(__linux__)
+#include <cerrno>
+#include <sys/random.h>
+#else
+#include <cstdlib>
+#endif
+
+namespace YT=Libraries::Net::Link;
+static_assert(YT::LinkVersion==4);
+static constexpr uint64_t kHelloRetry=1000u;
+static constexpr uint64_t kHeartbeat=1000u;
+static constexpr uint64_t kQuiet=10000u;
+static constexpr unsigned kPollBudget=32u;
+static constexpr size_t kWireLimit=SHYT_YT_UDP_MAX_DATAGRAM_V406;
+
+struct ShytYtServerSessionV408 {
+    ShytYtUdpEndpointV406* udp=nullptr;
+    ShytYtShlkClientV401* auth=nullptr;
+    std::string online_id,build,secret;
+    LinkAuth::Cookie cookie{};
+    int phase=SHYT_V408_NEW;
+    bool has_cookie=false;
+    uint64_t last_hello=0, last_ping=0, last_auth_recv=0, last_tick=0;
+    uint32_t pending_ping_seq=0, next_seq=0;
+    bool ping_outstanding=false;
+    ShytYtServerCountersV408 counters{};
+};
+
+namespace {
+void wipe_v408(void* ptr,size_t n) noexcept {
+    volatile uint8_t* p=static_cast<volatile uint8_t*>(ptr);
+    if(!p)return;
+    for(size_t i=0;i<n;++i)p[i]=0;
+}
+bool entropy_v408(uint8_t* output,size_t n) noexcept {
+    if(!output || n==0 || n>32u)return false;
+#if defined(_WIN32)
+    return BCryptGenRandom(nullptr,output,static_cast<ULONG>(n),
+                           BCRYPT_USE_SYSTEM_PREFERRED_RNG)>=0;
+#elif defined(__linux__)
+    size_t count=0;
+    while(count<n) {
+        const ssize_t got=getrandom(output+count,n-count,0);
+        if(got<0) {
+            if(errno==EINTR)continue;
+            return false;
+        }
+        if(!got)return false;
+        count+=static_cast<size_t>(got);
+    }
+    return true;
+#else
+    arc4random_buf(output,n);
+    return true;
+#endif
+}
+bool valid_field(const char* s) noexcept {
+    if(!s)return false;
+    // Real YT PutText caps fields at 255: reject rather than silently
+    // truncating an online ID, version or account secret.
+    for(size_t i=0;i<=255u;++i) {
+        if(s[i]==0)return i>=1u;
+    }
+    return false;
+}
+bool maybe_later(uint64_t now,uint64_t previous,uint64_t delay) noexcept {
+    return now>=previous && now-previous>=delay;
+}
+void reject(ShytYtServerSessionV408& s) noexcept {
+    ++s.counters.rejected_control_packets;
+}
+bool start_hello(ShytYtServerSessionV408& s,uint64_t now) {
+    std::array<uint8_t,32> ephemeral{};
+    if(!entropy_v408(ephemeral.data(),ephemeral.size())) {
+        s.phase=SHYT_V408_IO_FAILED;
+        return false;
+    }
+    std::array<uint8_t,kWireLimit> wire{};
+    size_t n=0;
+    bool valid=false;
+    if(!s.has_cookie) {
+        std::array<uint8_t,LinkAuth::HelloClearBytes> first{};
+        first[0]=first[1]=first[2]=first[3]=0xff;
+        first[4]='S';first[5]='H';first[6]='L';first[7]='K';
+        first[LinkAuth::KindAt]=LinkAuth::KindHello;
+        first[LinkAuth::HeaderBytes]=YT::LinkVersion;
+        valid=shyt_yt_shlk_hello_v401(
+            s.auth,first.data(),first.size(),ephemeral.data(),
+            wire.data(),wire.size(),&n)!=0;
+        if(valid)s.phase=SHYT_V408_WAIT_COOKIE;
+    } else {
+        YT::Hello hello{};
+        hello.online_id=s.online_id;
+        hello.build=s.build;
+        hello.secret=s.secret;
+        hello.cookie=s.cookie;
+        std::vector<u8> plain=YT::Encode(hello);
+        valid=plain.size()<=kWireLimit-64u &&
+              shyt_yt_shlk_hello_v401(s.auth,plain.data(),plain.size(),
+                   ephemeral.data(),wire.data(),wire.size(),&n)!=0;
+        wipe_v408(hello.secret.data(),hello.secret.size());
+        wipe_v408(plain.data(),plain.size());
+        if(valid)s.phase=SHYT_V408_WAIT_WELCOME;
+    }
+    wipe_v408(ephemeral.data(),ephemeral.size());
+    if(!valid || n>kWireLimit ||
+       !shyt_yt_udp_send_server_v406(s.udp,wire.data(),n)) {
+        s.phase=SHYT_V408_IO_FAILED;
+        return false;
+    }
+    s.last_hello=now;
+    ++s.counters.hello_sent;
+    return true;
+}
+bool encrypt_send(ShytYtServerSessionV408& s,
+                  const uint8_t* message,size_t n) {
+    if(!shyt_yt_shlk_linked_v401(s.auth) || n>kWireLimit-24u)
+        return false;
+    std::array<uint8_t,kWireLimit> encrypted{};
+    size_t size=0;
+    if(!shyt_yt_shlk_seal_v401(s.auth,message,n,
+          encrypted.data(),encrypted.size(),&size))
+        return false;
+    return shyt_yt_udp_send_server_v406(s.udp,encrypted.data(),size)!=0;
+}
+bool ping(ShytYtServerSessionV408& s,uint64_t now) {
+    if(!s.next_seq)s.next_seq=1;
+    uint8_t wire[32]={0};
+    size_t n=0;
+    const uint32_t seq=s.next_seq++;
+    if(!shyt_yt_link_encode_ping_v403(4u,seq,now,wire,sizeof(wire),&n) ||
+       !encrypt_send(s,wire,n))
+        return false;
+    s.pending_ping_seq=seq;
+    s.ping_outstanding=true;
+    s.last_ping=now;
+    ++s.counters.heartbeats_sent;
+    return true;
+}
+void handle_control(ShytYtServerSessionV408& s,
+                    const uint8_t* raw,size_t n,uint64_t now) {
+    const int kind=shyt_yt_link_kind_v403(raw,n);
+    if(kind==9 && s.phase==SHYT_V408_WAIT_COOKIE) {
+        uint8_t cookie[16]={0},server_pub[32]={0},work=0;
+        if(!shyt_yt_link_decode_cookie_v403(
+              raw,n,cookie,server_pub,&work) ||
+           !shyt_yt_shlk_cookie_v401(s.auth,cookie,server_pub)) {
+            reject(s);
+            return;
+        }
+        if(work!=0) {
+            s.phase=SHYT_V408_WORK_UNSUPPORTED;
+            return; // Work solving must run off main game thread.
+        }
+        std::copy(cookie,cookie+sizeof(cookie),s.cookie.begin());
+        s.has_cookie=true;
+        (void)start_hello(s,now);
+        return;
+    }
+    if(kind==10 && (s.phase==SHYT_V408_WAIT_WELCOME ||
+                     s.phase==SHYT_V408_WAIT_COOKIE)) {
+        s.phase=SHYT_V408_WORK_UNSUPPORTED;
+        return;
+    }
+    if(kind==11 && s.phase!=SHYT_V408_NEW) {
+        // Changing shard requires NEW pinned key and trusted redirect
+        // ticket, not a silent switch to an arbitrary network endpoint.
+        s.phase=SHYT_V408_REDIRECT_UNSUPPORTED;
+        return;
+    }
+    // EVERYTHING else, including Welcome and Data, MUST decrypt before
+    // parsing. V401 enforces YT's Noise NK authentication and replay.
+    if(s.phase==SHYT_V408_WAIT_WELCOME ||
+       s.phase==SHYT_V408_LINKED ||
+       s.phase==SHYT_V408_QUIET) {
+        std::array<uint8_t,kWireLimit> plain{};
+        size_t size=0;
+        if(!shyt_yt_shlk_open_v401(s.auth,raw,n,
+               plain.data(),plain.size(),&size)) {
+            ++s.counters.auth_errors;
+            return;
+        }
+        const int decrypted_kind=shyt_yt_link_kind_v403(plain.data(),size);
+        if(s.phase==SHYT_V408_WAIT_WELCOME) {
+            if(decrypted_kind!=2 || !shyt_yt_shlk_linked_v401(s.auth)) {
+                reject(s);
+                return;
+            }
+            char reason[256]={0};
+            int accepted=0;
+            if(!shyt_yt_link_decode_welcome_v403(
+                 plain.data(),size,&accepted,reason,sizeof(reason))) {
+                reject(s);
+                return;
+            }
+            s.phase=accepted?SHYT_V408_LINKED:SHYT_V408_REFUSED;
+            s.last_auth_recv=now;
+            return;
+        }
+        if(decrypted_kind==5) {
+            uint32_t seq=0;uint64_t sent=0;
+            if(shyt_yt_link_decode_ping_v403(
+                  5u,plain.data(),size,&seq,&sent) &&
+               s.ping_outstanding && seq==s.pending_ping_seq &&
+               sent==s.last_ping && now>=sent) {
+                ++s.counters.heartbeats_received;
+                s.ping_outstanding=false;
+                s.last_auth_recv=now;
+                s.phase=SHYT_V408_LINKED;
+            }else reject(s);
+            return;
+        }
+        if(decrypted_kind==3) {
+            // Authenticated != authorized for the guest. The server
+            // must explicitly approve this peer's room/map ownership
+            // before ANY frame is injected into BBHost NetSync.
+            std::array<uint8_t,kWireLimit> held{};
+            uint32_t addr=0;uint16_t port=0;size_t game_size=0;
+            if(shyt_yt_link_decode_data_v403(
+                  plain.data(),size,&addr,&port,
+                  held.data(),held.size(),&game_size)) {
+                ++s.counters.authenticated_data_quarantined;
+                s.last_auth_recv=now;
+                s.phase=SHYT_V408_LINKED;
+                wipe_v408(held.data(),game_size);
+            } else reject(s);
+            return;
+        }
+        if(decrypted_kind==7) {
+            std::array<uint8_t,kWireLimit> held{};
+            size_t body_size=0;
+            if(shyt_yt_link_decode_coop_v403(
+                  plain.data(),size,held.data(),held.size(),&body_size)) {
+                ++s.counters.authenticated_coop_quarantined;
+                s.last_auth_recv=now;
+                s.phase=SHYT_V408_LINKED;
+                wipe_v408(held.data(),body_size);
+            } else reject(s);
+            return;
+        }
+        // Server Member and Rpc messages require authenticated team/NP
+        // state transition modules; never hand raw bytes to the game.
+        reject(s);
+    } else {
+        reject(s);
+    }
+}
+}
+extern "C" ShytYtServerSessionV408 *shyt_yt_server_new_v408(
+    uint32_t server_ip_nbo,uint16_t server_port_nbo,
+    const uint8_t pinned_server_pub[32],
+    const char* online_id,const char* game_build,const char* secret) {
+    if(!pinned_server_pub || !valid_field(online_id) ||
+       !valid_field(game_build) || !valid_field(secret))
+        return nullptr;
+    try {
+        auto* session=new(std::nothrow) ShytYtServerSessionV408{};
+        if(!session)return nullptr;
+        session->auth=shyt_yt_shlk_new_v401();
+        if(!session->auth ||
+           !shyt_yt_shlk_pin_v401(session->auth,pinned_server_pub)) {
+            shyt_yt_server_free_v408(session);
+            return nullptr;
+        }
+        session->udp=shyt_yt_udp_open_v406(server_ip_nbo,server_port_nbo);
+        if(!session->udp) {
+            shyt_yt_server_free_v408(session);
+            return nullptr;
+        }
+        session->online_id=online_id;
+        session->build=game_build;
+        session->secret=secret;
+        return session;
+    } catch(...) {return nullptr;}
+}
+extern "C" void shyt_yt_server_free_v408(ShytYtServerSessionV408* s) {
+    if(!s)return;
+    wipe_v408(s->secret.data(),s->secret.size());
+    shyt_yt_shlk_free_v401(s->auth);
+    shyt_yt_udp_close_v406(s->udp);
+    delete s;
+}
+extern "C" int shyt_yt_server_tick_v408(
+    ShytYtServerSessionV408* s,uint64_t now) {
+    if(!s || !s->udp || !s->auth)return -1;
+    if(s->phase>=SHYT_V408_REFUSED)return 1;
+    if(now<s->last_tick)return 1;
+    s->last_tick=now;
+    try {
+        if(s->phase==SHYT_V408_NEW ||
+           ((s->phase==SHYT_V408_WAIT_COOKIE ||
+             s->phase==SHYT_V408_WAIT_WELCOME) &&
+            maybe_later(now,s->last_hello,kHelloRetry))) {
+            if(!start_hello(*s,now))return -1;
+        }
+        for(unsigned i=0;i<kPollBudget;++i) {
+            std::array<uint8_t,kWireLimit> wire{};
+            size_t n=0;
+            const int read=shyt_yt_udp_receive_server_v406(
+                s->udp,wire.data(),wire.size(),&n);
+            if(read<0) {
+                s->phase=SHYT_V408_IO_FAILED;
+                return -1;
+            }
+            if(!read)break;
+            handle_control(*s,wire.data(),n,now);
+            if(s->phase>=SHYT_V408_REFUSED)break;
+        }
+        if(s->phase==SHYT_V408_LINKED || s->phase==SHYT_V408_QUIET) {
+            if((s->counters.heartbeats_sent==0 ||
+                maybe_later(now,s->last_ping,kHeartbeat)) &&
+               !ping(*s,now)) {
+                s->phase=SHYT_V408_IO_FAILED;
+                return -1;
+            }
+            if(maybe_later(now,s->last_auth_recv,kQuiet))
+                s->phase=SHYT_V408_QUIET;
+        }
+    }catch(...) {
+        s->phase=SHYT_V408_IO_FAILED;
+        return -1;
+    }
+    return 1;
+}
+extern "C" int shyt_yt_server_phase_v408(
+    const ShytYtServerSessionV408* s) {
+    return s?s->phase:-1;
+}
+extern "C" int shyt_yt_server_counters_v408(
+    const ShytYtServerSessionV408* s,ShytYtServerCountersV408* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    *out=s->counters;
+    return 1;
+}
+extern "C" int shyt_yt_server_local_port_v408(
+    const ShytYtServerSessionV408* s,uint16_t* port_nbo) {
+    if(port_nbo)*port_nbo=0;
+    return s && s->udp?
+        shyt_yt_udp_local_port_v406(s->udp,port_nbo):0;
+}
