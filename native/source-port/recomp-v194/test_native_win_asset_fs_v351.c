@@ -19,6 +19,24 @@ static void append(wchar_t out[1024],const wchar_t *a,const wchar_t *b) {
     wmemcpy(out+n+1,b,m+1);
 }
 
+typedef struct StreamReadV352 {
+    const ShytNativeWinAssetStreamV352 *stream;
+    uint64_t offset;
+    const char *expect_four;
+} StreamReadV352;
+static DWORD WINAPI stream_reader_v352(LPVOID arg) {
+    const StreamReadV352 *test=(const StreamReadV352 *)arg;
+    for (int i=0;i<128;++i) {
+        char out[4]={0};
+        size_t n=0;
+        if (!shyt_native_win_asset_stream_read_v352(
+              test->stream,test->offset,out,sizeof(out),&n) ||
+            n!=4 || memcmp(out,test->expect_four,4)!=0)
+            return 1;
+    }
+    return 0;
+}
+
 int main(void) {
     wchar_t temp[1024], sandbox[1024], game[1024], map[1024];
     wchar_t file[1024], outside[1024], linked[1024], hardlink[1024];
@@ -50,6 +68,38 @@ int main(void) {
     assert(shyt_native_win_asset_mount_v351(&root,game));
     assert(root.mounted && root.prefix_chars>4);
     const char *good="/dvdroot_ps4/map/m24_01_00_00.msb.dcx";
+    /* V352: AOT game asset streaming must keep a read-only handle instead
+     * of CreateFileW/CloseHandle on every tiny resource read. Concurrent
+     * offset reads on one OVERLAPPED handle must remain independent. */
+    ShytNativeWinAssetStreamV352 stream={0};
+    assert(shyt_native_win_asset_stream_open_v352(&root,good,&stream));
+    assert(stream.open && stream.native_handle && stream.file_size==sizeof(fake));
+    assert(!shyt_native_win_asset_stream_open_v352(&root,good,&stream));
+    char stream_bytes[5]={0};
+    size_t stream_got=0;
+    assert(shyt_native_win_asset_stream_read_v352(
+        &stream,4,stream_bytes,4,&stream_got));
+    assert(stream_got==4 && memcmp(stream_bytes,"FAKE",4)==0);
+    StreamReadV352 concurrent[]={{&stream,0,"DCX\0"},{&stream,4,"FAKE"}};
+    HANDLE threads[2];
+    threads[0]=CreateThread(NULL,0,stream_reader_v352,&concurrent[0],0,NULL);
+    threads[1]=CreateThread(NULL,0,stream_reader_v352,&concurrent[1],0,NULL);
+    assert(threads[0] && threads[1]);
+    assert(WaitForMultipleObjects(2,threads,TRUE,INFINITE)==WAIT_OBJECT_0);
+    DWORD exit_code=99;
+    assert(GetExitCodeThread(threads[0],&exit_code) && exit_code==0);
+    assert(GetExitCodeThread(threads[1],&exit_code) && exit_code==0);
+    CloseHandle(threads[0]);
+    CloseHandle(threads[1]);
+    assert(shyt_native_win_asset_stream_read_v352(
+        &stream,9999,stream_bytes,4,&stream_got) && stream_got==0);
+    shyt_native_win_asset_stream_close_v352(&stream);
+    shyt_native_win_asset_stream_close_v352(&stream);
+    assert(!shyt_native_win_asset_stream_read_v352(
+        &stream,0,stream_bytes,4,&stream_got));
+    assert(stream_got==0);
+    assert(!shyt_native_win_asset_stream_open_v352(
+        &root,"/dvdroot_ps4/map/../external.txt",&stream));
     char buffer[32];
     memset(buffer,0xcc,sizeof(buffer));
     size_t got=99;
@@ -119,6 +169,13 @@ int main(void) {
     assert(!shyt_native_win_asset_read_at_v351(
         &root,"/dvdroot_ps4/map/a.dcx",0,&root,1,&got));
     assert(got==0);
+    ShytNativeWinAssetStreamV352 stream={0};
+    assert(!shyt_native_win_asset_stream_open_v352(
+        &root,"/dvdroot_ps4/map/a.dcx",&stream));
+    assert(!shyt_native_win_asset_stream_read_v352(
+        &stream,0,&root,1,&got));
+    assert(got==0);
+    shyt_native_win_asset_stream_close_v352(&stream);
     puts("SHYT_NATIVE_V351_WINDOWS_ONLY_NO_POSIX_SHIM_PASS");
     return 0;
 }
