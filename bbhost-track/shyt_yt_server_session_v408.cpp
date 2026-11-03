@@ -276,8 +276,9 @@ extern "C" ShytYtServerSessionV408 *shyt_yt_server_new_v408(
     if(!pinned_server_pub || !valid_field(online_id) ||
        !valid_field(game_build) || !valid_field(secret))
         return nullptr;
+    ShytYtServerSessionV408* session=nullptr;
     try {
-        auto* session=new(std::nothrow) ShytYtServerSessionV408{};
+        session=new(std::nothrow) ShytYtServerSessionV408{};
         if(!session)return nullptr;
         session->auth=shyt_yt_shlk_new_v401();
         if(!session->auth ||
@@ -294,7 +295,10 @@ extern "C" ShytYtServerSessionV408 *shyt_yt_server_new_v408(
         session->build=game_build;
         session->secret=secret;
         return session;
-    } catch(...) {return nullptr;}
+    } catch(...) {
+        shyt_yt_server_free_v408(session);
+        return nullptr;
+    }
 }
 extern "C" void shyt_yt_server_free_v408(ShytYtServerSessionV408* s) {
     if(!s)return;
