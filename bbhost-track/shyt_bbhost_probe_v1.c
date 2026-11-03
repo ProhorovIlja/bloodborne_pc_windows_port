@@ -27,6 +27,21 @@ static uint64_t frame_count;
 static uint64_t window_start_ms;
 static ShytWorldLedgerV4 world_events;
 static int reported_world_overflow;
+static unsigned world_load_count;
+static uint32_t world_last_block;
+
+/* V16: BBHost's version-8 on_world_load is the real main-thread transition.
+ * A save/world load never implies an authenticated YT world snapshot.
+ * Invalidate the incremental stream, keep all existing callbacks installed.
+ */
+static void on_world_load_v16(uint32_t block, void *user) {
+    (void)user;
+    ++world_load_count;
+    world_last_block=block;
+    shyt_world_ledger_invalidate_v4(&world_events);
+    if (host && host->log && world_load_count==1u)
+        host->log("shyt-bbhost-probe: first world load observed; incremental flag stream INVALID until full verified world snapshot");
+}
 
 static void on_world_flag_v4(uint32_t id,int value,void *user) {
     (void)user;
@@ -112,6 +127,8 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     frame_count = 0;
     window_start_ms = 0;
     reported_world_overflow=0;
+    world_load_count=0;
+    world_last_block=0;
     shyt_world_ledger_reset_v4(&world_events);
     api->log("shyt-bbhost-probe: read-only plugin API accepted; no networking installed");
     return 0;
@@ -131,14 +148,23 @@ BB_PLUGIN_EXPORT int bb_plugin_image(const BbHostApi *api) {
     const char *capture=api->config("shyt_bbhost_probe.capture_world_flags");
     const int opt_in=capture &&
         (strcmp(capture,"true")==0 || strcmp(capture,"1")==0);
-    if (opt_in && api->version >= 4u &&
-        api->size >= offsetof(BbHostApi,on_event_flag) +
+    /* V16: never capture deltas if we cannot detect a world load.
+     * Register the load boundary FIRST, then event deltas. Both callbacks
+     * stay alive until process exit: no unload on partial registration.
+     * World changes invalidate, never silently reset, the ledger. */
+    const int world_boundary=opt_in && api->version>=8u &&
+        api->size >= offsetof(BbHostApi,on_world_load)+
+                     sizeof(api->on_world_load) &&
+        api->on_world_load &&
+        api->on_world_load(on_world_load_v16,0)==0;
+    if (world_boundary && api->version>=4u &&
+        api->size >= offsetof(BbHostApi,on_event_flag)+
                      sizeof(api->on_event_flag) &&
         api->on_event_flag &&
         api->on_event_flag(on_world_flag_v4,0)==0) {
-        api->log("shyt-bbhost-probe: opted-in world progression callback, LOCAL ONLY");
+        api->log("shyt-bbhost-probe: world-load boundary + local world flag callbacks registered; no sync transport");
     } else {
-        api->log("shyt-bbhost-probe: world flag capture disabled (default) or unavailable");
+        api->log("shyt-bbhost-probe: flag capture refused unless opted in AND world-load boundary available");
     }
     api->log("shyt-bbhost-probe: original Bloodborne 1.09 image accepted; observe-only");
     return 0;
