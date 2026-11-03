@@ -21,6 +21,10 @@ FIELDS = {"kind", "upstream_commit", "source_commit", "workflow_run_id",
           "host_sha256", "plugin_sha256"}
 KIND = "SHYT_V10_MODIFIED_BBHOST_WINDOWS_CI"
 MAX_META = 4096
+# RelWithDebInfo full Windows engine binaries may contain large DWARF/COFF
+# debug information. The engine is streamed and SHA-pinned, never mmap/read
+# in full. Limit remains bounded, far below any unbounded disk extraction.
+MAX_CUSTOM_PE = 768 * 1024 * 1024
 
 class ModdedBundleRejected(ValueError):
     pass
@@ -33,7 +37,7 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 def assert_real_pe(path: Path, *, dll: bool) -> None:
-    if path.is_symlink() or not path.is_file() or not (1024 < path.stat().st_size < 150000000):
+    if path.is_symlink() or not path.is_file() or not (1024 < path.stat().st_size <= MAX_CUSTOM_PE):
         raise ModdedBundleRejected("Missing or oversized custom Windows PE input")
     with path.open("rb") as f:
         hdr=f.read(4096)
@@ -142,7 +146,11 @@ def main() -> None:
     try:
         stage_modified_v10(args.launcher_folder,args.modified_artifact,args.source_commit)
     except (OSError,ValueError,UnicodeError) as e:
-        raise SystemExit("SHYT_V10_MODIFIED_ENGINE_PACKAGING_REFUSED: "+type(e).__name__) from None
+        # Only our own fixed validation errors may be displayed. OS errors
+        # can contain local paths, so retain class only for those.
+        reason=(str(e)[:160] if isinstance(e,ModdedBundleRejected)
+                else type(e).__name__)
+        raise SystemExit("SHYT_V10_MODIFIED_ENGINE_PACKAGING_REFUSED: "+reason) from None
 
 if __name__=="__main__":
     main()
