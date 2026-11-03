@@ -1,0 +1,79 @@
+# Real Windows cross-build of our patched BBHost, not official unmodified BBHost.
+# CI receives no retail Bloodborne or DS3 files.
+name: SHYT BBHost modified Windows executable and plugin
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-modified-windows-build.yml'
+      - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
+      - 'bbhost-track/apply_bbhost_os_stun_v2.py'
+      - 'bbhost-track/shyt_bbhost_probe_v1.c'
+      - 'bbhost-track/yt_world_event_ledger_v4.h'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-bbhost-modified-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-cross:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 100
+    steps:
+      - name: Install checkout dependencies
+        run: pacman -Syu --noconfirm --needed git ca-certificates python
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: true
+      - name: Verify and patch authentic BBHost release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/pinned-bbhost"
+          test "$(git -C pinned-bbhost rev-parse HEAD)" = b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          grep -Fq 'add_library(bb_plugin_shyt MODULE' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
+      - name: Build genuine modified Windows bbhost.exe using upstream cross toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pinned-bbhost
+          # Original BBHost Arch/Clang/mingw-w64 recipe. Logs stay in Actions.
+          if ! CI_PACMAN=1 CI_CMAKE_ARGS='-DBBHOST_LTO=ON' \
+               tools/ci_windows.sh > "$RUNNER_TEMP/shyt-windows.log" 2>&1; then
+            echo 'Modified BBHost Windows cross-build failed:'
+            tail -n 18 "$RUNNER_TEMP/shyt-windows.log" | cut -c1-190
+            exit 1
+          fi
+          test -s build-win/bbhost.exe
+          test -s build-win/plugins/shyt_bbhost_probe.dll
+          python - <<'PY'
+          from pathlib import Path
+          for path in (Path('build-win/bbhost.exe'), Path('build-win/plugins/shyt_bbhost_probe.dll')):
+              assert path.stat().st_size > 1024
+              with path.open('rb') as f:
+                  assert f.read(2) == b'MZ'
+          print('SHYT_MODIFIED_REAL_BBHOST_WINDOWS_EXE_PLUS_PLUGIN_COMPILED')
+          PY
+      - name: Upload strictly experimental Windows binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V8-MODIFIED-BBHost-Windows-COMPILE-ONLY
+          path: |
+            pinned-bbhost/build-win/bbhost.exe
+            pinned-bbhost/build-win/plugins/shyt_bbhost_probe.dll
+          retention-days: 7
+          if-no-files-found: error
