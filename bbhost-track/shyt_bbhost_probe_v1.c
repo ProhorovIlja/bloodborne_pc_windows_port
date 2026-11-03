@@ -14,6 +14,7 @@
 #include "yt_world_event_ledger_v4.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <string.h>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -29,6 +30,53 @@ static ShytWorldLedgerV4 world_events;
 static int reported_world_overflow;
 static unsigned world_load_count;
 static uint32_t world_last_block;
+
+/* V17: first real NetSync/SHAD game packet observation seam on BBHost.
+ * The YT 1.09 docs identify 0x017894E0 at image base 0; BBHost hook2
+ * takes Binary Ninja's 0x400000-based address. Never read payloads,
+ * rewrite a channel or send a datagram. Opt-in diagnostic only.
+ */
+#define SHYT_V17_NETSYNC_SEND_BN (UINT64_C(0x017894E0)+UINT64_C(0x400000))
+#define SHYT_V17_GAME_CHANNELS 68u
+static atomic_ullong outgoing_channels_v17[SHYT_V17_GAME_CHANNELS];
+static atomic_ullong malformed_sends_v17;
+static int packet_hook_enabled_v17;
+static const unsigned char netsync_prologue_v17[16] = {
+    /* A common safe x86-64 push/mov/sub prologue; only first 6 bytes
+     * are independently attested by YT's published coop-sites.json.
+     * Reject unless the WHOLE 16-byte prefix matches the loaded exact
+     * 1.09 image. We pass an entire 17-byte instruction boundary.
+     */
+    0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+    0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec
+};
+static int on_netsync_send_v17(BbHookCtx *ctx,void *user) {
+    (void)user;
+    if (!ctx) return 0;
+    const uint64_t channel=ctx->arg[2]; /* edx; known YT NetSync ABI */
+    const uint64_t size=ctx->arg[4];    /* r8d; no dereference of rcx */
+    if (channel<SHYT_V17_GAME_CHANNELS && size<=0x6400u) {
+        atomic_fetch_add_explicit(&outgoing_channels_v17[channel],1u,memory_order_relaxed);
+    } else {
+        atomic_fetch_add_explicit(&malformed_sends_v17,1u,memory_order_relaxed);
+    }
+    return 0; /* NEVER intercept / alter gameplay, only observe */
+}
+static int attach_netsync_readonly_v17(const BbHostApi *api) {
+    if (!api || api->version<8u ||
+        api->size<offsetof(BbHostApi,hook2)+sizeof(api->hook2) ||
+        !api->read || !api->hook2) return 0;
+    unsigned char actual[17] = {0};
+    if (api->read(SHYT_V17_NETSYNC_SEND_BN,actual,sizeof(actual))!=0 ||
+        memcmp(actual,netsync_prologue_v17,sizeof(netsync_prologue_v17))!=0)
+        return 0; /* no guessed instruction lengths in an unknown ELF */
+    /* The 16 pinned prefix bytes finish at the SUB RSP,imm8 opcode;
+     * byte 17 is the immediate, so exactly 17 bytes are whole x86 insns.
+     * hook2 checks the full live prologue too before patching.
+     */
+    return api->hook2(SHYT_V17_NETSYNC_SEND_BN,actual,sizeof(actual),
+                      on_netsync_send_v17,0)==0;
+}
 
 /* V16: BBHost's version-8 on_world_load is the real main-thread transition.
  * A save/world load never implies an authenticated YT world snapshot.
@@ -75,6 +123,15 @@ static void on_game_frame(void *user) {
     if (frame_count == 0) window_start_ms = now;
     ++frame_count;
     if ((frame_count % 600u) != 0u) return;
+    if (packet_hook_enabled_v17) {
+        unsigned long long total=0;
+        for (unsigned i=0;i<SHYT_V17_GAME_CHANNELS;++i)
+            total+=atomic_load_explicit(&outgoing_channels_v17[i],memory_order_relaxed);
+        host->log("shyt-bbhost-probe: NetSync real outgoing channel observations=%llu player-ch6=%llu rejected-inputs=%llu; NO payload capture or forwarding",
+                  total,
+                  atomic_load_explicit(&outgoing_channels_v17[6],memory_order_relaxed),
+                  atomic_load_explicit(&malformed_sends_v17,memory_order_relaxed));
+    }
     if (world_events.invalid_incremental && !reported_world_overflow) {
         host->log("shyt-bbhost-probe: world flag stream invalid (overflow or world load); future authenticated full snapshot required");
         reported_world_overflow=1;
@@ -110,6 +167,9 @@ BB_PLUGIN_EXPORT const BbOption bb_plugin_options[] = {
     {BB_OPT_BOOL, "capture_world_flags", "Capture world flags (diagnostic)",
      "Records a bounded local YT progression observation stream. No network transmission. Restart required.",
      "false", 0, 0, 0},
+    {BB_OPT_BOOL, "observe_netsync_sends", "Observe game packet channels (diagnostic)",
+     "Only counts NetSync send channels, requires exact 1.09 safe prologue. No payloads, changes or network. Restart required.",
+     "false", 0, 0, 0},
     {0}
 };
 
@@ -129,6 +189,10 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     reported_world_overflow=0;
     world_load_count=0;
     world_last_block=0;
+    packet_hook_enabled_v17=0;
+    for (unsigned i=0;i<SHYT_V17_GAME_CHANNELS;++i)
+        atomic_store_explicit(&outgoing_channels_v17[i],0u,memory_order_relaxed);
+    atomic_store_explicit(&malformed_sends_v17,0u,memory_order_relaxed);
     shyt_world_ledger_reset_v4(&world_events);
     api->log("shyt-bbhost-probe: read-only plugin API accepted; no networking installed");
     return 0;
@@ -166,6 +230,16 @@ BB_PLUGIN_EXPORT int bb_plugin_image(const BbHostApi *api) {
     } else {
         api->log("shyt-bbhost-probe: flag capture refused unless opted in AND world-load boundary available");
     }
+    /* Install last, after all existing callback registrations. Even when
+     * the code's prologue differs, do not unload the plugin: an on_frame
+     * callback is already installed and would otherwise dangle. */
+    const char *packet_opt=api->config("shyt_bbhost_probe.observe_netsync_sends");
+    const int packet_wanted=packet_opt &&
+        (strcmp(packet_opt,"true")==0 || strcmp(packet_opt,"1")==0);
+    packet_hook_enabled_v17=packet_wanted && attach_netsync_readonly_v17(api);
+    if (packet_wanted)
+        api->log("shyt-bbhost-probe: NetSync hook %s; exact game/ABI/prologue opt-in, counters only",
+                 packet_hook_enabled_v17 ? "INSTALLED":"REFUSED");
     api->log("shyt-bbhost-probe: original Bloodborne 1.09 image accepted; observe-only");
     return 0;
 }
