@@ -213,7 +213,10 @@ void handle_control(ShytYtServerSessionV408& s,
                 s.phase=SHYT_V408_WORK_UNSUPPORTED;
                 return;
             }
-            const uint64_t attempts=uint64_t{1}<<std::min(29,*asked+5);
+            // Windows minwindef.h can define min as a macro: never
+            // let its preprocessor substitution enter the C++ code.
+            const int exponent=(*asked+5>29)?29:(*asked+5);
+            const uint64_t attempts=uint64_t{1}<<exponent;
             s.signup_work=shyt_yt_work_start_v409(
                 s.cookie.data(),s.online_id.c_str(),*asked,attempts);
             if(!s.signup_work) {
