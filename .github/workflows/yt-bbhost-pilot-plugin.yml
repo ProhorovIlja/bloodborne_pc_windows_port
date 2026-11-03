@@ -1,0 +1,82 @@
+name: BBHost pilot plugin cross-platform ABI compatibility
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-pilot-plugin.yml'
+      - 'bbhost-track/**'
+  pull_request:
+    paths:
+      - '.github/workflows/yt-bbhost-pilot-plugin.yml'
+      - 'bbhost-track/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bbhost-pilot-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  pinned-bbhost-plugin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          # Official v0.2.24 release commit, not floating master.
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: false
+      - name: Strict source pin and GPL3 plugin public API guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-bbhost rev-parse HEAD)" = b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          grep -q '^#define BB_PLUGIN_API_VERSION 16$' pinned-bbhost/include/bbhost_plugin.h
+          test -f pinned-bbhost/plugins/hello/hello.c
+          grep -q 'GPL-3.0-or-later' bbhost-track/shyt_bbhost_probe_v1.c
+      - name: Compile an ACTUAL bbhost .so and exercise real dlopen plugin lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared \
+            -Ipinned-bbhost/include bbhost-track/shyt_bbhost_probe_v1.c \
+            -o "$RUNNER_TEMP/shyt_bbhost_probe.so"
+          gcc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ipinned-bbhost/include bbhost-track/test_shyt_bbhost_probe_v1.c \
+            -ldl -o "$RUNNER_TEMP/shyt_bbhost_probe_test"
+          "$RUNNER_TEMP/shyt_bbhost_probe_test" "$RUNNER_TEMP/shyt_bbhost_probe.so"
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_init
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_image
+      - name: Install cross compiler for REAL Windows BBHost plugin DLL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y gcc-mingw-w64-x86-64
+      - name: Cross compile original BBHost public ABI Windows plugin PE DLL
+        shell: bash
+        run: |
+          set -euo pipefail
+          x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -shared \
+            -Ipinned-bbhost/include bbhost-track/shyt_bbhost_probe_v1.c \
+            -o "$RUNNER_TEMP/shyt_bbhost_probe.dll"
+          file "$RUNNER_TEMP/shyt_bbhost_probe.dll" | grep -Eq 'PE32\+.*DLL'
+          x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" \
+            | grep -q bb_plugin_image
+          x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" \
+            | grep -q bb_plugin_init
+          echo SHYT_BBHOST_V1_RELEASE_PINNED_REAL_WINDOWS_AND_LINUX_PLUGIN_BUILT_PASS
+      - name: Preserve ONLY optional experimental DLL and SO, no original game
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-BBHost-v0.2.24-plugin-api-EXPERIMENTAL-only
+          path: |
+            ${{ runner.temp }}/shyt_bbhost_probe.dll
+            ${{ runner.temp }}/shyt_bbhost_probe.so
+          retention-days: 7
+          if-no-files-found: error
