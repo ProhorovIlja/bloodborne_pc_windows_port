@@ -162,6 +162,22 @@ jobs:
           x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" \
             | grep -q bb_plugin_init
           echo SHYT_BBHOST_V402_REAL_WINDOWS_LINUX_CRYPTOLINK_PLUGIN_BUILT_PASS
+      - name: Verify real source-pinned BBHost CMake build graph also vendors original YT SHLK4
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py \
+            --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py \
+            --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode apply
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/link_auth.h
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/link_crypto.cpp
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/monocypher/monocypher.c
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_shlk_client_v401.cpp
+          grep -Fq 'plugins/shyt_probe/yt_original/coop/link_crypto.cpp' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'bb_plugin_shyt PRIVATE' pinned-bbhost/CMakeLists.txt
+          grep -Fq -- '-static-libstdc++' pinned-bbhost/CMakeLists.txt
+          echo SHYT_V402_PINNED_ORIGINAL_YT_CRYPTO_INCLUDED_IN_ACTUAL_BBHOST_PLUGIN_BUILD_GRAPH
       - name: Preserve ONLY optional experimental DLL and SO, no original game
         uses: actions/upload-artifact@v4
         with:
