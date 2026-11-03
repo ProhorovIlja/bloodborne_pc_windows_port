@@ -35,6 +35,26 @@ int shyt_native_win_asset_mount_v351(ShytNativeWinAssetRootV351 *root,
 int shyt_native_win_asset_read_at_v351(
     const ShytNativeWinAssetRootV351 *root, const char *logical_path,
     uint64_t offset, void *out, size_t max_bytes, size_t *got);
+/* V352: native Windows I/O handle retained across asset stream reads.
+ * A stream belongs to one caller and must not be copied. Concurrent reads
+ * from the SAME stream are supported via distinct OVERLAPPED file offsets;
+ * the caller must not close the handle while any read is in progress.
+ * Read-only and strictly rooted in the mount from V351.
+ */
+typedef struct ShytNativeWinAssetStreamV352 {
+    void *native_handle;
+    uint64_t file_size;
+    int open;
+} ShytNativeWinAssetStreamV352;
+
+int shyt_native_win_asset_stream_open_v352(
+    const ShytNativeWinAssetRootV351 *root, const char *logical_path,
+    ShytNativeWinAssetStreamV352 *stream);
+int shyt_native_win_asset_stream_read_v352(
+    const ShytNativeWinAssetStreamV352 *stream,
+    uint64_t offset, void *out, size_t max_bytes, size_t *got);
+void shyt_native_win_asset_stream_close_v352(
+    ShytNativeWinAssetStreamV352 *stream);
 #ifdef __cplusplus
 }
 #endif
