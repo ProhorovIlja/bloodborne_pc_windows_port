@@ -46,6 +46,7 @@ jobs:
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
           python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
           grep -Fq 'add_library(bb_plugin_shyt MODULE' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'bb_plugin_debug_menu bb_plugin_shyt' pinned-bbhost/CMakeLists.txt
           grep -Fq 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
       - name: Build genuine modified Windows bbhost.exe using upstream cross toolchain
         shell: bash
@@ -53,12 +54,15 @@ jobs:
           set -euo pipefail
           cd pinned-bbhost
           # Original BBHost Arch/Clang/mingw-w64 recipe. Logs stay in Actions.
-          if ! CI_PACMAN=1 CI_CMAKE_ARGS='-DBBHOST_LTO=ON' \
+          # Establish a correct baseline before optional ThinLTO optimization.
+          if ! CI_PACMAN=1 CI_CMAKE_ARGS='-DBBHOST_LTO=OFF' \
                tools/ci_windows.sh > "$RUNNER_TEMP/shyt-windows.log" 2>&1; then
             echo 'Modified BBHost Windows cross-build failed:'
             tail -n 18 "$RUNNER_TEMP/shyt-windows.log" | cut -c1-190
             exit 1
           fi
+          # The source-pinned package-win target now directly depends on
+          # bb_plugin_shyt. This should not be an independently built orphan.
           test -s build-win/bbhost.exe
           test -s build-win/plugins/shyt_bbhost_probe.dll
           python - <<'PY'
@@ -88,7 +92,19 @@ jobs:
           excerpt=$(printf '%s\n' "$excerpt" |
             sed -E 's/(gh[pousr]_[A-Za-z0-9]+)/[REDACTED]/g;s/(Bearer [A-Za-z0-9._-]+)/Bearer [REDACTED]/g')
           msg=$(printf 'BBHost modified Windows cross-build **failed** in Actions run %s. Public pinned toolchain, no game input. Bounded diagnosis:\n\`\`\`text\n%s\n\`\`\`\n' "$GITHUB_RUN_ID" "$excerpt")
-          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/86/comments" -f body="$msg" >/dev/null
+          # GitHub PR comment permissions vary across installations; always
+          # leave a tiny diagnostic artifact even if commenting is denied.
+          printf '%s\n' "$msg" > "$RUNNER_TEMP/shyt-brief-diagnosis.txt"
+          wc -c < "$RUNNER_TEMP/shyt-brief-diagnosis.txt"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/86/comments" -f body="$msg" >/dev/null 2>&1 || true
+      - name: Upload SMALL failure diagnosis only, never full CI logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-BBHost-Windows-FAILURE-6-LINES
+          path: ${{ runner.temp }}/shyt-brief-diagnosis.txt
+          retention-days: 3
+          if-no-files-found: ignore
       - name: Upload strictly experimental Windows binaries
         uses: actions/upload-artifact@v4
         with:
