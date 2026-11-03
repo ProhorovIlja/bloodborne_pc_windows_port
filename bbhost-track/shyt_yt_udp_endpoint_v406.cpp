@@ -154,19 +154,26 @@ extern "C" int shyt_yt_udp_receive_server_v406(
     std::array<uint8_t,SHYT_YT_UDP_MAX_DATAGRAM_V406+1u> incoming{};
     sockaddr_in sender{};
     native_socklen_v406 len=sizeof(sender);
-    const int n=recvfrom(endpoint->fd,
-        reinterpret_cast<char*>(incoming.data()),
-        static_cast<int>(incoming.size()),0,
-        reinterpret_cast<sockaddr*>(&sender),&len);
-    if(n<0) return transient_v406()?0:-1;
-    if(n<9 || n>static_cast<int>(SHYT_YT_UDP_MAX_DATAGRAM_V406) ||
-       sender.sin_family!=AF_INET ||
-       sender.sin_addr.s_addr!=endpoint->server.sin_addr.s_addr ||
-       sender.sin_port!=endpoint->server.sin_port ||
-       static_cast<size_t>(n)>packet_capacity ||
-       !shyt_yt_link_kind_v403(incoming.data(),static_cast<size_t>(n)))
-        return 0; // No logging or exposure of untrusted third-party UDP.
-    std::memcpy(packet,incoming.data(),static_cast<size_t>(n));
-    *got=static_cast<size_t>(n);
-    return 1; // NOT authenticated: caller MUST invoke original Noise NK.
+    // V411: a forged or malformed datagram must not hide a valid server
+    // datagram queued behind it. Drain a small, bounded number per call
+    // without spinning under a flood or changing the single-reader design.
+    for(unsigned discarded=0;discarded<8u;++discarded) {
+        len=sizeof(sender);
+        const int n=recvfrom(endpoint->fd,
+            reinterpret_cast<char*>(incoming.data()),
+            static_cast<int>(incoming.size()),0,
+            reinterpret_cast<sockaddr*>(&sender),&len);
+        if(n<0)return transient_v406()?0:-1;
+        if(n<9 || n>static_cast<int>(SHYT_YT_UDP_MAX_DATAGRAM_V406) ||
+           sender.sin_family!=AF_INET ||
+           sender.sin_addr.s_addr!=endpoint->server.sin_addr.s_addr ||
+           sender.sin_port!=endpoint->server.sin_port ||
+           static_cast<size_t>(n)>packet_capacity ||
+           !shyt_yt_link_kind_v403(incoming.data(),static_cast<size_t>(n)))
+            continue; // No logging or exposure of third-party UDP.
+        std::memcpy(packet,incoming.data(),static_cast<size_t>(n));
+        *got=static_cast<size_t>(n);
+        return 1; // NOT authenticated: caller MUST use original Noise NK.
+    }
+    return 0; // Bounded discard: next caller tick may continue draining.
 }
