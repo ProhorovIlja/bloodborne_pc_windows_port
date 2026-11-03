@@ -16,7 +16,7 @@ from pathlib import Path
 import subprocess
 
 RECOMP_PIN="222db5101170135c8ee854bcf338237477bf4ae9"
-BBCPU_PIN="3f9b6c1a11d5d8ef2441c37735e20f2b1b8da70d"
+BBCPU_PIN="3f9b6c1a11d5a443ee2e556a0d1f3aec4a73f0ca"
 # Direct source blobs verified against GitHub: original and split runtime.
 CPU_BLOB="bcbd422f92a84087a2e0c2d260ec64040f381540"
 RC_OLD="a27b8f5fc872c75bd08f6788d716b6856c9e2309"
