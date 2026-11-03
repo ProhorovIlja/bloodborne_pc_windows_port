@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 static int acceptable_image;
+static int user_opted_in_world_flags;
 static int observed_register;
 static int observed_mutations;
 static int observed_cadence;
@@ -30,6 +31,10 @@ static void fake_log(const char *fmt, ...) {
         observed_cadence++;
     if (strstr(line,"world flags overflow"))
         observed_world_overflow++;
+}
+static const char *fake_config(const char *name) {
+    assert(strcmp(name,"shyt_bbhost_probe.capture_world_flags")==0);
+    return user_opted_in_world_flags ? "true" : "";
 }
 static int fake_image(void) { return acceptable_image; }
 static int fake_frame(void (*fn)(void*),void *user) {
@@ -70,10 +75,15 @@ int main(int argc,char **argv) {
     const BbPluginInfo *info=(const BbPluginInfo*)dlsym(dll,"bb_plugin_info");
     assert(init && image && info && info->api_version>=3);
     assert(strcmp(info->name,"shyt_bbhost_probe")==0);
+    const BbOption *settings=(const BbOption*)dlsym(dll,"bb_plugin_options");
+    assert(settings && settings[0].type==BB_OPT_BOOL);
+    assert(strcmp(settings[0].key,"capture_world_flags")==0);
+    assert(strcmp(settings[0].def,"false")==0);
     BbHostApi api={0};
     api.version=BB_PLUGIN_API_VERSION;
     api.size=sizeof(api);
     api.log=fake_log;
+    api.config=fake_config;
     api.eboot_is_109=fake_image;
     api.on_frame=fake_frame;
     api.on_event_flag=fake_world_event;
@@ -91,9 +101,18 @@ int main(int argc,char **argv) {
     assert(image(&api)!=0); /* missing actual pinned 1.09 is DENY */
     assert(!observed_register);
     acceptable_image=1;
+    /* On the default empty config, the real engine never registers
+     * a progression event callback or captures a single world flag. */
+    user_opted_in_world_flags=0;
     assert(init(&api)==0);
     assert(image(&api)==0);
     assert(observed_register==1 && registered_frame);
+    assert(observed_world_register==0 && !registered_world_flag);
+    /* Explicit opt-in. Reinit is synthetic lifecycle fixture only. */
+    user_opted_in_world_flags=1;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_register==2 && registered_frame);
     assert(observed_world_register==1 && registered_world_flag);
     for(unsigned i=0;i<130;++i)
         registered_world_flag(100000u+i,i&1u,0);
