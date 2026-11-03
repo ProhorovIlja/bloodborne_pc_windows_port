@@ -116,35 +116,16 @@ int shyt_native_win_asset_read_at_v351(
     uint64_t offset,void *out,size_t max_bytes,size_t *got) {
     if (!got) return 0;
     *got=0;
-    if (!root || !out || !max_bytes ||
-        max_bytes>SHYT_WIN_ASSET_MAX_READ_V351 ||
-        offset>INT64_MAX) return 0;
-    wchar_t actual[SHYT_WIN_ASSET_PATH_CAP_V351];
-    if (!logical_asset_path_v351(root,logical_path,actual)) return 0;
-    HANDLE h=CreateFileW(actual,GENERIC_READ,FILE_SHARE_READ,0,
-                         OPEN_EXISTING,FILE_FLAG_OPEN_REPARSE_POINT,0);
-    if (h==INVALID_HANDLE_VALUE) return 0;
-    int result=0;
-    BY_HANDLE_FILE_INFORMATION info;
-    wchar_t final[SHYT_WIN_ASSET_PATH_CAP_V351];
-    DWORD n=GetFinalPathNameByHandleW(h,final,SHYT_WIN_ASSET_PATH_CAP_V351,FILE_NAME_NORMALIZED);
-    if (!GetFileInformationByHandle(h,&info) ||
-        (info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY))!=0 ||
-        info.nNumberOfLinks!=1 ||
-        !n || n>=SHYT_WIN_ASSET_PATH_CAP_V351 ||
-        n<=root->prefix_chars ||
-        _wcsnicmp(final,root->canonical_prefix,root->prefix_chars)!=0)
-        goto cleanup;
-    LARGE_INTEGER pos;
-    pos.QuadPart=(LONGLONG)offset;
-    if (!SetFilePointerEx(h,pos,NULL,FILE_BEGIN)) goto cleanup;
-    DWORD read_bytes=0;
-    if (!ReadFile(h,out,(DWORD)max_bytes,&read_bytes,NULL)) goto cleanup;
-    *got=(size_t)read_bytes;
-    result=1;
-cleanup:
-    CloseHandle(h);
-    return result;
+    /* V352: one security gate for both short single-shot reads and
+     * persistent streaming handles. Avoid duplicated containment checks
+     * silently diverging as the native asset API grows. */
+    ShytNativeWinAssetStreamV352 stream={0};
+    if (!shyt_native_win_asset_stream_open_v352(root,logical_path,&stream))
+        return 0;
+    const int ok=shyt_native_win_asset_stream_read_v352(
+        &stream,offset,out,max_bytes,got);
+    shyt_native_win_asset_stream_close_v352(&stream);
+    return ok;
 }
 
 int shyt_native_win_asset_stream_open_v352(
