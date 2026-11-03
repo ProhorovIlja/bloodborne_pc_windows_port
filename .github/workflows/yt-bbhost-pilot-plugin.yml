@@ -98,6 +98,7 @@ jobs:
           set -euo pipefail
           gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared \
             -Ipinned-bbhost/include bbhost-track/shyt_bbhost_probe_v1.c \
+            bbhost-track/shyt_yt_game_frame_v362.c \
             -o "$RUNNER_TEMP/shyt_bbhost_probe.so"
           gcc -std=c11 -O2 -Wall -Wextra -Werror \
             -Ipinned-bbhost/include bbhost-track/test_shyt_bbhost_probe_v1.c \
@@ -105,6 +106,8 @@ jobs:
           "$RUNNER_TEMP/shyt_bbhost_probe_test" "$RUNNER_TEMP/shyt_bbhost_probe.so"
           nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_init
           nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_image
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_game_frame_encode_v362
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_game_frame_decode_v362
       - name: Install cross compiler for REAL Windows BBHost plugin DLL
         shell: bash
         run: |
@@ -117,6 +120,7 @@ jobs:
           set -euo pipefail
           x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -shared \
             -Ipinned-bbhost/include bbhost-track/shyt_bbhost_probe_v1.c \
+            bbhost-track/shyt_yt_game_frame_v362.c \
             -o "$RUNNER_TEMP/shyt_bbhost_probe.dll"
           file "$RUNNER_TEMP/shyt_bbhost_probe.dll" | grep -Eq 'PE32\+.*DLL'
           x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" \
