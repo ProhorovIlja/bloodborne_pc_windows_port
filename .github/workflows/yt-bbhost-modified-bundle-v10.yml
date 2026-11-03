@@ -1,0 +1,32 @@
+name: SHYT V10 modified BBHost + YT atomic packaging contract (fictional files)
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-modified-bundle-v10.yml'
+      - 'bbhost-track/assemble_modded_bbhost_v10.py'
+      - 'bbhost-track/test_modded_bbhost_assembler_v10.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unsigned-asset-isolation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run only invented PE header, SHA manifest and rollback tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile bbhost-track/assemble_modded_bbhost_v10.py bbhost-track/test_modded_bbhost_assembler_v10.py
+          python bbhost-track/test_modded_bbhost_assembler_v10.py
+          test ! -e eboot.bin
+          test ! -e eboot.bin-decrypted
+          echo SHYT_V10_PACKAGING_GUARDS_PASS_NO_RETAIL_DATA
