@@ -91,6 +91,7 @@ jobs:
           # invented fixtures only; never upload either original title.
           python native/source-port/recomp-v194/test_private_asset_census_v342.py
           python native/source-port/recomp-v194/test_private_coff_batch_runner_v273.py
+          python native/source-port/recomp-v194/test_private_worktree_isolation_v344.py
           python -m py_compile native/source-port/recomp-v194/private_native_link_probe_v309.py
           python native/source-port/recomp-v194/test_private_native_link_probe_v309.py
           # V317: real LLVM lld-link invocation on disposable synthetic
