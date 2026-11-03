@@ -26,6 +26,27 @@ ORIGINAL_109_SHA256="941f887a562aae054fac35af8cc8f27cf075f3d4cc2e029fb5ae2a663aa
 def verified_original_109_digest(digest: str)->bool:
     return type(digest) is str and digest==ORIGINAL_109_SHA256
 
+def verify_private_109_manifest_claim_v336(manifest: dict)->bool:
+    """Recompute the original-input identity from the recorded digest.
+
+    A boolean in a copied/stale manifest must never become a substitute for
+    the exact 1.09 image's provenance in full COFF/link preparation.
+    SHA alone is not proof of executable boot or unmodified code generation.
+    """
+    if not isinstance(manifest,dict):
+        raise ValueError("missing original image provenance")
+    digest=manifest.get("input_sha256")
+    claimed=manifest.get("version_109_verified")
+    if (type(digest) is not str or len(digest)!=64 or
+            any(c not in "0123456789abcdef" for c in digest) or
+            type(claimed) is not bool):
+        raise ValueError("invalid private original image manifest identity")
+    proven=verified_original_109_digest(digest)
+    if claimed is not proven:
+        raise ValueError("private original 1.09 identity claim disagrees with SHA-256")
+    return proven
+
+
 def sha(p):
     h=hashlib.sha256()
     with p.open("rb") as f:
