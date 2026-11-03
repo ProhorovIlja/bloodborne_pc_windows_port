@@ -19,6 +19,7 @@
 #include "shyt_yt_link_wire_v403.h"
 #include "shyt_yt_secure_game_data_v405.h"
 #include "shyt_yt_udp_endpoint_v406.h"
+#include "shyt_yt_server_session_v408.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -201,6 +202,9 @@ static int shyt_yt_transport_codec_selfcheck_v363(void) {
     // V406 real OS UDP is completely dormant until a launcher supplies
     // an authenticated server endpoint. A zero/malformed endpoint must
     // fail closed WITHOUT creating a network socket at plugin startup.
+    if (shyt_yt_server_phase_v408(NULL)!=-1 ||
+        shyt_yt_server_new_v408(0u,0u,NULL,NULL,NULL,NULL)!=NULL)
+        return 0; /* no config => no socket, no login, no secrets */
     ShytYtUdpEndpointV406 *no_server=shyt_yt_udp_open_v406(0u,0u);
     if (no_server) {
         shyt_yt_udp_close_v406(no_server);
@@ -290,6 +294,7 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     api->log("shyt-bbhost-probe: original YT SHLK4 crypto C session linked, local unconnected; NO network socket/login or P2P installed");
     api->log("shyt-bbhost-probe: encrypted original YT GameData V405 linked; unauthenticated packets refused; NO live forwarding installed");
     api->log("shyt-bbhost-probe: native YT UDP endpoint V406 compiled; disabled until configured authenticated server");
+    api->log("shyt-bbhost-probe: YT SHLK4 V408 session state machine compiled; manually opt-in only; game NetSync still not connected");
     api->log("shyt-bbhost-probe: actual YT GameFrame V362 codec + V358 packet policy linked; NO SHLK authentication or P2P installed");
     return 0;
 }
