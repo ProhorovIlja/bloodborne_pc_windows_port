@@ -13,6 +13,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  issues: write  # only for a short, source-only diagnostic on failed owner push
 concurrency:
   group: shyt-bbhost-modified-windows-${{ github.ref }}
   cancel-in-progress: true
@@ -68,6 +69,26 @@ jobs:
                   assert f.read(2) == b'MZ'
           print('SHYT_MODIFIED_REAL_BBHOST_WINDOWS_EXE_PLUS_PLUGIN_COMPILED')
           PY
+      - name: Record bounded Windows cross-build failure diagnosis in Draft PR
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/shyt-windows.log"
+          test -f "$log" || exit 0
+          # Pinned public-source toolchain only: NO retail data or private paths.
+          # Avoid full logs and repeat chat stream failures. Preserve 6 short
+          # compiler/dependency error lines for a future engineering fix.
+          excerpt=$(grep -E 'fatal error:|error:|CMake Error|FAILED:|404|403|No such file|failed|Killed' "$log" | tail -n 6 | cut -c1-180 || true)
+          if [ -z "$excerpt" ]; then
+            excerpt=$(tail -n 5 "$log" | cut -c1-180)
+          fi
+          excerpt=$(printf '%s\n' "$excerpt" |
+            sed -E 's/(gh[pousr]_[A-Za-z0-9]+)/[REDACTED]/g;s/(Bearer [A-Za-z0-9._-]+)/Bearer [REDACTED]/g')
+          msg=$(printf 'BBHost modified Windows cross-build **failed** in Actions run %s. Public pinned toolchain, no game input. Bounded diagnosis:\n\`\`\`text\n%s\n\`\`\`\n' "$GITHUB_RUN_ID" "$excerpt")
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/86/comments" -f body="$msg" >/dev/null
       - name: Upload strictly experimental Windows binaries
         uses: actions/upload-artifact@v4
         with:
