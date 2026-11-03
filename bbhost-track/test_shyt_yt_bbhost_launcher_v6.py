@@ -74,6 +74,44 @@ def check(mod):
             toml.unlink()
         finally:
             mod.EXPECTED_GAME_109=original
+        # V9: simulate the owner's historical CUSA03173-patch layout,
+        # without possessing any original Bloodborne bytes.
+        patch_game = root / "CUSA03173-patch"
+        patch_game.mkdir()
+        patch_elf = patch_game / "eboot.bin-decrypted"
+        fictional_patch = b"\x7fELF\x02" + b"independent-fictional-CUSA-patch" * 20
+        patch_elf.write_bytes(fictional_patch)
+        try:
+            mod.EXPECTED_GAME_109 = hashlib.sha256(fictional_patch).hexdigest()
+            found_game, found_elf = mod.owner_game_image_v6(profile)
+            assert found_game == game.resolve()
+            assert found_elf == patch_elf.resolve()
+            args = mod.command_v6(appdir, data, profile)
+            assert args[1:3] == ["--app0", str(game.resolve())]
+            assert args[3:5] == ["--eboot", str(patch_elf.resolve())]
+            patch_elf.unlink()
+            try:
+                mod.owner_game_image_v6(profile)
+            except mod.EngineSetupError:
+                pass
+            else:
+                raise AssertionError("nonmatching base ELF accepted after patch gone")
+            patch_elf.write_bytes(fictional_patch)
+            real_patch_dir = root / "actual-patch"
+            patch_game.rename(real_patch_dir)
+            try:
+                patch_game.symlink_to(real_patch_dir, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                pass
+            else:
+                try:
+                    mod.owner_game_image_v6(profile)
+                except mod.EngineSetupError:
+                    pass
+                else:
+                    raise AssertionError("symlinked game update dir accepted")
+        finally:
+            mod.EXPECTED_GAME_109 = original
         # Parent directory cannot be link redirected to an attacker binary.
         old=exe.parent
         backup=appdir/"old"
