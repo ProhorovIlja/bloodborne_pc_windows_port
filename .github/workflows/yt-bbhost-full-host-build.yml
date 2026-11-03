@@ -52,7 +52,7 @@ jobs:
           fi
           test -x pinned-bbhost/build-ci/build/bbhost
           test -s pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so
-          grep -Fq 'SHYT' pinned-bbhost/plugins/shyt_probe/shyt_bbhost_probe_v1.c
+          grep -Fq 'shyt_bbhost_probe' pinned-bbhost/plugins/shyt_probe/shyt_bbhost_probe_v1.c
 
           echo SHYT_BBHOST_V1_COMPLETE_PINNED_HOST_ENGINE_RENDERER_AND_TESTS_PASS
       - name: Verify actual full-host-linked plugin exports, no original game content
