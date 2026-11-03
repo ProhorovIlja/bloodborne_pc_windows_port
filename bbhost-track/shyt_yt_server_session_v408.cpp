@@ -7,6 +7,7 @@
 #include "shyt_yt_udp_endpoint_v406.h"
 #include "shyt_yt_shlk_client_v401.h"
 #include "shyt_yt_link_wire_v403.h"
+#include "shyt_yt_signup_work_v409.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -47,6 +48,8 @@ struct ShytYtServerSessionV408 {
     uint32_t pending_ping_seq=0, next_seq=0;
     bool ping_outstanding=false;
     ShytYtServerCountersV408 counters{};
+    ShytYtSignupWorkV409* signup_work=nullptr;
+    int signup_work_bits=0;
 };
 
 namespace {
@@ -117,6 +120,9 @@ bool start_hello(ShytYtServerSessionV408& s,uint64_t now) {
         hello.build=s.build;
         hello.secret=s.secret;
         hello.cookie=s.cookie;
+        uint64_t solved_work=0;
+        if(shyt_yt_shlk_work_nonce_v409(s.auth,&solved_work))
+            hello.work=solved_work;
         std::vector<u8> plain=YT::Encode(hello);
         valid=plain.size()<=kWireLimit-64u &&
               shyt_yt_shlk_hello_v401(s.auth,plain.data(),plain.size(),
@@ -171,9 +177,13 @@ void handle_control(ShytYtServerSessionV408& s,
             reject(s);
             return;
         }
-        if(work!=0) {
+        // A cookie advertises work difficulty, but the original YT
+        // server sends an authenticated Work response ONLY if the
+        // account is new and actually needs the one-time challenge.
+        // Existing accounts must not waste CPU on a cookie hint.
+        if(work>LinkAuth::MaxWorkBits) {
             s.phase=SHYT_V408_WORK_UNSUPPORTED;
-            return; // Work solving must run off main game thread.
+            return;
         }
         std::copy(cookie,cookie+sizeof(cookie),s.cookie.begin());
         s.has_cookie=true;
@@ -195,11 +205,30 @@ void handle_control(ShytYtServerSessionV408& s,
             ++s.counters.auth_errors;
             return;
         }
-        // Work requires background CPU PoW and Redirect requires a
-        // separately pinned/authorized shard ticket. Fail closed until
-        // both handoff protocols are implemented, never skip them.
-        s.phase=(kind==10)?SHYT_V408_WORK_UNSUPPORTED:
-                           SHYT_V408_REDIRECT_UNSUPPORTED;
+        if(kind==10) {
+            const auto asked=YT::DecodeWork({verified.data(),verified_size});
+            if(!asked || *asked<1 || *asked>28 ||
+               !shyt_yt_shlk_work_challenge_v409(s.auth,*asked)) {
+                ++s.counters.work_challenges_refused;
+                s.phase=SHYT_V408_WORK_UNSUPPORTED;
+                return;
+            }
+            const uint64_t attempts=uint64_t{1}<<std::min(29,*asked+5);
+            s.signup_work=shyt_yt_work_start_v409(
+                s.cookie.data(),s.online_id.c_str(),*asked,attempts);
+            if(!s.signup_work) {
+                ++s.counters.work_challenges_refused;
+                s.phase=SHYT_V408_WORK_UNSUPPORTED;
+                return;
+            }
+            s.signup_work_bits=*asked;
+            ++s.counters.verified_work_challenges;
+            s.phase=SHYT_V408_SOLVING_WORK;
+            return;
+        }
+        // A shard redirect needs a pinned key plus an authenticated
+        // region ticket; never follow an address from unverified input.
+        s.phase=SHYT_V408_REDIRECT_UNSUPPORTED;
         return;
     }
     // EVERYTHING else, including Welcome and Data, MUST decrypt before
@@ -313,6 +342,7 @@ extern "C" ShytYtServerSessionV408 *shyt_yt_server_new_v408(
 }
 extern "C" void shyt_yt_server_free_v408(ShytYtServerSessionV408* s) {
     if(!s)return;
+    shyt_yt_work_free_v409(s->signup_work);
     wipe_v408(s->secret.data(),s->secret.size());
     shyt_yt_shlk_free_v401(s->auth);
     shyt_yt_udp_close_v406(s->udp);
@@ -343,6 +373,27 @@ extern "C" int shyt_yt_server_tick_v408(
             if(!read)break;
             handle_control(*s,wire.data(),n,now);
             if(s->phase>=SHYT_V408_REFUSED)break;
+        }
+        if(s->phase==SHYT_V408_SOLVING_WORK) {
+            uint64_t nonce=0;
+            const int ready=shyt_yt_work_poll_v409(s->signup_work,&nonce);
+            if(ready!=0) {
+                if(ready!=1 ||
+                   !shyt_yt_shlk_work_complete_v409(
+                       s->auth,s->cookie.data(),s->online_id.c_str(),
+                       s->signup_work_bits,nonce)) {
+                    // The challenge's actual difficulty is stored below
+                    // as work_bits; never fake a work result or skip it.
+                    ++s->counters.work_challenges_refused;
+                    s->phase=SHYT_V408_WORK_UNSUPPORTED;
+                }
+                shyt_yt_work_free_v409(s->signup_work);
+                s->signup_work=nullptr;
+                if(s->phase==SHYT_V408_SOLVING_WORK) {
+                    ++s->counters.work_nonces_solved;
+                    if(!start_hello(*s,now))return -1;
+                }
+            }
         }
         if(s->phase==SHYT_V408_LINKED || s->phase==SHYT_V408_QUIET) {
             if((s->counters.heartbeats_sent==0 ||
