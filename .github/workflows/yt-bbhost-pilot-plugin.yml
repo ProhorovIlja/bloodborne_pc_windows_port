@@ -31,6 +31,20 @@ jobs:
           path: pinned-bbhost
           persist-credentials: false
           submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - name: Verify actual original YT game packet send hook site against BBHost ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/check_netsync_yt_pin_v17.py \
+            --yt-source pinned-yt/bbport/patches/coop-sites.json \
+            --probe bbhost-track/shyt_bbhost_probe_v1.c
       - name: Strict source pin and GPL3 plugin public API guard
         shell: bash
         run: |
