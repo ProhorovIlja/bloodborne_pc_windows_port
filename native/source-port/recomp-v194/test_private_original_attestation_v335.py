@@ -58,7 +58,10 @@ def exercise(fake_matching_input: bool, drift: bool = False) -> None:
         reg = {"functions_scanned": 1, "aot_functions_registered": 1,
                "functions_not_in_aot_table": 0}
         report = {"callback_total": 0, "strict_native_runtime_ready": True}
-        with (patch.object(prep, "upstream", return_value=root),
+        # V204's generator is Linux-only; simulate only this platform gate
+        # for the synthetic Windows contract, never run a real scanner here.
+        with (patch.object(prep.sys, "platform", "linux"),
+              patch.object(prep, "upstream", return_value=root),
               patch.object(prep.preflight, "check", return_value={}),
               patch.object(prep, "sha", side_effect=controlled_sha),
               patch.object(prep, "run", side_effect=synthetic_generator),
