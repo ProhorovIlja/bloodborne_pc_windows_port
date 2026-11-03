@@ -14,7 +14,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import tkinter as tk
 
 EXPECTED_GAME_109 = "941f887a562aae054fac35af8cc8f27cf075f3d4cc2e029fb5ae2a663aaa5ae7"
 MAX_ELF_BYTES = 256 * 1024 * 1024
@@ -162,6 +161,7 @@ def launch_from_yt_v6(launcher, port_dir: Path, data_dir: Path) -> None:
 
 def engine_settings_popup_v6(launcher, config_dir: Path, port_dir: Path) -> None:
     """The original YT GUI hosts this additional BBHost engine/settings tab."""
+    import tkinter as tk  # a headless game's CLI or CI does not require Tk
     win = tk.Toplevel(launcher.root)
     win.title("Seamless Hunt | Game engine")
     win.transient(launcher.root)
