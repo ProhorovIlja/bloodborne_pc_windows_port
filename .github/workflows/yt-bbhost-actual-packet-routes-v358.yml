@@ -34,8 +34,11 @@ jobs:
           set -euo pipefail
           test "$(git -C original-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
           test "$(git -C original-yt rev-parse HEAD:server/coop/packet_routes.h)" = f732c87cd0a030751f5ed23dfa225e98bb8ffc5c
+          # On Windows checkout autocrlf can convert this PUBLIC header to
+          # CRLF. Verify the committed canonical Git blob, not workspace bytes.
+          git -C original-yt show HEAD:server/coop/packet_routes.h >yt-v358-source-git-blob.txt
           python bbhost-track/check_yt_native_channel_policy_v21.py \
-            --yt-policy original-yt/server/coop/packet_routes.h \
+            --yt-policy yt-v358-source-git-blob.txt \
             --host-policy bbhost-track/shyt_yt_native_channel_policy_v21.h
       - name: Build and execute 10080 EXACT original YT server vs BBHost packet route cases
         shell: bash
