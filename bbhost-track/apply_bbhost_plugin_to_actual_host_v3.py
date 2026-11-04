@@ -14,6 +14,14 @@ import shutil
 import subprocess
 
 UPSTREAM="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
+# Released BBHost 0.2.25 is a distinct, explicitly approved upstream source.
+# Candidate builds must never silently replace the proven 0.2.24 baseline.
+UPSTREAM_V025="7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13"
+BBHOST_CMAKE_BLOBS={
+    UPSTREAM:"672a3c1c3b9264cf3cc34d4606b844e5cba87717",
+    UPSTREAM_V025:"c881ca32c838eb7a8162c45558cfdac135967f53",
+}
+BBHOST_PLUGIN_ABI_BLOB="b437a16204a7a439d709054b8fa592034d42f990"
 YT_UPSTREAM="5d2305ee611ef1e03be39ff925f0da75c9a70393"
 YT_NET_BLOBS={
     "emulator/src/core/libraries/network/net_link.h":"7f56fd1a5215eddb9edd9f13c91b216c16bc1651",
@@ -26,7 +34,7 @@ YT_CRYPTO_BLOBS={
     "coop/monocypher/monocypher.c":"fe5bbdc8bde356ae80fe0b136d8c8e9212c15db8",
     "coop/monocypher/monocypher.h":"291b8b9e6f9187e4df715227047c83ee88c95959"
 }
-CMAKE_BLOB="672a3c1c3b9264cf3cc34d4606b844e5cba87717"
+CMAKE_BLOB=BBHOST_CMAKE_BLOBS[UPSTREAM]  # retained 0.2.24 baseline constant
 CMAKE_ANCHOR="""set_target_properties(bb_plugin_hello PROPERTIES OUTPUT_NAME hello PREFIX ""
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)"""
 # BBHost's Windows package-win target has explicit dependencies. Merely
@@ -96,8 +104,14 @@ def main()->None:
             git(yt,"rev-parse","HEAD:"+file)!=expected_blob or
             git(yt,"hash-object",file)!=expected_blob):
             raise ValueError("original YT outer link source pin drift")
-    if git(root,"rev-parse","HEAD")!=UPSTREAM:
+    actual_upstream=git(root,"rev-parse","HEAD")
+    expected_cmake_blob=BBHOST_CMAKE_BLOBS.get(actual_upstream)
+    if not expected_cmake_blob:
         raise ValueError("unverified BBHost release")
+    plugin_abi="include/bbhost_plugin.h"
+    if (git(root,"rev-parse","HEAD:"+plugin_abi)!=BBHOST_PLUGIN_ABI_BLOB or
+        git(root,"hash-object",plugin_abi)!=BBHOST_PLUGIN_ABI_BLOB):
+        raise ValueError("BBHost plugin ABI differs from validated v16")
     cmake=root/"CMakeLists.txt"
     plugin_root=root/"plugins/shyt_probe"
     plugin=plugin_root/"shyt_bbhost_probe_v1.c"
@@ -120,8 +134,8 @@ def main()->None:
     yt_work_source=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.cpp"
     yt_work_header=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.h"
     if (cmake.is_symlink() or not cmake.is_file() or
-        git(root,"rev-parse","HEAD:CMakeLists.txt")!=CMAKE_BLOB or
-        git(root,"hash-object","CMakeLists.txt")!=CMAKE_BLOB or
+        git(root,"rev-parse","HEAD:CMakeLists.txt")!=expected_cmake_blob or
+        git(root,"hash-object","CMakeLists.txt")!=expected_cmake_blob or
         not source.is_file() or source.is_symlink() or
         not world_header.is_file() or world_header.is_symlink() or
         not yt_policy_header.is_file() or yt_policy_header.is_symlink() or
