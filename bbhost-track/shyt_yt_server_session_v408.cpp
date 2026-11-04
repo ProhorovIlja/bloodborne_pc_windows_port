@@ -48,6 +48,10 @@ struct ShytYtServerSessionV408 {
     uint32_t pending_ping_seq=0, next_seq=0;
     bool ping_outstanding=false;
     ShytYtServerCountersV408 counters{};
+    // V412: only authenticated transport presence, never team approval.
+    std::array<ShytYtMemberNoticeV412,SHYT_V412_MEMBER_QUEUE_CAP> member_queue{};
+    size_t member_head=0,member_count=0;
+    bool member_overflow=false;
     ShytYtSignupWorkV409* signup_work=nullptr;
     int signup_work_bits=0;
 };
@@ -276,6 +280,40 @@ void handle_control(ShytYtServerSessionV408& s,
             }else reject(s);
             return;
         }
+        if(decrypted_kind==6) {
+            // V412: original YT's LINK presence notifications (Quiet,
+            // Back, Gone) are not proof of membership in a co-op room.
+            // Only process after successful Noise NK MAC/replay checks.
+            const auto notice=YT::DecodeMember({plain.data(),size});
+            if(!notice || notice->online_id.empty() ||
+               notice->online_id.size()>255u) {
+                ++s.counters.rejected_member_notices;
+                return;
+            }
+            s.last_auth_recv=now;
+            s.phase=SHYT_V408_LINKED;
+            ++s.counters.authenticated_member_notices;
+            if(s.member_overflow)return; // fail closed until new session
+            if(s.member_count==SHYT_V412_MEMBER_QUEUE_CAP) {
+                s.member_overflow=true;
+                s.member_head=0;
+                s.member_count=0;
+                ++s.counters.member_notice_overflows;
+                return;
+            }
+            ShytYtMemberNoticeV412 event{};
+            event.state=static_cast<uint8_t>(notice->state);
+            event.gap_ms=notice->gap_ms;
+            event.addr_nbo=notice->addr_nbo;
+            event.port_nbo=notice->port_nbo;
+            std::memcpy(event.online_id,notice->online_id.data(),
+                        notice->online_id.size());
+            event.online_id[notice->online_id.size()]=0;
+            s.member_queue[(s.member_head+s.member_count)%
+                           SHYT_V412_MEMBER_QUEUE_CAP]=event;
+            ++s.member_count;
+            return;
+        }
         if(decrypted_kind==3) {
             // Authenticated != authorized for the guest. The server
             // must explicitly approve this peer's room/map ownership
@@ -423,6 +461,18 @@ extern "C" int shyt_yt_server_counters_v408(
     if(out)*out={};
     if(!s || !out)return 0;
     *out=s->counters;
+    return 1;
+}
+extern "C" int shyt_yt_server_take_member_v412(
+    ShytYtServerSessionV408* s,ShytYtMemberNoticeV412* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    if(s->member_overflow)return -1;
+    if(!s->member_count)return 0;
+    *out=s->member_queue[s->member_head];
+    s->member_queue[s->member_head]={};
+    s->member_head=(s->member_head+1u)%SHYT_V412_MEMBER_QUEUE_CAP;
+    --s->member_count;
     return 1;
 }
 extern "C" int shyt_yt_server_local_port_v408(
