@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """V13: source-locked BBHost HLE P2P route counters, off by default.
 
-Run AFTER the exact v0.2.24 STUN CSPRNG V2 patch on a disposable checkout.
+Run AFTER the exact v0.2.24/v0.2.25 STUN CSPRNG V2 patch on a disposable checkout.
 No game files, wire protocol changes, IP logging, payload interception,
 server updates or gameplay hooks.
 """
@@ -13,6 +13,8 @@ import shutil
 import subprocess
 
 PIN="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
+PIN_V025="7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13"
+ALLOWED_RELEASE_HEADS=(PIN,PIN_V025)  # explicit source pins only
 ORIGINAL_NET_BLOB="476fd20eb8acf1acbb5ca45cbb4e03af6b6da4a2"
 REL="src/hle/net.cpp"
 NAME="shyt_route_telemetry_v13.h"
@@ -57,7 +59,7 @@ def main()->None:
     net=root/REL
     header=root/"src/hle"/NAME
     source=Path(__file__).with_name(NAME)
-    if (git(root,"rev-parse","HEAD")!=PIN or
+    if (git(root,"rev-parse","HEAD") not in ALLOWED_RELEASE_HEADS or
         git(root,"rev-parse","HEAD:"+REL)!=ORIGINAL_NET_BLOB or
         not net.is_file() or net.is_symlink() or
         not source.is_file() or source.is_symlink() or
