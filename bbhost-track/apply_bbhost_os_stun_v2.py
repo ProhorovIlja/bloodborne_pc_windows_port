@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """V2: harden REAL BBHost STUN Binding transaction IDs in a pinned checkout.
 
-BBHost v0.2.24 uses steady-clock-seeded mt19937_64 for a 96-bit STUN
+BBHost v0.2.24/v0.2.25 uses steady-clock-seeded mt19937_64 for a 96-bit STUN
 transaction ID. Replace ONLY that non-cryptographic transaction source with
 the operating system CSPRNG; refuse STUN (and relay negotiation) when entropy
 is unavailable. This neither authorizes YT game movement nor claims
@@ -14,6 +14,8 @@ from pathlib import Path
 import subprocess
 
 PIN="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
+PIN_V025="7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13"
+ALLOWED_RELEASE_HEADS=(PIN,PIN_V025)  # explicit source pins only
 FILES={
     "src/net/stun.cpp":"d4c950d9ce321ddc01134778b326017b1f282d86",
     "src/hle/net.cpp":"476fd20eb8acf1acbb5ca45cbb4e03af6b6da4a2",
@@ -110,8 +112,8 @@ def main()->None:
     p.add_argument("--mode",choices=("check","apply"),default="check")
     a=p.parse_args()
     root=a.upstream_checkout.resolve(strict=True)
-    if git(root,"rev-parse","HEAD")!=PIN:
-        raise ValueError("expected official BBHost v0.2.24 commit")
+    if git(root,"rev-parse","HEAD") not in ALLOWED_RELEASE_HEADS:
+        raise ValueError("expected official BBHost v0.2.24/v0.2.25 commit")
     patches={}
     for path,expected in FILES.items():
         file=root/path
