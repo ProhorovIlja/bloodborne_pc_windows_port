@@ -30,6 +30,6 @@ Code and tests in this branch are GPL; never commit original game data, owner cr
 - V411 OS UDP spoof-ahead-of-legitimate regression passed Windows/Linux: run `41738181923`; pilot plugin `41738190841` passed.
 - V412 added authenticated Link::Member presence events and fail-closed queue overflow, without world authorization. Local original YT responder tests passed Ubuntu/Windows in run `41850926818`; plugin/STUN run `41850941632` also passed.
 - Pending full-game work: actual YT co-op reliable world/team state, validated NetSync RX/TX, complete gameplay, five-player UX, hybrid P2P/relay and installer. Not a release.
-- Relevant upstream as last checked: YT #484/#486 Draft; YT #506/#507 open; BBHost #204 open. Never claim these PRs are merged without checking.
+- **2026-11-04 upstream refresh:** YT #484 five-player changes merged to `main` (NOT published v1.3.1; YT #486 rig remains Draft). YT #506/#507 merged into `release-1.3.2` (not v1.3.1). BBHost #204 merged into `master`, and official BBHost `v0.2.25` was published. The *current playable SHYT baseline* still pins BBHost v0.2.24 and YT v1.3.1; no implicit cherry-pick or tested v0.2.25 migration. The upgrade candidate runs on exact commit `7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13` in the separate `yt-bbhost-v025-pinned-upgrade-candidate.yml` CI workflow.
 
 **Constraints:** No production Fornex writes, no retail game binaries or user identifiers in public GitHub or CI, no publishing experimental artifacts as complete releases.
