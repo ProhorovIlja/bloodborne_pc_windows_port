@@ -224,6 +224,37 @@ int main() {
         raw.insert(raw.end(),trailer.begin(),trailer.end());
         return send_to(server,endpoint,raw);
     };
+    // V412: real YT Link::Member is an encrypted PRESENCE notice, not
+    // a co-op team authorization or permission to forward game data.
+    ShytYtMemberNoticeV412 member_event{};
+    if(shyt_yt_server_take_member_v412(client,&member_event)!=0)
+        return bad(35);
+    YT::Member quiet{};
+    quiet.state=YT::MemberState::Quiet;
+    quiet.gap_ms=1750u;
+    quiet.addr_nbo=htonl(0x0a020304u);
+    quiet.port_nbo=htons(3658);
+    quiet.online_id="fictional-peer";
+    if(!send_encrypted(YT::Encode(quiet)) ||
+       shyt_yt_server_tick_v408(client,1350)!=1 ||
+       shyt_yt_server_take_member_v412(client,&member_event)!=1 ||
+       member_event.state!=0 ||
+       member_event.gap_ms!=1750u ||
+       member_event.addr_nbo!=quiet.addr_nbo ||
+       member_event.port_nbo!=quiet.port_nbo ||
+       std::strcmp(member_event.online_id,"fictional-peer")!=0 ||
+       shyt_yt_server_take_member_v412(client,&member_event)!=0)
+        return bad(36);
+    // A valid Noise tag does not make a malformed Member state valid.
+    auto bad_member=YT::Encode(quiet);
+    bad_member[YT::HeaderSize]=0xffu;
+    if(!send_encrypted(bad_member) ||
+       shyt_yt_server_tick_v408(client,1360)!=1 ||
+       !shyt_yt_server_counters_v408(client,&counts) ||
+       counts.rejected_member_notices!=1u ||
+       shyt_yt_server_take_member_v412(client,&member_event)!=0)
+        return bad(37);
+
     if(!send_encrypted(YT::EncodeData(0x12345678u,0x4a5bu,fake_game)) ||
        !send_encrypted(YT::EncodeCoop(fake_game)) ||
        shyt_yt_server_tick_v408(client,1400)!=1)
@@ -242,6 +273,26 @@ int main() {
        counts.auth_errors==0 ||
        counts.authenticated_data_quarantined!=1)
         return bad(25);
+    // V412: bounded notifications must fail closed rather than silently
+    // missing a Gone event, which would leave stale presence behind.
+    for(unsigned i=0;i<SHYT_V412_MEMBER_QUEUE_CAP+1u;++i) {
+        YT::Member next=quiet;
+        next.gap_ms=i;
+        next.state=YT::MemberState::Gone;
+        if(!send_encrypted(YT::Encode(next)))return bad(38);
+    }
+    if(shyt_yt_server_tick_v408(client,1500)!=1 ||
+       !shyt_yt_server_counters_v408(client,&counts) ||
+       counts.authenticated_member_notices!=
+           SHYT_V412_MEMBER_QUEUE_CAP+2u ||
+       counts.member_notice_overflows!=1u ||
+       shyt_yt_server_take_member_v412(client,&member_event)!=-1 ||
+       member_event.online_id[0]!=0)
+        return bad(39);
+    // No event can be returned from the stale queue until a fresh
+    // session and authoritative room snapshot are established.
+    if(shyt_yt_server_take_member_v412(client,&member_event)!=-1)
+        return bad(40);
     // Original client must keep its authenticated transport, but report
     // quiet when replies have not arrived within the safety window.
     if(shyt_yt_server_tick_v408(client,12500)!=1 ||
@@ -254,6 +305,7 @@ int main() {
 #endif
     std::puts("SHYT_V408_REAL_ORIGINAL_YT_SERVER_LINK_SESSION_LOGIN_HEARTBEAT_QUARANTINE_PASS");
     std::puts("SHYT_V409_SOURCE_PINNED_YT_HOSTED_SIGNUP_POW_BACKGROUND_NONCE_AND_RELOGIN_PASS");
+    std::puts("SHYT_V412_MAC_AUTHENTICATED_MEMBER_PRESENCE_QUEUE_OVERFLOW_FAIL_CLOSED_PASS");
     std::puts("localhost only; encrypted game Data quarantined. No production or retail game connection.");
     return 0;
 }
