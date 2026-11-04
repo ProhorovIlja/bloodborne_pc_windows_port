@@ -33,6 +33,19 @@ enum ShytYtServerPhaseV408 {
     SHYT_V408_REDIRECT_UNSUPPORTED=8,
     SHYT_V408_IO_FAILED=9
 };
+/* V412: server LINK presence notifications (Quiet / Back / Gone).
+ * NOT a team/room membership authorization, P2P grant, or permission to
+ * forward game packets. Read only on the same thread as tick().
+ * All addresses and ports remain in network byte order.
+ */
+enum { SHYT_V412_MEMBER_QUEUE_CAP = 16 };
+typedef struct ShytYtMemberNoticeV412 {
+    uint8_t state; /* 0 Quiet, 1 Back, 2 Gone; original YT MemberState */
+    uint32_t gap_ms;
+    uint32_t addr_nbo;
+    uint16_t port_nbo;
+    char online_id[256]; /* NUL-terminated, never logged */
+} ShytYtMemberNoticeV412;
 typedef struct ShytYtServerCountersV408 {
     uint64_t hello_sent;
     uint64_t auth_errors;
@@ -44,6 +57,9 @@ typedef struct ShytYtServerCountersV408 {
     uint64_t verified_work_challenges;
     uint64_t work_nonces_solved;
     uint64_t work_challenges_refused;
+    uint64_t authenticated_member_notices;
+    uint64_t rejected_member_notices;
+    uint64_t member_notice_overflows;
 } ShytYtServerCountersV408;
 /* C-string fields must be present, NUL-terminated and 1..255B.
  * No implicit fallback to unsigned/TOFU key, and no credential capture.
@@ -64,6 +80,14 @@ int shyt_yt_server_tick_v408(ShytYtServerSessionV408 *session,
 int shyt_yt_server_phase_v408(const ShytYtServerSessionV408 *session);
 int shyt_yt_server_counters_v408(const ShytYtServerSessionV408 *session,
                                  ShytYtServerCountersV408 *out);
+/* Consume exactly one MAC-authenticated LINK presence notice.
+ * Returns 1 for a notice; 0 if empty/bad args; -1 if the bounded
+ * queue overflowed, permanently invalidating presence until a NEW
+ * session/snapshot. In every case except 1, *out is zeroed.
+ * This API MUST NOT authorize a room or inject a P2P game packet.
+ */
+int shyt_yt_server_take_member_v412(
+    ShytYtServerSessionV408 *session,ShytYtMemberNoticeV412 *out);
 /* Exposes ephemeral local UDP port for isolated/authorized integration
  * tests; never a direct game listener and not the BBHost P2P port. */
 int shyt_yt_server_local_port_v408(const ShytYtServerSessionV408 *session,
