@@ -17,6 +17,12 @@ on:
       - 'bbhost-track/shyt_yt_game_frame_v362.c'
       - 'bbhost-track/shyt_yt_game_frame_v362.h'
       - 'bbhost-track/shyt_yt_packet_routes_v358.h'
+      - 'bbhost-track/shyt_yt_link_wire_v403.*'
+      - 'bbhost-track/shyt_yt_secure_game_data_v405.*'
+      - 'bbhost-track/shyt_yt_udp_endpoint_v406.*'
+      - 'bbhost-track/shyt_yt_server_session_v408.*'
+      - 'bbhost-track/shyt_yt_signup_work_v409.*'
+      - 'bbhost-track/shyt_yt_native_channel_policy_v21.h'
       - 'bbhost-track/yt_world_event_ledger_v4.h'
   workflow_dispatch:
 permissions:
