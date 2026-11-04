@@ -1,0 +1,139 @@
+name: SHYT candidate BBHost v0.2.25 verified plugin/host cross-build (no game data)
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-v025-pinned-upgrade-candidate.yml'
+      - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
+      - 'bbhost-track/apply_bbhost_os_stun_v2.py'
+      - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
+      - 'bbhost-track/apply_bbhost_route_rx_v19.py'
+      - 'bbhost-track/shyt_bbhost_probe_v1.c'
+      - 'bbhost-track/shyt_yt_server_session_v408.*'
+      - 'bbhost-track/shyt_yt_udp_endpoint_v406.*'
+      - 'bbhost-track/shyt_yt_signup_work_v409.*'
+      - 'bbhost-track/shyt_yt_secure_game_data_v405.*'
+      - 'bbhost-track/shyt_yt_link_wire_v403.*'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: shyt-bbhost-v025-candidate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify-v025-real-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+      - name: Verify both upstream sources and BBHost unchanged v16 plugin ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-bbhost rev-parse HEAD)" = 7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13
+          test "$(git -C pinned-bbhost rev-parse HEAD:CMakeLists.txt)" = c881ca32c838eb7a8162c45558cfdac135967f53
+          test "$(git -C pinned-bbhost rev-parse HEAD:include/bbhost_plugin.h)" = b437a16204a7a439d709054b8fa592034d42f990
+          test "$(git -C pinned-bbhost rev-parse HEAD:src/net/stun.cpp)" = d4c950d9ce321ddc01134778b326017b1f282d86
+          test "$(git -C pinned-bbhost rev-parse HEAD:src/hle/net.cpp)" = 476fd20eb8acf1acbb5ca45cbb4e03af6b6da4a2
+          test "$(git -C pinned-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          echo SHYT_V025_UPSTREAM_HASH_AND_STABLE_PLUGIN_ABI_V16_PIN_PASS
+      - name: Apply actual SHYT V2/V13/V19 network and V412 plugin onto pinned v0.2.25
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode apply
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode apply
+          grep -Fq 'bb_plugin_debug_menu bb_plugin_shyt' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'shyt_route_account_received_v19' pinned-bbhost/src/hle/net.cpp
+          echo SHYT_V025_ORIGINAL_BBHOST_PATCHES_APPLIED_NO_PUBLIC_GAME_BYTES
+      - name: Compile whole v0.2.25 host and actual integrated Linux plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! (cd pinned-bbhost && tools/ci_build.sh) >"$RUNNER_TEMP/shyt-v025-linux.log" 2>&1; then
+            (grep -E 'fatal error:|error:|FAILED:|CMake Error|failed|Killed' "$RUNNER_TEMP/shyt-v025-linux.log" | tail -n 6 | cut -c1-160 || true)
+            exit 1
+          fi
+          test -x pinned-bbhost/build-ci/build/bbhost
+          test -s pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so
+          nm -D --defined-only pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so | grep -q bb_plugin_init
+          echo SHYT_V025_REAL_FULL_LINUX_HOST_PLUS_V412_SHLK_PLUGIN_BUILD_PASS
+  verify-v025-real-windows:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 105
+    steps:
+      - name: Install checkout toolchain preconditions
+        run: pacman -Syu --noconfirm --needed git ca-certificates python 7zip
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+      - name: Verify pinned authentic v0.2.25 sources, apply real networking and SHLK
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/pinned-bbhost"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/pinned-yt"
+          test "$(git -C pinned-bbhost rev-parse HEAD)" = 7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13
+          test "$(git -C pinned-bbhost rev-parse HEAD:include/bbhost_plugin.h)" = b437a16204a7a439d709054b8fa592034d42f990
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode apply
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode apply
+          grep -Fq 'bb_plugin_debug_menu bb_plugin_shyt' pinned-bbhost/CMakeLists.txt
+      - name: Build authentic modified v0.2.25 Windows EXE and V412 plugin DLL
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! (cd pinned-bbhost && CI_PACMAN=1 CI_CMAKE_ARGS='-DBBHOST_LTO=OFF' tools/ci_windows.sh) >"$RUNNER_TEMP/shyt-v025-win.log" 2>&1; then
+            (grep -E 'fatal error:|error:|FAILED:|CMake Error|failed|Killed' "$RUNNER_TEMP/shyt-v025-win.log" | tail -n 6 | cut -c1-160 || true)
+            exit 1
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          for p in ("pinned-bbhost/build-win/bbhost.exe",
+                    "pinned-bbhost/build-win/plugins/shyt_bbhost_probe.dll"):
+              f=Path(p)
+              assert f.is_file() and f.stat().st_size>1024
+              with f.open("rb") as stream: assert stream.read(2)==b"MZ"
+          print("SHYT_V025_REAL_WIN64_BBHOST_AND_V412_PLUGIN_PE_BUILD_PASS")
+          PY
