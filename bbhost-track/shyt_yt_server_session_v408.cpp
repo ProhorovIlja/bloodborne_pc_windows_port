@@ -140,6 +140,10 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
     while(s.coop_quarantine->PeekQuarantined(s.coop_observed,bytes)) {
         auto decoded=SeamlessHunt::YtTeamWireLiteV415::Decode(bytes);
         using Kind=SeamlessHunt::YtTeamWireLiteV415::Kind;
+        // V424: erase only fully validated, already represented world
+        // events. Transport ACK != game application and must not erase
+        // a new event or the one complete world Snapshot.
+        bool redundant_delta_handled=false;
         switch(decoded.kind) {
         case Kind::Lobby:
             s.party_reply.Revoke(); // any roster refresh fences in-flight Hello
@@ -212,6 +216,8 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
             const auto verdict=s.world_delta.Observe(
                 decoded.epoch,decoded.last,decoded.first_entry_seq,
                 decoded.last_entry_seq,decoded.entry_count);
+            redundant_delta_handled=
+                verdict==Verdict::Replay || verdict==Verdict::Heartbeat;
             if(verdict==Verdict::Gap || verdict==Verdict::EpochChanged ||
                verdict==Verdict::Invalid) {
                 s.world_snapshot.Revoke();
@@ -235,10 +241,15 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
         // controls, and explicitly rejected an unbound Welcome. Keeping
         // them in quarantine forever would exhaust the 16-message budget
         // during a normal team-creation flow and stop the reliable stream.
-        // Unknown world events and malformed bodies are NOT discarded.
+        // Unknown events, new world deltas, invalid bodies, and the
+        // actual Snapshot are NEVER discarded. Only a V423-confirmed
+        // exact old replay or empty heartbeat is redundant; keeping 16
+        // such packets would otherwise exhaust the bounded 16-message
+        // staging queue, needlessly failing an otherwise healthy link.
         const bool handled=decoded.kind==Kind::Lobby ||
                            decoded.kind==Kind::Start ||
-                           decoded.kind==Kind::Welcome;
+                           decoded.kind==Kind::Welcome ||
+                           redundant_delta_handled;
         if(handled) {
             if(!s.coop_quarantine->DiscardHandledAt(s.coop_observed)) {
                 invalidate_coop(s);
