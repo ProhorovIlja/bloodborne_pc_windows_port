@@ -1,0 +1,43 @@
+name: SHYT V187 genuine Win64 recomp module ABI feasibility
+on:
+  push:
+    branches: [feature/native-win64-recomp-abi-v187-20261031]
+    paths:
+      - .github/workflows/shyt-v187-native-recomp-abi.yml
+      - native/source-port/recomp-v187/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-module:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Verify external real RcApi v4 layout and report native Windows blockers
+        run: >-
+          python native/source-port/recomp-v187/check_upstream_abi.py
+          --upstream-root upstream-recomp
+          --project-header native/source-port/recomp-v187/recomp_abi.h
+      - name: Test strict upstream ABI source drift refusal
+        run: python -m unittest discover -s native/source-port/recomp-v187 -p test_upstream_abi.py -v
+      - name: Configure genuine platform C compiler for native module test
+        run: cmake -S native/source-port/recomp-v187 -B build-v187 -DCMAKE_BUILD_TYPE=Release
+      - name: Compile actual native Windows DLL or Linux shared object, no retail assets
+        run: cmake --build build-v187 --config Release --parallel 2
+      - name: Run native module ABI load and callback tests
+        run: ctest --test-dir build-v187 -C Release --output-on-failure
