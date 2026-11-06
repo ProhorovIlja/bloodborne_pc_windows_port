@@ -92,9 +92,10 @@ static int fake_world_load(void (*fn)(uint32_t,void*),void *user) {
     registered_world_load=fn;
     return 0;
 }
-static const unsigned char expected_netsync_head[17] = {
+static const unsigned char expected_netsync_head[20] = {
     0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
-    0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x38
+    0x41,0x55,0x41,0x54,0x53,0x48,0x81,0xec,
+    0x88,0x00,0x00,0x00
 };
 static int fake_net_read(uint64_t address,void *out,size_t n) {
     if(n==6u) {
@@ -224,6 +225,7 @@ int main(int argc,char **argv) {
     /* V17: actual 1.09 exact-prologue-aware hook stays off by default,
      * and a nonmatching prologue may NEVER be patched. */
     user_opted_in_packet_channels=1;
+    acceptable_sha=1; /* v428 exact 1.09 is a prerequisite */
     acceptable_prologue=0;
     assert(init(&api)==0);
     assert(image(&api)==0);
