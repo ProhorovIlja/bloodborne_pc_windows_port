@@ -1,0 +1,52 @@
+name: BBHost-YT original reliable CoopStream bounded transport V413
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-reliable-coop-v413.yml'
+      - 'bbhost-track/shyt_yt_coop_transport_v413.h'
+      - 'bbhost-track/test_shyt_yt_coop_transport_v413.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-yt-world-stream-transport:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: original-yt
+          persist-credentials: false
+      - name: Strict original-source pin
+        shell: bash
+        run: |
+          test "$(git -C original-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test -f original-yt/server/coop/coop_stream.h
+          test -f original-yt/server/coop/game_link.h
+      - name: Compile and exercise real YT stream without game or network
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Windows ]; then
+            MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl /nologo /std:c++20 /EHsc /O2 /W4 /WX \
+              /Ibbhost-track /Ioriginal-yt/server \
+              bbhost-track/test_shyt_yt_coop_transport_v413.cpp \
+              /Fe:./v413-test.exe >v413-build.log 2>&1 || { tail -n 7 v413-build.log | cut -c1-160; exit 1; }
+            ./v413-test.exe
+          else
+            clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
+              -Ibbhost-track -Ioriginal-yt/server \
+              bbhost-track/test_shyt_yt_coop_transport_v413.cpp \
+              -o v413-test >v413-build.log 2>&1 || { tail -n 7 v413-build.log | cut -c1-160; exit 1; }
+            ./v413-test
+          fi
