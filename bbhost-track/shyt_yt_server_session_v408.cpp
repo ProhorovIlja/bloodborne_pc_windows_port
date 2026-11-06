@@ -128,7 +128,6 @@ void observe_team_authority(ShytYtServerSessionV408& s) {
     if(!s.team_gate || !s.coop_quarantine)return;
     std::span<const u8> bytes;
     while(s.coop_quarantine->PeekQuarantined(s.coop_observed,bytes)) {
-        ++s.coop_observed;
         auto decoded=SeamlessHunt::YtTeamWireLiteV415::Decode(bytes);
         using Kind=SeamlessHunt::YtTeamWireLiteV415::Kind;
         switch(decoded.kind) {
@@ -159,6 +158,22 @@ void observe_team_authority(ShytYtServerSessionV408& s) {
             break;
         case Kind::Other:
             break;
+        }
+        // The authority gate has completely consumed only lobby/start
+        // controls, and explicitly rejected an unbound Welcome. Keeping
+        // them in quarantine forever would exhaust the 16-message budget
+        // during a normal team-creation flow and stop the reliable stream.
+        // Unknown world events and malformed bodies are NOT discarded.
+        const bool handled=decoded.kind==Kind::Lobby ||
+                           decoded.kind==Kind::Start ||
+                           decoded.kind==Kind::Welcome;
+        if(handled) {
+            if(!s.coop_quarantine->DiscardHandledAt(s.coop_observed)) {
+                invalidate_coop(s);
+                return;
+            }
+        } else {
+            ++s.coop_observed;
         }
     }
 }
