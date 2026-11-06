@@ -50,7 +50,7 @@ int V435AuthenticatedGameSender() {
   auto result = forward(frame, 10);
   CHECK(SentTo(result, Ada).size() == 1);
   const auto authentic = DecodeData(SentTo(result, Ada)[0]);
-  CHECK(authentic && authentic->from == VirtualEndpointOf("Kaniel"));
+  CHECK(authentic && authentic->peer == VirtualEndpointOf("Kaniel"));
   frame.sender = "Ada";
   CHECK(forward(frame, 11).sends.isEmpty()); // spoof another signed-in link
   frame.sender = "eileen";
