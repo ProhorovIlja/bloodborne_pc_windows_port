@@ -98,15 +98,27 @@ static const unsigned char expected_netsync_head[20] = {
     0x88,0x00,0x00,0x00
 };
 static int fake_net_read(uint64_t address,void *out,size_t n) {
-    if(n==6u) {
-        assert(address==UINT64_C(0x00C8F0A0)+UINT64_C(0x400000) ||
-               address==UINT64_C(0x01789B60)+UINT64_C(0x400000));
-        static const unsigned char yt_prefix[6]={
-            0x55u,0x48u,0x89u,0xe5u,0x41u,0x57u};
+    if(n==14u || n==20u) {
+        static const unsigned char yt_transport[14]={
+            0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+            0x41,0x55,0x41,0x54,0x53,0x50
+        };
+        static const unsigned char yt_update[20]={
+            0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+            0x41,0x55,0x41,0x54,0x53,0x48,0x81,0xec,
+            0x18,0x21,0x00,0x00
+        };
         assert(out);
-        memcpy(out,yt_prefix,6u);
+        if(address==UINT64_C(0x00C8F0A0)+UINT64_C(0x400000)) {
+            assert(n==sizeof(yt_transport));
+            memcpy(out,yt_transport,n);
+        } else {
+            assert(address==UINT64_C(0x01789B60)+UINT64_C(0x400000));
+            assert(n==sizeof(yt_update));
+            memcpy(out,yt_update,n);
+        }
         ++observed_site_reads;
-        if(!acceptable_prologue) ((unsigned char*)out)[0]=0xcc;
+        if(!acceptable_prologue) ((unsigned char*)out)[n-1u]^=1u;
         return 0;
     }
     assert(address==UINT64_C(0x017894E0)+UINT64_C(0x400000));
