@@ -549,8 +549,9 @@ int main() {
        stage_obs.pending_packets!=1u || stage_obs.active!=1u)
         return bad(83);
     ShytYtWorldProjectionObservationsV426 projection_obs{};
-    if(!shyt_yt_server_world_projection_observations_v426(client,&projection_obs) ||
-       projection_obs.projection_ready!=1u ||
+    const int projection_ok=
+        shyt_yt_server_world_projection_observations_v426(client,&projection_obs);
+    if(!projection_ok || projection_obs.projection_ready!=1u ||
        projection_obs.epoch!=77u || projection_obs.projected_seq!=9u ||
        projection_obs.game_applied_seq!=0u ||
        projection_obs.killed!=2u || projection_obs.shown!=1u ||
@@ -559,8 +560,27 @@ int main() {
        projection_obs.snapshot_recent_flags!=1u ||
        projection_obs.live_flag_events!=0u ||
        projection_obs.shown_map!=0x18000000u ||
-       projection_obs.after_wipe!=1u)
+       projection_obs.after_wipe!=1u) {
+        std::fprintf(stderr,
+            "V426_SHADOW_SNAPSHOT_DIAGNOSTIC result=%d ready=%u "
+            "epoch=%llu projected=%llu game=%llu kills=%llu "
+            "shown=%llu hp_reports=%llu hp_enemies=%llu map_bytes=%llu "
+            "recent_flags=%llu live_flags=%llu shown_map=%u wipe=%u\\n",
+            projection_ok,static_cast<unsigned>(projection_obs.projection_ready),
+            static_cast<unsigned long long>(projection_obs.epoch),
+            static_cast<unsigned long long>(projection_obs.projected_seq),
+            static_cast<unsigned long long>(projection_obs.game_applied_seq),
+            static_cast<unsigned long long>(projection_obs.killed),
+            static_cast<unsigned long long>(projection_obs.shown),
+            static_cast<unsigned long long>(projection_obs.hp_reports),
+            static_cast<unsigned long long>(projection_obs.hp_enemies),
+            static_cast<unsigned long long>(projection_obs.map_state_bytes),
+            static_cast<unsigned long long>(projection_obs.snapshot_recent_flags),
+            static_cast<unsigned long long>(projection_obs.live_flag_events),
+            projection_obs.shown_map,
+            static_cast<unsigned>(projection_obs.after_wipe));
         return bad(84);
+    }
     // V422: a real server-authenticated original reliable Entries message
     // must validate its consecutive log seqs, without delivering them to
     // game memory or consuming the still-quarantined world snapshot.
