@@ -24,6 +24,7 @@ on:
       - 'bbhost-track/shyt_yt_game_link_observer_v429.h'
       - 'bbhost-track/shyt_yt_game_packet_stage_v430.h'
       - 'bbhost-track/shyt_yt_peer_evidence_v431.h'
+      - 'bbhost-track/shyt_yt_guest_member_v432.h'
       - 'bbhost-track/shyt_yt_signup_work_v409.*'
       - 'bbhost-track/shyt_yt_native_channel_policy_v21.h'
       - 'bbhost-track/yt_world_event_ledger_v4.h'
