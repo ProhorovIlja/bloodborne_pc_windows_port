@@ -61,6 +61,9 @@ struct ShytYtServerSessionV408 {
     SeamlessHunt::YtPartyReplyV419 party_reply;
     SeamlessHunt::YtWorldSnapshotV420 world_snapshot;
     SeamlessHunt::YtWorldDeltaFenceV423 world_delta;
+    uint64_t redundant_heartbeats_pruned=0u;
+    uint64_t redundant_replays_pruned=0u;
+    uint64_t redundant_bytes_pruned=0u;
     std::unique_ptr<SeamlessHunt::YtTeamAuthorityV414> team_gate;
     size_t coop_observed=0;
     bool lobby_hello_submitted=false;
@@ -251,9 +254,21 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
                            decoded.kind==Kind::Welcome ||
                            redundant_delta_handled;
         if(handled) {
+            // Save length before erase invalidates the PeekQuarantined
+            // span; this telemetry counts local staging bytes freed,
+            // NEVER network packets/bytes the server did not transmit.
+            const std::size_t prune_size=bytes.size();
             if(!s.coop_quarantine->DiscardHandledAt(s.coop_observed)) {
                 invalidate_coop(s);
                 return;
+            }
+            if(redundant_delta_handled) {
+                if(decoded.entry_count==0u)++s.redundant_heartbeats_pruned;
+                else ++s.redundant_replays_pruned;
+                const std::uint64_t increment=static_cast<std::uint64_t>(prune_size);
+                if(s.redundant_bytes_pruned>UINT64_MAX-increment)
+                    s.redundant_bytes_pruned=UINT64_MAX;
+                else s.redundant_bytes_pruned+=increment;
             }
         } else {
             ++s.coop_observed;
@@ -906,6 +921,15 @@ extern "C" int shyt_yt_server_world_observations_v420(
     *out={stats.requests_sent,stats.metadata_matching,stats.metadata_rejected,
           stats.metadata_unbound,stats.contexts_revoked,
           static_cast<uint8_t>(s->world_snapshot.AwaitingGameSnapshotConsumer()?1u:0u)};
+    return 1;
+}
+extern "C" int shyt_yt_server_world_pruning_observations_v424(
+    const ShytYtServerSessionV408* s,ShytYtRedundantWorldPruningV424* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    *out={s->redundant_heartbeats_pruned,s->redundant_replays_pruned,
+          s->redundant_bytes_pruned,
+          s->coop_quarantine?s->coop_quarantine->Quarantined():0u};
     return 1;
 }
 extern "C" int shyt_yt_server_world_delta_observations_v423(
