@@ -115,6 +115,15 @@ typedef struct ShytYtWorldDeltaObservationsV423 {
     uint8_t tracking;
     uint8_t awaiting_more;
 } ShytYtWorldDeltaObservationsV423;
+/* V424: count only SAFE authenticated stale-event/heartbeat pruning.
+ * bytes_pruned is application-envelope staging memory, NOT WAN traffic
+ * saved (original encrypted frames still arrived on the network). */
+typedef struct ShytYtRedundantWorldPruningV424 {
+    uint64_t heartbeats_pruned;
+    uint64_t replays_pruned;
+    uint64_t bytes_pruned;
+    uint64_t messages_still_held;
+} ShytYtRedundantWorldPruningV424;
 
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
@@ -153,6 +162,8 @@ int shyt_yt_server_world_observations_v420(const ShytYtServerSessionV408 *sessio
                                            ShytYtWorldSnapshotObservationsV420 *out);
 int shyt_yt_server_world_delta_observations_v423(
     const ShytYtServerSessionV408 *session,ShytYtWorldDeltaObservationsV423 *out);
+int shyt_yt_server_world_pruning_observations_v424(
+    const ShytYtServerSessionV408 *session,ShytYtRedundantWorldPruningV424 *out);
 /* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
  * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
  * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
