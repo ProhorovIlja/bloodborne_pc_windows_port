@@ -11,6 +11,7 @@ on:
       - 'bbhost-track/shyt_bbhost_probe_v1.c'
       - 'bbhost-track/shyt_yt_server_session_v408.*'
       - 'bbhost-track/shyt_yt_party_reply_v419.h'
+      - 'bbhost-track/shyt_yt_world_snapshot_v420.h'
       - 'bbhost-track/shyt_yt_udp_endpoint_v406.*'
       - 'bbhost-track/shyt_yt_signup_work_v409.*'
       - 'bbhost-track/shyt_yt_secure_game_data_v405.*'
