@@ -504,6 +504,7 @@ int main() {
     putvar(packed_handles,300u);
     putbytes(one_map,2u,packed_handles);
     putbytes(snapshot_body,3u,one_map); // MapKills (packed uint32)
+    putnum(snapshot_body,4u,0x18000000u); // original shown_map
     std::vector<u8> shown_character;
     putnum(shown_character,1u,55u);
     putnum(shown_character,2u,7u);
