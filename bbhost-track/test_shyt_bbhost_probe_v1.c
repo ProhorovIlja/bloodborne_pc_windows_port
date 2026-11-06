@@ -14,6 +14,12 @@ static int acceptable_image;
 static int user_opted_in_world_flags;
 static int user_opted_in_packet_channels;
 static int user_opted_in_site_inspection;
+static int user_opted_in_game_calls;
+static int (*registered_yt_send)(BbHookCtx*,void*);
+static int (*registered_yt_update)(BbHookCtx*,void*);
+static void *registered_yt_send_user,*registered_yt_update_user;
+static int observed_yt_hook_placements,observed_yt_metrics_logs;
+static unsigned long long v429_logged[8];
 static int acceptable_sha;
 static int observed_site_reads;
 static int observed_site_logs;
@@ -46,6 +52,13 @@ static void fake_log(const char *fmt, ...) {
         observed_cadence++;
     if (strstr(line,"game hook-site preflight"))
         observed_site_logs++;
+    if (strstr(line,"shyt-yt-v429: original YT game-link CALLS")) {
+        ++observed_yt_metrics_logs;
+        assert(sscanf(line,
+            "shyt-yt-v429: original YT game-link CALLS outgoing=%llu valid=%llu bad=%llu no-member=%llu reliable=%llu unreliable=%llu native-game-bytes=%llu netSyncUpdates=%llu",
+            &v429_logged[0],&v429_logged[1],&v429_logged[2],&v429_logged[3],
+            &v429_logged[4],&v429_logged[5],&v429_logged[6],&v429_logged[7])==8);
+    }
     if (strstr(line,"world flag stream invalid"))
         observed_world_overflow++;
     if (strstr(line,"incremental flag stream INVALID"))
@@ -65,8 +78,10 @@ static const char *fake_config(const char *name) {
         return user_opted_in_world_flags ? "true" : "";
     if (strcmp(name,"shyt_bbhost_probe.observe_netsync_sends")==0)
         return user_opted_in_packet_channels ? "true" : "";
-    assert(strcmp(name,"shyt_bbhost_probe.inspect_yt_game_sites")==0);
-    return user_opted_in_site_inspection ? "true" : "";
+    if(strcmp(name,"shyt_bbhost_probe.inspect_yt_game_sites")==0)
+        return user_opted_in_site_inspection ? "true" : "";
+    assert(strcmp(name,"shyt_bbhost_probe.observe_yt_game_link_calls")==0);
+    return user_opted_in_game_calls ? "true" : "";
 }
 static int fake_image(void) { return acceptable_image; }
 static const char *fake_sha(void) {
@@ -131,12 +146,33 @@ static int fake_net_read(uint64_t address,void *out,size_t n) {
 }
 static int fake_hook2(uint64_t address,const void *bytes,size_t n,
                       BbHookFn2 fn,void *user) {
-    assert(address==UINT64_C(0x017894E0)+UINT64_C(0x400000));
-    assert(bytes && n==sizeof(expected_netsync_head));
-    assert(memcmp(bytes,expected_netsync_head,n)==0);
-    assert(fn && !user);
+    static const unsigned char yt_send[14]={
+        0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+        0x41,0x55,0x41,0x54,0x53,0x50
+    };
+    static const unsigned char yt_update[20]={
+        0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+        0x41,0x55,0x41,0x54,0x53,0x48,0x81,0xec,
+        0x18,0x21,0x00,0x00
+    };
+    assert(bytes && fn);
+    if(address==UINT64_C(0x00C8F0A0)+UINT64_C(0x400000)) {
+        assert(n==sizeof(yt_send) && memcmp(bytes,yt_send,n)==0 && user);
+        ++observed_yt_hook_placements;
+        registered_yt_send=fn;
+        registered_yt_send_user=user;
+    } else if(address==UINT64_C(0x01789B60)+UINT64_C(0x400000)) {
+        assert(n==sizeof(yt_update) && memcmp(bytes,yt_update,n)==0 && user);
+        ++observed_yt_hook_placements;
+        registered_yt_update=fn;
+        registered_yt_update_user=user;
+    } else {
+        assert(address==UINT64_C(0x017894E0)+UINT64_C(0x400000));
+        assert(n==sizeof(expected_netsync_head) &&
+               memcmp(bytes,expected_netsync_head,n)==0 && !user);
+        registered_packet_hook=fn;
+    }
     ++observed_hook_placements;
-    registered_packet_hook=fn;
     return 0;
 }
 static int fake_stat(const char *key,int64_t *value) {
@@ -175,7 +211,10 @@ int main(int argc,char **argv) {
     assert(settings[2].type==BB_OPT_BOOL);
     assert(strcmp(settings[2].key,"inspect_yt_game_sites")==0);
     assert(strcmp(settings[2].def,"false")==0);
-    assert(settings[3].type==0);
+    assert(settings[3].type==BB_OPT_BOOL);
+    assert(strcmp(settings[3].key,"observe_yt_game_link_calls")==0);
+    assert(strcmp(settings[3].def,"false")==0);
+    assert(settings[4].type==0);
     BbHostApi api={0};
     api.version=BB_PLUGIN_API_VERSION;
     api.size=sizeof(api);
@@ -304,6 +343,56 @@ int main(int argc,char **argv) {
            observed_hook_placements==1 && observed_mutations==0);
     user_opted_in_site_inspection=0;
     acceptable_prologue=1;
+    /* V429 real plugin source hooks: never installed by default, by
+     * incorrect SHA, by a modified complete prologue or by old ABI. */
+    user_opted_in_game_calls=1;
+    acceptable_sha=0;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_yt_hook_placements==0 && !registered_yt_send);
+    acceptable_sha=1;acceptable_prologue=0;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_yt_hook_placements==0 && !registered_yt_update);
+    acceptable_prologue=1;api.version=7;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_yt_hook_placements==0);
+    api.version=BB_PLUGIN_API_VERSION;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_yt_hook_placements==2 &&
+           registered_yt_send && registered_yt_update &&
+           registered_yt_send_user==registered_yt_update_user);
+    /* Synthetic original game regs in the exact BbHookCtx order.
+     * No packet bytes are copied or read by either callback. */
+    BbHookCtx yt_packet={0};
+    yt_packet.arg[0]=0x123u;     /* rdi */
+    yt_packet.arg[1]=1u;        /* rsi reliable */
+    yt_packet.arg[2]=0x700000u; /* rdx member */
+    yt_packet.arg[3]=0x800000u; /* rcx game packet pointer */
+    yt_packet.arg[4]=0x108u;    /* r8 length including native header */
+    yt_packet.arg[5]=0xdefu;    /* r9 */
+    yt_packet.ret=0x123456u;
+    const BbHookCtx original=yt_packet;
+    const int reads_before=observed_site_reads;
+    assert(registered_yt_send(&yt_packet,registered_yt_send_user)==0);
+    assert(registered_yt_update(&yt_packet,registered_yt_update_user)==0);
+    assert(memcmp(&yt_packet,&original,sizeof(yt_packet))==0);
+    assert(observed_site_reads==reads_before && observed_mutations==0);
+    yt_packet.arg[1]=0u; /* unreliable */
+    yt_packet.arg[2]=0u; /* missing member, still NEVER intercepted */
+    yt_packet.arg[4]=8u;
+    assert(registered_yt_send(&yt_packet,registered_yt_send_user)==0);
+    yt_packet.arg[3]=0x42u; /* invalid pointer */
+    assert(registered_yt_send(&yt_packet,registered_yt_send_user)==0);
+    for(int i=0;i<600;++i)registered_frame(0);
+    assert(observed_yt_metrics_logs==1);
+    assert(v429_logged[0]==3u && v429_logged[1]==2u &&
+           v429_logged[2]==1u && v429_logged[3]==1u &&
+           v429_logged[4]==1u && v429_logged[5]==1u &&
+           v429_logged[6]==0x110u && v429_logged[7]==1u);
+    assert(observed_mutations==0);
     dlclose(dll);
     puts("SHYT_BBHOST_V1_REAL_PLUGIN_DLOPEN_API_READONLY_PASS");
     return 0;
