@@ -562,6 +562,11 @@ int main() {
        projection_obs.shown_map!=0x18000000u ||
        projection_obs.after_wipe!=1u) {
         std::fprintf(stderr,
+            "V426_TAIL_DIAGNOSTIC live=%llu shown_map=%u expected=%u wipe=%u\\n",
+            static_cast<unsigned long long>(projection_obs.live_flag_events),
+            projection_obs.shown_map,0x18000000u,
+            static_cast<unsigned>(projection_obs.after_wipe));
+        std::fprintf(stderr,
             "V426_SHADOW_SNAPSHOT_DIAGNOSTIC result=%d ready=%u "
             "epoch=%llu projected=%llu game=%llu kills=%llu "
             "shown=%llu hp_reports=%llu hp_enemies=%llu map_bytes=%llu "
