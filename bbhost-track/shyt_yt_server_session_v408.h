@@ -173,6 +173,21 @@ typedef struct ShytYtPeerEvidenceObservationsV431 {
     uint8_t can_arm_game_queue;
     uint8_t can_route_game;
 } ShytYtPeerEvidenceObservationsV431;
+/* V432: game guest member pointer -> (read-only) original SceNpId
+ * via BBHost guest memory reader, then compare LOWER-HEX identity to
+ * the signed-in server's V431 TeamMember roster. Never disclose IDs,
+ * never use a matched ID as peer crypto/route or P2P proof. */
+typedef int (*ShytYtGuestMemoryReadV432)(uint64_t guest_addr,void *out,size_t bytes);
+typedef struct ShytYtGuestPeerEvidenceV432 {
+    uint64_t observed_world_epoch;
+    uint64_t observed_world_cursor;
+    uint8_t guest_identity_valid;
+    uint8_t server_roster_candidate;
+    uint8_t correlated_hello;
+    uint8_t matched_world_snapshot;
+    uint8_t can_arm_game_queue;
+    uint8_t can_route_game;
+} ShytYtGuestPeerEvidenceV432;
 
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
@@ -225,6 +240,16 @@ int shyt_yt_server_world_projection_observations_v426(
 int shyt_yt_server_peer_evidence_v431(
     const ShytYtServerSessionV408 *session,const char *canonical_peer_member,
     ShytYtPeerEvidenceObservationsV431 *out);
+/* Same-thread diagnostic only. The supplied read callback MUST be the
+ * pinned host's guarded BbHostApi.read from the exact 1.09 process.
+ * Uses two bounded reads (8+17 bytes). Returns 1 for a query; zero
+ * for invalid API args. False evidence is reported as an all-zero out.
+ * A guest SceNpId match is NOT authenticated endpoint/owner permission. */
+int shyt_yt_server_guest_peer_evidence_v432(
+    const ShytYtServerSessionV408 *session,
+    uint64_t game_member_addr,int exact_109,const char *eboot_sha256,
+    ShytYtGuestMemoryReadV432 guarded_read,
+    ShytYtGuestPeerEvidenceV432 *out);
 /* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
  * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
  * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
