@@ -641,6 +641,8 @@ jobs:
             --out "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
           python3 bbhost-track/extend_yt_qt_encrypted_gamelink_v436.py \
             --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
+          python3 bbhost-track/extend_yt_qt_five_player_v437.py \
+            --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
           test -z "$(git -C pinned-yt-v140 status --porcelain)"
           contracts="$PWD/pinned-yt-v140/server/tests/contracts/server_link_frames.txt"
           g++ -std=c++20 -O2 -fPIC -Wall -Wextra \
@@ -660,4 +662,5 @@ jobs:
           tail -n 12 "$RUNNER_TEMP/v435-yt-hub-tests.log" | cut -c1-150
           grep -Fq 'V435 YT original Qt Hub sender spoofing/no-route: ok' "$RUNNER_TEMP/v435-yt-hub-tests.log"
           grep -Fq 'V436 YT ORIGINAL NOISE-NK 2-PEER AUTHENTIC GAME RELAY PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
-          echo SHYT_V436_REAL_ORIGINAL_QT_HUB_NOISE_2_PEER_GAME_RELAY_REPLAY_AND_MAP_ROUTE_PASS
+          grep -Fq 'V437 YT ORIGINAL NOISE-NK FIVE HUNTER ROUTE REBIND PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
+          echo SHYT_V437_REAL_ORIGINAL_QT_NOISE_FIVE_HUNTER_5COOP_4PLUS1_3PLUS2_REBIND_PASS
