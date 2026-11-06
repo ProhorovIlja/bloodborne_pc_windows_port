@@ -238,6 +238,31 @@ int main(int argc,char **argv) {
     assert(image(&api)==0);
     assert(observed_probe_reads==2 && observed_hook_placements==1);
     assert(registered_packet_hook);
+    BbHookCtx packet={0};
+    packet.arg[0]=0x12345;
+    packet.arg[2]=6; /* player movement channel */
+    packet.arg[4]=128;
+    assert(registered_packet_hook(&packet,0)==0);
+    assert(packet.arg[0]==0x12345 && packet.arg[2]==6 && packet.arg[4]==128);
+    for (unsigned i=0;i<3;++i) {
+        static const uint64_t policies[]={0x10u,0x2Cu,0x27u};
+        packet.arg[2]=policies[i];
+        assert(registered_packet_hook(&packet,0)==0);
+    }
+    packet.arg[2]=UINT64_C(0xffff);
+    assert(registered_packet_hook(&packet,0)==0); /* invalid never forwarded */
+    for(int i=0;i<600;++i)registered_frame(0);
+    assert(observed_packet_cadence==1);
+    assert(observed_yt_policy_v21==1);
+    for (unsigned i=0;i<4;++i)
+        assert(classified_policy_v21[i]==1u);
+    for(unsigned i=0;i<130;++i)
+        registered_world_flag(100000u+i,i&1u,0);
+    for(int i=0;i<600;++i)registered_frame(0);
+    assert(observed_world_overflow==1);
+    assert(observed_cadence>=1 && observed_mutations==0);
+    /* Run V427 source-site audit after V17 cadence assertions:
+     * bb_plugin_init resets the prior V17 observation flag by design. */
     /* V427: optional official YT source-site read-only preflight in the
      * ACTUAL compiled plugin. Unlike V17, it NEVER installs game hooks. */
     user_opted_in_world_flags=0;
@@ -264,29 +289,6 @@ int main(int argc,char **argv) {
            observed_hook_placements==1 && observed_mutations==0);
     user_opted_in_site_inspection=0;
     acceptable_prologue=1;
-    BbHookCtx packet={0};
-    packet.arg[0]=0x12345;
-    packet.arg[2]=6; /* player movement channel */
-    packet.arg[4]=128;
-    assert(registered_packet_hook(&packet,0)==0);
-    assert(packet.arg[0]==0x12345 && packet.arg[2]==6 && packet.arg[4]==128);
-    for (unsigned i=0;i<3;++i) {
-        static const uint64_t policies[]={0x10u,0x2Cu,0x27u};
-        packet.arg[2]=policies[i];
-        assert(registered_packet_hook(&packet,0)==0);
-    }
-    packet.arg[2]=UINT64_C(0xffff);
-    assert(registered_packet_hook(&packet,0)==0); /* invalid never forwarded */
-    for(int i=0;i<600;++i)registered_frame(0);
-    assert(observed_packet_cadence==1);
-    assert(observed_yt_policy_v21==1);
-    for (unsigned i=0;i<4;++i)
-        assert(classified_policy_v21[i]==1u);
-    for(unsigned i=0;i<130;++i)
-        registered_world_flag(100000u+i,i&1u,0);
-    for(int i=0;i<600;++i)registered_frame(0);
-    assert(observed_world_overflow==1);
-    assert(observed_cadence>=1 && observed_mutations==0);
     dlclose(dll);
     puts("SHYT_BBHOST_V1_REAL_PLUGIN_DLOPEN_API_READONLY_PASS");
     return 0;
