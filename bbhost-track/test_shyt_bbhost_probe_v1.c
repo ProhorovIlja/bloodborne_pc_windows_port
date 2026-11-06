@@ -13,6 +13,10 @@
 static int acceptable_image;
 static int user_opted_in_world_flags;
 static int user_opted_in_packet_channels;
+static int user_opted_in_site_inspection;
+static int acceptable_sha;
+static int observed_site_reads;
+static int observed_site_logs;
 static int acceptable_prologue;
 static int observed_hook_placements;
 static int observed_packet_cadence;
@@ -40,6 +44,8 @@ static void fake_log(const char *fmt, ...) {
     if (strstr(line,"600-frame engine-main-thread") ||
         strstr(line,"timing unavailable"))
         observed_cadence++;
+    if (strstr(line,"game hook-site preflight"))
+        observed_site_logs++;
     if (strstr(line,"world flag stream invalid"))
         observed_world_overflow++;
     if (strstr(line,"incremental flag stream INVALID"))
@@ -57,10 +63,17 @@ static void fake_log(const char *fmt, ...) {
 static const char *fake_config(const char *name) {
     if (strcmp(name,"shyt_bbhost_probe.capture_world_flags")==0)
         return user_opted_in_world_flags ? "true" : "";
-    assert(strcmp(name,"shyt_bbhost_probe.observe_netsync_sends")==0);
-    return user_opted_in_packet_channels ? "true" : "";
+    if (strcmp(name,"shyt_bbhost_probe.observe_netsync_sends")==0)
+        return user_opted_in_packet_channels ? "true" : "";
+    assert(strcmp(name,"shyt_bbhost_probe.inspect_yt_game_sites")==0);
+    return user_opted_in_site_inspection ? "true" : "";
 }
 static int fake_image(void) { return acceptable_image; }
+static const char *fake_sha(void) {
+    return acceptable_sha ?
+        "941f887a562aae054fac35af8cc8f27cf075f3d4cc2e029fb5ae2a663aaa5ae7" :
+        "wrong";
+}
 static int fake_frame(void (*fn)(void*),void *user) {
     assert(fn && !user);
     observed_register++;
@@ -84,6 +97,17 @@ static const unsigned char expected_netsync_head[17] = {
     0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x38
 };
 static int fake_net_read(uint64_t address,void *out,size_t n) {
+    if(n==6u) {
+        assert(address==UINT64_C(0x00C8F0A0)+UINT64_C(0x400000) ||
+               address==UINT64_C(0x01789B60)+UINT64_C(0x400000));
+        static const unsigned char yt_prefix[6]={
+            0x55u,0x48u,0x89u,0xe5u,0x41u,0x57u};
+        assert(out);
+        memcpy(out,yt_prefix,6u);
+        ++observed_site_reads;
+        if(!acceptable_prologue) ((unsigned char*)out)[0]=0xcc;
+        return 0;
+    }
     assert(address==UINT64_C(0x017894E0)+UINT64_C(0x400000));
     assert(out && n==sizeof(expected_netsync_head));
     ++observed_probe_reads;
@@ -134,12 +158,17 @@ int main(int argc,char **argv) {
     assert(settings[1].type==BB_OPT_BOOL);
     assert(strcmp(settings[1].key,"observe_netsync_sends")==0);
     assert(strcmp(settings[1].def,"false")==0);
+    assert(settings[2].type==BB_OPT_BOOL);
+    assert(strcmp(settings[2].key,"inspect_yt_game_sites")==0);
+    assert(strcmp(settings[2].def,"false")==0);
+    assert(settings[3].type==0);
     BbHostApi api={0};
     api.version=BB_PLUGIN_API_VERSION;
     api.size=sizeof(api);
     api.log=fake_log;
     api.config=fake_config;
     api.eboot_is_109=fake_image;
+    api.eboot_sha256=fake_sha;
     api.on_frame=fake_frame;
     api.on_event_flag=fake_world_event;
     api.on_world_load=fake_world_load;
@@ -209,6 +238,32 @@ int main(int argc,char **argv) {
     assert(image(&api)==0);
     assert(observed_probe_reads==2 && observed_hook_placements==1);
     assert(registered_packet_hook);
+    /* V427: optional official YT source-site read-only preflight in the
+     * ACTUAL compiled plugin. Unlike V17, it NEVER installs game hooks. */
+    user_opted_in_world_flags=0;
+    user_opted_in_packet_channels=0;
+    user_opted_in_site_inspection=1;
+    acceptable_sha=1;
+    acceptable_prologue=1;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_site_reads==2 && observed_site_logs==1 &&
+           observed_hook_placements==1 && observed_mutations==0);
+    /* Even when BBHost says 1.09, a mismatched SHA prevents guest reads. */
+    acceptable_sha=0;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_site_reads==2 && observed_site_logs==2 &&
+           observed_hook_placements==1);
+    /* A mutated YT NetSync prologue refuses rather than enabling a hook. */
+    acceptable_sha=1;
+    acceptable_prologue=0;
+    assert(init(&api)==0);
+    assert(image(&api)==0);
+    assert(observed_site_reads==4 && observed_site_logs==3 &&
+           observed_hook_placements==1 && observed_mutations==0);
+    user_opted_in_site_inspection=0;
+    acceptable_prologue=1;
     BbHookCtx packet={0};
     packet.arg[0]=0x12345;
     packet.arg[2]=6; /* player movement channel */
