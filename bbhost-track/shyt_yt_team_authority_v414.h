@@ -115,6 +115,19 @@ public:
         authorized_ = true;
         return true;
     }
+    // A TeamStart validated against the exact authenticated member is
+    // sufficient to PREPARE an opt-in party Hello, not to run game NetSync.
+    // The loaded save slot comes from the owner game and must match the
+    // server's TeamStart before any such Hello may leave this client.
+    bool MaySendPartyHello(const std::string& party,
+                           std::uint32_t loaded_slot,bool& local_host) const {
+        local_host=false;
+        if(!identity_valid_ || !have_lobby_ || !have_start_ ||
+           authorized_ || !lobby_.started || party!=start_.party ||
+           loaded_slot!=start_.slot || !HasMember(local_id_))return false;
+        local_host=start_.host==local_id_;
+        return true;
+    }
     bool Authorized() const noexcept { return authorized_; }
     // A membership check only. Does NOT validate map/owner/channel,
     // invasion policy, the peer's cryptographic key or its endpoint.
