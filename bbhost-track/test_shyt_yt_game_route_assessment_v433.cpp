@@ -2,7 +2,10 @@
 // Exhaustive parity against original released YT v1.4.0 production
 // server/coop/packet_routes.h and game_link.h (not mirrored fixtures).
 #include "shyt_yt_game_route_assessment_v433.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #include "coop/packet_routes.h"
+#pragma GCC diagnostic pop
 #include <array>
 #include <cassert>
 #include <cstdint>
