@@ -20,7 +20,7 @@
 #include "shyt_yt_secure_game_data_v405.h"
 #include "shyt_yt_udp_endpoint_v406.h"
 #include "shyt_yt_server_session_v408.h"
-#include "shyt_yt_guest_hook_preflight_v427.h"
+#include "shyt_yt_full_guest_preflight_v428.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -198,7 +198,7 @@ BB_PLUGIN_EXPORT const BbOption bb_plugin_options[] = {
      "Only counts NetSync send channels, requires exact 1.09 safe prologue. No payloads, changes or network. Restart required.",
      "false", 0, 0, 0},
     {BB_OPT_BOOL, "inspect_yt_game_sites", "Inspect YT game send/NetSync code (diagnostic)",
-     "Read-only compare of 1.09 game signatures at the YT transport-send and NetSync-update sites. NO hooks, game changes or network. Restart required.",
+     "Read-only full-instruction 14/20-byte compare of 1.09 YT send/NetSync sites. NO hooks, game changes or network. Restart required.",
      "false", 0, 0, 0},
     {0}
 };
@@ -352,27 +352,28 @@ BB_PLUGIN_EXPORT int bb_plugin_image(const BbHostApi *api) {
     if (packet_wanted)
         api->log("shyt-bbhost-probe: NetSync hook %s; exact game/ABI/prologue opt-in, counters only",
                  packet_hook_enabled_v17 ? "INSTALLED":"REFUSED");
-    /* V427: opt-in original YT hook-site preflight. Read six known
-     * bytes from the pinned 1.09 image at both canonical sites. A
-     * matching prefix is not a safe prologue or proof of game NetSync.
-     * NEVER install either hook until 14+ full instruction bytes and
-     * original forwarding/callback ABI have been independently tested. */
+    /* V428: private exact-SHA EBOOT proves the 14/20 byte initial
+     * instruction boundaries at both original YT v1.4.0 game sites.
+     * Optional source-pinned READ-ONLY diagnostic, NO game hooks.
+     * Although the prefixes are now known, callback ABI + original
+     * continuation, game-thread delivery and five-player behavior
+     * remain unverified and hooking these sites is forbidden. */
     const char *site_opt=api->config("shyt_bbhost_probe.inspect_yt_game_sites");
     const int sites_wanted=site_opt &&
         (strcmp(site_opt,"true")==0 || strcmp(site_opt,"1")==0);
     if (sites_wanted) {
-        ShytYtGuestHookPreflightV427 state={0};
+        ShytYtFullGuestPreflightV428 state={0};
         const int api_ready=api->size>=offsetof(BbHostApi,read)+
                                    sizeof(api->read) &&
                             api->read && api->eboot_sha256;
-        const int found=shyt_yt_guest_hook_preflight_v427(
+        const int found=shyt_yt_full_guest_preflight_v428(
             api->eboot_is_109(),
             api_ready ? api->eboot_sha256() : NULL,
             api_ready ? api->read : NULL, &state);
-        api->log("shyt-bbhost-probe: YT v1.4.0 1.09 game hook-site preflight %s: read=%u matched=%u mismatched=%u; hook installation DISABLED (six-byte prefixes are insufficient)",
+        api->log("shyt-bbhost-probe: YT v1.4.0 1.09 game hook-site preflight %s: transport=%u/%u update=%u/%u; hook installation DISABLED (unverified game ABI and continuation)",
                  found ? "MATCHED":"REFUSED",
-                 (unsigned)state.sites_read,(unsigned)state.sites_matching,
-                 (unsigned)state.sites_mismatching);
+                 (unsigned)state.transport_matched,(unsigned)state.transport_read,
+                 (unsigned)state.update_matched,(unsigned)state.update_read);
     }
     api->log("shyt-bbhost-probe: original Bloodborne 1.09 image accepted; observe-only");
     return 0;
