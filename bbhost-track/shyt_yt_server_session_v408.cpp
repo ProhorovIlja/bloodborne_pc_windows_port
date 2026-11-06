@@ -133,7 +133,12 @@ void observe_team_authority(ShytYtServerSessionV408& s) {
         using Kind=SeamlessHunt::YtTeamWireLiteV415::Kind;
         switch(decoded.kind) {
         case Kind::Lobby:
-            if(s.team_gate->OnAuthenticatedLobby(std::move(decoded.lobby)))
+            if(!decoded.lobby_has_team) {
+                // Ordinary YT initial lobby: no group yet. Never a world
+                // grant and never a malformed-message error.
+                s.team_gate->Revoke();
+                ++s.team_observations.lobby_states_accepted;
+            } else if(s.team_gate->OnAuthenticatedLobby(std::move(decoded.lobby)))
                 ++s.team_observations.lobby_states_accepted;
             else
                 ++s.team_observations.authority_messages_rejected;
