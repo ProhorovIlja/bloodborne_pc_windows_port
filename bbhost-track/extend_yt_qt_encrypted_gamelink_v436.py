@@ -97,7 +97,7 @@ def extend(p:Path)->None:
     if p.is_symlink() or not p.is_file() or p.stat().st_size>200000:
         raise ValueError("missing/oversized V435 test-only Qt overlay")
     s=p.read_text(encoding="utf-8")
-    if s.count(ANCHOR)!=1 or s.count(MAIN)!=1 or s.count("V435AuthenticatedGameSender()")!=1:
+    if s.count(ANCHOR)!=1 or s.count(MAIN)!=1 or s.count("V435AuthenticatedGameSender()")!=2:
         raise ValueError("V435 original Qt test anchor drift")
     updated=s.replace(ANCHOR,ADDED+"\n"+ANCHOR).replace(
         MAIN,"       V435AuthenticatedGameSender() != 0 ||\n"
