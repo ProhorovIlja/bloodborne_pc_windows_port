@@ -16,6 +16,7 @@
 #include "shyt_yt_world_delta_fence_v423.h"
 #include "shyt_yt_world_staging_v425.h"
 #include "shyt_yt_world_projection_v426.h"
+#include "shyt_yt_peer_evidence_v431.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -946,6 +947,28 @@ extern "C" int shyt_yt_server_world_observations_v420(
     *out={stats.requests_sent,stats.metadata_matching,stats.metadata_rejected,
           stats.metadata_unbound,stats.contexts_revoked,
           static_cast<uint8_t>(s->world_snapshot.AwaitingGameSnapshotConsumer()?1u:0u)};
+    return 1;
+}
+extern "C" int shyt_yt_server_peer_evidence_v431(
+    const ShytYtServerSessionV408* s,const char* canonical_peer_member,
+    ShytYtPeerEvidenceObservationsV431* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    // A bogus/empty OnlineID is an ordinary refused query; never log it.
+    // All session state is owned by the one original authenticated link,
+    // not a self-described peer datagram or an unauthenticated caller.
+    if(!canonical_peer_member || !valid_field(canonical_peer_member) ||
+       !s->team_gate || !s->coop_quarantine ||
+       s->phase!=SHYT_V408_LINKED ||
+       s->coop_quarantine->Failed())return 1;
+    const auto evidence=SeamlessHunt::YtPeerEvidenceV431::Inspect(
+        *s->team_gate,s->party_reply,s->world_stage,
+        std::string(canonical_peer_member));
+    *out={evidence.observed_world_epoch,evidence.observed_world_cursor,
+          static_cast<std::uint8_t>(evidence.roster_candidate?1u:0u),
+          static_cast<std::uint8_t>(evidence.correlated_hello?1u:0u),
+          static_cast<std::uint8_t>(evidence.matched_world_snapshot?1u:0u),
+          0u,0u};
     return 1;
 }
 extern "C" int shyt_yt_server_world_projection_observations_v426(
