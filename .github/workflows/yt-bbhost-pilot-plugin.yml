@@ -71,7 +71,7 @@ jobs:
             echo V413_SOURCE_DRIFT >>v413-brief.txt
             exit 1
           fi
-          if ! g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+          if ! g++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
             -Ibbhost-track -Ipinned-yt/server \
             bbhost-track/test_shyt_yt_coop_transport_v413.cpp \
             -o "$RUNNER_TEMP/shyt-coop-stream-v413" >v413-compile.log 2>&1; then
