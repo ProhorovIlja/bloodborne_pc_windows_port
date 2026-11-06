@@ -309,6 +309,13 @@ private:
         return r.Done();
     }
     static void Apply(const Entry& e,State& s) {
+        // Original WorldLogBatch normalizes Shown wire kind 0x10-0x1f
+        // (low four bits repeat ShownBits) to WorldLogKind::Shown. Keep
+        // exactly the original entry.value as the full shown bitset.
+        if((e.kind & ~std::uint32_t{0x0fu})==0x10u) {
+            if(e.map==s.shown_map)s.shown[e.subject]=e.value;
+            return;
+        }
         switch(e.kind) {
         case 0u: // Reset: match WorldLogMember::Apply
             if(!e.map)s.kills.clear();
@@ -330,7 +337,6 @@ private:
         }
         case 3u:s.shown_map=e.map;s.shown.clear();break;
         case 4u:if(e.map==s.shown_map)s.shown.erase(e.subject);break;
-        case 16u:if(e.map==s.shown_map)s.shown[e.subject]=e.value;break;
         case 5u:case 6u:++s.live_flags_seen;break;
         case 7u:
             s.map_state_map=e.map;
