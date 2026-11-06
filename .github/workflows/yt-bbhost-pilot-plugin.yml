@@ -155,6 +155,14 @@ jobs:
             -Ibbhost-track bbhost-track/test_shyt_yt_world_staging_v425.cpp \
             -o "$RUNNER_TEMP/shyt-world-staging-v425"
           "$RUNNER_TEMP/shyt-world-staging-v425"
+      - name: Validate V426 typed YT world projection without guest memory writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_world_projection_v426.cpp \
+            -o "$RUNNER_TEMP/shyt-world-projection-v426"
+          "$RUNNER_TEMP/shyt-world-projection-v426"
       - name: Build and compare lite BBHost authority codec with real YT v1.4.0 protobuf
         shell: bash
         run: |
@@ -405,6 +413,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_snapshot_v420.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_delta_fence_v423.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_staging_v425.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_projection_v426.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
