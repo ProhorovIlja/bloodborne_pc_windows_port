@@ -136,7 +136,7 @@ public:
     // this predicate to arm an outgoing packet queue or route P2P data.
     bool PreparedPeerCandidate(const std::string& id) const {
         if (!identity_valid_ || !have_lobby_ || !have_start_ ||
-            !lobby_.started || !Identifier(id) || id == local_id_ ||
+            !lobby_.started || !CanonicalMemberHex(id) || id == local_id_ ||
             start_.team != lobby_.team || start_.party != lobby_.party ||
             start_.world != lobby_.world || !HasMember(start_.host))
             return false;
@@ -155,6 +155,17 @@ public:
                 epoch_, last_, lobby_.members};
     }
 private:
+    // The real server's AuthenticatedMember() lower-hex-encodes the
+    // *raw* signed-in NP OnlineID. Human-readable display names and
+    // upper-case/odd-length hex are NOT canonical peer identities.
+    static bool CanonicalMemberHex(const std::string& id) {
+        if(id.empty() || id.size()>254u || (id.size()&1u))return false;
+        for(const unsigned char ch:id) {
+            if(!((ch>='0' && ch<='9') || (ch>='a' && ch<='f')))
+                return false;
+        }
+        return true;
+    }
     static bool Identifier(const std::string& value) {
         if (value.empty() || value.size() > 255u) return false;
         for (unsigned char c : value) {
