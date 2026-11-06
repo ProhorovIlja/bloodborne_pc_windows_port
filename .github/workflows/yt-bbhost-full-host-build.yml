@@ -21,6 +21,7 @@ on:
       - 'bbhost-track/shyt_yt_world_projection_v426.h'
       - 'bbhost-track/shyt_yt_guest_hook_preflight_v427.h'
       - 'bbhost-track/shyt_yt_full_guest_preflight_v428.h'
+      - 'bbhost-track/shyt_yt_game_link_observer_v429.h'
       - 'bbhost-track/shyt_yt_signup_work_v409.*'
       - 'bbhost-track/shyt_yt_native_channel_policy_v21.h'
       - 'bbhost-track/yt_world_event_ledger_v4.h'
