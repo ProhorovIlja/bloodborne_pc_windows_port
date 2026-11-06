@@ -19,6 +19,7 @@
 #include <new>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -56,6 +57,7 @@ struct ShytYtServerSessionV408 {
     ShytYtTeamObservationsV415 team_observations{};
     std::unique_ptr<SeamlessHunt::YtTeamAuthorityV414> team_gate;
     size_t coop_observed=0;
+    bool lobby_hello_submitted=false;
     // V412: only authenticated transport presence, never team approval.
     std::array<ShytYtMemberNoticeV412,SHYT_V412_MEMBER_QUEUE_CAP> member_queue{};
     size_t member_head=0,member_count=0;
@@ -211,6 +213,73 @@ bool encrypt_send(ShytYtServerSessionV408& s,
           encrypted.data(),encrypted.size(),&size))
         return false;
     return shyt_yt_udp_send_server_v406(s.udp,encrypted.data(),size)!=0;
+}
+// Only authenticated original-YT game CoopStream frames can be emitted.
+// This does not authorize peer Data/NetSync, which remains quarantined.
+bool flush_outgoing_coop_v416(ShytYtServerSessionV408& s,uint64_t now) {
+    if(!s.coop_quarantine || s.coop_quarantine->Failed())return false;
+    for(const auto& body:s.coop_quarantine->Flush(static_cast<s64>(now))) {
+        std::array<uint8_t,kWireLimit> wire{};
+        size_t written=0;
+        if(!shyt_yt_link_encode_coop_v403(
+               body.data(),body.size(),wire.data(),wire.size(),&written) ||
+           !encrypt_send(s,wire.data(),written))
+            return false;
+    }
+    return true;
+}
+void append_varint_v416(std::vector<u8>& out,uint64_t value) {
+    while(value>=128u) {
+        out.push_back(static_cast<u8>((value&127u)|128u));
+        value >>= 7u;
+    }
+    out.push_back(static_cast<u8>(value));
+}
+void append_number_v416(std::vector<u8>& out,uint32_t number,uint64_t value) {
+    append_varint_v416(out,static_cast<uint64_t>(number)*8u);
+    append_varint_v416(out,value);
+}
+void append_string_v416(std::vector<u8>& out,uint32_t number,
+                        std::string_view value) {
+    append_varint_v416(out,static_cast<uint64_t>(number)*8u+2u);
+    append_varint_v416(out,value.size());
+    out.insert(out.end(),value.begin(),value.end());
+}
+std::string member_hex_v416(std::string_view id) {
+    constexpr char Hex[]="0123456789abcdef";
+    std::string out;
+    out.reserve(id.size()*2u);
+    for(unsigned char c:id) {
+        out.push_back(Hex[c>>4u]);
+        out.push_back(Hex[c&15u]);
+    }
+    return out;
+}
+bool utf8_name_v416(std::string_view text) noexcept {
+    if(text.empty() || text.size()>96u)return false;
+    for(size_t i=0;i<text.size();) {
+        const unsigned c=static_cast<unsigned char>(text[i]);
+        if(c<0x20u || c==0x7fu)return false;
+        if(c<0x80u) {++i;continue;}
+        unsigned len=0;
+        if(c>=0xc2u && c<=0xdfu)len=2;
+        else if(c>=0xe0u && c<=0xefu)len=3;
+        else if(c>=0xf0u && c<=0xf4u)len=4;
+        else return false;
+        if(len>text.size()-i)return false;
+        const unsigned second=static_cast<unsigned char>(text[i+1u]);
+        if(second<0x80u || second>0xbfu ||
+           (c==0xe0u && second<0xa0u) ||
+           (c==0xedu && second>=0xa0u) ||
+           (c==0xf0u && second<0x90u) ||
+           (c==0xf4u && second>0x8fu))return false;
+        for(unsigned j=2u;j<len;++j) {
+            const unsigned k=static_cast<unsigned char>(text[i+j]);
+            if(k<0x80u || k>0xbfu)return false;
+        }
+        i+=len;
+    }
+    return true;
 }
 bool ping(ShytYtServerSessionV408& s,uint64_t now) {
     if(!s.next_seq)s.next_seq=1;
@@ -536,6 +605,14 @@ extern "C" int shyt_yt_server_tick_v408(
                 }
             }
         }
+        if(s->phase==SHYT_V408_LINKED &&
+           s->lobby_hello_submitted && s->coop_quarantine &&
+           !s->coop_quarantine->Failed() &&
+           !flush_outgoing_coop_v416(*s,now)) {
+            invalidate_coop(*s);
+            s->phase=SHYT_V408_IO_FAILED;
+            return -1;
+        }
         if(s->phase==SHYT_V408_LINKED || s->phase==SHYT_V408_QUIET) {
             if((s->counters.heartbeats_sent==0 ||
                 maybe_later(now,s->last_ping,kHeartbeat)) &&
@@ -575,6 +652,41 @@ extern "C" int shyt_yt_server_coop_counters_v413(
     if(!s || !out)return 0;
     *out=s->coop_counters;
     return 1;
+}
+extern "C" int shyt_yt_server_send_lobby_hello_v416(
+    ShytYtServerSessionV408* s,const char* display_name,int playing,uint64_t now) {
+    if(!s || !s->coop_quarantine || s->lobby_hello_submitted ||
+       s->phase!=SHYT_V408_LINKED || !valid_field(display_name) ||
+       (playing!=0 && playing!=1) || now<s->last_tick ||
+       s->online_id.size()>127u || s->coop_quarantine->Failed() ||
+       s->coop_quarantine->Quarantined()!=0u)
+        return 0;
+    try {
+        const std::string_view name(display_name);
+        if(!utf8_name_v416(name))return 0;
+        const std::string member=member_hex_v416(s->online_id);
+        std::vector<u8> hello,envelope;
+        append_number_v416(hello,1u,8u); // YT Coop PROTOCOL_CURRENT
+        append_string_v416(hello,2u,member); // hosted account binding
+        append_string_v416(hello,3u,name);
+        if(playing)append_number_v416(hello,4u,1u);
+        append_varint_v416(envelope,23u*8u+2u); // Envelope.lobby_hello
+        append_varint_v416(envelope,hello.size());
+        envelope.insert(envelope.end(),hello.begin(),hello.end());
+        if(!s->coop_quarantine->QueueOutgoing(envelope,static_cast<s64>(now)))
+            return 0;
+        s->lobby_hello_submitted=true;
+        if(!flush_outgoing_coop_v416(*s,now)) {
+            invalidate_coop(*s);
+            s->phase=SHYT_V408_IO_FAILED;
+            return -1;
+        }
+        return 1;
+    }catch(...) {
+        invalidate_coop(*s);
+        s->phase=SHYT_V408_IO_FAILED;
+        return -1;
+    }
 }
 extern "C" int shyt_yt_server_team_observations_v415(
     const ShytYtServerSessionV408* s,ShytYtTeamObservationsV415* out) {
