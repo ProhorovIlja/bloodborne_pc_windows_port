@@ -29,6 +29,11 @@ int main() {
     assert(!gate.Authorized());
     assert(gate.OnAuthenticatedTeamStart(start));
     assert(!gate.Authorized());
+    bool local_host=true;
+    assert(!gate.MaySendPartyHello("world:elsewhere",5,local_host));
+    assert(!gate.MaySendPartyHello("world:level-44",4,local_host));
+    assert(gate.MaySendPartyHello("world:level-44",5,local_host));
+    assert(!local_host); // hunter5 is a guest, not the leader
     assert(!gate.OnAuthenticatedPartyWelcome("unrelated-world",true,21,0));
     assert(!gate.Authorized()); // wrong stream destroyed previous grant context
     assert(gate.OnAuthenticatedLobby(five));
