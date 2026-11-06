@@ -147,6 +147,7 @@ def main()->None:
     yt_game_packet_header=Path(__file__).resolve().parent/"shyt_yt_game_packet_stage_v430.h"
     yt_peer_evidence_header=Path(__file__).resolve().parent/"shyt_yt_peer_evidence_v431.h"
     yt_guest_member_header=Path(__file__).resolve().parent/"shyt_yt_guest_member_v432.h"
+    yt_route_assessment_header=Path(__file__).resolve().parent/"shyt_yt_game_route_assessment_v433.h"
     yt_work_source=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.cpp"
     yt_work_header=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.h"
     if (cmake.is_symlink() or not cmake.is_file() or
@@ -182,6 +183,7 @@ def main()->None:
         not yt_game_packet_header.is_file() or yt_game_packet_header.is_symlink() or
         not yt_peer_evidence_header.is_file() or yt_peer_evidence_header.is_symlink() or
         not yt_guest_member_header.is_file() or yt_guest_member_header.is_symlink() or
+        not yt_route_assessment_header.is_file() or yt_route_assessment_header.is_symlink() or
         not yt_work_source.is_file() or yt_work_source.is_symlink() or
         not yt_work_header.is_file() or yt_work_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
@@ -221,6 +223,7 @@ def main()->None:
         shutil.copyfile(yt_game_packet_header,plugin_root/yt_game_packet_header.name)
         shutil.copyfile(yt_peer_evidence_header,plugin_root/yt_peer_evidence_header.name)
         shutil.copyfile(yt_guest_member_header,plugin_root/yt_guest_member_header.name)
+        shutil.copyfile(yt_route_assessment_header,plugin_root/yt_route_assessment_header.name)
         shutil.copyfile(yt_work_source,plugin_root/yt_work_source.name)
         shutil.copyfile(yt_work_header,plugin_root/yt_work_header.name)
         vendored=plugin_root/"yt_original"/"coop"
