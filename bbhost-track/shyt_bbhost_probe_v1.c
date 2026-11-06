@@ -53,14 +53,17 @@ static atomic_ullong outgoing_channels_v17[SHYT_V17_GAME_CHANNELS];
 static atomic_ullong outgoing_policy_v21[4];
 static atomic_ullong malformed_sends_v17;
 static int packet_hook_enabled_v17;
-static const unsigned char netsync_prologue_v17[16] = {
-    /* A common safe x86-64 push/mov/sub prologue; only first 6 bytes
-     * are independently attested by YT's published coop-sites.json.
-     * Reject unless the WHOLE 16-byte prefix matches the loaded exact
-     * 1.09 image. We pass an entire 17-byte instruction boundary.
+static const unsigned char netsync_prologue_v17[20] = {
+    /* V428 privately audited exact Bloodborne 1.09 decrypted EBOOT
+     * (SHA-256 pinned by BBHost); original YT site 0x017894E0.
+     * Eight complete push/mov/sub instructions, 20-byte boundary.
+     * Earlier V17 used a guessed 17-byte 48 83 EC prologue: the
+     * actual 1.09 uses 48 81 EC. It could NEVER match in real play.
+     * This OBSERVER is default-off and never alters a game packet.
      */
     0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
-    0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec
+    0x41,0x55,0x41,0x54,0x53,0x48,0x81,0xec,
+    0x88,0x00,0x00,0x00
 };
 static int on_netsync_send_v17(BbHookCtx *ctx,void *user) {
     (void)user;
@@ -81,13 +84,17 @@ static int attach_netsync_readonly_v17(const BbHostApi *api) {
     if (!api || api->version<8u ||
         api->size<offsetof(BbHostApi,hook2)+sizeof(api->hook2) ||
         !api->read || !api->hook2) return 0;
-    unsigned char actual[17] = {0};
-    if (api->read(SHYT_V17_NETSYNC_SEND_BN,actual,sizeof(actual))!=0 ||
-        memcmp(actual,netsync_prologue_v17,sizeof(netsync_prologue_v17))!=0)
-        return 0; /* no guessed instruction lengths in an unknown ELF */
-    /* The 16 pinned prefix bytes finish at the SUB RSP,imm8 opcode;
-     * byte 17 is the immediate, so exactly 17 bytes are whole x86 insns.
-     * hook2 checks the full live prologue too before patching.
+    unsigned char actual[sizeof(netsync_prologue_v17)] = {0};
+    if (!api->eboot_is_109 || !api->eboot_is_109() ||
+        !api->eboot_sha256 ||
+        strcmp(api->eboot_sha256(),
+               "941f887a562aae054fac35af8cc8f27cf075f3d4cc2e029fb5ae2a663aaa5ae7")!=0 ||
+        api->read(SHYT_V17_NETSYNC_SEND_BN,actual,sizeof(actual))!=0 ||
+        memcmp(actual,netsync_prologue_v17,sizeof(actual))!=0)
+        return 0; /* exact 1.09 + full instruction boundary, no fallback */
+    /* All 20 bytes are complete initial instructions without RIP-relative
+     * operands. hook2 still verifies the live prologue before patching.
+     * The callback returns 0 so the ORIGINAL function runs unchanged.
      */
     return api->hook2(SHYT_V17_NETSYNC_SEND_BN,actual,sizeof(actual),
                       on_netsync_send_v17,0)==0;
