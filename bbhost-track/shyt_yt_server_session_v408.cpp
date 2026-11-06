@@ -17,6 +17,7 @@
 #include "shyt_yt_world_staging_v425.h"
 #include "shyt_yt_world_projection_v426.h"
 #include "shyt_yt_peer_evidence_v431.h"
+#include "shyt_yt_guest_member_v432.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -947,6 +948,35 @@ extern "C" int shyt_yt_server_world_observations_v420(
     *out={stats.requests_sent,stats.metadata_matching,stats.metadata_rejected,
           stats.metadata_unbound,stats.contexts_revoked,
           static_cast<uint8_t>(s->world_snapshot.AwaitingGameSnapshotConsumer()?1u:0u)};
+    return 1;
+}
+extern "C" int shyt_yt_server_guest_peer_evidence_v432(
+    const ShytYtServerSessionV408* s,
+    uint64_t game_member_addr,int exact_109,const char* sha,
+    ShytYtGuestMemoryReadV432 read,ShytYtGuestPeerEvidenceV432* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    // Do not even dereference a game pointer unless this same session is
+    // currently authenticated, active and still owns its CoopStream.
+    if(s->phase!=SHYT_V408_LINKED || !s->team_gate ||
+       !s->coop_quarantine || s->coop_quarantine->Failed())return 1;
+    ShytYtGuestMemberV432 identity{};
+    if(!shyt_yt_v432_resolve(exact_109,sha,read,game_member_addr,&identity))
+        return 1;
+    out->guest_identity_valid=1u;
+    ShytYtPeerEvidenceObservationsV431 roster{};
+    if(shyt_yt_server_peer_evidence_v431(
+         s,identity.canonical_member_hex,&roster)!=1)
+        return 1;
+    out->observed_world_epoch=roster.observed_world_epoch;
+    out->observed_world_cursor=roster.observed_world_cursor;
+    out->server_roster_candidate=roster.roster_candidate;
+    out->correlated_hello=roster.correlated_hello;
+    out->matched_world_snapshot=roster.matched_world_snapshot;
+    // Readable guest identity is NOT proof of server-authenticated peer
+    // endpoint or a game-room/member network route. Never grant either.
+    out->can_arm_game_queue=0u;
+    out->can_route_game=0u;
     return 1;
 }
 extern "C" int shyt_yt_server_peer_evidence_v431(
