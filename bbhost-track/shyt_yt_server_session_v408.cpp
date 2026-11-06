@@ -105,6 +105,12 @@ bool maybe_later(uint64_t now,uint64_t previous,uint64_t delay) noexcept {
 void reject(ShytYtServerSessionV408& s) noexcept {
     ++s.counters.rejected_control_packets;
 }
+void invalidate_coop(ShytYtServerSessionV408& s) noexcept {
+    if(s.coop_quarantine && s.coop_quarantine->Invalidate()) {
+        ++s.coop_counters.fail_closed;
+        s.coop_counters.messages_held=0;
+    }
+}
 bool start_hello(ShytYtServerSessionV408& s,uint64_t now) {
     std::array<uint8_t,32> ephemeral{};
     if(!entropy_v408(ephemeral.data(),ephemeral.size())) {
@@ -305,6 +311,9 @@ void handle_control(ShytYtServerSessionV408& s,
                 s.member_head=0;
                 s.member_count=0;
                 ++s.counters.member_notice_overflows;
+                // Lost member presence invalidates room/world authority.
+                // Old reliable world events must not survive it.
+                invalidate_coop(s);
                 return;
             }
             ShytYtMemberNoticeV412 event{};
@@ -354,8 +363,13 @@ void handle_control(ShytYtServerSessionV408& s,
                         s.coop_quarantine->Quarantined();
                 } else {
                     ++s.coop_counters.frames_rejected;
-                    if(s.coop_quarantine && s.coop_quarantine->Failed())
-                        ++s.coop_counters.fail_closed;
+                    if(s.coop_quarantine && s.coop_quarantine->Failed()) {
+                        // Already invalidated inside the bounded adapter;
+                        // record the transition once and keep held count zero.
+                        if(s.coop_counters.fail_closed==0u)
+                            ++s.coop_counters.fail_closed;
+                        s.coop_counters.messages_held=0;
+                    }
                 }
                 s.last_auth_recv=now;
                 s.phase=SHYT_V408_LINKED;
@@ -443,6 +457,7 @@ extern "C" int shyt_yt_server_tick_v408(
             const int read=shyt_yt_udp_receive_server_v406(
                 s->udp,wire.data(),wire.size(),&n);
             if(read<0) {
+                invalidate_coop(*s);
                 s->phase=SHYT_V408_IO_FAILED;
                 return -1;
             }
@@ -475,13 +490,19 @@ extern "C" int shyt_yt_server_tick_v408(
             if((s->counters.heartbeats_sent==0 ||
                 maybe_later(now,s->last_ping,kHeartbeat)) &&
                !ping(*s,now)) {
+                invalidate_coop(*s);
                 s->phase=SHYT_V408_IO_FAILED;
                 return -1;
             }
-            if(maybe_later(now,s->last_auth_recv,kQuiet))
+            if(maybe_later(now,s->last_auth_recv,kQuiet)) {
+                // Reconnect must re-establish an authoritative world snapshot.
+                // Keeping a pre-disconnect CoopStream would trust stale events.
+                invalidate_coop(*s);
                 s->phase=SHYT_V408_QUIET;
+            }
         }
     }catch(...) {
+        invalidate_coop(*s);
         s->phase=SHYT_V408_IO_FAILED;
         return -1;
     }
