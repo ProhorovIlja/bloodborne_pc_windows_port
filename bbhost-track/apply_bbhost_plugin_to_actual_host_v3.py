@@ -134,6 +134,7 @@ def main()->None:
     yt_session_source=Path(__file__).resolve().parent/"shyt_yt_server_session_v408.cpp"
     yt_session_header=Path(__file__).resolve().parent/"shyt_yt_server_session_v408.h"
     yt_coop_transport_header=Path(__file__).resolve().parent/"shyt_yt_coop_transport_v413.h"
+    yt_authority_header=Path(__file__).resolve().parent/"shyt_yt_team_authority_v414.h"
     yt_work_source=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.cpp"
     yt_work_header=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.h"
     if (cmake.is_symlink() or not cmake.is_file() or
@@ -156,6 +157,7 @@ def main()->None:
         not yt_session_source.is_file() or yt_session_source.is_symlink() or
         not yt_session_header.is_file() or yt_session_header.is_symlink() or
         not yt_coop_transport_header.is_file() or yt_coop_transport_header.is_symlink() or
+        not yt_authority_header.is_file() or yt_authority_header.is_symlink() or
         not yt_work_source.is_file() or yt_work_source.is_symlink() or
         not yt_work_header.is_file() or yt_work_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
@@ -182,6 +184,7 @@ def main()->None:
         shutil.copyfile(yt_session_source,plugin_root/yt_session_source.name)
         shutil.copyfile(yt_session_header,plugin_root/yt_session_header.name)
         shutil.copyfile(yt_coop_transport_header,plugin_root/yt_coop_transport_header.name)
+        shutil.copyfile(yt_authority_header,plugin_root/yt_authority_header.name)
         shutil.copyfile(yt_work_source,plugin_root/yt_work_source.name)
         shutil.copyfile(yt_work_header,plugin_root/yt_work_header.name)
         vendored=plugin_root/"yt_original"/"coop"
