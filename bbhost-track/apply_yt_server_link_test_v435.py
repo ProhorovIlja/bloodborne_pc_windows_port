@@ -83,8 +83,8 @@ int V435AuthenticatedGameSender() {
   return 0;
 }
 '''
-MAIN='''       AnInvaderSharesTheVisitedTeamsRelay() != 0) {'''
-MAIN_NEW='''       AnInvaderSharesTheVisitedTeamsRelay() != 0 ||
+MAIN='''      AnInvaderSharesTheVisitedTeamsRelay() != 0) {'''
+MAIN_NEW='''      AnInvaderSharesTheVisitedTeamsRelay() != 0 ||
        V435AuthenticatedGameSender() != 0) {'''
 def patch(yt:Path,out:Path)->None:
     if not yt.is_dir() or yt.is_symlink() or out.is_symlink():
