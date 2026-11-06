@@ -398,6 +398,22 @@ int main() {
     for(const auto& frame:server_world.Flush(1423))
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(46);
     if(shyt_yt_server_tick_v408(client,1424)!=1)return bad(47);
+    // V431: the five-player roster is real original encrypted
+    // Lobby/TeamStart evidence, but it is NOT yet a peer-route grant.
+    // "hunter2" is the first remote hex-authenticated TeamMember.
+    const char* real_remote="68756e74657232";
+    ShytYtPeerEvidenceObservationsV431 peer_v431{};
+    if(!shyt_yt_server_peer_evidence_v431(client,real_remote,&peer_v431) ||
+       peer_v431.roster_candidate!=1u ||
+       peer_v431.correlated_hello!=0u ||
+       peer_v431.matched_world_snapshot!=0u ||
+       peer_v431.can_arm_game_queue!=0u ||
+       peer_v431.can_route_game!=0u ||
+       !shyt_yt_server_peer_evidence_v431(client,"hunter2",&peer_v431) ||
+       peer_v431.roster_candidate!=0u ||
+       !shyt_yt_server_peer_evidence_v431(client,member_hex.c_str(),&peer_v431) ||
+       peer_v431.roster_candidate!=0u)
+        return bad(86);
     // V418: only a game-confirmed save slot and authentic TeamStart may
     // cause a party Hello. These negative cases MUST send no datagrams.
     if(shyt_yt_server_send_party_hello_v418(
@@ -466,6 +482,13 @@ int main() {
        observations.authority_messages_rejected!=1u ||
        coop_counts.messages_held!=1u)
         return bad(50);
+    if(!shyt_yt_server_peer_evidence_v431(client,real_remote,&peer_v431) ||
+       peer_v431.roster_candidate!=1u ||
+       peer_v431.correlated_hello!=1u ||
+       peer_v431.matched_world_snapshot!=0u ||
+       peer_v431.can_arm_game_queue!=0u ||
+       peer_v431.can_route_game!=0u)
+        return bad(87);
     // Only arbitrary unhandled world data remains quarantined. V419
     // correlated the Welcome with explicit party Hello, but it is still
     // a read-only candidate, NOT permission for NetSync or game writes.
@@ -549,6 +572,18 @@ int main() {
        stage_obs.staged_bytes!=snapshot_envelope.size() ||
        stage_obs.pending_packets!=1u || stage_obs.active!=1u)
         return bad(83);
+    if(!shyt_yt_server_peer_evidence_v431(client,real_remote,&peer_v431) ||
+       peer_v431.roster_candidate!=1u ||
+       peer_v431.correlated_hello!=1u ||
+       peer_v431.matched_world_snapshot!=1u ||
+       peer_v431.observed_world_epoch!=77u ||
+       peer_v431.observed_world_cursor!=9u ||
+       peer_v431.can_arm_game_queue!=0u ||
+       peer_v431.can_route_game!=0u ||
+       !shyt_yt_server_peer_evidence_v431(client,"6e6f742d612d6d656d626572",&peer_v431) ||
+       peer_v431.roster_candidate!=0u ||
+       peer_v431.can_arm_game_queue!=0u)
+        return bad(88);
     ShytYtWorldProjectionObservationsV426 projection_obs{};
     const int projection_ok=
         shyt_yt_server_world_projection_observations_v426(client,&projection_obs);
@@ -661,6 +696,12 @@ int main() {
        projection_obs.killed!=2u || projection_obs.hp_enemies!=1u ||
        projection_obs.snapshot_recent_flags!=1u)
         return bad(85);
+    if(!shyt_yt_server_peer_evidence_v431(client,real_remote,&peer_v431) ||
+       peer_v431.roster_candidate!=1u ||
+       peer_v431.matched_world_snapshot!=1u ||
+       peer_v431.observed_world_cursor!=11u ||
+       peer_v431.can_route_game!=0u)
+        return bad(89);
     // V424: 24 original server-authenticated empty Entries heartbeats
     // must not exhaust the 16-message quarantine cap, revoke a healthy
     // link or discard the pending actual world Snapshot/new delta.
@@ -737,6 +778,12 @@ int main() {
        !shyt_yt_server_world_staging_observations_v425(client,&stage_obs) ||
        stage_obs.active!=0u || stage_obs.pending_packets!=0u ||
        stage_obs.revoked!=1u ||
+       !shyt_yt_server_peer_evidence_v431(client,real_remote,&peer_v431) ||
+       peer_v431.roster_candidate!=0u ||
+       peer_v431.correlated_hello!=0u ||
+       peer_v431.matched_world_snapshot!=0u ||
+       peer_v431.can_arm_game_queue!=0u ||
+       peer_v431.can_route_game!=0u ||
        shyt_yt_server_world_projection_observations_v426(client,&projection_obs)!=0 ||
        projection_obs.projection_ready!=0u ||
        !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
