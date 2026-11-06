@@ -32,6 +32,9 @@ int main() {
     assert(!gate.PreparedPeerCandidate(local)); // no self P2P
     assert(!gate.PreparedPeerCandidate("6e6f7065")); // unknown
     assert(!gate.PreparedPeerCandidate("bob")); // display name != server ID
+    assert(!gate.PreparedPeerCandidate("626F62")); // uppercase not canonical
+    assert(!gate.PreparedPeerCandidate("626f6")); // odd-length hex
+    assert(!gate.PreparedPeerCandidate("626f62:80")); // endpoint != ID
     obs=Fence::Inspect(gate,reply,stage,peer);
     assert(obs.roster_candidate && !obs.correlated_hello &&
            !obs.matched_world_snapshot && !obs.ready_for_route &&
