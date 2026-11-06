@@ -561,8 +561,12 @@ extern "C" ShytYtServerSessionV408 *shyt_yt_server_new_v408(
         session->coop_quarantine=
             std::make_unique<SeamlessHunt::CoopTransportV413>(
                 session->online_id,run==0u?1u:run,"shadnet");
+        // YT server AuthenticatedMember(online_id) is lower-case HEX of
+        // the signed-in link's raw online ID, not the display name or raw
+        // account text. Bind the gate to EXACTLY that canonical identity.
         session->team_gate=
-            std::make_unique<SeamlessHunt::YtTeamAuthorityV414>(session->online_id);
+            std::make_unique<SeamlessHunt::YtTeamAuthorityV414>(
+                member_hex_v416(session->online_id));
         return session;
     } catch(...) {
         shyt_yt_server_free_v408(session);
