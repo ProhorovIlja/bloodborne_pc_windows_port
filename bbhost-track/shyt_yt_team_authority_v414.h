@@ -129,6 +129,21 @@ public:
         return true;
     }
     bool Authorized() const noexcept { return authorized_; }
+    // V431: a server-MAC-authenticated Lobby + checked TeamStart provide
+    // a *read-only roster candidate*, not a gameplay grant. The actual
+    // party Welcome does not echo room identity and cannot establish
+    // per-peer authentication/endpoint ownership by itself. Do not use
+    // this predicate to arm an outgoing packet queue or route P2P data.
+    bool PreparedPeerCandidate(const std::string& id) const {
+        if (!identity_valid_ || !have_lobby_ || !have_start_ ||
+            !lobby_.started || !Identifier(id) || id == local_id_ ||
+            start_.team != lobby_.team || start_.party != lobby_.party ||
+            start_.world != lobby_.world || !HasMember(start_.host))
+            return false;
+        const auto member=std::find_if(lobby_.members.begin(),lobby_.members.end(),
+            [&](const Member& m) {return m.id==id;});
+        return member!=lobby_.members.end() && member->ready;
+    }
     // A membership check only. Does NOT validate map/owner/channel,
     // invasion policy, the peer's cryptographic key or its endpoint.
     bool IsTeamMember(const std::string& id) const {
