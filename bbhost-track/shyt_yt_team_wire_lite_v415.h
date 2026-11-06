@@ -291,6 +291,21 @@ private:
     }
     static bool ReadSnapshotMetadata(std::span<const std::uint8_t> bytes,
                                      Message& msg) {
+        // Protobuf wire fields can legally arrive out of field-number order.
+        // Resolve and check epoch/last in a bounded first pass so a later
+        // recent_flags Entry never compares to an uninitialized last=0.
+        Reader header(bytes);Field h;std::uint32_t header_seen=0u;
+        while(header.Next(h)) {
+            if(h.number==1u || h.number==2u) {
+                const std::uint32_t bit=1u<<h.number;
+                if(h.wire!=0u || (header_seen&bit))return false;
+                header_seen|=bit;
+                if(h.number==1u)msg.epoch=h.number_value;
+                else msg.last=h.number_value;
+            }
+        }
+        if(!header.Valid() || !(header_seen&(1u<<1u)) ||
+           msg.epoch==0u)return false;
         Reader r(bytes);Field f;std::uint32_t seen=0u,items=0u;
         while(r.Next(f)) {
             if(f.number==0u || f.number>12u)return false;
