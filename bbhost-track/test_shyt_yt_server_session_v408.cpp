@@ -626,6 +626,12 @@ int main() {
        delta_obs.heartbeats!=24u || delta_obs.cursor!=11u ||
        delta_obs.tracking!=1u)
         return bad(81);
+    ShytYtRedundantWorldPruningV424 prune{};
+    if(!shyt_yt_server_world_pruning_observations_v424(client,&prune) ||
+       prune.heartbeats_pruned!=24u || prune.replays_pruned!=1u ||
+       prune.messages_still_held!=3u ||
+       prune.bytes_pruned<24u*empty_envelope.size())
+        return bad(82);
     // An inner frame from a different identity cannot impersonate shadnet
     // even when the outer authenticated test server sends it.
     BloodborneCoop::CoopStream impostor("not-shadnet",800u);
