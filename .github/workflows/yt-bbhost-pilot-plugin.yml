@@ -93,6 +93,14 @@ jobs:
           path: v413-brief.txt
           retention-days: 2
           if-no-files-found: ignore
+      - name: Verify BBHost five-player team/world authorization is fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_team_authority_v414.cpp \
+            -o "$RUNNER_TEMP/shyt-authority-v414"
+          "$RUNNER_TEMP/shyt-authority-v414"
       - name: Verify owner game compatibility probe never sends or prints game data
         shell: bash
         run: |
@@ -266,6 +274,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_udp_endpoint_v406.cpp
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_server_session_v408.cpp
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_coop_transport_v413.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_team_authority_v414.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
