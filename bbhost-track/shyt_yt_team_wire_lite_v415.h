@@ -14,7 +14,7 @@
 namespace SeamlessHunt {
 class YtTeamWireLiteV415 final {
 public:
-    enum class Kind { Invalid, Other, Lobby, Start, Welcome };
+    enum class Kind { Invalid, Other, Lobby, Start, Welcome, Snapshot };
     struct Message {
         Kind kind = Kind::Invalid;
         YtTeamAuthorityV414::Lobby lobby{};
@@ -40,6 +40,10 @@ public:
             case 2u:
                 result.kind = Kind::Welcome;
                 if (!ReadWelcome(field.bytes,result)) return {};
+                break;
+            case 7u:
+                result.kind = Kind::Snapshot;
+                if (!ReadSnapshotMetadata(field.bytes,result)) return {};
                 break;
             case 25u:
                 result.kind = Kind::Lobby;
@@ -211,6 +215,23 @@ private:
             }
         }
         return r.Valid() && (seen&23u)==23u; // proto3 omits slot=0
+    }
+    // Only the top-level original Snapshot.epoch/last are decoded. The
+    // nested kills/flags/map/HpReport payloads remain opaque and quarantined
+    // until a separately verified world application consumer exists.
+    static bool ReadSnapshotMetadata(std::span<const std::uint8_t> bytes,Message& msg) {
+        Reader r(bytes);Field f;std::uint32_t seen=0;
+        while(r.Next(f)) {
+            if(f.number==1u || f.number==2u) {
+                if(f.wire!=0u || (seen & (1u<<(f.number-1u))))return false;
+                seen |= 1u<<(f.number-1u);
+                if(f.number==1u)msg.epoch=f.number_value;
+                else msg.last=f.number_value;
+            }
+        }
+        // Proto3 serializes last=0 by omission. A valid world epoch cannot
+        // be zero for this read-only admission gate.
+        return r.Valid() && (seen&1u)!=0u && msg.epoch!=0u;
     }
     static bool ReadWelcome(std::span<const std::uint8_t> bytes,Message& msg) {
         Reader r(bytes);Field f;std::uint32_t seen=0;
