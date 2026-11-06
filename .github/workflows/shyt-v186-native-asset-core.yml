@@ -1,0 +1,65 @@
+name: SHYT V186 source-port native Bloodborne / Dark Souls III asset core
+on:
+  push:
+    branches: [feature/native-source-assets-bb-ds3-v186-20261031]
+    paths:
+      - .github/workflows/shyt-v186-native-asset-core.yml
+      - native/source-port/assets/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-source-assets:
+    name: Original independent source-port asset core (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Install zlib (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -qq update > "$RUNNER_TEMP/v186-apt.txt" 2>&1
+          sudo apt-get -qq install -y zlib1g-dev >> "$RUNNER_TEMP/v186-apt.txt" 2>&1
+      - name: Install zlib (MSVC Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vcpkg = Join-Path $env:VCPKG_INSTALLATION_ROOT 'vcpkg.exe'
+          if (-not (Test-Path $vcpkg)) { throw 'MSVC vcpkg not found on Windows runner' }
+          & $vcpkg install zlib:x64-windows --disable-metrics 1> "$env:RUNNER_TEMP/v186-vcpkg.txt" 2>&1
+          if ($LASTEXITCODE -ne 0) { throw 'zlib Windows dependency not installed' }
+      - name: Configure + compile original native C++ on Ubuntu
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S native/source-port/assets -B "$RUNNER_TEMP/v186-build" -DCMAKE_BUILD_TYPE=Release > "$RUNNER_TEMP/v186-config.txt" 2>&1
+          if ! cmake --build "$RUNNER_TEMP/v186-build" --parallel 2 > "$RUNNER_TEMP/v186-build.txt" 2>&1; then
+            echo '::error title=V186 Linux C++::Build failed'; tail -n 12 "$RUNNER_TEMP/v186-build.txt" | cut -c1-260; exit 1
+          fi
+          ctest --test-dir "$RUNNER_TEMP/v186-build" --output-on-failure --timeout 60
+      - name: Configure + compile original native C++ on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path $env:VCPKG_INSTALLATION_ROOT 'scripts/buildsystems/vcpkg.cmake'
+          cmake -S native/source-port/assets -B "$env:RUNNER_TEMP/v186-build" -A x64 -DCMAKE_TOOLCHAIN_FILE="$toolchain" -DVCPKG_TARGET_TRIPLET=x64-windows
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows CMake configuration failed' }
+          cmake --build "$env:RUNNER_TEMP/v186-build" --config Release --parallel 2 1> "$env:RUNNER_TEMP/v186-build.txt" 2>&1
+          if ($LASTEXITCODE -ne 0) { Write-Output '::error title=V186 Windows native C++::Build failed'; Get-Content "$env:RUNNER_TEMP/v186-build.txt" -Tail 12 | ForEach-Object { $_.Substring(0,[Math]::Min(260,$_.Length)) }; throw 'Native Windows build failed' }
+          ctest --test-dir "$env:RUNNER_TEMP/v186-build" -C Release --output-on-failure --timeout 60
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows parser regression failed' }
+      - name: Declare scope honestly
+        shell: bash
+        run: |
+          echo 'SHYT_V186_INDEPENDENT_PC_ASSET_READER_SYNTHETIC_PASS_IF_JOBS_GREEN'
+          echo 'No retail game files, PS4 runtime, game boot, renderer, gameplay, online or NAT validation in this CI'
