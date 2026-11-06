@@ -1,0 +1,83 @@
+name: SHYT V414 original YT protobuf five-player world authority
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/shyt_yt_team_authority_v414.h'
+      - 'bbhost-track/shyt_yt_team_wire_v414.h'
+      - 'bbhost-track/test_shyt_yt_team_authority_v414.cpp'
+      - 'bbhost-track/test_shyt_yt_team_wire_v414.cpp'
+      - '.github/workflows/yt-bbhost-team-authority-v414.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pure-authority:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and exercise strict authorization state machine
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Windows ]; then
+            clang-cl /nologo /std:c++20 /EHsc /O2 /W4 /WX \
+              /Ibbhost-track bbhost-track/test_shyt_yt_team_authority_v414.cpp \
+              /Fe:./v414-test.exe >v414-build.log 2>&1 || { tail -n 6 v414-build.log | cut -c1-170; exit 1; }
+            ./v414-test.exe
+          else
+            g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+              -Ibbhost-track bbhost-track/test_shyt_yt_team_authority_v414.cpp \
+              -o v414-test >v414-build.log 2>&1 || { tail -n 6 v414-build.log | cut -c1-170; exit 1; }
+            ./v414-test
+          fi
+  original-protobuf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: original-yt-v140
+          persist-credentials: false
+          submodules: false
+      - name: Verify exact original v1.4 protocol and Team fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original-yt-v140 rev-parse HEAD)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          grep -Fq 'PROTOCOL_CURRENT = 8;' original-yt-v140/server/coop/coop.proto
+          grep -Fq 'message TeamStart {' original-yt-v140/server/coop/coop.proto
+          grep -Fq 'message LobbyState {' original-yt-v140/server/coop/coop.proto
+          grep -Fq 'GuestSigns{7, 6, 5,' original-yt-v140/server/coop/team_lobby.cpp
+      - name: Generate original YT C++ messages and execute V414 admission regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq >/dev/null
+          sudo apt-get install -qq -y --no-install-recommends protobuf-compiler libprotobuf-dev >/dev/null
+          mkdir -p "$RUNNER_TEMP/yt-v140-proto"
+          protoc -I original-yt-v140/server/coop \
+            --cpp_out="$RUNNER_TEMP/yt-v140-proto" \
+            original-yt-v140/server/coop/coop.proto
+          g++ -std=c++20 -O2 -w \
+            -I"$RUNNER_TEMP/yt-v140-proto" \
+            -c "$RUNNER_TEMP/yt-v140-proto/coop.pb.cc" \
+            -o "$RUNNER_TEMP/coop-proto.o" >v414-compile.log 2>&1 || { tail -n 7 v414-compile.log | cut -c1-170; exit 1; }
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -I"$RUNNER_TEMP/yt-v140-proto" \
+            bbhost-track/test_shyt_yt_team_wire_v414.cpp \
+            "$RUNNER_TEMP/coop-proto.o" -lprotobuf-lite \
+            -o "$RUNNER_TEMP/v414-proto-test" >>v414-compile.log 2>&1 || { tail -n 7 v414-compile.log | cut -c1-170; exit 1; }
+          "$RUNNER_TEMP/v414-proto-test"
