@@ -307,6 +307,9 @@ int main() {
        counts.authenticated_member_notices!=
            SHYT_V412_MEMBER_QUEUE_CAP+2u ||
        counts.member_notice_overflows!=1u ||
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
+       coop_counts.fail_closed!=1u ||
+       coop_counts.messages_held!=0u ||
        shyt_yt_server_take_member_v412(client,&member_event)!=-1 ||
        member_event.online_id[0]!=0)
         return bad(39);
@@ -317,7 +320,10 @@ int main() {
     // Original client must keep its authenticated transport, but report
     // quiet when replies have not arrived within the safety window.
     if(shyt_yt_server_tick_v408(client,12500)!=1 ||
-       shyt_yt_server_phase_v408(client)!=SHYT_V408_QUIET)
+       shyt_yt_server_phase_v408(client)!=SHYT_V408_QUIET ||
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
+       coop_counts.fail_closed!=1u ||
+       coop_counts.messages_held!=0u)
         return bad(26);
     shyt_yt_server_free_v408(client);
     close_raw(server);
