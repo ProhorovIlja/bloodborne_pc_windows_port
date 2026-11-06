@@ -100,7 +100,18 @@ int main() {
     auto bad_wire=Encode(original_start);
     bad_wire.push_back(0x80u); // unterminated varint key
     assert(Lite::Decode(bad_wire).kind==Lite::Kind::Invalid);
+    // The first response to LobbyHello on a public YT server commonly
+    // contains NO team. This is valid protobuf and must not be mistaken
+    // for a malformed packet or an authority grant.
+    bbcoop::Envelope teamless;
+    teamless.mutable_lobby_state()->set_notice("make a team");
+    assert(!teamless.lobby_state().has_team());
+    const auto lite_teamless=Lite::Decode(Encode(teamless));
+    assert(lite_teamless.kind==Lite::Kind::Lobby);
+    assert(!lite_teamless.lobby_has_team);
     Gate gate("hunter5");
+    assert(Feed(gate,Scope::Lobby,"",teamless)==Result::Revoked);
+    assert(!gate.Authorized());
     assert(Feed(gate,Scope::Lobby,"",Lobby())==Result::Accepted);
     assert(!gate.Authorized());
     assert(Feed(gate,Scope::Lobby,"",Start())==Result::Accepted);
