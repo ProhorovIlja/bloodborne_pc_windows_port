@@ -452,17 +452,23 @@ int main() {
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(48);
     if(shyt_yt_server_tick_v408(client,1426)!=1)return bad(49);
     ShytYtTeamObservationsV415 observations{};
+    ShytYtPartyReplyObservationsV419 party_replies{};
     if(!shyt_yt_server_team_observations_v415(client,&observations) ||
+       !shyt_yt_server_party_observations_v419(client,&party_replies) ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        observations.lobby_states_accepted!=2u ||
        observations.team_starts_accepted!=1u ||
-       observations.party_welcomes_unbound!=1u ||
+       observations.party_welcomes_unbound!=0u ||
+       party_replies.party_hellos_sent!=1u ||
+       party_replies.replies_correlated!=1u ||
+       party_replies.replies_unbound!=0u ||
+       party_replies.candidate_awaiting_snapshot!=1u ||
        observations.authority_messages_rejected!=1u ||
        coop_counts.messages_held!=1u)
         return bad(50);
-    // Only the arbitrary unhandled world data remains in the bounded
-    // quarantine. Teamless LobbyState, five-player LobbyState, TeamStart,
-    // and unbound Welcome were fully consumed by the authority observer.
+    // Only arbitrary unhandled world data remains quarantined. V419
+    // correlated the Welcome with explicit party Hello, but it is still
+    // a read-only candidate, NOT permission for NetSync or game writes.
     // An inner frame from a different identity cannot impersonate shadnet
     // even when the outer authenticated test server sends it.
     BloodborneCoop::CoopStream impostor("not-shadnet",800u);
@@ -501,6 +507,9 @@ int main() {
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        coop_counts.fail_closed!=1u ||
        coop_counts.messages_held!=0u ||
+       !shyt_yt_server_party_observations_v419(client,&party_replies) ||
+       party_replies.candidate_awaiting_snapshot!=0u ||
+       party_replies.contexts_revoked!=1u ||
        shyt_yt_server_take_member_v412(client,&member_event)!=-1 ||
        member_event.online_id[0]!=0)
         return bad(39);
