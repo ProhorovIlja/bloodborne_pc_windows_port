@@ -469,13 +469,54 @@ int main() {
     // Only arbitrary unhandled world data remains quarantined. V419
     // correlated the Welcome with explicit party Hello, but it is still
     // a read-only candidate, NOT permission for NetSync or game writes.
+    // V420: explicitly ask for the first full world snapshot over the
+    // SAME Noise NK-authenticated original reliable YT CoopStream.
+    // The canonical initial request {epoch:0,seq:0} contains no local
+    // game state and grants no NetSync access.
+    if(shyt_yt_server_send_snapshot_request_v420(client,1427)!=1 ||
+       shyt_yt_server_send_snapshot_request_v420(client,1427)!=0)
+        return bad(66);
+    const std::vector<u8> expected_snapshot_request{0x32u,0x00u};
+    bool saw_snapshot_request=false;
+    for(unsigned attempt=0;attempt<16u && !saw_snapshot_request;++attempt) {
+        auto reply=receive(server,endpoint);
+        if(reply.empty())return bad(67);
+        if(answer.session.Open(reply)!=LinkAuth::Session::Verdict::Ok)
+            return bad(68);
+        reply.resize(reply.size()-LinkAuth::TrailerBytes);
+        if(const auto coop=YT::DecodeCoop(reply)) {
+            for(const auto& message:from_client.Receive(*coop,1427))
+                if(message==expected_snapshot_request)
+                    saw_snapshot_request=true;
+        }
+    }
+    if(!saw_snapshot_request)return bad(69);
+    // A real original field-tag Snapshot (Envelope.snapshot=7) arrives.
+    // Its payload is deliberately retained in quarantine: observing the
+    // epoch/last header is NOT applying map kills/flags/HP to the game.
+    std::vector<u8> snapshot_body,snapshot_envelope;
+    putnum(snapshot_body,1u,77u); // epoch from accepted party Welcome
+    putbytes(snapshot_envelope,7u,snapshot_body);
+    server_world.Send(snapshot_envelope,1428);
+    for(const auto& frame:server_world.Flush(1428))
+        if(!send_encrypted(YT::EncodeCoop(frame)))return bad(70);
+    if(shyt_yt_server_tick_v408(client,1429)!=1)return bad(71);
+    ShytYtWorldSnapshotObservationsV420 world_observations{};
+    if(!shyt_yt_server_world_observations_v420(client,&world_observations) ||
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
+       world_observations.requests_sent!=1u ||
+       world_observations.metadata_matching!=1u ||
+       world_observations.metadata_rejected!=0u ||
+       world_observations.awaiting_game_snapshot_consumer!=1u ||
+       coop_counts.messages_held!=2u)
+        return bad(72);
     // An inner frame from a different identity cannot impersonate shadnet
     // even when the outer authenticated test server sends it.
     BloodborneCoop::CoopStream impostor("not-shadnet",800u);
-    impostor.Send(lobby_envelope,1427);
-    for(const auto& frame:impostor.Flush(1427))
+    impostor.Send(lobby_envelope,1430);
+    for(const auto& frame:impostor.Flush(1430))
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(51);
-    if(shyt_yt_server_tick_v408(client,1428)!=1 ||
+    if(shyt_yt_server_tick_v408(client,1431)!=1 ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        coop_counts.frames_rejected!=2u ||
        !shyt_yt_server_team_observations_v415(client,&observations) ||
@@ -510,6 +551,9 @@ int main() {
        !shyt_yt_server_party_observations_v419(client,&party_replies) ||
        party_replies.candidate_awaiting_snapshot!=0u ||
        party_replies.contexts_revoked!=1u ||
+       !shyt_yt_server_world_observations_v420(client,&world_observations) ||
+       world_observations.awaiting_game_snapshot_consumer!=0u ||
+       world_observations.contexts_revoked!=1u ||
        shyt_yt_server_take_member_v412(client,&member_event)!=-1 ||
        member_event.online_id[0]!=0)
         return bad(39);
