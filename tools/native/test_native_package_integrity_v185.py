@@ -1,0 +1,260 @@
+"""Offline fixture tests; no actual game, proprietary binaries, network or installs."""
+import contextlib
+import importlib.util
+import io
+import json
+from pathlib import Path
+import struct
+import tempfile
+import unittest
+import zipfile
+
+PATH = Path(__file__).with_name('native_package_integrity_v185.py')
+SPEC = importlib.util.spec_from_file_location('native_v185', PATH)
+audit = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(audit)
+
+
+def fake_pe() -> bytes:
+    b = bytearray(512)
+    b[:2] = b'MZ'
+    struct.pack_into('<I', b, 0x3c, 0x80)
+    b[0x80:0x84] = b'PE\0\0'
+    struct.pack_into('<H', b, 0x84, 0x8664)
+    return bytes(b)
+
+
+class NativePackageTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / 'client'
+        self.root.mkdir()
+        self.data = {p: fake_pe() for p in audit.REQUIRED_PE}
+        self.data.update({'run.py': b'# harmless fixture\n',
+                          'VERSION.txt': b'Bloodborne PC native Windows test build',
+                          'bin/fsr24/sdk.dll': b'SDK-only runtime, no game',
+                          'bin/reshade/README.txt': b'Nested optional runtime'})
+        self.zip = Path(self.tmp.name) / 'source.zip'
+
+    def write_dir(self):
+        for name, value in self.data.items():
+            p = self.root / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(value)
+
+    def write_zip(self, malicious=None):
+        with zipfile.ZipFile(self.zip, 'w', zipfile.ZIP_DEFLATED) as z:
+            for name, data in self.data.items():
+                z.writestr('BBSC-RELEASE/' + name, data)
+            if malicious:
+                for name, data in malicious:
+                    z.writestr(name, data)
+
+    def cli(self, *args):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = audit.main([str(args[0]), *map(str, args[1:])])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_real_game_sfo_version_gate_with_synthetic_fixture(self):
+        def make_sfo(title=b'CUSA03173\0', app=b'01.09\0'):
+            keys=b'APP_VER\0TITLE_ID\0'
+            key_off=20 + 16*2
+            data_off=key_off + len(keys)
+            entries=(struct.pack('<HHIII',0,0x204,len(app),len(app),0) +
+                     struct.pack('<HHIII',8,0x204,len(title),len(title),len(app)))
+            return (struct.pack('<4sIIII',b'\x00PSF',0x101,key_off,data_off,2)
+                    + entries + keys + app + title)
+        self.write_dir()
+        game = Path(self.tmp.name) / 'param.sfo'
+        game.write_bytes(make_sfo())
+        self.assertEqual(audit.read_game_sfo(game), {'APP_VER':'01.09','TITLE_ID':'CUSA03173'})
+        status, out, err = self.cli(self.root, '--game-sfo', game)
+        self.assertEqual(status, 0, err)
+        summary=json.loads(out)
+        self.assertTrue(summary['private_game_sfo_109_verified'])
+        self.assertFalse(summary['game_eboot_patch_sites_verified'])
+        self.assertNotIn(str(game), out)
+        for bad in (make_sfo(app=b'01.00\0'),make_sfo(title=b'CUSA00000\0'),
+                    b'broken',make_sfo()[:18]):
+            game.write_bytes(bad)
+            code, out, err = self.cli(self.root, '--game-sfo', game)
+            self.assertEqual(code, 2)
+            self.assertEqual(out, '')
+            self.assertNotIn(str(game), err)
+
+    def test_local_ps4_elf64_x86_64_gate_does_not_claim_boot(self):
+        self.write_dir()
+        game = Path(self.tmp.name) / 'eboot.bin-decrypted'
+        elf = bytearray(64)
+        elf[:8] = b'\x7fELF\x02\x01\x01\x09'
+        struct.pack_into('<HH', elf, 16, 0xfe10, 0x3e)
+        with game.open('wb') as f:
+            f.write(elf)
+            f.truncate(2 * 1024 * 1024)
+        self.assertEqual(audit.read_decrypted_game_eboot(game),
+                         {'elf_class':64,'machine_x86_64':1,'sce_elf_type':0xfe10})
+        # A decrypted game executable alone is NOT authenticated to a build.
+        status, out, err = self.cli(self.root, '--game-eboot', game)
+        self.assertEqual(status, 2)
+        self.assertEqual(out, '')
+        # Wrong architecture and wrong ELF class fail before calling a loader.
+        with game.open('r+b') as f:
+            f.seek(18)
+            f.write(struct.pack('<H', 40))
+        self.assertEqual(self.cli(self.root, '--game-eboot', game)[0], 2)
+        with self.assertRaises(audit.PackageError):
+            audit.read_decrypted_game_eboot(game)
+        with game.open('r+b') as f:
+            f.seek(18)
+            f.write(struct.pack('<H', 0x3e))
+            f.seek(4)
+            f.write(b'\x01')
+        with self.assertRaises(audit.PackageError):
+            audit.read_decrypted_game_eboot(game)
+
+    def test_canonical_loaded_game_elf_image_only_valid_segments(self):
+        game = Path(self.tmp.name) / 'synthetic-eboot'
+        elf = bytearray(4096)
+        elf[:8] = b'\x7fELF\x02\x01\x01\x09'
+        struct.pack_into('<HH', elf, 16, 0xfe10, 0x3e)
+        struct.pack_into('<Q', elf, 32, 0x40)  # ELF program header offset
+        struct.pack_into('<HH', elf, 54, 56, 2)  # phentsize, phnum
+        struct.pack_into('<IIQQQQQQ', elf, 0x40,
+                         1, 5, 0x1000, 0, 0, 4, 8, 0x1000)
+        struct.pack_into('<IIQQQQQQ', elf, 0x40 + 56,
+                         1, 6, 0x2000, 16, 16, 3, 4, 0x1000)
+        with game.open('wb') as f:
+            f.write(elf)
+            f.write(b'ABCD')
+            f.seek(0x2000)
+            f.write(b'XYZ')
+            f.truncate(2 * 1024**2)
+        expected = b'ABCD' + b'\0' * 12 + b'XYZ\0'
+        self.assertEqual(audit.loaded_game_image_sha256(game),
+                         __import__('hashlib').sha256(expected).hexdigest())
+        # A hash of the raw file is different from canonical loaded image.
+        with game.open('r+b') as f:
+            f.seek(0x3000)
+            f.write(b'irrelevant outside load segments')
+        self.assertEqual(audit.loaded_game_image_sha256(game),
+                         __import__('hashlib').sha256(expected).hexdigest())
+        # Crafted huge virtual addresses are rejected rather than allocated.
+        with game.open('r+b') as f:
+            f.seek(0x40 + 16)
+            f.write(struct.pack('<Q', 0x20000000))
+        with self.assertRaisesRegex(audit.PackageError, 'unsafe'):
+            audit.loaded_game_image_sha256(game)
+
+    def test_private_game_image_hash_mismatch_fails_closed(self):
+        self.write_dir()
+        game = Path(self.tmp.name) / 'synthetic-eboot'
+        data = bytearray(128)
+        data[:8] = b'\x7fELF\x02\x01\x01\x09'
+        struct.pack_into('<HH', data, 16, 0xfe10, 0x3e)
+        struct.pack_into('<Q', data, 32, 0x40)
+        struct.pack_into('<HH', data, 54, 56, 1)
+        struct.pack_into('<IIQQQQQQ', data, 0x40, 1, 5, 0x1000, 0, 0, 4, 4, 0x1000)
+        with game.open('wb') as f:
+            f.write(data)
+            f.seek(0x1000)
+            f.write(b'FAKE')
+            f.truncate(2 * 1024**2)
+        keys = b'APP_VER\0TITLE_ID\0'
+        app, title = b'01.09\0', b'CUSA03173\0'
+        ko = 20+16*2
+        metadata = (struct.pack('<4sIIII', b'\0PSF', 0x101, ko, ko+len(keys), 2)
+                    + struct.pack('<HHIII', 0, 0x204, len(app), len(app), 0)
+                    + struct.pack('<HHIII', 8, 0x204, len(title), len(title), len(app))
+                    + keys+app+title)
+        sfo = Path(self.tmp.name) / 'param.sfo'
+        sfo.write_bytes(metadata)
+        code, output, error = self.cli(self.root, '--game-sfo', sfo,
+                                       '--game-eboot', game, '--verify-game-image')
+        self.assertEqual(code, 2)
+        self.assertEqual(output, '')
+        self.assertIn('loaded-image hash differs', error)
+        original = audit.SUPPORTED_GAME_IMAGE_SHA256
+        try:
+            audit.SUPPORTED_GAME_IMAGE_SHA256 = audit.loaded_game_image_sha256(game)
+            code, output, error = self.cli(self.root, '--game-sfo', sfo,
+                                           '--game-eboot', game, '--verify-game-image')
+            self.assertEqual(code, 0, error)
+            self.assertTrue(json.loads(output)['private_clean_109_loaded_image_verified'])
+            self.assertFalse(json.loads(output)['gameplay_boot_tested'])
+        finally:
+            audit.SUPPORTED_GAME_IMAGE_SHA256 = original
+
+    def test_zip_and_directory_same_reproducible_fingerprint(self):
+        self.write_zip()
+        self.write_dir()
+        a = audit.inspect(self.zip)
+        b = audit.inspect(self.root)
+        self.assertEqual(a, b)
+        self.assertEqual(a['summary']['pe_amd64_verified'], 4)
+        self.assertEqual(a['summary']['nested_bin_count'], 2)
+        self.assertFalse(a['summary']['gameplay_boot_tested'])
+        self.assertLess(len(json.dumps(a['summary']).encode()), 16384)
+
+    def test_private_manifest_detects_modified_and_missing_nested_runtime(self):
+        self.write_dir()
+        manifest = Path(self.tmp.name) / 'private-manifest.json'
+        code, out, err = self.cli(self.root, '--write-manifest', manifest)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(manifest.exists())
+        self.assertNotIn('bin/fsr24/sdk.dll', out)
+        self.assertEqual(self.cli(self.root, '--verify-manifest', manifest)[0], 0)
+        (self.root / 'bin/fsr24/sdk.dll').write_bytes(b'changed')
+        status, out, err = self.cli(self.root, '--verify-manifest', manifest)
+        self.assertEqual(status, 2)
+        self.assertEqual(out, '')
+        self.assertNotIn('bin/fsr24/sdk.dll', err)
+        (self.root / 'bin/fsr24/sdk.dll').unlink()
+        self.assertEqual(self.cli(self.root, '--verify-manifest', manifest)[0], 2)
+
+    def test_required_pe_not_just_name(self):
+        self.data['bin/bb-probe.exe'] = b'not PE'
+        self.write_zip()
+        code, out, err = self.cli(self.zip)
+        self.assertEqual(code, 2)
+        self.assertEqual(out, '')
+        self.assertIn('not Windows x86-64 PE', err)
+        self.data.pop('bin/bb-probe.exe')
+        self.write_zip()
+        self.assertIn('required native runtime component missing', self.cli(self.zip)[2])
+
+    def test_reject_zip_slip_duplicates_and_retail_game_content(self):
+        for malicious in [[('../steal', b'private')],
+                          [('BBSC-RELEASE/BIN/BB-PROBE.exe', b'fake')],
+                          [('BBSC-RELEASE/game/CUSA03173/eboot.bin', b'game')]]:
+            with self.subTest(malicious=malicious[0][0]):
+                self.write_zip(malicious)
+                code, out, err = self.cli(self.zip)
+                self.assertEqual(code, 2)
+                self.assertEqual(out, '')
+        self.data['bin/../escapes.txt'] = b'a'
+        self.write_zip()
+        self.assertEqual(self.cli(self.zip)[0], 2)
+
+    def test_directory_symlink_rejected(self):
+        self.write_dir()
+        p = self.root / 'bin' / 'linked.dll'
+        try:
+            p.symlink_to(self.root / 'run.py')
+        except (OSError, NotImplementedError):
+            self.skipTest('Windows symlink privilege unavailable')
+        self.assertEqual(self.cli(self.root)[0], 2)
+
+    def test_never_write_manifests_into_runtime_or_print_user_paths(self):
+        self.write_dir()
+        code, out, err = self.cli(self.root, '--write-manifest', self.root / 'private.json')
+        self.assertEqual(code, 2)
+        self.assertEqual(out, '')
+        self.assertFalse((self.root / 'private.json').exists())
+        self.assertNotIn(str(self.root), err)
+        self.assertNotIn('PRIVATE', err)
+
+
+if __name__ == '__main__':
+    unittest.main()
