@@ -6,6 +6,7 @@ on:
       - '.github/workflows/yt-bbhost-live-server-session-v408.yml'
       - 'bbhost-track/shyt_yt_server_session_v408.*'
       - 'bbhost-track/test_shyt_yt_server_session_v408.cpp'
+      - 'bbhost-track/shyt_yt_coop_transport_v413.h'
       - 'bbhost-track/shyt_yt_signup_work_v409.cpp'
       - 'bbhost-track/shyt_yt_signup_work_v409.h'
       - 'bbhost-track/shyt_yt_shlk_client_v401.cpp'
