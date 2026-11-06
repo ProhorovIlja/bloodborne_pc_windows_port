@@ -363,6 +363,13 @@ int main() {
         if(i>0u)putnum(m,7,8u-i); // guest signs 7,6,5,4
         putbytes(team,3,m);
     }
+    // Original v1.4 initial LobbyState often has no team at all.
+    // It is a valid protobuf oneof with an empty nested message.
+    const std::vector<u8> teamless_lobby{0xcau,0x01u,0x00u};
+    server_world.Send(teamless_lobby,1421);
+    for(const auto& frame:server_world.Flush(1421))
+        if(!send_encrypted(YT::EncodeCoop(frame)))return bad(59);
+    if(shyt_yt_server_tick_v408(client,1421)!=1)return bad(60);
     std::vector<u8> lobby, lobby_envelope;
     putbytes(lobby,1,team);
     putbytes(lobby_envelope,25,lobby);
@@ -391,7 +398,7 @@ int main() {
     if(shyt_yt_server_tick_v408(client,1426)!=1)return bad(49);
     ShytYtTeamObservationsV415 observations{};
     if(!shyt_yt_server_team_observations_v415(client,&observations) ||
-       observations.lobby_states_accepted!=1u ||
+       observations.lobby_states_accepted!=2u ||
        observations.team_starts_accepted!=1u ||
        observations.party_welcomes_unbound!=1u ||
        observations.authority_messages_rejected!=1u)
@@ -406,7 +413,7 @@ int main() {
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        coop_counts.frames_rejected!=2u ||
        !shyt_yt_server_team_observations_v415(client,&observations) ||
-       observations.lobby_states_accepted!=1u)
+       observations.lobby_states_accepted!=2u)
         return bad(52);
     // Even from the configured server socket, unsigned/raw game traffic
     // cannot go to the game. It must have the original Noise NK tag.
