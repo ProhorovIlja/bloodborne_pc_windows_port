@@ -365,6 +365,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_coop_transport_v413.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_team_authority_v414.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_team_wire_lite_v415.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_party_reply_v419.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
