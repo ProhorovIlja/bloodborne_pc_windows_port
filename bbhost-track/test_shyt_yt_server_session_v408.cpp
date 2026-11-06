@@ -496,6 +496,37 @@ int main() {
     // epoch/last header is NOT applying map kills/flags/HP to the game.
     std::vector<u8> snapshot_body,snapshot_envelope;
     putnum(snapshot_body,1u,77u); // epoch from accepted party Welcome
+    putnum(snapshot_body,2u,9u); // original world last sequence
+    std::vector<u8> one_map;
+    putnum(one_map,1u,0x18000000u);
+    std::vector<u8> packed_handles;
+    putvar(packed_handles,55u);
+    putvar(packed_handles,300u);
+    putbytes(one_map,2u,packed_handles);
+    putbytes(snapshot_body,3u,one_map); // MapKills (packed uint32)
+    std::vector<u8> shown_character;
+    putnum(shown_character,1u,55u);
+    putnum(shown_character,2u,7u);
+    putbytes(snapshot_body,5u,shown_character);
+    putnum(snapshot_body,6u,0x18000000u); // map_state_map
+    putbytes(snapshot_body,7u,std::vector<u8>(64u,0x5au));
+    std::vector<u8> one_hp;
+    putnum(one_hp,1u,0x123456789u); // source
+    putnum(one_hp,2u,0x18000000u); // map
+    std::vector<u8> hp_enemy;
+    putnum(hp_enemy,1u,55u);
+    putnum(hp_enemy,2u,101u); // sint32 -51 zigzag=101
+    putnum(hp_enemy,3u,200u); // sint32 100 zigzag=200
+    putbytes(one_hp,3u,hp_enemy);
+    putbytes(snapshot_body,10u,one_hp);
+    std::vector<u8> one_flag;
+    putnum(one_flag,1u,7u); // 7 <= snapshot last=9
+    putnum(one_flag,2u,0x18000000u);
+    putnum(one_flag,3u,1u);
+    putnum(one_flag,4u,1200u);
+    putnum(one_flag,5u,1u);
+    putbytes(snapshot_body,11u,one_flag);
+    putnum(snapshot_body,12u,1u); // after_wipe
     putbytes(snapshot_envelope,7u,snapshot_body);
     server_world.Send(snapshot_envelope,1428);
     for(const auto& frame:server_world.Flush(1428))
