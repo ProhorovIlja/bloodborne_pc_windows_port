@@ -13,6 +13,7 @@
 #include "shyt_yt_team_wire_lite_v415.h"
 #include "shyt_yt_party_reply_v419.h"
 #include "shyt_yt_world_snapshot_v420.h"
+#include "shyt_yt_world_delta_fence_v423.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -59,6 +60,7 @@ struct ShytYtServerSessionV408 {
     ShytYtTeamObservationsV415 team_observations{};
     SeamlessHunt::YtPartyReplyV419 party_reply;
     SeamlessHunt::YtWorldSnapshotV420 world_snapshot;
+    SeamlessHunt::YtWorldDeltaFenceV423 world_delta;
     std::unique_ptr<SeamlessHunt::YtTeamAuthorityV414> team_gate;
     size_t coop_observed=0;
     bool lobby_hello_submitted=false;
@@ -121,6 +123,7 @@ void invalidate_coop(ShytYtServerSessionV408& s) noexcept {
     if(s.team_gate)s.team_gate->Revoke();
     s.party_reply.Revoke();
     s.world_snapshot.Revoke();
+    s.world_delta.Revoke();
     s.coop_observed=0;
     if(s.coop_quarantine && s.coop_quarantine->Invalidate()) {
         ++s.coop_counters.fail_closed;
@@ -141,6 +144,7 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
         case Kind::Lobby:
             s.party_reply.Revoke(); // any roster refresh fences in-flight Hello
             s.world_snapshot.Revoke();
+            s.world_delta.Revoke();
             if(!decoded.lobby_has_team) {
                 // Ordinary YT initial lobby: no group yet. Never a world
                 // grant and never a malformed-message error.
@@ -154,6 +158,7 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
         case Kind::Start:
             s.party_reply.Revoke(); // world/start refresh requires new session
             s.world_snapshot.Revoke();
+            s.world_delta.Revoke();
             if(s.team_gate->OnAuthenticatedTeamStart(decoded.start))
                 ++s.team_observations.team_starts_accepted;
             else
@@ -184,22 +189,42 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
             // A real authenticated in-game world consumer is still absent.
             const bool waiting=s.world_snapshot.WaitingForSnapshot();
             const bool matched=s.world_snapshot.Observe(decoded.epoch,decoded.last);
-            if(waiting && !matched) {
+            if(waiting && matched &&
+               !s.world_delta.Arm(decoded.epoch,decoded.last)) {
+                s.world_snapshot.Revoke();
+                s.party_reply.Revoke();
+                s.team_gate->Revoke();
+                ++s.team_observations.authority_messages_rejected;
+            } else if(waiting && !matched) {
+                s.world_delta.Revoke();
                 s.party_reply.Revoke();
                 s.team_gate->Revoke();
                 ++s.team_observations.authority_messages_rejected;
             }
             break;
         }
-        case Kind::Entries:
-            // V422 validates epoch/ordered event headers, but never
-            // applies a world delta. Retain complete message in the
-            // bounded quarantine for a future game-verified consumer.
-            // No ACK here means "applied": transport ACK is staging only.
+        case Kind::Entries: {
+            // Source-validated V422 incremental changes are read-only.
+            // V423 compares with the already-matched V421 Snapshot and
+            // prevents stale epochs, gaps and replays from being mistaken
+            // for a usable world stream. Full payload stays quarantined.
+            using Verdict=SeamlessHunt::YtWorldDeltaFenceV423::Verdict;
+            const auto verdict=s.world_delta.Observe(
+                decoded.epoch,decoded.last,decoded.first_entry_seq,
+                decoded.last_entry_seq,decoded.entry_count);
+            if(verdict==Verdict::Gap || verdict==Verdict::EpochChanged ||
+               verdict==Verdict::Invalid) {
+                s.world_snapshot.Revoke();
+                s.party_reply.Revoke();
+                s.team_gate->Revoke();
+                ++s.team_observations.authority_messages_rejected;
+            }
             break;
+        }
         case Kind::Invalid:
             s.party_reply.Revoke();
             s.world_snapshot.Revoke();
+            s.world_delta.Revoke();
             s.team_gate->Revoke();
             ++s.team_observations.authority_messages_rejected;
             break;
@@ -869,6 +894,19 @@ extern "C" int shyt_yt_server_world_observations_v420(
     *out={stats.requests_sent,stats.metadata_matching,stats.metadata_rejected,
           stats.metadata_unbound,stats.contexts_revoked,
           static_cast<uint8_t>(s->world_snapshot.AwaitingGameSnapshotConsumer()?1u:0u)};
+    return 1;
+}
+extern "C" int shyt_yt_server_world_delta_observations_v423(
+    const ShytYtServerSessionV408* s,ShytYtWorldDeltaObservationsV423* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    const auto stats=s->world_delta.Stats();
+    *out={stats.heartbeats,stats.replays,stats.advanced,stats.gaps,
+          stats.epoch_changes,stats.invalid,stats.unbound,
+          stats.contexts_revoked,s->world_delta.Epoch(),
+          s->world_delta.Cursor(),s->world_delta.ServerLast(),
+          static_cast<uint8_t>(s->world_delta.Armed()?1u:0u),
+          static_cast<uint8_t>(s->world_delta.Behind()?1u:0u)};
     return 1;
 }
 extern "C" int shyt_yt_server_take_member_v412(
