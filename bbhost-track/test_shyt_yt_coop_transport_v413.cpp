@@ -22,6 +22,9 @@ int main() {
     for (std::size_t i = 0; i + 1u < frames.size(); ++i)
         assert(server.ReceiveAfterServerAuth(frames[i], 1002));
     assert(server.Quarantined() == 1u);
+    // The upper layer has NOT approved/applied the world event: withholding
+    // the ACK makes the server retain responsibility for retransmission.
+    assert(server.Flush(1003).empty());
     Bytes received;
     assert(server.TakeQuarantined(received) && received == world);
     assert(!server.TakeQuarantined(received));
@@ -73,5 +76,25 @@ int main() {
     assert(sink.Quarantined() == 0u);
     assert(!sink.TakeQuarantined(received));
     assert(!sink.QueueOutgoing(Bytes{9u}, 5000));
+    // Two distinct runs from the same authenticated server identity must
+    // never preserve an old quarantined world envelope across restart.
+    CoopTransportV413 old_run("shadnet", 801u), new_run("shadnet", 802u),
+                      listener("listener", 900u);
+    const Bytes old_event{0x41u, 0x42u, 0x43u};
+    assert(old_run.QueueOutgoing(old_event, 6100));
+    for (const auto& body : old_run.Flush(6100))
+        assert(listener.ReceiveAfterServerAuth(body, 6101));
+    assert(listener.Quarantined() == 1u);
+    assert(new_run.QueueOutgoing(Bytes{0x99u}, 6200));
+    bool accepted_restart = true;
+    for (const auto& body : new_run.Flush(6200))
+        accepted_restart = listener.ReceiveAfterServerAuth(body, 6201) && accepted_restart;
+    assert(!accepted_restart);
+    assert(listener.TakePeerRestarted());
+    assert(listener.Failed());
+    assert(listener.Quarantined() == 0u);
+    assert(!listener.TakeQuarantined(received));
+    assert(!listener.Invalidate());
+    assert(listener.Flush(6300).empty());
     std::puts("SHYT_V413_ORIGINAL_YT_RELIABLE_COOP_TRANSPORT_BOUNDED_QUARANTINE_PASS");
 }
