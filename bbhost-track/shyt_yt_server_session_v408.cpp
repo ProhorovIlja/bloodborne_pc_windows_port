@@ -58,6 +58,7 @@ struct ShytYtServerSessionV408 {
     std::unique_ptr<SeamlessHunt::YtTeamAuthorityV414> team_gate;
     size_t coop_observed=0;
     bool lobby_hello_submitted=false;
+    bool party_hello_submitted=false;
     // V412: only authenticated transport presence, never team approval.
     std::array<ShytYtMemberNoticeV412,SHYT_V412_MEMBER_QUEUE_CAP> member_queue{};
     size_t member_head=0,member_count=0;
@@ -700,6 +701,49 @@ extern "C" int shyt_yt_server_send_lobby_hello_v416(
         if(!s->coop_quarantine->QueueOutgoing(envelope,static_cast<s64>(now)))
             return 0;
         s->lobby_hello_submitted=true;
+        if(!flush_outgoing_coop_v416(*s,now)) {
+            invalidate_coop(*s);
+            s->phase=SHYT_V408_IO_FAILED;
+            return -1;
+        }
+        return 1;
+    }catch(...) {
+        invalidate_coop(*s);
+        s->phase=SHYT_V408_IO_FAILED;
+        return -1;
+    }
+}
+extern "C" int shyt_yt_server_send_party_hello_v418(
+    ShytYtServerSessionV408* s,const char* party,uint32_t loaded_slot,
+    uint32_t game_run,int enemy_owner,uint64_t now) {
+    if(!s || !s->team_gate || !s->coop_quarantine ||
+       !s->lobby_hello_submitted || s->party_hello_submitted ||
+       s->phase!=SHYT_V408_LINKED || !valid_field(party) ||
+       (enemy_owner!=0 && enemy_owner!=1) || game_run==0u ||
+       now<s->last_tick || s->coop_quarantine->Failed())
+        return 0;
+    try {
+        bool is_host=false;
+        const std::string requested_party(party);
+        // Never trust the caller's own host bit, member or world name.
+        // The original signed-in server's TeamStart controls all three.
+        if(!s->team_gate->MaySendPartyHello(
+                requested_party,loaded_slot,is_host))
+            return 0;
+        std::vector<u8> hello,envelope;
+        append_number_v416(hello,1u,8u); // pinned YT coop protocol
+        append_string_v416(hello,2u,requested_party);
+        append_string_v416(hello,3u,member_hex_v416(s->online_id));
+        append_number_v416(hello,4u,game_run);
+        if(is_host)append_number_v416(hello,5u,1u);
+        if(enemy_owner)append_number_v416(hello,6u,1u);
+        append_varint_v416(envelope,1u*8u+2u); // Envelope.hello
+        append_varint_v416(envelope,hello.size());
+        envelope.insert(envelope.end(),hello.begin(),hello.end());
+        if(!s->coop_quarantine->QueueOutgoing(
+               envelope,static_cast<s64>(now)))
+            return 0;
+        s->party_hello_submitted=true;
         if(!flush_outgoing_coop_v416(*s,now)) {
             invalidate_coop(*s);
             s->phase=SHYT_V408_IO_FAILED;
