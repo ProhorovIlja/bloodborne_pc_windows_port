@@ -51,6 +51,7 @@ jobs:
             emulator/src/core/bloodborne_patches.cpp
             emulator/src/core/bloodborne_party.cpp
             server/src/bloodborne_world.cpp
+            server/src/server_link.cpp
             server/coop/game_link.h
             server/coop/packet_routes.h
             server/coop/coop_types.h
@@ -165,6 +166,23 @@ jobs:
             bbhost-track/test_shyt_yt_game_route_assessment_v433.cpp \
             -o "$RUNNER_TEMP/shyt-v433-game-route-parity"
           "$RUNNER_TEMP/shyt-v433-game-route-parity"
+      - name: Check V434 genuine original YT GameFrame signed-in sender binding and server patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -Ipinned-yt-v140/server \
+            bbhost-track/test_shyt_yt_game_sender_binding_v434.cpp \
+            -o "$RUNNER_TEMP/shyt-v434-authenticated-sender"
+          "$RUNNER_TEMP/shyt-v434-authenticated-sender"
+          python3 bbhost-track/apply_yt_game_sender_guard_v434.py \
+            --yt pinned-yt-v140 \
+            --header bbhost-track/shyt_yt_game_sender_binding_v434.h \
+            --out "$RUNNER_TEMP/shyt-v434-yt-server-overlay"
+          grep -q 'YtGameSenderBindingV434::Inspect(' \
+            "$RUNNER_TEMP/shyt-v434-yt-server-overlay/server/src/server_link.cpp"
+          test -f "$RUNNER_TEMP/shyt-v434-yt-server-overlay/server/coop/shyt_yt_game_sender_binding_v434.h"
+          test -z "$(git -C pinned-yt-v140 status --porcelain)"
       - name: Strict source pin and GPL3 plugin public API guard
         shell: bash
         run: |
