@@ -233,7 +233,10 @@ int main() {
     login_coop_wire.resize(login_coop_wire.size()-LinkAuth::TrailerBytes);
     const auto login_frame=YT::DecodeCoop(login_coop_wire);
     if(!login_frame)return bad(56);
-    BloodborneCoop::CoopStream from_client("shadnet",1u);
+    // This receiver represents THE SAME server run as server_world.
+    // A real client now echoes the authenticated server's instance in
+    // GameFrame.peer_instance; a mismatched fake receiver drops it.
+    BloodborneCoop::CoopStream from_client("shadnet",777u);
     const auto login_envelopes=from_client.Receive(*login_frame,1301);
     if(login_envelopes.size()!=1u)return bad(57);
     // Canonical protobuf (original YT Envelope.lobby_hello=23):
