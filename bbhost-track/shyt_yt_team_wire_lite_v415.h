@@ -216,22 +216,118 @@ private:
         }
         return r.Valid() && (seen&23u)==23u; // proto3 omits slot=0
     }
-    // Only the top-level original Snapshot.epoch/last are decoded. The
-    // nested kills/flags/map/HpReport payloads remain opaque and quarantined
-    // until a separately verified world application consumer exists.
-    static bool ReadSnapshotMetadata(std::span<const std::uint8_t> bytes,Message& msg) {
-        Reader r(bytes);Field f;std::uint32_t seen=0;
+    // V421: strict bounded structural audit of the COMPLETE original
+    // v1.4.0 Snapshot protobuf, not just epoch/last. Validate known fields,
+    // nested scalar wire types, packed/unpacked MapKills handles, duplicate
+    // singular fields and a shared item budget. The world remains read-only
+    // and quarantined; this is NOT a game state decoder or an auth grant.
+    static constexpr std::uint32_t MaxWorldItemsV421=8192u;
+    static constexpr std::size_t MaxMapStateBytesV421=16384u;
+    static bool PackedWorldHandlesV421(std::span<const std::uint8_t> bytes,
+                                      std::uint32_t& items) {
+        std::size_t pos=0;
+        while(pos<bytes.size()) {
+            if(items>=MaxWorldItemsV421)return false;
+            std::uint32_t value=0;
+            bool ended=false;
+            for(unsigned i=0u;i<5u && pos<bytes.size();++i) {
+                const std::uint8_t b=bytes[pos++];
+                if(i==4u && b>0x0fu)return false;
+                value|=static_cast<std::uint32_t>(b&0x7fu)<<(7u*i);
+                if(!(b&0x80u)) {
+                    // Reject noncanonical varints and redundant zeros.
+                    if(i!=0u && b==0u)return false;
+                    ended=true;
+                    break;
+                }
+            }
+            if(!ended)return false;
+            ++items;
+            (void)value;
+        }
+        return true;
+    }
+    // kind: 1 MapKills, 2 ShownCharacter, 3 HpReport, 4 HpEnemy,
+    // 5 Entry. Nested recursion is fixed at depth <=2.
+    static bool WorldRecordV421(std::span<const std::uint8_t> bytes,
+                                unsigned kind,std::uint32_t& items,
+                                std::uint64_t last) {
+        if(items>=MaxWorldItemsV421)return false;
+        ++items;
+        Reader r(bytes);Field f;std::uint32_t seen=0u;
+        bool has_seq=false;
+        std::uint64_t seq=0u;
         while(r.Next(f)) {
-            if(f.number==1u || f.number==2u) {
-                if(f.wire!=0u || (seen & (1u<<(f.number-1u))))return false;
-                seen |= 1u<<(f.number-1u);
-                if(f.number==1u)msg.epoch=f.number_value;
-                else msg.last=f.number_value;
+            const unsigned max=kind==1u?2u:kind==2u?2u:
+                               kind==3u?3u:kind==4u?3u:5u;
+            if(f.number==0u || f.number>max)return false;
+            const bool repeated=(kind==1u && f.number==2u) ||
+                                (kind==3u && f.number==3u);
+            const std::uint32_t bit=1u<<f.number;
+            if(!repeated && (seen&bit))return false;
+            seen|=bit;
+            if(kind==1u && f.number==2u) {
+                if(f.wire==2u) {
+                    if(!PackedWorldHandlesV421(f.bytes,items))return false;
+                } else if(f.wire==0u && f.number_value<=UINT32_MAX) {
+                    if(items>=MaxWorldItemsV421)return false;
+                    ++items;
+                } else return false;
+            } else if(kind==3u && f.number==3u) {
+                if(f.wire!=2u || !WorldRecordV421(f.bytes,4u,items,last))
+                    return false;
+            } else if(f.wire!=0u)return false;
+            else if(kind==3u && f.number==1u) {
+                // uint64 source: all wire-0 values permitted.
+            } else if(kind==5u && f.number==1u) {
+                has_seq=true;
+                seq=f.number_value;
+            } else if(f.number_value>UINT32_MAX) {
+                // uint32 and sint32 (zigzag) fields cannot exceed 32 bits.
+                return false;
             }
         }
-        // Proto3 serializes last=0 by omission. A valid world epoch cannot
-        // be zero for this read-only admission gate.
-        return r.Valid() && (seen&1u)!=0u && msg.epoch!=0u;
+        return r.Valid() && (kind!=5u || (has_seq && seq>0u && (last==UINT64_MAX || seq<=last)));
+    }
+    static bool ReadSnapshotMetadata(std::span<const std::uint8_t> bytes,
+                                     Message& msg) {
+        Reader r(bytes);Field f;std::uint32_t seen=0u,items=0u;
+        while(r.Next(f)) {
+            if(f.number==0u || f.number>12u)return false;
+            const bool repeated=f.number==3u || f.number==5u ||
+                                f.number==10u || f.number==11u;
+            const std::uint32_t bit=1u<<f.number;
+            if(!repeated && (seen&bit))return false;
+            seen|=bit;
+            if(repeated) {
+                const unsigned kind=f.number==3u?1u:f.number==5u?2u:
+                                    f.number==10u?3u:5u;
+                if(f.wire!=2u ||
+                   !WorldRecordV421(f.bytes,kind,items,msg.last))
+                    return false;
+                continue;
+            }
+            if(f.number==7u) {
+                if(f.wire!=2u || f.bytes.size()>MaxMapStateBytesV421)
+                    return false;
+                continue;
+            }
+            if(f.wire!=0u)return false;
+            switch(f.number) {
+            case 1u:msg.epoch=f.number_value;break;
+            case 2u:msg.last=f.number_value;break;
+            case 12u:
+                if(f.number_value>1u)return false;
+                break;
+            default:
+                if(f.number_value>UINT32_MAX)return false;
+                break;
+            }
+        }
+        // Epoch is mandatory, last=0 is a legitimate proto3 default.
+        // An empty snapshot after reset is valid; its opaque payload still
+        // cannot be applied to the owner's game.
+        return r.Valid() && (seen&(1u<<1u))!=0u && msg.epoch!=0u;
     }
     static bool ReadWelcome(std::span<const std::uint8_t> bytes,Message& msg) {
         Reader r(bytes);Field f;std::uint32_t seen=0;
