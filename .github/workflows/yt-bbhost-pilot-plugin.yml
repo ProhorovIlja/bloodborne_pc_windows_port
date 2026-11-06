@@ -47,6 +47,7 @@ jobs:
           sparse-checkout: |
             server/coop/coop.proto
             server/coop/team_lobby.cpp
+            bbport/patches/coop-sites.json
           persist-credentials: false
       - name: Verify released YT v1.4.0 retains exact reliable/crypto core used by BBHost
         shell: bash
@@ -75,6 +76,19 @@ jobs:
           python bbhost-track/check_yt_native_channel_policy_v21.py \
             --yt-policy pinned-yt/server/coop/packet_routes.h \
             --host-policy bbhost-track/shyt_yt_native_channel_policy_v21.h
+      - name: Cross-check v427 real YT v1.4.0 1.09 hook sites against BBHost ABI (NO hooks)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/check_yt_guest_site_contract_v427.py \
+            --yt-source pinned-yt-v140/bbport/patches/coop-sites.json \
+            --header bbhost-track/shyt_yt_guest_hook_preflight_v427.h \
+            --plugin bbhost-track/shyt_bbhost_probe_v1.c \
+            --bbhost-api pinned-bbhost/include/bbhost_plugin.h
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_guest_hook_preflight_v427.c \
+            -o "$RUNNER_TEMP/shyt-yt-hook-preflight-v427"
+          "$RUNNER_TEMP/shyt-yt-hook-preflight-v427"
       - name: Strict source pin and GPL3 plugin public API guard
         shell: bash
         run: |
@@ -414,6 +428,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_delta_fence_v423.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_staging_v425.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_projection_v426.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_guest_hook_preflight_v427.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
