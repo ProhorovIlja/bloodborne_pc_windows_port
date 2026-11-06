@@ -49,6 +49,8 @@ jobs:
             server/coop/team_lobby.cpp
             bbport/patches/coop-sites.json
             emulator/src/core/bloodborne_patches.cpp
+            emulator/src/core/bloodborne_party.cpp
+            server/src/bloodborne_world.cpp
           persist-credentials: false
       - name: Verify released YT v1.4.0 retains exact reliable/crypto core used by BBHost
         shell: bash
@@ -135,6 +137,18 @@ jobs:
             -Ibbhost-track bbhost-track/test_shyt_yt_peer_evidence_v431.cpp \
             -o "$RUNNER_TEMP/shyt-v431-roster-candidate"
           "$RUNNER_TEMP/shyt-v431-roster-candidate"
+      - name: Verify V432 original YT SceNpId/hex source and bounded guest read (NO traffic)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/check_yt_game_member_source_v432.py \
+            --yt pinned-yt-v140 \
+            --header bbhost-track/shyt_yt_guest_member_v432.h \
+            --session bbhost-track/shyt_yt_server_session_v408.cpp
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_guest_member_v432.c \
+            -o "$RUNNER_TEMP/shyt-v432-guest-member"
+          "$RUNNER_TEMP/shyt-v432-guest-member"
       - name: Strict source pin and GPL3 plugin public API guard
         shell: bash
         run: |
@@ -479,6 +493,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_game_link_observer_v429.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_game_packet_stage_v430.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_peer_evidence_v431.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_guest_member_v432.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
