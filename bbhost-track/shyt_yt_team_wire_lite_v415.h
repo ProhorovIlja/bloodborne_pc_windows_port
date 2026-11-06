@@ -14,7 +14,7 @@
 namespace SeamlessHunt {
 class YtTeamWireLiteV415 final {
 public:
-    enum class Kind { Invalid, Other, Lobby, Start, Welcome, Snapshot };
+    enum class Kind { Invalid, Other, Lobby, Start, Welcome, Snapshot, Entries };
     struct Message {
         Kind kind = Kind::Invalid;
         YtTeamAuthorityV414::Lobby lobby{};
@@ -22,6 +22,8 @@ public:
         YtTeamAuthorityV414::Start start{};
         bool accepted = false;
         std::uint64_t epoch = 0, last = 0;
+        std::uint64_t first_entry_seq = 0, last_entry_seq = 0;
+        std::uint32_t entry_count = 0;
     };
     static constexpr std::size_t MaxEnvelope = 64u * 1024u;
 
@@ -40,6 +42,10 @@ public:
             case 2u:
                 result.kind = Kind::Welcome;
                 if (!ReadWelcome(field.bytes,result)) return {};
+                break;
+            case 5u:
+                result.kind = Kind::Entries;
+                if (!ReadEntriesV422(field.bytes,result)) return {};
                 break;
             case 7u:
                 result.kind = Kind::Snapshot;
@@ -251,7 +257,8 @@ private:
     // 5 Entry. Nested recursion is fixed at depth <=2.
     static bool WorldRecordV421(std::span<const std::uint8_t> bytes,
                                 unsigned kind,std::uint32_t& items,
-                                std::uint64_t last) {
+                                std::uint64_t last,
+                                std::uint64_t* out_seq=nullptr) {
         if(items>=MaxWorldItemsV421)return false;
         ++items;
         Reader r(bytes);Field f;std::uint32_t seen=0u;
@@ -287,7 +294,48 @@ private:
                 return false;
             }
         }
-        return r.Valid() && (kind!=5u || (has_seq && seq>0u && (last==UINT64_MAX || seq<=last)));
+        const bool ok=r.Valid() &&
+            (kind!=5u || (has_seq && seq>0u && (last==UINT64_MAX || seq<=last)));
+        if(ok && kind==5u && out_seq)*out_seq=seq;
+        return ok;
+    }
+    // V422: strict, read-only original YT Entries(epoch,last,entries).
+    // A heartbeat may contain no entries; nonempty batches are consecutive,
+    // bounded, and no sequence can outrun the server's advertised last.
+    // No change is ever applied to a guest world by this decoder.
+    static bool ReadEntriesV422(std::span<const std::uint8_t> bytes,Message& msg) {
+        Reader meta(bytes);Field f;std::uint32_t seen=0u;
+        while(meta.Next(f)) {
+            if(f.number==1u || f.number==2u) {
+                const std::uint32_t bit=1u<<f.number;
+                if(f.wire!=0u || (seen&bit))return false;
+                seen|=bit;
+                if(f.number==1u)msg.epoch=f.number_value;
+                else msg.last=f.number_value;
+            }
+        }
+        if(!meta.Valid() || !(seen&(1u<<1u)) || msg.epoch==0u)return false;
+        Reader r(bytes);std::uint32_t elements=0u;
+        bool have_previous=false;
+        std::uint64_t previous=0u;
+        while(r.Next(f)) {
+            if(f.number==1u || f.number==2u) {
+                if(f.wire!=0u)return false;
+            } else if(f.number==3u) {
+                if(f.wire!=2u || msg.entry_count>=256u)return false;
+                std::uint64_t seq=0u;
+                if(!WorldRecordV421(f.bytes,5u,elements,msg.last,&seq))
+                    return false;
+                if(have_previous && (previous==UINT64_MAX || seq!=previous+1u))
+                    return false;
+                if(!have_previous)msg.first_entry_seq=seq;
+                msg.last_entry_seq=seq;
+                previous=seq;
+                have_previous=true;
+                ++msg.entry_count;
+            } else return false;
+        }
+        return r.Valid();
     }
     static bool ReadSnapshotMetadata(std::span<const std::uint8_t> bytes,
                                      Message& msg) {
