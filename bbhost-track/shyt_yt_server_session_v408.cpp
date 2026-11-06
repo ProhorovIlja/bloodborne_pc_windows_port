@@ -409,8 +409,11 @@ void handle_control(ShytYtServerSessionV408& s,
                 } else {
                     ++s.coop_counters.frames_rejected;
                     if(s.coop_quarantine && s.coop_quarantine->Failed()) {
-                        // Already invalidated inside the bounded adapter;
-                        // record the transition once and keep held count zero.
+                        // Remote stream restart or quarantine failure must
+                        // also revoke any observed team/world authority,
+                        // never retain stale lobby grants across instances.
+                        if(s.team_gate)s.team_gate->Revoke();
+                        s.coop_observed=0;
                         if(s.coop_counters.fail_closed==0u)
                             ++s.coop_counters.fail_closed;
                         s.coop_counters.messages_held=0;
