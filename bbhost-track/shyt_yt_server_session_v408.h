@@ -159,6 +159,20 @@ typedef struct ShytYtWorldProjectionObservationsV426 {
     uint8_t after_wipe;
     uint8_t projection_ready;
 } ShytYtWorldProjectionObservationsV426;
+/* V431: evidence from the authenticated server's original Team Lobby,
+ * checked TeamStart, correlated Hello/Welcome and matched Snapshot.
+ * Every result is READ-ONLY. The source Welcome does NOT bind a peer
+ * identity/endpoint, so can_arm_game_queue and can_route_game are always
+ * ZERO even if all other observations are present. */
+typedef struct ShytYtPeerEvidenceObservationsV431 {
+    uint64_t observed_world_epoch;
+    uint64_t observed_world_cursor;
+    uint8_t roster_candidate;
+    uint8_t correlated_hello;
+    uint8_t matched_world_snapshot;
+    uint8_t can_arm_game_queue;
+    uint8_t can_route_game;
+} ShytYtPeerEvidenceObservationsV431;
 
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
@@ -205,6 +219,12 @@ int shyt_yt_server_world_staging_observations_v425(
  * previously staged original protobuf, never runs during network tick. */
 int shyt_yt_server_world_projection_observations_v426(
     const ShytYtServerSessionV408 *session,ShytYtWorldProjectionObservationsV426 *out);
+/* canonical_peer_member is the hex-encoded original TeamMember.member,
+ * not a player's display name or UDP source address. Read-only, on the
+ * same thread as session tick(); never a P2P/NetSync permission. */
+int shyt_yt_server_peer_evidence_v431(
+    const ShytYtServerSessionV408 *session,const char *canonical_peer_member,
+    ShytYtPeerEvidenceObservationsV431 *out);
 /* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
  * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
  * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
