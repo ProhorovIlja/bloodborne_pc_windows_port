@@ -60,6 +60,14 @@ typedef struct ShytYtServerCountersV408 {
     uint64_t authenticated_member_notices;
     uint64_t rejected_member_notices;
     uint64_t member_notice_overflows;
+    /* V413 diagnostic only. Counts authenticated Coop datagrams whose
+     * GameFrames passed original YT reliable stream parsing. Neither a
+     * transport ACK nor a queued envelope authorizes a team or world.
+     * The last held count is a snapshot, not a cumulative counter. */
+    uint64_t coop_frames_reassembled_v413;
+    uint64_t coop_frames_rejected_v413;
+    uint64_t coop_fail_closed_v413;
+    uint64_t coop_messages_held_v413;
 } ShytYtServerCountersV408;
 /* C-string fields must be present, NUL-terminated and 1..255B.
  * No implicit fallback to unsigned/TOFU key, and no credential capture.
