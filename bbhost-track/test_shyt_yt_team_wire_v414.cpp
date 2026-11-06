@@ -192,6 +192,50 @@ int main() {
         0x10u,0x09u,              // last=9
         0x08u,0x4du};             // epoch=77
     assert(Lite::Decode(out_of_order).kind==Lite::Kind::Snapshot);
+    // V422: actual v1.4.0 generated Entries, including consecutive world
+    // log sequences, legitimate empty heartbeats and malformed/gapped logs.
+    bbcoop::Envelope world_entries;
+    auto* log=world_entries.mutable_entries();
+    log->set_epoch(77u);
+    log->set_last(9u);
+    auto* change=log->add_entries();
+    change->set_seq(7u);
+    change->set_map(0x18000000u);
+    change->set_kind(1u);
+    change->set_subject(55u);
+    change->set_value(1u);
+    change=log->add_entries();
+    change->set_seq(8u);
+    change->set_map(0x18000000u);
+    change->set_kind(2u);
+    change->set_subject(56u);
+    change->set_value(0u);
+    auto lite_entries=Lite::Decode(Encode(world_entries));
+    assert(lite_entries.kind==Lite::Kind::Entries);
+    assert(lite_entries.epoch==77u && lite_entries.last==9u);
+    assert(lite_entries.entry_count==2u &&
+           lite_entries.first_entry_seq==7u &&
+           lite_entries.last_entry_seq==8u);
+    log->mutable_entries(1)->set_seq(9u);
+    assert(Lite::Decode(Encode(world_entries)).kind==Lite::Kind::Invalid);
+    log->mutable_entries(1)->set_seq(8u);
+    log->mutable_entries(1)->set_seq(10u);
+    assert(Lite::Decode(Encode(world_entries)).kind==Lite::Kind::Invalid);
+    log->mutable_entries()->Clear();
+    const auto heartbeat=Lite::Decode(Encode(world_entries));
+    assert(heartbeat.kind==Lite::Kind::Entries &&
+           heartbeat.entry_count==0u && heartbeat.epoch==77u &&
+           heartbeat.last==9u);
+    for(unsigned i=1u;i<=257u;++i)
+        log->add_entries()->set_seq(i);
+    log->set_last(257u);
+    assert(Lite::Decode(Encode(world_entries)).kind==Lite::Kind::Invalid);
+    // Wrong nested Entry.seq wire type: a spoofed stream cannot silently
+    // reinterpret length-delimited strings as uint64 sequence numbers.
+    const std::vector<std::uint8_t> malformed_log{
+        0x2au,0x08u,0x08u,0x4du,0x10u,0x09u,
+        0x1au,0x02u,0x0au,0x00u};
+    assert(Lite::Decode(malformed_log).kind==Lite::Kind::Invalid);
     // Independently cross-check the V418 outbound party Hello wire tags
     // against the REAL YT v1.4.0 protobuf serializer, not a second local
     // homegrown parser. This locks protocol/party/member/run/host/owner.
