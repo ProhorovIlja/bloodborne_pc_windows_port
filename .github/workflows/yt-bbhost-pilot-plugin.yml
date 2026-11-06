@@ -150,6 +150,38 @@ jobs:
             exit 1
           fi
           "$RUNNER_TEMP/v415-real-protobuf"
+      - name: Exercise authenticated YT five-player lobby observation on real loopback UDP
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! g++ -std=c++20 -O2 -w -I pinned-yt/server \
+              -c pinned-yt/server/coop/link_crypto.cpp \
+              -o "$RUNNER_TEMP/v415-original-link-crypto.o" >v415-loopback-build.log 2>&1; then
+            echo V415_ORIGINAL_LINK_CRYPTO_COMPILE_FAIL
+            tail -n 6 v415-loopback-build.log | cut -c1-150
+            exit 1
+          fi
+          if ! g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+              -Wno-missing-field-initializers -pthread \
+              -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+              bbhost-track/shyt_yt_shlk_client_v401.cpp \
+              bbhost-track/shyt_yt_link_wire_v403.cpp \
+              bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
+              bbhost-track/shyt_yt_server_session_v408.cpp \
+              bbhost-track/shyt_yt_signup_work_v409.cpp \
+              bbhost-track/test_shyt_yt_server_session_v408.cpp \
+              "$RUNNER_TEMP/v415-original-link-crypto.o" \
+              -o "$RUNNER_TEMP/v415-authenticated-lobby" >>v415-loopback-build.log 2>&1; then
+            echo V415_AUTHENTICATED_LOBBY_BUILD_FAILED
+            tail -n 7 v415-loopback-build.log | cut -c1-150
+            exit 1
+          fi
+          if ! "$RUNNER_TEMP/v415-authenticated-lobby" >v415-loopback-run.log 2>&1; then
+            echo V415_AUTHENTICATED_LOBBY_TEST_FAILED
+            tail -n 6 v415-loopback-run.log | cut -c1-150
+            exit 1
+          fi
+          tail -n 4 v415-loopback-run.log | cut -c1-150
       - name: Verify owner game compatibility probe never sends or prints game data
         shell: bash
         run: |
