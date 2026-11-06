@@ -343,10 +343,10 @@ int main() {
     for(const auto& frame:server_world.Flush(1423))
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(46);
     if(shyt_yt_server_tick_v408(client,1424)!=1)return bad(47);
-    std::vector<u8> welcome, welcome_envelope;
-    putnum(welcome,1,1); // accepted, but no separate party link binding
-    putnum(welcome,3,77); // synthetic world epoch
-    putbytes(welcome_envelope,2,welcome);
+    std::vector<u8> party_welcome, welcome_envelope;
+    putnum(party_welcome,1,1); // accepted, but no separate party link binding
+    putnum(party_welcome,3,77); // synthetic world epoch
+    putbytes(welcome_envelope,2,party_welcome);
     server_world.Send(welcome_envelope,1425);
     for(const auto& frame:server_world.Flush(1425))
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(48);
