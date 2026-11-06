@@ -29,8 +29,10 @@ public:
     static constexpr std::size_t MaxQuarantinedBytes = 128u * 1024u;
     static constexpr std::size_t MaxQuarantinedMessages = 16u;
 
-    explicit CoopTransportV413(std::string identity, u32 run)
-        : stream_(CheckIdentity(std::move(identity)), CheckRun(run), Limits()) {}
+    explicit CoopTransportV413(std::string identity, u32 run,
+                               std::string authenticated_remote_sender = {})
+        : stream_(CheckIdentity(std::move(identity)), CheckRun(run), Limits()),
+          expected_remote_sender_(std::move(authenticated_remote_sender)) {}
 
     // Queue only an envelope already approved by the higher-level caller.
     // A full queue refuses rather than allocating without bound.
@@ -65,8 +67,14 @@ public:
     // and anti-replay checks succeeded. No caller-controlled trust boolean:
     // integrate this at the existing V408 authenticated decrypt boundary.
     bool ReceiveAfterServerAuth(std::span<const u8> frame, s64 now_ms) {
-        if (failed_ || frame.empty() || frame.size() > MaxFrameBytes ||
-            !BloodborneCoop::DecodeGameFrame(frame)) return false;
+        if (failed_ || frame.empty() || frame.size() > MaxFrameBytes) return false;
+        const auto decoded = BloodborneCoop::DecodeGameFrame(frame);
+        // Noise NK authenticates the outer server link; bind the INNER
+        // original YT frame sender too, so an alternate stream cannot
+        // silently impersonate our authoritative world source.
+        if (!decoded || (!expected_remote_sender_.empty() &&
+                         decoded->sender != expected_remote_sender_))
+            return false;
         auto messages = stream_.Receive(frame, now_ms);
         if (stream_.Broken()) {
             Fail();
@@ -96,6 +104,16 @@ public:
 
     // Quarantined bytes are NOT authorization to execute a world event or
     // inject a game packet. A future validated team/world handler owns them.
+    // Read-only observation for the authority decoder. Never removes or
+    // ACKs an unhandled world event. The returned span is valid only until
+    // the next transport mutation.
+    bool PeekQuarantined(size_t index, std::span<const u8>& result) const {
+        result = {};
+        if (failed_ || index >= quarantine_.size()) return false;
+        const auto& bytes = quarantine_[index];
+        result = std::span<const u8>{bytes.data(), bytes.size()};
+        return true;
+    }
     bool TakeQuarantined(std::vector<u8>& result) {
         result.clear();
         if (failed_ || quarantine_.empty()) return false;
@@ -146,6 +164,7 @@ private:
     }
 
     BloodborneCoop::CoopStream stream_;
+    std::string expected_remote_sender_;
     std::deque<std::vector<u8>> quarantine_;
     std::size_t quarantined_bytes_ = 0;
     bool peer_restarted_ = false;
