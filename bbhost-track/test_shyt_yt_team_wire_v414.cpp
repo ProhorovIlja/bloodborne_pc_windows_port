@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Compiled with protoc from the exact upstream YT coop.proto, not mock fields.
 #include "shyt_yt_team_wire_v414.h"
+#include "shyt_yt_team_wire_lite_v415.h"
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -10,6 +11,7 @@ using Gate = SeamlessHunt::YtTeamAuthorityV414;
 using Wire = SeamlessHunt::YtTeamWireV414;
 using Scope = Wire::Scope;
 using Result = Wire::Result;
+using Lite = SeamlessHunt::YtTeamWireLiteV415;
 
 static std::vector<std::uint8_t> Encode(const bbcoop::Envelope& value) {
     std::string bytes;
@@ -59,6 +61,44 @@ static bbcoop::Envelope Welcome(bool ok=true, std::uint64_t epoch=21,
     return env;
 }
 int main() {
+    // The fast BBHost decoder must agree with REAL generated YT protobuf
+    // field values. These bytes are produced by upstream protoc, not mocks.
+    const auto original_lobby=Lobby();
+    const auto lite_lobby=Lite::Decode(Encode(original_lobby));
+    assert(lite_lobby.kind==Lite::Kind::Lobby);
+    assert(lite_lobby.lobby.team==original_lobby.lobby_state().team().id());
+    assert(lite_lobby.lobby.leader==original_lobby.lobby_state().team().leader());
+    assert(lite_lobby.lobby.world==original_lobby.lobby_state().team().world());
+    assert(lite_lobby.lobby.party==original_lobby.lobby_state().team().party());
+    assert(lite_lobby.lobby.members.size()==5u);
+    for (std::size_t i=0; i<5u; ++i) {
+        const auto& expected=original_lobby.lobby_state().team().members(static_cast<int>(i));
+        const auto& actual=lite_lobby.lobby.members[i];
+        assert(actual.id==expected.member() && actual.sign==expected.sign());
+        assert(actual.slot==expected.slot() && actual.ready==expected.ready());
+    }
+    const auto original_start=Start();
+    const auto lite_start=Lite::Decode(Encode(original_start));
+    assert(lite_start.kind==Lite::Kind::Start);
+    assert(lite_start.start.team==original_start.team_start().team());
+    assert(lite_start.start.party==original_start.team_start().party());
+    assert(lite_start.start.host==original_start.team_start().host());
+    assert(lite_start.start.world==original_start.team_start().world());
+    assert(lite_start.start.slot==original_start.team_start().slot());
+    const auto original_welcome=Welcome();
+    const auto lite_welcome=Lite::Decode(Encode(original_welcome));
+    assert(lite_welcome.kind==Lite::Kind::Welcome);
+    assert(lite_welcome.accepted==original_welcome.welcome().accepted());
+    assert(lite_welcome.epoch==original_welcome.welcome().epoch());
+    assert(lite_welcome.last==original_welcome.welcome().last());
+    // A nested duplicate authority field and malformed trailing varint
+    // must not be silently resolved via protobuf's last-field-wins rule.
+    auto duplicate=Encode(original_lobby);
+    duplicate.insert(duplicate.end(),duplicate.begin(),duplicate.end());
+    assert(Lite::Decode(duplicate).kind==Lite::Kind::Invalid);
+    auto bad_wire=Encode(original_start);
+    bad_wire.push_back(0x80u); // unterminated varint key
+    assert(Lite::Decode(bad_wire).kind==Lite::Kind::Invalid);
     Gate gate("hunter5");
     assert(Feed(gate,Scope::Lobby,"",Lobby())==Result::Accepted);
     assert(!gate.Authorized());
@@ -115,4 +155,5 @@ int main() {
     unhandled.mutable_map()->set_map(0x18000000u);
     assert(Feed(gate,Scope::Party,"world:level-44",unhandled)==Result::Ignored);
     std::puts("SHYT_V414_ORIGINAL_YT_PROTOBUF_TEAM_WORLD_ADMISSION_PASS");
+    std::puts("SHYT_V415_LITE_WIRE_MATCHES_GENERATED_YT_PROTOBUF_PASS");
 }
