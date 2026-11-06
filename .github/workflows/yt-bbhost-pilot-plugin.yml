@@ -48,6 +48,18 @@ jobs:
             server/coop/coop.proto
             server/coop/team_lobby.cpp
           persist-credentials: false
+      - name: Verify released YT v1.4.0 retains exact reliable/crypto core used by BBHost
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test "$(git -C pinned-yt-v140 rev-parse HEAD)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          for file in coop_stream.h game_link.h link_auth.h link_crypto.cpp; do
+            old="$(git -C pinned-yt rev-parse "HEAD:server/coop/$file")"
+            now="$(git -C pinned-yt-v140 rev-parse "HEAD:server/coop/$file")"
+            test "$old" = "$now" || { echo "YT v1.4.0 core protocol drift: $file"; exit 1; }
+          done
+          echo SHYT_V140_RELEASED_ORIGINAL_YT_RELIABLE_NOISE_CORE_IDENTITY_PASS
       - name: Verify actual original YT game packet send hook site against BBHost ABI
         shell: bash
         run: |
