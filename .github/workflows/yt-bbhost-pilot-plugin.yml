@@ -139,6 +139,14 @@ jobs:
             -Ibbhost-track bbhost-track/test_shyt_yt_world_snapshot_v420.cpp \
             -o "$RUNNER_TEMP/shyt-world-snapshot-v420"
           "$RUNNER_TEMP/shyt-world-snapshot-v420"
+      - name: Verify original YT ordered delta world-epoch and gap fence (V423)
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_world_delta_fence_v423.cpp \
+            -o "$RUNNER_TEMP/shyt-world-delta-v423"
+          "$RUNNER_TEMP/shyt-world-delta-v423"
       - name: Build and compare lite BBHost authority codec with real YT v1.4.0 protobuf
         shell: bash
         run: |
@@ -387,6 +395,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_team_wire_lite_v415.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_party_reply_v419.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_snapshot_v420.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_delta_fence_v423.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
