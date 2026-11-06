@@ -50,6 +50,7 @@ struct ShytYtServerSessionV408 {
     uint32_t pending_ping_seq=0, next_seq=0;
     bool ping_outstanding=false;
     ShytYtServerCountersV408 counters{};
+    ShytYtCoopCountersV413 coop_counters{};
     // V412: only authenticated transport presence, never team approval.
     std::array<ShytYtMemberNoticeV412,SHYT_V412_MEMBER_QUEUE_CAP> member_queue{};
     size_t member_head=0,member_count=0;
@@ -348,13 +349,13 @@ void handle_control(ShytYtServerSessionV408& s,
                    s.coop_quarantine->ReceiveAfterServerAuth(
                        std::span<const u8>{held.data(),body_size},
                        static_cast<s64>(now))) {
-                    ++s.counters.coop_frames_reassembled_v413;
-                    s.counters.coop_messages_held_v413=
+                    ++s.coop_counters.frames_reassembled;
+                    s.coop_counters.messages_held=
                         s.coop_quarantine->Quarantined();
                 } else {
-                    ++s.counters.coop_frames_rejected_v413;
+                    ++s.coop_counters.frames_rejected;
                     if(s.coop_quarantine && s.coop_quarantine->Failed())
-                        ++s.counters.coop_fail_closed_v413;
+                        ++s.coop_counters.fail_closed;
                 }
                 s.last_auth_recv=now;
                 s.phase=SHYT_V408_LINKED;
@@ -495,6 +496,13 @@ extern "C" int shyt_yt_server_counters_v408(
     if(out)*out={};
     if(!s || !out)return 0;
     *out=s->counters;
+    return 1;
+}
+extern "C" int shyt_yt_server_coop_counters_v413(
+    const ShytYtServerSessionV408* s,ShytYtCoopCountersV413* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    *out=s->coop_counters;
     return 1;
 }
 extern "C" int shyt_yt_server_take_member_v412(
