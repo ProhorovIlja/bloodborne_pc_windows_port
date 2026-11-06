@@ -18,6 +18,7 @@ public:
     struct Message {
         Kind kind = Kind::Invalid;
         YtTeamAuthorityV414::Lobby lobby{};
+        bool lobby_has_team = false; // valid default YT lobby: player has no team
         YtTeamAuthorityV414::Start start{};
         bool accepted = false;
         std::uint64_t epoch = 0, last = 0;
@@ -42,7 +43,7 @@ public:
                 break;
             case 25u:
                 result.kind = Kind::Lobby;
-                if (!ReadLobby(field.bytes,result.lobby)) return {};
+                if (!ReadLobby(field.bytes,result.lobby,result.lobby_has_team)) return {};
                 break;
             case 26u:
                 result.kind = Kind::Start;
@@ -177,7 +178,7 @@ private:
         return r.Valid() && !lobby.team.empty();
     }
     static bool ReadLobby(std::span<const std::uint8_t> bytes,
-                          YtTeamAuthorityV414::Lobby& lobby) {
+                          YtTeamAuthorityV414::Lobby& lobby,bool& has_team) {
         Reader r(bytes);Field f;bool seen=false;
         while(r.Next(f)) {
             if(f.number==1u) {
@@ -185,7 +186,12 @@ private:
                 seen=true;
             }
         }
-        return r.Valid() && seen; // no team is a revoke, not an old grant
+        has_team=seen;
+        // Original LobbyState.team is optional: a signed-in hunter not
+        // yet in a team legitimately receives one without this field.
+        // That message revokes world access, but MUST NOT be rejected as
+        // malformed, or the first lobby response deadlocks the stream.
+        return r.Valid();
     }
     static bool ReadStart(std::span<const std::uint8_t> bytes,
                           YtTeamAuthorityV414::Start& start) {
