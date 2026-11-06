@@ -204,7 +204,7 @@ private:
             default:break;
             }
         }
-        return r.Valid() && seen==31u;
+        return r.Valid() && (seen&23u)==23u; // proto3 omits slot=0
     }
     static bool ReadWelcome(std::span<const std::uint8_t> bytes,Message& msg) {
         Reader r(bytes);Field f;std::uint32_t seen=0;
