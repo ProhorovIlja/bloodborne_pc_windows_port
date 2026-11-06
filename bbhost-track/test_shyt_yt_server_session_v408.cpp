@@ -568,13 +568,48 @@ int main() {
        !shyt_yt_server_world_observations_v420(client,&world_observations) ||
        world_observations.awaiting_game_snapshot_consumer!=1u)
         return bad(74);
+    // The V422 historical replay must not rewind the V421 snapshot cursor.
+    ShytYtWorldDeltaObservationsV423 delta_obs{};
+    if(!shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
+       delta_obs.tracking!=1u || delta_obs.epoch!=77u ||
+       delta_obs.cursor!=9u || delta_obs.replays!=1u ||
+       delta_obs.advanced!=0u)
+        return bad(75);
+    // A subsequent legitimate original server delta advances the cursor
+    // by exactly two world events, and is STILL NOT applied to gameplay.
+    delta_body.clear();
+    delta_envelope.clear();
+    delta_entry_a.clear();
+    delta_entry_b.clear();
+    putnum(delta_body,1u,77u);
+    putnum(delta_body,2u,11u);
+    putnum(delta_entry_a,1u,10u);
+    putnum(delta_entry_a,2u,0x18000000u);
+    putnum(delta_entry_a,3u,1u);
+    putnum(delta_entry_b,1u,11u);
+    putnum(delta_entry_b,2u,0x18000000u);
+    putnum(delta_entry_b,3u,2u);
+    putbytes(delta_body,3u,delta_entry_a);
+    putbytes(delta_body,3u,delta_entry_b);
+    putbytes(delta_envelope,5u,delta_body);
+    server_world.Send(delta_envelope,1432);
+    for(const auto& frame:server_world.Flush(1432))
+        if(!send_encrypted(YT::EncodeCoop(frame)))return bad(76);
+    if(shyt_yt_server_tick_v408(client,1433)!=1 ||
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
+       coop_counts.messages_held!=4u ||
+       !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
+       delta_obs.tracking!=1u || delta_obs.cursor!=11u ||
+       delta_obs.server_last!=11u || delta_obs.advanced!=1u ||
+       delta_obs.awaiting_more!=0u)
+        return bad(77);
     // An inner frame from a different identity cannot impersonate shadnet
     // even when the outer authenticated test server sends it.
     BloodborneCoop::CoopStream impostor("not-shadnet",800u);
-    impostor.Send(lobby_envelope,1433);
-    for(const auto& frame:impostor.Flush(1433))
+    impostor.Send(lobby_envelope,1435);
+    for(const auto& frame:impostor.Flush(1435))
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(51);
-    if(shyt_yt_server_tick_v408(client,1434)!=1 ||
+    if(shyt_yt_server_tick_v408(client,1436)!=1 ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        coop_counts.frames_rejected!=2u ||
        !shyt_yt_server_team_observations_v415(client,&observations) ||
@@ -612,6 +647,9 @@ int main() {
        !shyt_yt_server_world_observations_v420(client,&world_observations) ||
        world_observations.awaiting_game_snapshot_consumer!=0u ||
        world_observations.contexts_revoked!=1u ||
+       !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
+       delta_obs.tracking!=0u ||
+       delta_obs.contexts_revoked!=1u ||
        shyt_yt_server_take_member_v412(client,&member_event)!=-1 ||
        member_event.online_id[0]!=0)
         return bad(39);
