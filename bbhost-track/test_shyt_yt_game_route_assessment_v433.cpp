@@ -89,7 +89,9 @@ int main() {
     const auto before=game;
     const auto n=BloodborneCoop::RouteGameFrame(game,
         [&](u32 ch) {return Local::CoOpPolicy(ch,{});});
-    assert(n==3u && game.entries.size()==3u);
+    // Already tombstoned reliable channel 68 is preserved but does
+    // not count as an additional newly rejected original packet.
+    assert(n==2u && game.entries.size()==3u);
     assert(game.entries[0].seq==14u &&
            game.entries[0].packet_class==BloodborneCoop::PacketClass::Reliable &&
            game.entries[0].packet==
