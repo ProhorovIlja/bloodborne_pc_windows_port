@@ -43,7 +43,7 @@ int main() {
            first_packet->sequence==1u && first_packet->channel==6u &&
            first_packet->policy==SHYT_YT_CHANNEL_SAME_MAP_V21 &&
            !first_packet->reliable && first_packet->frame==first &&
-           first_packet->member=="peer-A");
+           stage.BoundMember()=="peer-A");
     assert(stage.Pending()==1u && stage.BytesHeld()==first.size());
     // Original game frames are [LE32 channel][LE32 payload_len][payload].
     auto bad=first;bad[4u]^=1u;
@@ -97,6 +97,7 @@ int main() {
            stage.BytesHeld()==0u &&
            stage.Generation()!=previous_generation);
     assert(stage.Stage(first,"peer-A",false)==Result::Closed);
+    assert(stage.BoundMember().empty()); // zeroed when link revoked
     assert(!stage.ArmSynthetic(21u,"peer-A")); // no stale same-link rearm
     assert(stage.Stats().revoked==1u &&
            stage.Stats().rejected_full==2u &&
