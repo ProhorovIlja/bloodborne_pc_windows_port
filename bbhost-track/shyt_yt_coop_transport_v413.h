@@ -48,7 +48,9 @@ public:
     // Returns YT GameFrame bodies only. The caller still must wrap them as
     // SHLK kind Coop and seal/send with the authenticated server session.
     std::vector<std::vector<u8>> Flush(s64 now_ms) {
-        if (failed_) return {};
+        // A transport ACK would assert reliable delivery before a room/world
+        // consumer has processed an envelope. Do not ACK quarantined events.
+        if (failed_ || !quarantine_.empty()) return {};
         auto frames = stream_.Flush(now_ms);
         for (const auto& frame : frames) {
             if (frame.size() > MaxFrameBytes) {
@@ -71,9 +73,12 @@ public:
             return false;
         }
         if (stream_.TakeRestarted()) {
-            quarantine_.clear();
-            quarantined_bytes_ = 0;
+            // The previous world epoch may be incomplete. A fresh original
+            // YT party Welcome/snapshot is required, never silently retain
+            // the old transport or acknowledge queued events.
             peer_restarted_ = true;
+            Invalidate();
+            return false;
         }
         for (const auto& message : messages) {
             if (message.size() > MaxMessageBytes ||
@@ -104,6 +109,13 @@ public:
         const bool was = peer_restarted_;
         peer_restarted_ = false;
         return was;
+    }
+    // Idempotent lifecycle invalidation on disconnect, stale session,
+    // membership overflow or new peer run. A new bridge is required.
+    bool Invalidate() {
+        if (failed_) return false;
+        Fail();
+        return true;
     }
     bool Failed() const { return failed_; }
     std::size_t Quarantined() const { return quarantine_.size(); }
