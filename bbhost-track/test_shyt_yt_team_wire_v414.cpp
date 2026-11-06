@@ -2,6 +2,7 @@
 // Compiled with protoc from the exact upstream YT coop.proto, not mock fields.
 #include "shyt_yt_team_wire_v414.h"
 #include "shyt_yt_team_wire_lite_v415.h"
+#include "shyt_yt_world_projection_v426.h"
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -177,6 +178,46 @@ int main() {
     assert(Lite::Decode(Encode(complex_snapshot)).kind==Lite::Kind::Invalid);
     world->mutable_kills()->RemoveLast();
     assert(Lite::Decode(Encode(complex_snapshot)).kind==Lite::Kind::Snapshot);
+    // V426: compare typed shadow-model interpretation against REAL
+    // original generated YT v1.4.0 Snapshot and Entries protobufs.
+    SeamlessHunt::YtWorldStagingV425 original_staging;
+    SeamlessHunt::YtWorldProjectionV426 original_projection;
+    assert(original_staging.StageSnapshot(Encode(complex_snapshot),77u,9u));
+    assert(original_projection.Rebuild(original_staging));
+    const auto& typed_snapshot=original_projection.View();
+    assert(typed_snapshot.epoch==77u && typed_snapshot.applied==9u &&
+           typed_snapshot.game_applied==0u &&
+           typed_snapshot.CountKilled()==2u &&
+           typed_snapshot.kills.at(0x18000000u).count(7u)==1u &&
+           typed_snapshot.shown.at(55u)==7u &&
+           typed_snapshot.map_state_bits.size()==128u &&
+           typed_snapshot.return_point==-12 &&
+           typed_snapshot.hp.at(0x123456789ull).enemies.at(55u).value==-51 &&
+           typed_snapshot.hp.at(0x123456789ull).enemies.at(55u).max==100 &&
+           typed_snapshot.snapshot_recent_flags.size()==1u &&
+           typed_snapshot.after_wipe);
+    bbcoop::Envelope original_changes;
+    auto* generated=original_changes.mutable_entries();
+    generated->set_epoch(77u);
+    generated->set_last(11u);
+    auto* typed_a=generated->add_entries();
+    typed_a->set_seq(10u);
+    typed_a->set_map(0x18000000u);
+    typed_a->set_kind(1u);
+    typed_a->set_subject(777u);
+    auto* typed_b=generated->add_entries();
+    typed_b->set_seq(11u);
+    typed_b->set_map(0x18000000u);
+    typed_b->set_kind(2u);
+    typed_b->set_subject(7u);
+    assert(original_staging.StageEntries(
+        Encode(original_changes),77u,11u,10u,11u,2u));
+    assert(original_projection.Rebuild(original_staging));
+    const auto& typed_delta=original_projection.View();
+    assert(typed_delta.applied==11u && typed_delta.game_applied==0u &&
+           typed_delta.CountKilled()==2u &&
+           typed_delta.kills.at(0x18000000u).count(7u)==0u &&
+           typed_delta.kills.at(0x18000000u).count(777u)==1u);
     // Nested MapKills.map has wire-0 uint32, not length-delimited.
     const std::vector<std::uint8_t> wrong_nested_map{
         0x3au,0x06u,0x08u,0x4du,0x1au,0x02u,0x0au,0x00u};
