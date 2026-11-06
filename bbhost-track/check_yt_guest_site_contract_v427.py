@@ -52,9 +52,9 @@ def verify(yt:Path,header:Path,plugin:Path,bbhost_api:Path)->None:
         "SHYT_V427_HOOK_INSTALL_ALLOWED=0" not in h or
         "return result->sites_matching==SHYT_V427_SITE_COUNT;" not in h):
         raise ValueError("V427 digest, prefix or no-hook policy changed")
-    if ("#include \"shyt_yt_guest_hook_preflight_v427.h\"" not in p or
+    if ("#include \"shyt_yt_full_guest_preflight_v428.h\"" not in p or
         'api->config("shyt_bbhost_probe.inspect_yt_game_sites")' not in p or
-        'shyt_yt_guest_hook_preflight_v427(' not in p or
+        'shyt_yt_full_guest_preflight_v428(' not in p or
         '"false", 0, 0, 0}' not in p):
         raise ValueError("V427 plugin opt-in integration missing")
     if ("int (*read)(uint64_t bn_addr, void* out, size_t n);" not in api or
