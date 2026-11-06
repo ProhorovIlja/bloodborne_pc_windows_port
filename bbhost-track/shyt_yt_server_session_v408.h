@@ -98,6 +98,23 @@ typedef struct ShytYtWorldSnapshotObservationsV420 {
     uint64_t contexts_revoked;
     uint8_t awaiting_game_snapshot_consumer;
 } ShytYtWorldSnapshotObservationsV420;
+/* V423 read-only world log audit. All counters refer to authenticated,
+ * structurally checked server data and NEVER to applied game-world state. */
+typedef struct ShytYtWorldDeltaObservationsV423 {
+    uint64_t heartbeats;
+    uint64_t replays;
+    uint64_t advanced;
+    uint64_t gaps;
+    uint64_t epoch_changes;
+    uint64_t invalid;
+    uint64_t unbound;
+    uint64_t contexts_revoked;
+    uint64_t epoch;
+    uint64_t cursor;
+    uint64_t server_last;
+    uint8_t tracking;
+    uint8_t awaiting_more;
+} ShytYtWorldDeltaObservationsV423;
 
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
@@ -134,6 +151,8 @@ int shyt_yt_server_party_observations_v419(const ShytYtServerSessionV408 *sessio
 /* Diagnostic only; no NetSync or world application grant. */
 int shyt_yt_server_world_observations_v420(const ShytYtServerSessionV408 *session,
                                            ShytYtWorldSnapshotObservationsV420 *out);
+int shyt_yt_server_world_delta_observations_v423(
+    const ShytYtServerSessionV408 *session,ShytYtWorldDeltaObservationsV423 *out);
 /* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
  * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
  * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
