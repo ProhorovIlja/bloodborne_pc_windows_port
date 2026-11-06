@@ -137,6 +137,28 @@ typedef struct ShytYtWorldStagingObservationsV425 {
     uint64_t pending_packets;
     uint8_t active;
 } ShytYtWorldStagingObservationsV425;
+/* V426 read-only, on-demand type projection. Counts are shadow world
+ * data reconstructed from authenticated staging, never guest game writes.
+ * Does NOT imply NetSync or save/reward application. */
+typedef struct ShytYtWorldProjectionObservationsV426 {
+    uint64_t epoch;
+    uint64_t projected_seq;
+    uint64_t game_applied_seq;
+    uint64_t killed;
+    uint64_t shown;
+    uint64_t hp_reports;
+    uint64_t hp_enemies;
+    uint64_t map_state_bytes;
+    uint64_t snapshot_recent_flags;
+    uint64_t live_flag_events;
+    uint64_t unknown_kinds;
+    uint32_t shown_map;
+    uint32_t map_state_map;
+    int32_t return_point;
+    uint32_t return_point_map;
+    uint8_t after_wipe;
+    uint8_t projection_ready;
+} ShytYtWorldProjectionObservationsV426;
 
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
@@ -179,6 +201,10 @@ int shyt_yt_server_world_pruning_observations_v424(
     const ShytYtServerSessionV408 *session,ShytYtRedundantWorldPruningV424 *out);
 int shyt_yt_server_world_staging_observations_v425(
     const ShytYtServerSessionV408 *session,ShytYtWorldStagingObservationsV425 *out);
+/* Explicitly requested diagnostic only. Replays at most 128 KiB of
+ * previously staged original protobuf, never runs during network tick. */
+int shyt_yt_server_world_projection_observations_v426(
+    const ShytYtServerSessionV408 *session,ShytYtWorldProjectionObservationsV426 *out);
 /* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
  * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
  * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
