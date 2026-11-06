@@ -90,8 +90,8 @@ int main() {
            updated.map_state_map==2u &&
            updated.map_state_bits.size()==1250u &&
            (updated.map_state_bits[0]&2u)!=0u);
-    assert(updated.hp.at(3u).enemies.at(42u).value==-44 &&
-           updated.hp.at(3u).enemies.at(42u).max==200 &&
+    assert(updated.hp.at((1ull<<32u)|2u).enemies.at(42u).value==-44 &&
+           updated.hp.at((1ull<<32u)|2u).enemies.at(42u).max==200 &&
            updated.live_flags_seen==1u);
     assert(updated.return_point==3000 && updated.return_point_map==2u);
     // Replayed seq19 is skipped: only the new Unkill(seq20) is applied.
