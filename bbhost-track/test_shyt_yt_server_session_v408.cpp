@@ -260,11 +260,13 @@ int main() {
        !send_encrypted(YT::EncodeCoop(fake_game)) ||
        shyt_yt_server_tick_v408(client,1400)!=1)
         return bad(22);
+    ShytYtCoopCountersV413 coop_counts{};
     if(!shyt_yt_server_counters_v408(client,&counts) ||
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        counts.authenticated_data_quarantined!=1 ||
        counts.authenticated_coop_quarantined!=1 ||
-       counts.coop_frames_reassembled_v413!=0u ||
-       counts.coop_frames_rejected_v413!=1u)
+       coop_counts.frames_reassembled!=0u ||
+       coop_counts.frames_rejected!=1u)
         return bad(23);
     // A REAL YT reliable CoopStream frame over the authenticated OS UDP
     // server socket is now reassembled, but never injected into BBHost.
@@ -277,10 +279,10 @@ int main() {
         if(!send_encrypted(YT::EncodeCoop(body)))return bad(42);
     }
     if(shyt_yt_server_tick_v408(client,1420)!=1 ||
-       !shyt_yt_server_counters_v408(client,&counts) ||
-       counts.coop_frames_reassembled_v413!=original_frames.size() ||
-       counts.coop_messages_held_v413!=1u ||
-       counts.coop_frames_rejected_v413!=1u)
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
+       coop_counts.frames_reassembled!=original_frames.size() ||
+       coop_counts.messages_held!=1u ||
+       coop_counts.frames_rejected!=1u)
         return bad(43);
     // Even from the configured server socket, unsigned/raw game traffic
     // cannot go to the game. It must have the original Noise NK tag.
