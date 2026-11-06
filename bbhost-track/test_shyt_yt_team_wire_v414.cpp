@@ -94,7 +94,8 @@ int main() {
     // A nested duplicate authority field and malformed trailing varint
     // must not be silently resolved via protobuf's last-field-wins rule.
     auto duplicate=Encode(original_lobby);
-    duplicate.insert(duplicate.end(),duplicate.begin(),duplicate.end());
+    const auto copy_of_body=duplicate;
+    duplicate.insert(duplicate.end(),copy_of_body.begin(),copy_of_body.end());
     assert(Lite::Decode(duplicate).kind==Lite::Kind::Invalid);
     auto bad_wire=Encode(original_start);
     bad_wire.push_back(0x80u); // unterminated varint key
