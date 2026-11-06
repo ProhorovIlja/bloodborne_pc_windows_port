@@ -548,6 +548,19 @@ int main() {
        stage_obs.staged_bytes!=snapshot_envelope.size() ||
        stage_obs.pending_packets!=1u || stage_obs.active!=1u)
         return bad(83);
+    ShytYtWorldProjectionObservationsV426 projection_obs{};
+    if(!shyt_yt_server_world_projection_observations_v426(client,&projection_obs) ||
+       projection_obs.projection_ready!=1u ||
+       projection_obs.epoch!=77u || projection_obs.projected_seq!=9u ||
+       projection_obs.game_applied_seq!=0u ||
+       projection_obs.killed!=2u || projection_obs.shown!=1u ||
+       projection_obs.hp_reports!=1u || projection_obs.hp_enemies!=1u ||
+       projection_obs.map_state_bytes!=64u ||
+       projection_obs.snapshot_recent_flags!=1u ||
+       projection_obs.live_flag_events!=0u ||
+       projection_obs.shown_map!=0x18000000u ||
+       projection_obs.after_wipe!=1u)
+        return bad(84);
     // V422: a real server-authenticated original reliable Entries message
     // must validate its consecutive log seqs, without delivering them to
     // game memory or consuming the still-quarantined world snapshot.
@@ -616,6 +629,12 @@ int main() {
        stage_obs.pending_packets!=2u ||
        stage_obs.staged_bytes!=snapshot_envelope.size()+delta_envelope.size())
         return bad(77);
+    if(!shyt_yt_server_world_projection_observations_v426(client,&projection_obs) ||
+       projection_obs.projected_seq!=11u ||
+       projection_obs.game_applied_seq!=0u ||
+       projection_obs.killed!=2u || projection_obs.hp_enemies!=1u ||
+       projection_obs.snapshot_recent_flags!=1u)
+        return bad(85);
     // V424: 24 original server-authenticated empty Entries heartbeats
     // must not exhaust the 16-message quarantine cap, revoke a healthy
     // link or discard the pending actual world Snapshot/new delta.
@@ -692,6 +711,8 @@ int main() {
        !shyt_yt_server_world_staging_observations_v425(client,&stage_obs) ||
        stage_obs.active!=0u || stage_obs.pending_packets!=0u ||
        stage_obs.revoked!=1u ||
+       shyt_yt_server_world_projection_observations_v426(client,&projection_obs)!=0 ||
+       projection_obs.projection_ready!=0u ||
        !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
        delta_obs.tracking!=0u ||
        delta_obs.contexts_revoked!=1u ||
