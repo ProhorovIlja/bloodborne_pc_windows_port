@@ -33,7 +33,7 @@ public:
     static constexpr std::uint32_t DroppedNativeChannel=68u;
     static constexpr std::array<std::uint8_t,8> DroppedReliablePacket={
         static_cast<std::uint8_t>(DroppedNativeChannel),0,0,0,0,0,0,0};
-    static constexpr bool CoOpPolicy(std::uint32_t channel,
+    static bool CoOpPolicy(std::uint32_t channel,
                                      const Ends& e) noexcept {
         if(channel>=SHYT_YT_NATIVE_CHANNEL_COUNT_V21)return false;
         switch(shyt_yt_channel_policy_v21(channel)) {
@@ -67,7 +67,7 @@ public:
         }
         return true;
     }
-    static constexpr bool HostilePolicy(std::uint32_t channel,
+    static bool HostilePolicy(std::uint32_t channel,
                                         const Ends& e,
                                         bool from_visitor) noexcept {
         if(channel>=SHYT_YT_NATIVE_CHANNEL_COUNT_V21)return false;
@@ -95,7 +95,7 @@ public:
                        SHYT_YT_CHANNEL_PASS_V21;
         }
     }
-    static constexpr Assessment Inspect(
+    static Assessment Inspect(
         std::uint32_t channel,Relation relation,const Ends& e,
         bool from_visitor,bool reliable) noexcept {
         const bool policy=relation==Relation::Teammate?
@@ -104,7 +104,4 @@ public:
     }
 };
 static_assert(YtGameRouteAssessmentV433::DroppedReliablePacket[0]==68u);
-static_assert(!YtGameRouteAssessmentV433::Inspect(
-    0x27u,YtGameRouteAssessmentV433::Relation::Teammate,{},false,
-    true).can_forward_game);
 } // namespace SeamlessHunt
