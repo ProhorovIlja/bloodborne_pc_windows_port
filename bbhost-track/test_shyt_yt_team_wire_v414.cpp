@@ -112,14 +112,9 @@ int main() {
     assert(Lite::Decode(Encode(original_snapshot)).kind==Lite::Kind::Snapshot);
     assert(Lite::Decode(Encode(original_snapshot)).last==0u);
     // Conflicting duplicate world epochs must never be silently accepted.
-    auto duplicate_snapshot=Encode(original_snapshot);
-    assert(duplicate_snapshot.size()>5u);
-    // The field-1 epoch is encoded first in the nested Snapshot (08 4d).
-    duplicate_snapshot.insert(duplicate_snapshot.end(),{});
-    bbcoop::Envelope snapshot_duplicate;
-    auto* dup=snapshot_duplicate.mutable_snapshot();
-    dup->set_epoch(77u);
-    std::vector<std::uint8_t> duplicate_meta{0x3au,0x04u,0x08u,0x4du,0x08u,0x4du};
+    // Envelope.snapshot=7; duplicate nested epoch field=1 is invalid.
+    const std::vector<std::uint8_t> duplicate_meta{
+        0x3au,0x04u,0x08u,0x4du,0x08u,0x4du};
     assert(Lite::Decode(duplicate_meta).kind==Lite::Kind::Invalid);
     // Independently cross-check the V418 outbound party Hello wire tags
     // against the REAL YT v1.4.0 protobuf serializer, not a second local
