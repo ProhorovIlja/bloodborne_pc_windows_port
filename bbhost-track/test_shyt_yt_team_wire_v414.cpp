@@ -91,6 +91,36 @@ int main() {
     assert(lite_welcome.accepted==original_welcome.welcome().accepted());
     assert(lite_welcome.epoch==original_welcome.welcome().epoch());
     assert(lite_welcome.last==original_welcome.welcome().last());
+    // V420: original v1.4.0 SnapshotRequest (empty proto3 defaults)
+    // must match the two canonical bytes transmitted by the BBHost link.
+    bbcoop::Envelope original_snapshot_request;
+    auto* sr=original_snapshot_request.mutable_snapshot_request();
+    sr->set_epoch(0u);
+    sr->set_seq(0u);
+    assert(Encode(original_snapshot_request)==
+           (std::vector<std::uint8_t>{0x32u,0x00u}));
+    bbcoop::Envelope original_snapshot;
+    original_snapshot.mutable_snapshot()->set_epoch(77u);
+    original_snapshot.mutable_snapshot()->set_last(9u);
+    original_snapshot.mutable_snapshot()->set_shown_map(0x00112233u);
+    const auto lite_snapshot=Lite::Decode(Encode(original_snapshot));
+    assert(lite_snapshot.kind==Lite::Kind::Snapshot);
+    assert(lite_snapshot.epoch==original_snapshot.snapshot().epoch());
+    assert(lite_snapshot.last==original_snapshot.snapshot().last());
+    // Proto3 omits last=0, which is valid for an otherwise fresh world.
+    original_snapshot.mutable_snapshot()->set_last(0u);
+    assert(Lite::Decode(Encode(original_snapshot)).kind==Lite::Kind::Snapshot);
+    assert(Lite::Decode(Encode(original_snapshot)).last==0u);
+    // Conflicting duplicate world epochs must never be silently accepted.
+    auto duplicate_snapshot=Encode(original_snapshot);
+    assert(duplicate_snapshot.size()>5u);
+    // The field-1 epoch is encoded first in the nested Snapshot (08 4d).
+    duplicate_snapshot.insert(duplicate_snapshot.end(),{});
+    bbcoop::Envelope snapshot_duplicate;
+    auto* dup=snapshot_duplicate.mutable_snapshot();
+    dup->set_epoch(77u);
+    std::vector<std::uint8_t> duplicate_meta{0x3au,0x04u,0x08u,0x4du,0x08u,0x4du};
+    assert(Lite::Decode(duplicate_meta).kind==Lite::Kind::Invalid);
     // Independently cross-check the V418 outbound party Hello wire tags
     // against the REAL YT v1.4.0 protobuf serializer, not a second local
     // homegrown parser. This locks protocol/party/member/run/host/owner.
