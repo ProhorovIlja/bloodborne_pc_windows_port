@@ -60,15 +60,16 @@ typedef struct ShytYtServerCountersV408 {
     uint64_t authenticated_member_notices;
     uint64_t rejected_member_notices;
     uint64_t member_notice_overflows;
-    /* V413 diagnostic only. Counts authenticated Coop datagrams whose
-     * GameFrames passed original YT reliable stream parsing. Neither a
-     * transport ACK nor a queued envelope authorizes a team or world.
-     * The last held count is a snapshot, not a cumulative counter. */
-    uint64_t coop_frames_reassembled_v413;
-    uint64_t coop_frames_rejected_v413;
-    uint64_t coop_fail_closed_v413;
-    uint64_t coop_messages_held_v413;
 } ShytYtServerCountersV408;
+/* V413 separate ABI: preserve the exact layout/size of existing V408
+ * counters for older compiled BBHost plugins. No team/game authorization. */
+typedef struct ShytYtCoopCountersV413 {
+    uint64_t frames_reassembled;
+    uint64_t frames_rejected;
+    uint64_t fail_closed;
+    uint64_t messages_held; /* point-in-time count, not a cumulative total */
+} ShytYtCoopCountersV413;
+
 /* C-string fields must be present, NUL-terminated and 1..255B.
  * No implicit fallback to unsigned/TOFU key, and no credential capture.
  * Opens one independent ephemeral UDP socket, but sends NOTHING until
@@ -88,6 +89,10 @@ int shyt_yt_server_tick_v408(ShytYtServerSessionV408 *session,
 int shyt_yt_server_phase_v408(const ShytYtServerSessionV408 *session);
 int shyt_yt_server_counters_v408(const ShytYtServerSessionV408 *session,
                                  ShytYtServerCountersV408 *out);
+/* Read-only, versioned transport diagnostic. Its counters are not a
+ * permission to deliver network data to the guest game. */
+int shyt_yt_server_coop_counters_v413(const ShytYtServerSessionV408 *session,
+                                     ShytYtCoopCountersV413 *out);
 /* Consume exactly one MAC-authenticated LINK presence notice.
  * Returns 1 for a notice; 0 if empty/bad args; -1 if the bounded
  * queue overflowed, permanently invalidating presence until a NEW
