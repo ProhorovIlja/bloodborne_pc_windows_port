@@ -78,6 +78,15 @@ typedef struct ShytYtTeamObservationsV415 {
     uint64_t authority_messages_rejected;
     uint64_t party_welcomes_unbound;
 } ShytYtTeamObservationsV415;
+/* V419: diagnostics only. A correlated reply is NOT a playable world grant. */
+typedef struct ShytYtPartyReplyObservationsV419 {
+    uint64_t party_hellos_sent;
+    uint64_t replies_correlated;
+    uint64_t replies_refused;
+    uint64_t replies_unbound;
+    uint64_t contexts_revoked;
+    uint8_t candidate_awaiting_snapshot;
+} ShytYtPartyReplyObservationsV419;
 
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
@@ -108,6 +117,9 @@ int shyt_yt_server_coop_counters_v413(const ShytYtServerSessionV408 *session,
  * remains disabled and these are observation counters only. */
 int shyt_yt_server_team_observations_v415(const ShytYtServerSessionV408 *session,
                                           ShytYtTeamObservationsV415 *out);
+/* Correlated same-link party Welcome, still NOT world authority or NetSync. */
+int shyt_yt_server_party_observations_v419(const ShytYtServerSessionV408 *session,
+                                           ShytYtPartyReplyObservationsV419 *out);
 /* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
  * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
  * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
