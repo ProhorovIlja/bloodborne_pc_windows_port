@@ -33,8 +33,8 @@ def check(yt:Path,header:Path,test:Path)->None:
     required_h=[
         "DroppedNativeChannel=68u",
         "return Assessment{policy,!policy && reliable,false,false};",
-        "static constexpr bool CoOpPolicy(",
-        "static constexpr bool HostilePolicy(",
+        "static bool CoOpPolicy(",
+        "static bool HostilePolicy(",
         "if(e.sender_map && e.target_map && e.sender_map!=e.target_map)",
         "return !from_visitor && same_map &&",
         "case 0x27u:case 0x39u:",
