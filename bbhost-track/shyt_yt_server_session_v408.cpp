@@ -9,6 +9,8 @@
 #include "shyt_yt_link_wire_v403.h"
 #include "shyt_yt_signup_work_v409.h"
 #include "shyt_yt_coop_transport_v413.h"
+#include "shyt_yt_team_authority_v414.h"
+#include "shyt_yt_team_wire_lite_v415.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -51,6 +53,9 @@ struct ShytYtServerSessionV408 {
     bool ping_outstanding=false;
     ShytYtServerCountersV408 counters{};
     ShytYtCoopCountersV413 coop_counters{};
+    ShytYtTeamObservationsV415 team_observations{};
+    std::unique_ptr<SeamlessHunt::YtTeamAuthorityV414> team_gate;
+    size_t coop_observed=0;
     // V412: only authenticated transport presence, never team approval.
     std::array<ShytYtMemberNoticeV412,SHYT_V412_MEMBER_QUEUE_CAP> member_queue{};
     size_t member_head=0,member_count=0;
@@ -106,9 +111,48 @@ void reject(ShytYtServerSessionV408& s) noexcept {
     ++s.counters.rejected_control_packets;
 }
 void invalidate_coop(ShytYtServerSessionV408& s) noexcept {
+    if(s.team_gate)s.team_gate->Revoke();
+    s.coop_observed=0;
     if(s.coop_quarantine && s.coop_quarantine->Invalidate()) {
         ++s.coop_counters.fail_closed;
         s.coop_counters.messages_held=0;
+    }
+}
+// V415: READ-ONLY observation on the authenticated link, never an auth
+// grant. In particular an unbound party Welcome cannot call
+// OnAuthenticatedPartyWelcome(). Reliable world data stays quarantined
+// and no game/NetSync callback is invoked.
+void observe_team_authority(ShytYtServerSessionV408& s) {
+    if(!s.team_gate || !s.coop_quarantine)return;
+    std::span<const u8> bytes;
+    while(s.coop_quarantine->PeekQuarantined(s.coop_observed,bytes)) {
+        ++s.coop_observed;
+        auto decoded=SeamlessHunt::YtTeamWireLiteV415::Decode(bytes);
+        using Kind=SeamlessHunt::YtTeamWireLiteV415::Kind;
+        switch(decoded.kind) {
+        case Kind::Lobby:
+            if(s.team_gate->OnAuthenticatedLobby(std::move(decoded.lobby)))
+                ++s.team_observations.lobby_states_accepted;
+            else
+                ++s.team_observations.authority_messages_rejected;
+            break;
+        case Kind::Start:
+            if(s.team_gate->OnAuthenticatedTeamStart(decoded.start))
+                ++s.team_observations.team_starts_accepted;
+            else
+                ++s.team_observations.authority_messages_rejected;
+            break;
+        case Kind::Welcome:
+            // The stream's party identity has NOT been established.
+            ++s.team_observations.party_welcomes_unbound;
+            break;
+        case Kind::Invalid:
+            s.team_gate->Revoke();
+            ++s.team_observations.authority_messages_rejected;
+            break;
+        case Kind::Other:
+            break;
+        }
     }
 }
 bool start_hello(ShytYtServerSessionV408& s,uint64_t now) {
@@ -359,6 +403,7 @@ void handle_control(ShytYtServerSessionV408& s,
                        std::span<const u8>{held.data(),body_size},
                        static_cast<s64>(now))) {
                     ++s.coop_counters.frames_reassembled;
+                    observe_team_authority(s);
                     s.coop_counters.messages_held=
                         s.coop_quarantine->Quarantined();
                 } else {
@@ -423,7 +468,9 @@ extern "C" ShytYtServerSessionV408 *shyt_yt_server_new_v408(
              (u32{run_entropy[3]}<<24);
         session->coop_quarantine=
             std::make_unique<SeamlessHunt::CoopTransportV413>(
-                session->online_id,run==0u?1u:run);
+                session->online_id,run==0u?1u:run,"shadnet");
+        session->team_gate=
+            std::make_unique<SeamlessHunt::YtTeamAuthorityV414>(session->online_id);
         return session;
     } catch(...) {
         shyt_yt_server_free_v408(session);
@@ -524,6 +571,13 @@ extern "C" int shyt_yt_server_coop_counters_v413(
     if(out)*out={};
     if(!s || !out)return 0;
     *out=s->coop_counters;
+    return 1;
+}
+extern "C" int shyt_yt_server_team_observations_v415(
+    const ShytYtServerSessionV408* s,ShytYtTeamObservationsV415* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    *out=s->team_observations;
     return 1;
 }
 extern "C" int shyt_yt_server_take_member_v412(
