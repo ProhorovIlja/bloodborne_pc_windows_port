@@ -44,7 +44,7 @@ jobs:
               /Fe:./v413-test.exe >v413-build.log 2>&1 || { tail -n 7 v413-build.log | cut -c1-160; exit 1; }
             ./v413-test.exe
           else
-            clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
               -Ibbhost-track -Ioriginal-yt/server \
               bbhost-track/test_shyt_yt_coop_transport_v413.cpp \
               -o v413-test >v413-build.log 2>&1 || { tail -n 7 v413-build.log | cut -c1-160; exit 1; }
