@@ -14,6 +14,7 @@
 #include "shyt_yt_party_reply_v419.h"
 #include "shyt_yt_world_snapshot_v420.h"
 #include "shyt_yt_world_delta_fence_v423.h"
+#include "shyt_yt_world_staging_v425.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -61,6 +62,7 @@ struct ShytYtServerSessionV408 {
     SeamlessHunt::YtPartyReplyV419 party_reply;
     SeamlessHunt::YtWorldSnapshotV420 world_snapshot;
     SeamlessHunt::YtWorldDeltaFenceV423 world_delta;
+    SeamlessHunt::YtWorldStagingV425 world_stage;
     uint64_t redundant_heartbeats_pruned=0u;
     uint64_t redundant_replays_pruned=0u;
     uint64_t redundant_bytes_pruned=0u;
@@ -127,6 +129,7 @@ void invalidate_coop(ShytYtServerSessionV408& s) noexcept {
     s.party_reply.Revoke();
     s.world_snapshot.Revoke();
     s.world_delta.Revoke();
+    s.world_stage.Revoke();
     s.coop_observed=0;
     if(s.coop_quarantine && s.coop_quarantine->Invalidate()) {
         ++s.coop_counters.fail_closed;
@@ -147,11 +150,13 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
         // events. Transport ACK != game application and must not erase
         // a new event or the one complete world Snapshot.
         bool redundant_delta_handled=false;
+        bool staged_world_handled=false;
         switch(decoded.kind) {
         case Kind::Lobby:
             s.party_reply.Revoke(); // any roster refresh fences in-flight Hello
             s.world_snapshot.Revoke();
             s.world_delta.Revoke();
+            s.world_stage.Revoke();
             if(!decoded.lobby_has_team) {
                 // Ordinary YT initial lobby: no group yet. Never a world
                 // grant and never a malformed-message error.
@@ -166,6 +171,7 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
             s.party_reply.Revoke(); // world/start refresh requires new session
             s.world_snapshot.Revoke();
             s.world_delta.Revoke();
+            s.world_stage.Revoke();
             if(s.team_gate->OnAuthenticatedTeamStart(decoded.start))
                 ++s.team_observations.team_starts_accepted;
             else
@@ -191,19 +197,22 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
             break;
         }
         case Kind::Snapshot: {
-            // Never discard the actual world payload: our parser has
-            // inspected ONLY the original Snapshot epoch/last header.
-            // A real authenticated in-game world consumer is still absent.
+            // V425: only a structurally validated, explicitly requested
+            // authenticated Snapshot enters independent bounded staging.
+            // The original full payload is copied before being removed from
+            // transport quarantine. No game-memory access or grant exists.
             const bool waiting=s.world_snapshot.WaitingForSnapshot();
             const bool matched=s.world_snapshot.Observe(decoded.epoch,decoded.last);
-            if(waiting && matched &&
-               !s.world_delta.Arm(decoded.epoch,decoded.last)) {
-                s.world_snapshot.Revoke();
-                s.party_reply.Revoke();
-                s.team_gate->Revoke();
-                ++s.team_observations.authority_messages_rejected;
+            if(waiting && matched) {
+                if(!s.world_delta.Arm(decoded.epoch,decoded.last) ||
+                   !s.world_stage.StageSnapshot(bytes,decoded.epoch,decoded.last)) {
+                    invalidate_coop(s);
+                    return;
+                }
+                staged_world_handled=true;
             } else if(waiting && !matched) {
                 s.world_delta.Revoke();
+                s.world_stage.Revoke();
                 s.party_reply.Revoke();
                 s.team_gate->Revoke();
                 ++s.team_observations.authority_messages_rejected;
@@ -221,9 +230,22 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
                 decoded.last_entry_seq,decoded.entry_count);
             redundant_delta_handled=
                 verdict==Verdict::Replay || verdict==Verdict::Heartbeat;
+            if(verdict==Verdict::Advanced) {
+                if(!s.world_stage.StageEntries(
+                     bytes,decoded.epoch,decoded.last,
+                     decoded.first_entry_seq,decoded.last_entry_seq,
+                     decoded.entry_count)) {
+                    // The staged cursor might have been advanced by V423,
+                    // but not stored; fail closed rather than losing data.
+                    invalidate_coop(s);
+                    return;
+                }
+                staged_world_handled=true;
+            }
             if(verdict==Verdict::Gap || verdict==Verdict::EpochChanged ||
                verdict==Verdict::Invalid) {
                 s.world_snapshot.Revoke();
+                s.world_stage.Revoke();
                 s.party_reply.Revoke();
                 s.team_gate->Revoke();
                 ++s.team_observations.authority_messages_rejected;
@@ -234,6 +256,7 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
             s.party_reply.Revoke();
             s.world_snapshot.Revoke();
             s.world_delta.Revoke();
+            s.world_stage.Revoke();
             s.team_gate->Revoke();
             ++s.team_observations.authority_messages_rejected;
             break;
@@ -244,15 +267,15 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
         // controls, and explicitly rejected an unbound Welcome. Keeping
         // them in quarantine forever would exhaust the 16-message budget
         // during a normal team-creation flow and stop the reliable stream.
-        // Unknown events, new world deltas, invalid bodies, and the
-        // actual Snapshot are NEVER discarded. Only a V423-confirmed
-        // exact old replay or empty heartbeat is redundant; keeping 16
-        // such packets would otherwise exhaust the bounded 16-message
-        // staging queue, needlessly failing an otherwise healthy link.
+        // New world deltas and the full Snapshot are only discarded
+        // AFTER V425 has taken an immutable bounded copy. Unrecognized
+        // gameplay messages and unvalidated events stay quarantined.
+        // Thus transport ACK alone never signals world application.
         const bool handled=decoded.kind==Kind::Lobby ||
                            decoded.kind==Kind::Start ||
                            decoded.kind==Kind::Welcome ||
-                           redundant_delta_handled;
+                           redundant_delta_handled ||
+                           staged_world_handled;
         if(handled) {
             // Save length before erase invalidates the PeekQuarantined
             // span; this telemetry counts local staging bytes freed,
@@ -602,7 +625,8 @@ void handle_control(ShytYtServerSessionV408& s,
                         if(s.team_gate)s.team_gate->Revoke();
                         s.party_reply.Revoke();
                         s.world_snapshot.Revoke();
-                        s.world_delta.Revoke(); // V424: no stale world cursor
+                        s.world_delta.Revoke(); // no stale world cursor
+                        s.world_stage.Revoke(); // V425: drop staged world
                         s.coop_observed=0;
                         if(s.coop_counters.fail_closed==0u)
                             ++s.coop_counters.fail_closed;
@@ -921,6 +945,18 @@ extern "C" int shyt_yt_server_world_observations_v420(
     *out={stats.requests_sent,stats.metadata_matching,stats.metadata_rejected,
           stats.metadata_unbound,stats.contexts_revoked,
           static_cast<uint8_t>(s->world_snapshot.AwaitingGameSnapshotConsumer()?1u:0u)};
+    return 1;
+}
+extern "C" int shyt_yt_server_world_staging_observations_v425(
+    const ShytYtServerSessionV408* s,ShytYtWorldStagingObservationsV425* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    const auto stats=s->world_stage.Stats();
+    *out={stats.snapshots,stats.delta_batches,stats.rejected,stats.revoked,
+          s->world_stage.Epoch(),s->world_stage.StagedCursor(),
+          static_cast<std::uint64_t>(s->world_stage.StagedBytes()),
+          static_cast<std::uint64_t>(s->world_stage.PendingPackets()),
+          static_cast<uint8_t>(s->world_stage.Active()?1u:0u)};
     return 1;
 }
 extern "C" int shyt_yt_server_world_pruning_observations_v424(
