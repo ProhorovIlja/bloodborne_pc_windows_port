@@ -48,6 +48,7 @@ jobs:
             server/coop/coop.proto
             server/coop/team_lobby.cpp
             bbport/patches/coop-sites.json
+            emulator/src/core/bloodborne_patches.cpp
           persist-credentials: false
       - name: Verify released YT v1.4.0 retains exact reliable/crypto core used by BBHost
         shell: bash
@@ -97,6 +98,14 @@ jobs:
             -Ibbhost-track bbhost-track/test_shyt_yt_full_guest_preflight_v428.c \
             -o "$RUNNER_TEMP/shyt-yt-full-preflight-v428"
           "$RUNNER_TEMP/shyt-yt-full-preflight-v428"
+      - name: Verify V429 original YT game send/update and exact BBHost hook2 register ABI source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/check_yt_game_hook_abi_v429.py \
+            --yt pinned-yt-v140 --bbhost pinned-bbhost \
+            --observer bbhost-track/shyt_yt_game_link_observer_v429.h \
+            --plugin bbhost-track/shyt_bbhost_probe_v1.c
       - name: Verify V429 original YT send and NetSyncUpdate passive game ABI
         shell: bash
         run: |
