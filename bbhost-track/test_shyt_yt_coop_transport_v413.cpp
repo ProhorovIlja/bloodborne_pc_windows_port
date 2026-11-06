@@ -22,16 +22,18 @@ int main() {
     for (std::size_t i = 0; i + 1u < frames.size(); ++i)
         assert(server.ReceiveAfterServerAuth(frames[i], 1002));
     assert(server.Quarantined() == 1u);
-    // The upper layer has NOT approved/applied the world event: withholding
-    // the ACK makes the server retain responsibility for retransmission.
-    assert(server.Flush(1003).empty());
+    // Transport ACKs certify only BOUNDED, ordered receipt, not gameplay
+    // application. They must flow even while a world event is quarantined:
+    // otherwise the server retransmits forever and lobby creation jams.
+    const auto transport_acks = server.Flush(1003);
+    assert(!transport_acks.empty());
+    for (const auto& ack : transport_acks)
+        assert(game.ReceiveAfterServerAuth(ack, 1004));
+    assert(game.UnackedBytes() == 0u);
+    assert(server.Quarantined() == 1u); // no game authorization
     Bytes received;
     assert(server.TakeQuarantined(received) && received == world);
     assert(!server.TakeQuarantined(received));
-    // The original reliable stream acknowledges the ordered receive.
-    for (const auto& ack : server.Flush(1003))
-        assert(game.ReceiveAfterServerAuth(ack, 1004));
-    assert(game.UnackedBytes() == 0u);
     // Replayed frames never deliver the same message a second time.
     for (const auto& frame : frames)
         assert(server.ReceiveAfterServerAuth(frame, 1005));
@@ -52,6 +54,25 @@ int main() {
     assert(server.Quarantined() == 1u);
     assert(server.TakeQuarantined(received) && received == second);
     assert(game.Resends() > 0u);
+
+    // A handled lobby control may be removed from the middle of a
+    // bounded quarantine without discarding unknown world events around it.
+    CoopTransportV413 queue_writer("writer", 300u), queue_reader("reader", 301u);
+    const Bytes unknown_a{0x01u}, handled_lobby{0x02u}, unknown_b{0x03u};
+    for(const auto& msg : {unknown_a,handled_lobby,unknown_b}) {
+        assert(queue_writer.QueueOutgoing(msg, 2270));
+        for(const auto& frame:queue_writer.Flush(2270))
+            assert(queue_reader.ReceiveAfterServerAuth(frame, 2271));
+    }
+    assert(queue_reader.Quarantined()==3u);
+    std::span<const u8> staged;
+    assert(queue_reader.PeekQuarantined(1u,staged));
+    assert(std::equal(staged.begin(),staged.end(),handled_lobby.begin()));
+    assert(queue_reader.DiscardHandledAt(1u));
+    assert(queue_reader.Quarantined()==2u);
+    assert(queue_reader.TakeQuarantined(received) && received==unknown_a);
+    assert(queue_reader.TakeQuarantined(received) && received==unknown_b);
+    assert(!queue_reader.DiscardHandledAt(0u));
 
     // Oversized message and malformed wire fail closed.
     Bytes huge(CoopTransportV413::MaxMessageBytes + 1u, 1u);
