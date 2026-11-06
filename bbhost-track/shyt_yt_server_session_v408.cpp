@@ -15,6 +15,7 @@
 #include "shyt_yt_world_snapshot_v420.h"
 #include "shyt_yt_world_delta_fence_v423.h"
 #include "shyt_yt_world_staging_v425.h"
+#include "shyt_yt_world_projection_v426.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -945,6 +946,29 @@ extern "C" int shyt_yt_server_world_observations_v420(
     *out={stats.requests_sent,stats.metadata_matching,stats.metadata_rejected,
           stats.metadata_unbound,stats.contexts_revoked,
           static_cast<uint8_t>(s->world_snapshot.AwaitingGameSnapshotConsumer()?1u:0u)};
+    return 1;
+}
+extern "C" int shyt_yt_server_world_projection_observations_v426(
+    const ShytYtServerSessionV408* s,ShytYtWorldProjectionObservationsV426* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    // Explicit opt-in diagnostic. No rebuilding in the network hot path,
+    // no game memory or NetSync grants, 128 KiB staging bound applies.
+    SeamlessHunt::YtWorldProjectionV426 projection;
+    if(!projection.Rebuild(s->world_stage))return 0;
+    const auto& view=projection.View();
+    *out={view.epoch,view.applied,view.game_applied,
+          static_cast<std::uint64_t>(view.CountKilled()),
+          static_cast<std::uint64_t>(view.shown.size()),
+          static_cast<std::uint64_t>(view.hp.size()),
+          static_cast<std::uint64_t>(view.CountHpEnemies()),
+          static_cast<std::uint64_t>(view.map_state_bits.size()),
+          static_cast<std::uint64_t>(view.snapshot_recent_flags.size()),
+          view.live_flags_seen,view.unknown_kinds,
+          view.shown_map,view.map_state_map,
+          view.return_point,view.return_point_map,
+          static_cast<std::uint8_t>(view.after_wipe?1u:0u),
+          static_cast<std::uint8_t>(projection.Ready()?1u:0u)};
     return 1;
 }
 extern "C" int shyt_yt_server_world_staging_observations_v425(
