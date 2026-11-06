@@ -45,6 +45,16 @@ int main(void) {
     assert(READ(s.outgoing_without_member)==1u);
     assert(READ(s.outgoing_valid)==3u);
 
+    /* YT source explicitly casts rsi and r8 to u32: upper register
+     * bits must not produce false bad packets or fake reliability. */
+    c.arg[1]=UINT64_C(0x0000000100000000);
+    c.arg[2]=0x7000000u;
+    c.arg[4]=UINT64_C(0xdeadbeef00000008);
+    assert(shyt_yt_v429_observe_send(&c,&s)==0);
+    assert(READ(s.outgoing_valid)==4u &&
+           READ(s.outgoing_unreliable)==3u &&
+           READ(s.outgoing_game_bytes)==
+               0x108u+SHYT_V429_MAX_NATIVE_FRAME+8u);
     /* Never inspect a bogus or future payload pointer. */
     c.arg[3]=0x42u;
     assert(shyt_yt_v429_observe_send(&c,&s)==0);
@@ -53,8 +63,8 @@ int main(void) {
     c.arg[4]=SHYT_V429_MIN_NATIVE_FRAME-1u;
     assert(shyt_yt_v429_observe_send(&c,&s)==0);
     assert(READ(s.outgoing_malformed)==3u);
-    assert(READ(s.outgoing_valid)==3u &&
-           READ(s.outgoing_calls)==6u);
+    assert(READ(s.outgoing_valid)==4u &&
+           READ(s.outgoing_calls)==7u);
     assert(shyt_yt_v429_observe_update(NULL,&s)==0);
     assert(READ(s.update_calls)==2u);
     shyt_yt_v429_reset(&s);
