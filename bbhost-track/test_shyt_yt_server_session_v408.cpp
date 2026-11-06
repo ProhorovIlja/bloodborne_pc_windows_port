@@ -64,6 +64,30 @@ static bool send_to(test_fd fd,const sockaddr_in& to,const std::vector<u8>& p) {
                   reinterpret_cast<const sockaddr*>(&to),sizeof(to))==
            static_cast<int>(p.size());
 }
+// V432: synthetic guest member chain exercising real authenticated YT
+// UDP session + source-matched OnlineID, with NO retail game bytes.
+static constexpr uint64_t kGameMember=UINT64_C(0x7000000);
+static constexpr uint64_t kGameIdentity=UINT64_C(0x8000000);
+static int game_reads=0;
+static int fail_game_id=0;
+static const char* kSyntheticEbootSha=
+    "941f887a562aae054fac35af8cc8f27cf075f3d4cc2e029fb5ae2a663aaa5ae7";
+static int fake_guest_member_read(uint64_t address,void *out,size_t n) {
+    ++game_reads;
+    if(address==kGameMember && n==8u) {
+        for(unsigned i=0u;i<8u;++i)
+            static_cast<u8*>(out)[i]=static_cast<u8>(kGameIdentity>>(i*8u));
+        return 0;
+    }
+    if(address==kGameIdentity+0x36u && n==17u) {
+        if(fail_game_id)return 1;
+        const char name[]="hunter2";
+        std::memset(out,0,n);
+        std::memcpy(out,name,sizeof(name)); // 7 bytes + NUL
+        return 0;
+    }
+    return 1;
+}
 int main() {
 #ifdef _WIN32
     WSADATA ws{};
@@ -414,6 +438,28 @@ int main() {
        !shyt_yt_server_peer_evidence_v431(client,member_hex.c_str(),&peer_v431) ||
        peer_v431.roster_candidate!=0u)
         return bad(86);
+    ShytYtGuestPeerEvidenceV432 game_v432{};
+    if(!shyt_yt_server_guest_peer_evidence_v432(
+            client,kGameMember,1,kSyntheticEbootSha,
+            fake_guest_member_read,&game_v432) ||
+       game_v432.guest_identity_valid!=1u ||
+       game_v432.server_roster_candidate!=1u ||
+       game_v432.correlated_hello!=0u ||
+       game_v432.matched_world_snapshot!=0u ||
+       game_v432.can_arm_game_queue!=0u || game_v432.can_route_game!=0u)
+        return bad(90);
+    const int reads_before_bad_sha=game_reads;
+    if(!shyt_yt_server_guest_peer_evidence_v432(
+           client,kGameMember,1,"different SHA",
+           fake_guest_member_read,&game_v432) ||
+       game_v432.guest_identity_valid!=0u ||
+       game_reads!=reads_before_bad_sha)
+        return bad(91);
+    if(!shyt_yt_server_guest_peer_evidence_v432(
+           client,kGameMember,1,kSyntheticEbootSha,
+           fake_guest_member_read,&game_v432) ||
+       game_v432.server_roster_candidate!=1u)
+        return bad(92);
     // V418: only a game-confirmed save slot and authentic TeamStart may
     // cause a party Hello. These negative cases MUST send no datagrams.
     if(shyt_yt_server_send_party_hello_v418(
@@ -584,6 +630,26 @@ int main() {
        peer_v431.roster_candidate!=0u ||
        peer_v431.can_arm_game_queue!=0u)
         return bad(88);
+    if(!shyt_yt_server_guest_peer_evidence_v432(
+           client,kGameMember,1,kSyntheticEbootSha,
+           fake_guest_member_read,&game_v432) ||
+       game_v432.guest_identity_valid!=1u ||
+       game_v432.server_roster_candidate!=1u ||
+       game_v432.correlated_hello!=1u ||
+       game_v432.matched_world_snapshot!=1u ||
+       game_v432.observed_world_epoch!=77u ||
+       game_v432.observed_world_cursor!=9u ||
+       game_v432.can_arm_game_queue!=0u || game_v432.can_route_game!=0u)
+        return bad(93);
+    fail_game_id=1;
+    if(!shyt_yt_server_guest_peer_evidence_v432(
+           client,kGameMember,1,kSyntheticEbootSha,
+           fake_guest_member_read,&game_v432) ||
+       game_v432.guest_identity_valid!=0u ||
+       game_v432.server_roster_candidate!=0u ||
+       game_v432.can_route_game!=0u)
+        return bad(94);
+    fail_game_id=0;
     ShytYtWorldProjectionObservationsV426 projection_obs{};
     const int projection_ok=
         shyt_yt_server_world_projection_observations_v426(client,&projection_obs);
@@ -702,6 +768,12 @@ int main() {
        peer_v431.observed_world_cursor!=11u ||
        peer_v431.can_route_game!=0u)
         return bad(89);
+    if(!shyt_yt_server_guest_peer_evidence_v432(
+           client,kGameMember,1,kSyntheticEbootSha,
+           fake_guest_member_read,&game_v432) ||
+       game_v432.observed_world_cursor!=11u ||
+       game_v432.can_route_game!=0u)
+        return bad(95);
     // V424: 24 original server-authenticated empty Entries heartbeats
     // must not exhaust the 16-message quarantine cap, revoke a healthy
     // link or discard the pending actual world Snapshot/new delta.
@@ -778,6 +850,12 @@ int main() {
        !shyt_yt_server_world_staging_observations_v425(client,&stage_obs) ||
        stage_obs.active!=0u || stage_obs.pending_packets!=0u ||
        stage_obs.revoked!=1u ||
+       !shyt_yt_server_guest_peer_evidence_v432(
+           client,kGameMember,1,kSyntheticEbootSha,
+           fake_guest_member_read,&game_v432) ||
+       game_v432.guest_identity_valid!=0u ||
+       game_v432.server_roster_candidate!=0u ||
+       game_v432.can_route_game!=0u ||
        !shyt_yt_server_peer_evidence_v431(client,real_remote,&peer_v431) ||
        peer_v431.roster_candidate!=0u ||
        peer_v431.correlated_hello!=0u ||
