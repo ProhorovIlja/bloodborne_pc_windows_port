@@ -87,6 +87,17 @@ typedef struct ShytYtPartyReplyObservationsV419 {
     uint64_t contexts_revoked;
     uint8_t candidate_awaiting_snapshot;
 } ShytYtPartyReplyObservationsV419;
+/* V420: original YT SnapshotRequest/Snapshot metadata observations.
+ * A matching epoch/last is NOT a validated world payload or game grant.
+ * No older C ABI struct is enlarged. */
+typedef struct ShytYtWorldSnapshotObservationsV420 {
+    uint64_t requests_sent;
+    uint64_t metadata_matching;
+    uint64_t metadata_rejected;
+    uint64_t metadata_unbound;
+    uint64_t contexts_revoked;
+    uint8_t awaiting_game_snapshot_consumer;
+} ShytYtWorldSnapshotObservationsV420;
 
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
@@ -120,6 +131,9 @@ int shyt_yt_server_team_observations_v415(const ShytYtServerSessionV408 *session
 /* Correlated same-link party Welcome, still NOT world authority or NetSync. */
 int shyt_yt_server_party_observations_v419(const ShytYtServerSessionV408 *session,
                                            ShytYtPartyReplyObservationsV419 *out);
+/* Diagnostic only; no NetSync or world application grant. */
+int shyt_yt_server_world_observations_v420(const ShytYtServerSessionV408 *session,
+                                           ShytYtWorldSnapshotObservationsV420 *out);
 /* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
  * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
  * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
@@ -145,6 +159,13 @@ int shyt_yt_server_send_party_hello_v418(ShytYtServerSessionV408 *session,
                                          const char *party,uint32_t loaded_slot,
                                          uint32_t game_run,int enemy_owner,
                                          uint64_t monotonic_ms);
+/* V420: manually opt in to canonical original YT SnapshotRequest{epoch=0,seq=0}
+ * AFTER a correlated party Welcome, over the same encrypted CoopStream.
+ * No game world is applied even if Snapshot is later received.
+ * 1=queued/sent, 0=not admitted, -1=local transport failure.
+ */
+int shyt_yt_server_send_snapshot_request_v420(ShytYtServerSessionV408 *session,
+                                               uint64_t monotonic_ms);
 /* Consume exactly one MAC-authenticated LINK presence notice.
  * Returns 1 for a notice; 0 if empty/bad args; -1 if the bounded
  * queue overflowed, permanently invalidating presence until a NEW
