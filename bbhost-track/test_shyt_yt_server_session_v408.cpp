@@ -5,6 +5,7 @@
 #include "shyt_yt_server_session_v408.h"
 #include "core/libraries/network/net_link.h"
 #include "coop/link_auth.h"
+#include "coop/coop_stream.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -261,8 +262,26 @@ int main() {
         return bad(22);
     if(!shyt_yt_server_counters_v408(client,&counts) ||
        counts.authenticated_data_quarantined!=1 ||
-       counts.authenticated_coop_quarantined!=1)
+       counts.authenticated_coop_quarantined!=1 ||
+       counts.coop_frames_reassembled_v413!=0u ||
+       counts.coop_frames_rejected_v413!=1u)
         return bad(23);
+    // A REAL YT reliable CoopStream frame over the authenticated OS UDP
+    // server socket is now reassembled, but never injected into BBHost.
+    BloodborneCoop::CoopStream server_world("shadnet", 777u);
+    const std::vector<u8> imaginary_world_state(2600u,0x5au);
+    server_world.Send(imaginary_world_state,1401);
+    const auto original_frames=server_world.Flush(1401);
+    if(original_frames.size()<3u)return bad(41);
+    for(const auto& body:original_frames) {
+        if(!send_encrypted(YT::EncodeCoop(body)))return bad(42);
+    }
+    if(shyt_yt_server_tick_v408(client,1420)!=1 ||
+       !shyt_yt_server_counters_v408(client,&counts) ||
+       counts.coop_frames_reassembled_v413!=original_frames.size() ||
+       counts.coop_messages_held_v413!=1u ||
+       counts.coop_frames_rejected_v413!=1u)
+        return bad(43);
     // Even from the configured server socket, unsigned/raw game traffic
     // cannot go to the game. It must have the original Noise NK tag.
     if(!send_to(server,endpoint,YT::EncodeData(
