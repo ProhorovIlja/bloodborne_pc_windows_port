@@ -65,13 +65,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C pinned-yt rev-parse HEAD:server/coop/game_link.h)" = 5029581251bfe5decf562c19a10bdd079150cdad
-          test "$(git -C pinned-yt rev-parse HEAD:server/coop/coop_stream.h)" = 3f488861bd94ab1cdba8a07a9324267bab7a76a8
-          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+          echo V413_SOURCE_PIN >v413-brief.txt
+          if [ "$(git -C pinned-yt rev-parse HEAD:server/coop/game_link.h)" != 5029581251bfe5decf562c19a10bdd079150cdad ] ||
+             [ "$(git -C pinned-yt rev-parse HEAD:server/coop/coop_stream.h)" != 3f488861bd94ab1cdba8a07a9324267bab7a76a8 ]; then
+            echo V413_SOURCE_DRIFT >>v413-brief.txt
+            exit 1
+          fi
+          if ! g++ -std=c++20 -O2 -Wall -Wextra -Werror \
             -Ibbhost-track -Ipinned-yt/server \
             bbhost-track/test_shyt_yt_coop_transport_v413.cpp \
-            -o "$RUNNER_TEMP/shyt-coop-stream-v413"
-          "$RUNNER_TEMP/shyt-coop-stream-v413"
+            -o "$RUNNER_TEMP/shyt-coop-stream-v413" >v413-compile.log 2>&1; then
+            echo V413_COMPILE_FAIL >>v413-brief.txt
+            tail -n 6 v413-compile.log | cut -c1-150 >>v413-brief.txt
+            exit 1
+          fi
+          if ! "$RUNNER_TEMP/shyt-coop-stream-v413" >v413-test.log 2>&1; then
+            echo V413_RUNTIME_FAIL >>v413-brief.txt
+            tail -n 6 v413-test.log | cut -c1-150 >>v413-brief.txt
+            exit 1
+          fi
+          cat v413-test.log
+      - name: Upload bounded V413 diagnostic only on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V413-CoopStream-Diagnostic-Max7Lines
+          path: v413-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore
       - name: Verify owner game compatibility probe never sends or prints game data
         shell: bash
         run: |
