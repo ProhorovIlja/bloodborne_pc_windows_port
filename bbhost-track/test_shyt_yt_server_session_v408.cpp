@@ -541,13 +541,40 @@ int main() {
        world_observations.awaiting_game_snapshot_consumer!=1u ||
        coop_counts.messages_held!=2u)
         return bad(72);
+    // V422: a real server-authenticated original reliable Entries message
+    // must validate its consecutive log seqs, without delivering them to
+    // game memory or consuming the still-quarantined world snapshot.
+    std::vector<u8> delta_envelope,delta_body,delta_entry_a,delta_entry_b;
+    putnum(delta_body,1u,77u); // same world epoch as V419 Welcome
+    putnum(delta_body,2u,9u);  // advertised world last
+    putnum(delta_entry_a,1u,7u);
+    putnum(delta_entry_a,2u,0x18000000u);
+    putnum(delta_entry_a,3u,1u);
+    putnum(delta_entry_a,4u,55u);
+    putnum(delta_entry_a,5u,1u);
+    putnum(delta_entry_b,1u,8u);
+    putnum(delta_entry_b,2u,0x18000000u);
+    putnum(delta_entry_b,3u,2u);
+    putnum(delta_entry_b,4u,56u);
+    putbytes(delta_body,3u,delta_entry_a);
+    putbytes(delta_body,3u,delta_entry_b);
+    putbytes(delta_envelope,5u,delta_body); // original Envelope.entries=5
+    server_world.Send(delta_envelope,1430);
+    for(const auto& frame:server_world.Flush(1430))
+        if(!send_encrypted(YT::EncodeCoop(frame)))return bad(73);
+    if(shyt_yt_server_tick_v408(client,1431)!=1 ||
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
+       coop_counts.messages_held!=3u ||
+       !shyt_yt_server_world_observations_v420(client,&world_observations) ||
+       world_observations.awaiting_game_snapshot_consumer!=1u)
+        return bad(74);
     // An inner frame from a different identity cannot impersonate shadnet
     // even when the outer authenticated test server sends it.
     BloodborneCoop::CoopStream impostor("not-shadnet",800u);
-    impostor.Send(lobby_envelope,1430);
-    for(const auto& frame:impostor.Flush(1430))
+    impostor.Send(lobby_envelope,1433);
+    for(const auto& frame:impostor.Flush(1433))
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(51);
-    if(shyt_yt_server_tick_v408(client,1431)!=1 ||
+    if(shyt_yt_server_tick_v408(client,1434)!=1 ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        coop_counts.frames_rejected!=2u ||
        !shyt_yt_server_team_observations_v415(client,&observations) ||
