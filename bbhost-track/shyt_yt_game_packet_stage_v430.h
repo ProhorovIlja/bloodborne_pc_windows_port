@@ -32,7 +32,6 @@ public:
         Accepted, Closed, UnboundMember, BadFrame, Full
     };
     struct Packet {
-        std::string member;
         std::vector<std::uint8_t> frame; // exact immutable YT native bytes
         std::uint64_t epoch=0, generation=0, sequence=0;
         std::uint32_t channel=0;
@@ -80,7 +79,6 @@ public:
         }
         // Advance only after successfully storing the complete bytes.
         Packet candidate;
-        candidate.member=original_online_id;
         candidate.frame.assign(frame.begin(),frame.end());
         candidate.epoch=epoch_;
         candidate.generation=generation_;
@@ -110,7 +108,6 @@ public:
            front->sequence!=sequence)return false;
         const auto size=front->frame.size();
         Wipe(packets_.front().frame);
-        packets_.front().member.assign(packets_.front().member.size(),'\0');
         packets_.pop_front();
         held_bytes_-=size;
         stats_.bytes_consumed+=size;
@@ -123,7 +120,6 @@ public:
         member_.clear();
         for(auto& packet:packets_) {
             Wipe(packet.frame);
-            packet.member.assign(packet.member.size(),'\0');
         }
         packets_.clear();held_bytes_=0;
         if(generation_!=UINT64_MAX)++generation_;
@@ -131,6 +127,9 @@ public:
     bool Armed() const noexcept {return armed_;}
     std::size_t Pending() const noexcept{return packets_.size();}
     std::size_t BytesHeld() const noexcept{return held_bytes_;}
+    // Store one authenticated member binding per queue, not one repeated
+    // heap-allocated OnlineID for every game packet (up to 32 copies).
+    const std::string& BoundMember() const noexcept{return member_;}
     Counters Stats() const noexcept{return stats_;}
     std::uint64_t Generation() const noexcept{return generation_;}
 private:
