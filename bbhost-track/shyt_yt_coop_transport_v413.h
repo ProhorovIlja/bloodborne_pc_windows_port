@@ -47,12 +47,15 @@ public:
         return true;
     }
 
-    // Returns YT GameFrame bodies only. The caller still must wrap them as
-    // SHLK kind Coop and seal/send with the authenticated server session.
+    // Transport ACK means the message was safely staged in the BOUNDED
+    // quarantine, never that its world event was applied to the game. Holding
+    // the ACK until gameplay authorization would deadlock an ordinary YT
+    // LobbyHello -> LobbyState exchange. The party snapshot/epoch is the
+    // separate application-level resume and authorization boundary.
+    // Returns YT GameFrame bodies (ACKs, resends and app sends); outer SHLK
+    // Coop encoding + Noise NK sealing remain the controller's responsibility.
     std::vector<std::vector<u8>> Flush(s64 now_ms) {
-        // A transport ACK would assert reliable delivery before a room/world
-        // consumer has processed an envelope. Do not ACK quarantined events.
-        if (failed_ || !quarantine_.empty()) return {};
+        if (failed_) return {};
         auto frames = stream_.Flush(now_ms);
         for (const auto& frame : frames) {
             if (frame.size() > MaxFrameBytes) {
@@ -112,6 +115,16 @@ public:
         if (failed_ || index >= quarantine_.size()) return false;
         const auto& bytes = quarantine_[index];
         result = std::span<const u8>{bytes.data(), bytes.size()};
+        return true;
+    }
+    // Remove ONLY a previously inspected and fully handled control message
+    // at the given bounded queue position. Unknown world/save events stay
+    // quarantined for a future verified gameplay consumer.
+    bool DiscardHandledAt(std::size_t index) {
+        if (failed_ || index >= quarantine_.size()) return false;
+        auto it = quarantine_.begin() + static_cast<std::ptrdiff_t>(index);
+        quarantined_bytes_ -= it->size();
+        quarantine_.erase(it);
         return true;
     }
     bool TakeQuarantined(std::vector<u8>& result) {
