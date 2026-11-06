@@ -350,13 +350,20 @@ int main() {
     };
     std::vector<u8> team;
     puttext(team,1,"team-v415");
-    puttext(team,2,"fictional-id");
+    puttext(team,2,member_hex); // original shadNet AuthenticatedMember()
     putnum(team,4,1);
     puttext(team,6,"world-v415");
     puttext(team,7,"world:world-v415");
     for(unsigned i=0;i<5u;++i) {
         std::vector<u8> m;
-        const std::string id=i==0u?"fictional-id":"hunter"+std::to_string(i+1u);
+        // Every lobby TeamMember.member is an authenticated online ID
+        // converted to lower-case hex, never the display name.
+        const std::string raw=i==0u?"fictional-id":"hunter"+std::to_string(i+1u);
+        std::string id;
+        for(unsigned char c:raw) {
+            id.push_back(hex[c>>4u]);
+            id.push_back(hex[c&15u]);
+        }
         puttext(m,1,id);
         putnum(m,4,1);
         putnum(m,5,i+1u);
@@ -380,7 +387,7 @@ int main() {
     std::vector<u8> start, start_envelope;
     puttext(start,1,"team-v415");
     puttext(start,2,"world:world-v415");
-    puttext(start,3,"fictional-id");
+    puttext(start,3,member_hex);
     putnum(start,4,1);
     puttext(start,5,"world-v415");
     putbytes(start_envelope,26,start);
