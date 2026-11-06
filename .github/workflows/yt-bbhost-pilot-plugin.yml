@@ -97,6 +97,15 @@ jobs:
             -Ibbhost-track bbhost-track/test_shyt_yt_full_guest_preflight_v428.c \
             -o "$RUNNER_TEMP/shyt-yt-full-preflight-v428"
           "$RUNNER_TEMP/shyt-yt-full-preflight-v428"
+      - name: Verify V429 original YT send and NetSyncUpdate passive game ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ipinned-bbhost/include -Ibbhost-track \
+            bbhost-track/test_shyt_yt_game_link_observer_v429.c \
+            -o "$RUNNER_TEMP/shyt-yt-game-link-observer-v429"
+          "$RUNNER_TEMP/shyt-yt-game-link-observer-v429"
       - name: Strict source pin and GPL3 plugin public API guard
         shell: bash
         run: |
@@ -438,6 +447,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_projection_v426.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_guest_hook_preflight_v427.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_full_guest_preflight_v428.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_game_link_observer_v429.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
