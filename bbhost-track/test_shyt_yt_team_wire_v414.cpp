@@ -91,6 +91,17 @@ int main() {
     assert(lite_welcome.accepted==original_welcome.welcome().accepted());
     assert(lite_welcome.epoch==original_welcome.welcome().epoch());
     assert(lite_welcome.last==original_welcome.welcome().last());
+    // Proto3 does NOT serialize accepted=false; a denied Welcome
+    // with its refusal text is valid and must be reported as Refused.
+    bbcoop::Envelope denied_welcome;
+    denied_welcome.mutable_welcome()->set_text("wrong party");
+    assert(!denied_welcome.welcome().accepted());
+    const auto lite_denied=Lite::Decode(Encode(denied_welcome));
+    assert(lite_denied.kind==Lite::Kind::Welcome && !lite_denied.accepted);
+    bbcoop::Envelope empty_refusal;
+    empty_refusal.mutable_welcome();
+    const auto lite_empty=Lite::Decode(Encode(empty_refusal));
+    assert(lite_empty.kind==Lite::Kind::Welcome && !lite_empty.accepted);
     // V420: original v1.4.0 SnapshotRequest (empty proto3 defaults)
     // must match the two canonical bytes transmitted by the BBHost link.
     bbcoop::Envelope original_snapshot_request;
