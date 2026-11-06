@@ -38,6 +38,16 @@ jobs:
           path: pinned-yt
           persist-credentials: false
           submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: pinned-yt-v140
+          filter: blob:none
+          sparse-checkout: |
+            server/coop/coop.proto
+            server/coop/team_lobby.cpp
+          persist-credentials: false
       - name: Verify actual original YT game packet send hook site against BBHost ABI
         shell: bash
         run: |
@@ -101,6 +111,45 @@ jobs:
             -Ibbhost-track bbhost-track/test_shyt_yt_team_authority_v414.cpp \
             -o "$RUNNER_TEMP/shyt-authority-v414"
           "$RUNNER_TEMP/shyt-authority-v414"
+      - name: Build and compare lite BBHost authority codec with real YT v1.4.0 protobuf
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt-v140 rev-parse HEAD)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          grep -Fq 'PROTOCOL_CURRENT = 8;' pinned-yt-v140/server/coop/coop.proto
+          grep -Fq 'GuestSigns{7, 6, 5,' pinned-yt-v140/server/coop/team_lobby.cpp
+          if ! sudo apt-get update -qq >v415-setup.log 2>&1 ||
+             ! sudo apt-get install -qq -y --no-install-recommends protobuf-compiler libprotobuf-dev >>v415-setup.log 2>&1; then
+            echo V415_PROTOC_DEPENDENCY_FAILED
+            tail -n 4 v415-setup.log | cut -c1-150
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/yt-v140-proto"
+          if ! protoc -I pinned-yt-v140/server/coop \
+              --cpp_out="$RUNNER_TEMP/yt-v140-proto" pinned-yt-v140/server/coop/coop.proto \
+              >v415-proto.log 2>&1; then
+            echo V415_PROTO_GENERATION_FAILED
+            tail -n 4 v415-proto.log | cut -c1-150
+            exit 1
+          fi
+          if ! g++ -std=c++20 -O2 -w \
+              -I"$RUNNER_TEMP/yt-v140-proto" \
+              -c "$RUNNER_TEMP/yt-v140-proto/coop.pb.cc" \
+              -o "$RUNNER_TEMP/v415-coop.pb.o" >v415-build.log 2>&1; then
+            echo V415_ORIGINAL_PROTO_COMPILE_FAILED
+            tail -n 5 v415-build.log | cut -c1-150
+            exit 1
+          fi
+          if ! g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+              -Ibbhost-track -I"$RUNNER_TEMP/yt-v140-proto" \
+              bbhost-track/test_shyt_yt_team_wire_v414.cpp \
+              "$RUNNER_TEMP/v415-coop.pb.o" -lprotobuf-lite \
+              -o "$RUNNER_TEMP/v415-real-protobuf" >>v415-build.log 2>&1; then
+            echo V415_LITE_CODEC_TEST_COMPILE_FAILED
+            tail -n 5 v415-build.log | cut -c1-150
+            exit 1
+          fi
+          "$RUNNER_TEMP/v415-real-protobuf"
       - name: Verify owner game compatibility probe never sends or prints game data
         shell: bash
         run: |
@@ -275,6 +324,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_server_session_v408.cpp
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_coop_transport_v413.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_team_authority_v414.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_team_wire_lite_v415.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
