@@ -135,10 +135,18 @@ def command_v6(port_dir: Path, data_dir: Path, settings: dict) -> list[str]:
     # Leave BBHost's own settings and authenticator in BBHost, rather
     # than passing shadNet passwords, keys or BBPort environment flags.
     local_config = data / "bbhost.toml"
-    if local_config.is_symlink():
+    if local_config.is_symlink() or (local_config.exists() and not local_config.is_file()):
         raise EngineSetupError("Unsafe BBHost configuration")
-    if local_config.is_file():
-        command.extend(["--config", str(local_config)])
+    # The official BBHost default connects to a DIFFERENT public server.
+    # A Seamless Hunt launch must never silently sign in there if the
+    # private BBHost profile has not been configured yet.
+    if not local_config.is_file():
+        raise EngineSetupError(
+            "Set up the separate BBHost profile (bbhost.toml) first. "
+            "Refusing implicit third-party public server defaults. "
+            "This experimental engine does not yet support YT seamless co-op."
+        )
+    command.extend(["--config", str(local_config)])
     return command
 
 
