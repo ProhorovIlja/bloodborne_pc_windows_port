@@ -35,7 +35,7 @@ static bbcoop::Envelope Lobby(int players=5) {
         member->set_name("Hunter "+std::to_string(i));
         member->set_ready(true);
         member->set_slot(static_cast<std::uint32_t>(i));
-        member->set_sign(i==1?0u:static_cast<std::uint32_t>(8-i));
+        member->set_sign(i==1?0u:static_cast<std::uint32_t>(9-i));
     }
     return env;
 }
