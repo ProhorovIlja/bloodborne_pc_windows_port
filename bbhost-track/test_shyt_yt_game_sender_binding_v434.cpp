@@ -64,7 +64,7 @@ int main() {
     assert(Guard::Inspect(Roundtrip(spoof),"hunter2")==Status::SpoofedSender);
     spoof.sender=""; // original codec accepts empty but link guard doesn't
     assert(Guard::Inspect(Roundtrip(spoof),"hunter2")==Status::SpoofedSender);
-    spoof.sender="hunter2\0bad";
+    spoof.sender=std::string("hunter2\\0bad",11u);
     assert(Guard::Inspect(Roundtrip(spoof),"hunter2")==Status::SpoofedSender);
     spoof.sender=std::string(17u,'a');
     assert(Guard::Inspect(Roundtrip(spoof),"hunter2")==Status::SpoofedSender);
