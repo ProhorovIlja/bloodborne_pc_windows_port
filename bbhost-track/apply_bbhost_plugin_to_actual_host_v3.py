@@ -29,6 +29,8 @@ YT_NET_BLOBS={
 }
 YT_CRYPTO_BLOBS={
     "coop/coop_types.h":"457f7c7126868d81052fb492dea772ffbf6a18b1",
+    "coop/game_link.h":"5029581251bfe5decf562c19a10bdd079150cdad",
+    "coop/coop_stream.h":"3f488861bd94ab1cdba8a07a9324267bab7a76a8",
     "coop/link_auth.h":"589b823ae0733e9104fcc0140726c8080ade20db",
     "coop/link_crypto.cpp":"b91b3affaca7e2da0a357f1a747a90246b167b79",
     "coop/monocypher/monocypher.c":"fe5bbdc8bde356ae80fe0b136d8c8e9212c15db8",
@@ -131,6 +133,7 @@ def main()->None:
     yt_udp_header=Path(__file__).resolve().parent/"shyt_yt_udp_endpoint_v406.h"
     yt_session_source=Path(__file__).resolve().parent/"shyt_yt_server_session_v408.cpp"
     yt_session_header=Path(__file__).resolve().parent/"shyt_yt_server_session_v408.h"
+    yt_coop_transport_header=Path(__file__).resolve().parent/"shyt_yt_coop_transport_v413.h"
     yt_work_source=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.cpp"
     yt_work_header=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.h"
     if (cmake.is_symlink() or not cmake.is_file() or
@@ -152,6 +155,7 @@ def main()->None:
         not yt_udp_header.is_file() or yt_udp_header.is_symlink() or
         not yt_session_source.is_file() or yt_session_source.is_symlink() or
         not yt_session_header.is_file() or yt_session_header.is_symlink() or
+        not yt_coop_transport_header.is_file() or yt_coop_transport_header.is_symlink() or
         not yt_work_source.is_file() or yt_work_source.is_symlink() or
         not yt_work_header.is_file() or yt_work_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
@@ -177,6 +181,7 @@ def main()->None:
         shutil.copyfile(yt_udp_header,plugin_root/yt_udp_header.name)
         shutil.copyfile(yt_session_source,plugin_root/yt_session_source.name)
         shutil.copyfile(yt_session_header,plugin_root/yt_session_header.name)
+        shutil.copyfile(yt_coop_transport_header,plugin_root/yt_coop_transport_header.name)
         shutil.copyfile(yt_work_source,plugin_root/yt_work_source.name)
         shutil.copyfile(yt_work_header,plugin_root/yt_work_header.name)
         vendored=plugin_root/"yt_original"/"coop"
