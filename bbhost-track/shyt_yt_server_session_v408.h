@@ -69,6 +69,16 @@ typedef struct ShytYtCoopCountersV413 {
     uint64_t fail_closed;
     uint64_t messages_held; /* point-in-time count, not a cumulative total */
 } ShytYtCoopCountersV413;
+/* V415: observed original YT lobby/team envelopes after the pinned
+ * server's Noise NK and reliable CoopStream. Diagnostic only: an
+ * unbound party Welcome NEVER authorizes game packets. */
+typedef struct ShytYtTeamObservationsV415 {
+    uint64_t lobby_states_accepted;
+    uint64_t team_starts_accepted;
+    uint64_t authority_messages_rejected;
+    uint64_t party_welcomes_unbound;
+} ShytYtTeamObservationsV415;
+
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
  * No implicit fallback to unsigned/TOFU key, and no credential capture.
@@ -93,6 +103,11 @@ int shyt_yt_server_counters_v408(const ShytYtServerSessionV408 *session,
  * permission to deliver network data to the guest game. */
 int shyt_yt_server_coop_counters_v413(const ShytYtServerSessionV408 *session,
                                      ShytYtCoopCountersV413 *out);
+/* V415 does not expose or assert team/world authorization: until the
+ * separate party-stream Hello/Welcome binding is proven, game injection
+ * remains disabled and these are observation counters only. */
+int shyt_yt_server_team_observations_v415(const ShytYtServerSessionV408 *session,
+                                          ShytYtTeamObservationsV415 *out);
 /* Consume exactly one MAC-authenticated LINK presence notice.
  * Returns 1 for a notice; 0 if empty/bad args; -1 if the bounded
  * queue overflowed, permanently invalidating presence until a NEW
