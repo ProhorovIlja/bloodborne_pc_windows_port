@@ -120,6 +120,19 @@ int shyt_yt_server_team_observations_v415(const ShytYtServerSessionV408 *session
 int shyt_yt_server_send_lobby_hello_v416(ShytYtServerSessionV408 *session,
                                           const char *display_name,
                                           int playing,uint64_t monotonic_ms);
+/* V418: opt-in original YT Envelope{Hello} for a server-validated
+ * TeamStart, only after the caller has actually loaded the selected game
+ * save slot. The team ID, party and host come from the authenticated
+ * lobby (V414), while run/slot must be furnished by the owner game.
+ * The initial SHLK Login and lobby Hello are prerequisites.
+ * No implicit start, world-save write, NetSync, or peer Data permission.
+ * 1=sent, 0=refused, -1=local send failure, single-threaded with tick().
+ * A party Welcome is NOT yet a retail/gameplay authorization.
+ */
+int shyt_yt_server_send_party_hello_v418(ShytYtServerSessionV408 *session,
+                                         const char *party,uint32_t loaded_slot,
+                                         uint32_t game_run,int enemy_owner,
+                                         uint64_t monotonic_ms);
 /* Consume exactly one MAC-authenticated LINK presence notice.
  * Returns 1 for a notice; 0 if empty/bad args; -1 if the bounded
  * queue overflowed, permanently invalidating presence until a NEW
