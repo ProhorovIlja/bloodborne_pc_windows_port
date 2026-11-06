@@ -11,6 +11,7 @@
 #include "shyt_yt_coop_transport_v413.h"
 #include "shyt_yt_team_authority_v414.h"
 #include "shyt_yt_team_wire_lite_v415.h"
+#include "shyt_yt_party_reply_v419.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -55,6 +56,7 @@ struct ShytYtServerSessionV408 {
     ShytYtServerCountersV408 counters{};
     ShytYtCoopCountersV413 coop_counters{};
     ShytYtTeamObservationsV415 team_observations{};
+    SeamlessHunt::YtPartyReplyV419 party_reply;
     std::unique_ptr<SeamlessHunt::YtTeamAuthorityV414> team_gate;
     size_t coop_observed=0;
     bool lobby_hello_submitted=false;
@@ -115,6 +117,7 @@ void reject(ShytYtServerSessionV408& s) noexcept {
 }
 void invalidate_coop(ShytYtServerSessionV408& s) noexcept {
     if(s.team_gate)s.team_gate->Revoke();
+    s.party_reply.Revoke();
     s.coop_observed=0;
     if(s.coop_quarantine && s.coop_quarantine->Invalidate()) {
         ++s.coop_counters.fail_closed;
@@ -125,7 +128,7 @@ void invalidate_coop(ShytYtServerSessionV408& s) noexcept {
 // grant. In particular an unbound party Welcome cannot call
 // OnAuthenticatedPartyWelcome(). Reliable world data stays quarantined
 // and no game/NetSync callback is invoked.
-void observe_team_authority(ShytYtServerSessionV408& s) {
+void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
     if(!s.team_gate || !s.coop_quarantine)return;
     std::span<const u8> bytes;
     while(s.coop_quarantine->PeekQuarantined(s.coop_observed,bytes)) {
@@ -133,6 +136,7 @@ void observe_team_authority(ShytYtServerSessionV408& s) {
         using Kind=SeamlessHunt::YtTeamWireLiteV415::Kind;
         switch(decoded.kind) {
         case Kind::Lobby:
+            s.party_reply.Revoke(); // any roster refresh fences in-flight Hello
             if(!decoded.lobby_has_team) {
                 // Ordinary YT initial lobby: no group yet. Never a world
                 // grant and never a malformed-message error.
@@ -144,16 +148,28 @@ void observe_team_authority(ShytYtServerSessionV408& s) {
                 ++s.team_observations.authority_messages_rejected;
             break;
         case Kind::Start:
+            s.party_reply.Revoke(); // world/start refresh requires new session
             if(s.team_gate->OnAuthenticatedTeamStart(decoded.start))
                 ++s.team_observations.team_starts_accepted;
             else
                 ++s.team_observations.authority_messages_rejected;
             break;
-        case Kind::Welcome:
-            // The stream's party identity has NOT been established.
-            ++s.team_observations.party_welcomes_unbound;
+        case Kind::Welcome: {
+            // The reply echoes NO world/party/run. Correlate only with our
+            // explicit V418 Hello, authenticated stream, short time window
+            // and still-current V414 TeamStart. Never grant game authority.
+            bool is_host=false;
+            const bool prepared=s.party_reply.Pending() &&
+                s.team_gate->MaySendPartyHello(
+                    s.party_reply.Party(),s.party_reply.Slot(),is_host);
+            const auto result=s.party_reply.OnAuthenticatedWelcome(
+                decoded.accepted,now,prepared);
+            if(result==SeamlessHunt::YtPartyReplyV419::Reply::Unbound)
+                ++s.team_observations.party_welcomes_unbound;
             break;
+        }
         case Kind::Invalid:
+            s.party_reply.Revoke();
             s.team_gate->Revoke();
             ++s.team_observations.authority_messages_rejected;
             break;
@@ -493,7 +509,7 @@ void handle_control(ShytYtServerSessionV408& s,
                        std::span<const u8>{held.data(),body_size},
                        static_cast<s64>(now))) {
                     ++s.coop_counters.frames_reassembled;
-                    observe_team_authority(s);
+                    observe_team_authority(s,now);
                     s.coop_counters.messages_held=
                         s.coop_quarantine->Quarantined();
                 } else {
@@ -503,6 +519,7 @@ void handle_control(ShytYtServerSessionV408& s,
                         // also revoke any observed team/world authority,
                         // never retain stale lobby grants across instances.
                         if(s.team_gate)s.team_gate->Revoke();
+                        s.party_reply.Revoke();
                         s.coop_observed=0;
                         if(s.coop_counters.fail_closed==0u)
                             ++s.coop_counters.fail_closed;
@@ -743,6 +760,11 @@ extern "C" int shyt_yt_server_send_party_hello_v418(
         if(!s->coop_quarantine->QueueOutgoing(
                envelope,static_cast<s64>(now)))
             return 0;
+        if(!s->party_reply.Arm(requested_party,loaded_slot,game_run,now)) {
+            invalidate_coop(*s);
+            s->phase=SHYT_V408_IO_FAILED;
+            return -1;
+        }
         s->party_hello_submitted=true;
         if(!flush_outgoing_coop_v416(*s,now)) {
             invalidate_coop(*s);
@@ -761,6 +783,16 @@ extern "C" int shyt_yt_server_team_observations_v415(
     if(out)*out={};
     if(!s || !out)return 0;
     *out=s->team_observations;
+    return 1;
+}
+extern "C" int shyt_yt_server_party_observations_v419(
+    const ShytYtServerSessionV408* s,ShytYtPartyReplyObservationsV419* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    const auto stats=s->party_reply.Stats();
+    *out={stats.party_hellos_sent,stats.replies_correlated,
+          stats.replies_refused,stats.replies_unbound,stats.contexts_revoked,
+          static_cast<uint8_t>(s->party_reply.CandidateAwaitingSnapshot()?1u:0u)};
     return 1;
 }
 extern "C" int shyt_yt_server_take_member_v412(
