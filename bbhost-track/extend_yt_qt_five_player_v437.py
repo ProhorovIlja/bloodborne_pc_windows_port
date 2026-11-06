@@ -75,6 +75,19 @@ int V437FivePartyEncryptedRouteAndRebind() {
     return net.Receive(from,Encode(Data{
        VirtualEndpointOf(destination),GamePacketsFrame(f)}),ms);
   };
+  // In original GameLink a denied unreliable native entry disappears,
+  // but the authenticated ACK-only GameFrame is deliberately forwarded.
+  // Confusing an empty ACK with zero datagrams causes false failures.
+  const auto only_ack=[&](const Hub::Result& routed,const Endpoint& target) {
+    const auto sent=SentTo(routed,target);
+    if(sent.size()!=1)return false;
+    const auto data=DecodeData(sent[0]);
+    if(!data || data->frame.size()<9)return false;
+    const auto frame=BloodborneCoop::DecodeGameFrame({
+        reinterpret_cast<const u8*>(data->frame.constData())+9,
+        static_cast<std::size_t>(data->frame.size()-9)});
+    return frame && frame->entries.empty();
+  };
 
   // 5/5 cooperative hunters send encrypted game data by original
   // virtual YT addresses, never each other's physical UDP address.
@@ -104,7 +117,7 @@ int V437FivePartyEncryptedRouteAndRebind() {
   visiting[Gehrman.Key()]="yarnham-team";
   CHECK(SentTo(transmit(Kaniel,"Kaniel","Gehrman",0x06u,50),Gehrman).size()==1);
   CHECK(SentTo(transmit(Gehrman,"Gehrman","Kaniel",0x06u,51),Kaniel).size()==1);
-  CHECK(transmit(Kaniel,"Kaniel","Gehrman",0x31u,52).sends.isEmpty());
+  CHECK(only_ack(transmit(Kaniel,"Kaniel","Gehrman",0x31u,52),Gehrman));
   const auto forbidden_control=Encode(Data{VirtualEndpointOf("Gehrman"),
       QByteArray::fromHex("ffffffff")+"SHAD"+char(0x41)+"world"});
   CHECK(net.Receive(Kaniel,forbidden_control,53).sends.isEmpty());
@@ -121,7 +134,7 @@ int V437FivePartyEncryptedRouteAndRebind() {
   // Map mismatch blocks same-map movement even on an otherwise linked,
   // authenticated host-invader path. The YT original policy is oracle.
   maps[Maria.Key()]=202u;
-  CHECK(transmit(Kaniel,"Kaniel","Maria",0x06u,64).sends.isEmpty());
+  CHECK(only_ack(transmit(Kaniel,"Kaniel","Maria",0x06u,64),Maria));
   maps[Maria.Key()]=101u;
 
   // Original YT virtual endpoint survives NAT port rebind. Old source
