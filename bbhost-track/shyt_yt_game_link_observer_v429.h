@@ -55,8 +55,10 @@ static inline int shyt_yt_v429_observe_send(
      * resident during a load, and reading payload has no approval. */
     const uint64_t packet=ctx->arg[3]; // original game's rcx
     const uint64_t member=ctx->arg[2]; // original game's rdx
-    const uint64_t reliability=ctx->arg[1]; // original game's rsi
-    const uint64_t size=ctx->arg[4]; // original game's r8
+    // Original TakeGamePacket casts both registers to u32; their
+    // upper halves are NOT part of the guest call's logical values.
+    const uint32_t reliability=(uint32_t)ctx->arg[1]; // rsi low 32
+    const uint32_t size=(uint32_t)ctx->arg[4]; // r8 low 32
     if (packet<0x10000u || size<SHYT_V429_MIN_NATIVE_FRAME ||
         size>SHYT_V429_MAX_NATIVE_FRAME) {
         atomic_fetch_add_explicit(&s->outgoing_malformed,1u,memory_order_relaxed);
