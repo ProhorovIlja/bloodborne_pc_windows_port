@@ -587,6 +587,7 @@ void handle_control(ShytYtServerSessionV408& s,
                         if(s.team_gate)s.team_gate->Revoke();
                         s.party_reply.Revoke();
                         s.world_snapshot.Revoke();
+                        s.world_delta.Revoke(); // V424: no stale world cursor
                         s.coop_observed=0;
                         if(s.coop_counters.fail_closed==0u)
                             ++s.coop_counters.fail_closed;
