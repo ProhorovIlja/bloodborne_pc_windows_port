@@ -61,17 +61,22 @@ def check(mod):
         original=mod.EXPECTED_GAME_109
         try:
             mod.EXPECTED_GAME_109=hashlib.sha256(fake).hexdigest()
+            # An absent profile must not silently select BBHost's
+            # unrelated default public backend in the Seamless Hunt launcher.
+            try:
+                mod.command_v6(appdir, data, profile)
+            except mod.EngineSetupError as exc:
+                assert "implicit third-party public server" in str(exc)
+            else:
+                raise AssertionError("BBHost started without an explicit profile")
+            toml=data/"user"/"bbhost"/"bbhost.toml"
+            toml.write_text('[online]\nhost = "localhost"\n')
             args=mod.command_v6(appdir,data,profile)
             assert args[0]==str(exe.resolve())
             assert args[1:3]==["--app0",str(game.resolve())]
             assert args[3:5]==["--eboot",str(owner.resolve())]
             assert args[5:7]==["--data",str(data/"user"/"bbhost")]
-            assert "--config" not in args
-            toml=data/"user"/"bbhost"/"bbhost.toml"
-            toml.write_text('[online]\nhost = "localhost"\n')
-            args=mod.command_v6(appdir,data,profile)
             assert args[-2:]==["--config",str(toml)]
-            toml.unlink()
         finally:
             mod.EXPECTED_GAME_109=original
         # V9: simulate the owner's historical CUSA03173-patch layout,
