@@ -590,3 +590,71 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           & "$env:RUNNER_TEMP\bbhost-ledger-v4.exe"
           exit $LASTEXITCODE
+
+  yt-v435-original-qt-hub:
+    name: YT v1.4.0 original Qt Hub authenticated GameFrame integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: pinned-yt-v140
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            server/src/server_link.cpp
+            server/src/server_link.h
+            server/src/virtual_address.h
+            server/coop/coop_types.h
+            server/coop/game_link.h
+            server/coop/packet_routes.h
+            server/coop/build_fingerprint.h
+            server/coop/link_auth.h
+            server/coop/link_crypto.cpp
+            server/coop/monocypher/monocypher.c
+            server/coop/monocypher/monocypher.h
+            server/tests/test_server_link.cpp
+            server/tests/contracts/server_link_frames.txt
+      - name: Install ONLY Qt6 Core headers and compiler for actual YT test
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq >"$RUNNER_TEMP/v435-qt-apt.log" 2>&1
+          sudo apt-get install -qq -y --no-install-recommends qt6-base-dev pkg-config >>"$RUNNER_TEMP/v435-qt-apt.log" 2>&1
+          pkg-config --modversion Qt6Core
+      - name: Build original Qt Hub from source overlay and exercise actual encrypted/relay tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt-v140 rev-parse HEAD)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          python3 bbhost-track/apply_yt_game_sender_guard_v434.py \
+            --yt pinned-yt-v140 \
+            --header bbhost-track/shyt_yt_game_sender_binding_v434.h \
+            --out "$RUNNER_TEMP/v435-yt-overlay"
+          python3 bbhost-track/apply_yt_server_link_test_v435.py \
+            --yt pinned-yt-v140 \
+            --out "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
+          test -z "$(git -C pinned-yt-v140 status --porcelain)"
+          contracts="$PWD/pinned-yt-v140/server/tests/contracts/server_link_frames.txt"
+          g++ -std=c++20 -O2 -fPIC -Wall -Wextra \
+            -I"$RUNNER_TEMP/v435-yt-overlay/server" \
+            -Ipinned-yt-v140/server -Ipinned-yt-v140/server/src \
+            $(pkg-config --cflags Qt6Core) \
+            "-DBLOODBORNE_SERVER_LINK_CONTRACTS=\"$contracts\"" \
+            "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp" \
+            "$RUNNER_TEMP/v435-yt-overlay/server/src/server_link.cpp" \
+            pinned-yt-v140/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/v435-yt-original-qt-hub" \
+            $(pkg-config --libs Qt6Core)
+          "$RUNNER_TEMP/v435-yt-original-qt-hub" >"$RUNNER_TEMP/v435-yt-hub-tests.log" 2>&1 || {
+            tail -n 14 "$RUNNER_TEMP/v435-yt-hub-tests.log" | cut -c1-150
+            exit 1
+          }
+          tail -n 12 "$RUNNER_TEMP/v435-yt-hub-tests.log" | cut -c1-150
+          grep -Fq 'V435 YT original Qt Hub sender spoofing/no-route: ok' "$RUNNER_TEMP/v435-yt-hub-tests.log"
+          echo SHYT_V435_REAL_ORIGINAL_QT_HUB_NOISE_SPOOF_INVASION_AND_RECONNECT_PASS
