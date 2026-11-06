@@ -138,6 +138,7 @@ def main()->None:
     yt_wire_lite_header=Path(__file__).resolve().parent/"shyt_yt_team_wire_lite_v415.h"
     yt_party_reply_header=Path(__file__).resolve().parent/"shyt_yt_party_reply_v419.h"
     yt_world_snapshot_header=Path(__file__).resolve().parent/"shyt_yt_world_snapshot_v420.h"
+    yt_delta_fence_header=Path(__file__).resolve().parent/"shyt_yt_world_delta_fence_v423.h"
     yt_work_source=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.cpp"
     yt_work_header=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.h"
     if (cmake.is_symlink() or not cmake.is_file() or
@@ -164,6 +165,7 @@ def main()->None:
         not yt_wire_lite_header.is_file() or yt_wire_lite_header.is_symlink() or
         not yt_party_reply_header.is_file() or yt_party_reply_header.is_symlink() or
         not yt_world_snapshot_header.is_file() or yt_world_snapshot_header.is_symlink() or
+        not yt_delta_fence_header.is_file() or yt_delta_fence_header.is_symlink() or
         not yt_work_source.is_file() or yt_work_source.is_symlink() or
         not yt_work_header.is_file() or yt_work_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
@@ -194,6 +196,7 @@ def main()->None:
         shutil.copyfile(yt_wire_lite_header,plugin_root/yt_wire_lite_header.name)
         shutil.copyfile(yt_party_reply_header,plugin_root/yt_party_reply_header.name)
         shutil.copyfile(yt_world_snapshot_header,plugin_root/yt_world_snapshot_header.name)
+        shutil.copyfile(yt_delta_fence_header,plugin_root/yt_delta_fence_header.name)
         shutil.copyfile(yt_work_source,plugin_root/yt_work_source.name)
         shutil.copyfile(yt_work_header,plugin_root/yt_work_header.name)
         vendored=plugin_root/"yt_original"/"coop"
