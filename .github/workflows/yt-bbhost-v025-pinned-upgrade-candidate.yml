@@ -16,6 +16,7 @@ on:
       - 'bbhost-track/shyt_yt_world_staging_v425.h'
       - 'bbhost-track/shyt_yt_world_projection_v426.h'
       - 'bbhost-track/shyt_yt_guest_hook_preflight_v427.h'
+      - 'bbhost-track/shyt_yt_full_guest_preflight_v428.h'
       - 'bbhost-track/shyt_yt_udp_endpoint_v406.*'
       - 'bbhost-track/shyt_yt_signup_work_v409.*'
       - 'bbhost-track/shyt_yt_secure_game_data_v405.*'
