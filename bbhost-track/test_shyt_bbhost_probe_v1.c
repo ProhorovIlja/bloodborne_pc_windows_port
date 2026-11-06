@@ -98,7 +98,8 @@ static const unsigned char expected_netsync_head[20] = {
     0x88,0x00,0x00,0x00
 };
 static int fake_net_read(uint64_t address,void *out,size_t n) {
-    if(n==14u || n==20u) {
+    if(address==UINT64_C(0x00C8F0A0)+UINT64_C(0x400000) ||
+       address==UINT64_C(0x01789B60)+UINT64_C(0x400000)) {
         static const unsigned char yt_transport[14]={
             0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
             0x41,0x55,0x41,0x54,0x53,0x50
