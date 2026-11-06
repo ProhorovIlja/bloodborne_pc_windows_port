@@ -104,6 +104,14 @@ int main() {
     assert(final.applied==20u && final.CountKilled()==1u &&
            final.return_point==3000 && final.return_point_map==2u &&
            final.game_applied==0u);
+    // The original WorldLog binary codec admits Shown kinds 0x10-0x1F:
+    // its low nibble is a bit-hint, its full entry.value carries bits.
+    const auto shown_lowbits=Batch(21u,{E(21u,0x15u,2u,999u,0x25u)});
+    assert(staged.StageEntries(shown_lowbits,77u,21u,21u,21u,1u));
+    assert(projection.Rebuild(staged));
+    assert(projection.View().shown.at(999u)==0x25u &&
+           projection.View().unknown_kinds==0u &&
+           projection.View().applied==21u);
     staged.Revoke();
     assert(!projection.Rebuild(staged) && !projection.Ready() &&
            projection.View().applied==0u &&
