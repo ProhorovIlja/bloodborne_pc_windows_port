@@ -54,7 +54,7 @@ int main(void) {
     assert(READ(s.outgoing_valid)==4u &&
            READ(s.outgoing_unreliable)==3u &&
            READ(s.outgoing_game_bytes)==
-               0x108u+SHYT_V429_MAX_NATIVE_FRAME+8u);
+               0x108u+SHYT_V429_MAX_NATIVE_FRAME+16u);
     /* Never inspect a bogus or future payload pointer. */
     c.arg[3]=0x42u;
     assert(shyt_yt_v429_observe_send(&c,&s)==0);
