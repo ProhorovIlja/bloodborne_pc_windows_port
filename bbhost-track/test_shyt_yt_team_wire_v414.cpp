@@ -91,6 +91,32 @@ int main() {
     assert(lite_welcome.accepted==original_welcome.welcome().accepted());
     assert(lite_welcome.epoch==original_welcome.welcome().epoch());
     assert(lite_welcome.last==original_welcome.welcome().last());
+    // Independently cross-check the V418 outbound party Hello wire tags
+    // against the REAL YT v1.4.0 protobuf serializer, not a second local
+    // homegrown parser. This locks protocol/party/member/run/host/owner.
+    bbcoop::Envelope source_party_hello;
+    auto* ph=source_party_hello.mutable_hello();
+    ph->set_protocol(8u);
+    ph->set_party("world:level-44");
+    ph->set_member("68756e74657235"); // online ID "hunter5" in server hex
+    ph->set_run(707u);
+    ph->set_host(true);
+    ph->set_enemy_owner(true);
+    const std::vector<std::uint8_t> expected_hello_inner{
+        0x08u,0x08u, // protocol = 8
+        0x12u,0x0eu, // party: 14 bytes
+        'w','o','r','l','d',':','l','e','v','e','l','-','4','4',
+        0x1au,0x0eu, // member: 14 lowercase ASCII hex bytes
+        '6','8','7','5','6','e','7','4','6','5','7','2','3','5',
+        0x20u,0xc3u,0x05u, // run = 707, protobuf varint
+        0x28u,0x01u, // host
+        0x30u,0x01u  // enemy owner
+    };
+    std::vector<std::uint8_t> expected_party_wire{0x0au,
+        static_cast<std::uint8_t>(expected_hello_inner.size())};
+    expected_party_wire.insert(expected_party_wire.end(),
+        expected_hello_inner.begin(),expected_hello_inner.end());
+    assert(Encode(source_party_hello)==expected_party_wire);
     // A nested duplicate authority field and malformed trailing varint
     // must not be silently resolved via protobuf's last-field-wins rule.
     auto duplicate=Encode(original_lobby);
