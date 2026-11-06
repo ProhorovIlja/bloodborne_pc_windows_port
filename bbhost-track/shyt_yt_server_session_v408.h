@@ -124,6 +124,19 @@ typedef struct ShytYtRedundantWorldPruningV424 {
     uint64_t bytes_pruned;
     uint64_t messages_still_held;
 } ShytYtRedundantWorldPruningV424;
+/* V425: bounded, read-only staged original Snapshot/Entries. Cursor here
+ * means only staged, NOT applied to Bloodborne or guest save memory. */
+typedef struct ShytYtWorldStagingObservationsV425 {
+    uint64_t snapshots_staged;
+    uint64_t delta_batches_staged;
+    uint64_t rejected;
+    uint64_t revoked;
+    uint64_t epoch;
+    uint64_t staged_cursor;
+    uint64_t staged_bytes;
+    uint64_t pending_packets;
+    uint8_t active;
+} ShytYtWorldStagingObservationsV425;
 
 
 /* C-string fields must be present, NUL-terminated and 1..255B.
@@ -164,6 +177,8 @@ int shyt_yt_server_world_delta_observations_v423(
     const ShytYtServerSessionV408 *session,ShytYtWorldDeltaObservationsV423 *out);
 int shyt_yt_server_world_pruning_observations_v424(
     const ShytYtServerSessionV408 *session,ShytYtRedundantWorldPruningV424 *out);
+int shyt_yt_server_world_staging_observations_v425(
+    const ShytYtServerSessionV408 *session,ShytYtWorldStagingObservationsV425 *out);
 /* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
  * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
  * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
