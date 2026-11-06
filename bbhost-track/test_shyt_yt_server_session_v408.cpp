@@ -284,6 +284,92 @@ int main() {
        coop_counts.messages_held!=1u ||
        coop_counts.frames_rejected!=1u)
         return bad(43);
+    // V415: real authenticated original YT CoopStream now carries the
+    // canonical protobuf field tags for LobbyState/TeamStart/Welcome.
+    // We construct the tiny fixture using the pinned original field tags,
+    // while the separate V415 CI cross-checks actual generated protobuf.
+    auto putvar=[](std::vector<u8>& dst,std::uint64_t v) {
+        while(v>127u) {
+            dst.push_back(static_cast<u8>((v&127u)|128u));
+            v >>= 7u;
+        }
+        dst.push_back(static_cast<u8>(v));
+    };
+    auto putnum=[&](std::vector<u8>& dst,unsigned field,std::uint64_t value) {
+        putvar(dst,field*8u);
+        putvar(dst,value);
+    };
+    auto putbytes=[&](std::vector<u8>& dst,unsigned field,
+                      const std::vector<u8>& bytes) {
+        putvar(dst,field*8u+2u);
+        putvar(dst,bytes.size());
+        dst.insert(dst.end(),bytes.begin(),bytes.end());
+    };
+    auto puttext=[&](std::vector<u8>& dst,unsigned field,
+                     const std::string& value) {
+        const std::vector<u8> bytes(value.begin(),value.end());
+        putbytes(dst,field,bytes);
+    };
+    std::vector<u8> team;
+    puttext(team,1,"team-v415");
+    puttext(team,2,"fictional-id");
+    putnum(team,4,1);
+    puttext(team,6,"world-v415");
+    puttext(team,7,"world:world-v415");
+    for(unsigned i=0;i<5u;++i) {
+        std::vector<u8> m;
+        const std::string id=i==0u?"fictional-id":"hunter"+std::to_string(i+1u);
+        puttext(m,1,id);
+        putnum(m,4,1);
+        putnum(m,5,i+1u);
+        if(i>0u)putnum(m,7,8u-i); // guest signs 7,6,5,4
+        putbytes(team,3,m);
+    }
+    std::vector<u8> lobby, lobby_envelope;
+    putbytes(lobby,1,team);
+    putbytes(lobby_envelope,25,lobby);
+    server_world.Send(lobby_envelope,1421);
+    for(const auto& frame:server_world.Flush(1421))
+        if(!send_encrypted(YT::EncodeCoop(frame)))return bad(44);
+    if(shyt_yt_server_tick_v408(client,1422)!=1)return bad(45);
+    std::vector<u8> start, start_envelope;
+    puttext(start,1,"team-v415");
+    puttext(start,2,"world:world-v415");
+    puttext(start,3,"fictional-id");
+    putnum(start,4,1);
+    puttext(start,5,"world-v415");
+    putbytes(start_envelope,26,start);
+    server_world.Send(start_envelope,1423);
+    for(const auto& frame:server_world.Flush(1423))
+        if(!send_encrypted(YT::EncodeCoop(frame)))return bad(46);
+    if(shyt_yt_server_tick_v408(client,1424)!=1)return bad(47);
+    std::vector<u8> welcome, welcome_envelope;
+    putnum(welcome,1,1); // accepted, but no separate party link binding
+    putnum(welcome,3,77); // synthetic world epoch
+    putbytes(welcome_envelope,2,welcome);
+    server_world.Send(welcome_envelope,1425);
+    for(const auto& frame:server_world.Flush(1425))
+        if(!send_encrypted(YT::EncodeCoop(frame)))return bad(48);
+    if(shyt_yt_server_tick_v408(client,1426)!=1)return bad(49);
+    ShytYtTeamObservationsV415 observations{};
+    if(!shyt_yt_server_team_observations_v415(client,&observations) ||
+       observations.lobby_states_accepted!=1u ||
+       observations.team_starts_accepted!=1u ||
+       observations.party_welcomes_unbound!=1u ||
+       observations.authority_messages_rejected!=1u)
+        return bad(50);
+    // An inner frame from a different identity cannot impersonate shadnet
+    // even when the outer authenticated test server sends it.
+    BloodborneCoop::CoopStream impostor("not-shadnet",800u);
+    impostor.Send(lobby_envelope,1427);
+    for(const auto& frame:impostor.Flush(1427))
+        if(!send_encrypted(YT::EncodeCoop(frame)))return bad(51);
+    if(shyt_yt_server_tick_v408(client,1428)!=1 ||
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
+       coop_counts.frames_rejected!=2u ||
+       !shyt_yt_server_team_observations_v415(client,&observations) ||
+       observations.lobby_states_accepted!=1u)
+        return bad(52);
     // Even from the configured server socket, unsigned/raw game traffic
     // cannot go to the game. It must have the original Noise NK tag.
     if(!send_to(server,endpoint,YT::EncodeData(
