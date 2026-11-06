@@ -191,6 +191,12 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
             }
             break;
         }
+        case Kind::Entries:
+            // V422 validates epoch/ordered event headers, but never
+            // applies a world delta. Retain complete message in the
+            // bounded quarantine for a future game-verified consumer.
+            // No ACK here means "applied": transport ACK is staging only.
+            break;
         case Kind::Invalid:
             s.party_reply.Revoke();
             s.world_snapshot.Revoke();
