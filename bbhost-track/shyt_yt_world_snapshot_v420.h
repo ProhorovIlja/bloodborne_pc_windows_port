@@ -64,6 +64,9 @@ public:
     bool AwaitingGameSnapshotConsumer() const noexcept {
         return armed_ && metadata_matching_;
     }
+    bool WaitingForSnapshot() const noexcept {
+        return armed_ && requested_ && !metadata_matching_;
+    }
     bool Armed() const noexcept {return armed_;}
     Counters Stats() const noexcept {return stats_;}
 private:
