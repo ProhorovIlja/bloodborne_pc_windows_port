@@ -405,11 +405,16 @@ int main() {
     if(shyt_yt_server_tick_v408(client,1426)!=1)return bad(49);
     ShytYtTeamObservationsV415 observations{};
     if(!shyt_yt_server_team_observations_v415(client,&observations) ||
+       !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        observations.lobby_states_accepted!=2u ||
        observations.team_starts_accepted!=1u ||
        observations.party_welcomes_unbound!=1u ||
-       observations.authority_messages_rejected!=1u)
+       observations.authority_messages_rejected!=1u ||
+       coop_counts.messages_held!=1u)
         return bad(50);
+    // Only the arbitrary unhandled world data remains in the bounded
+    // quarantine. Teamless LobbyState, five-player LobbyState, TeamStart,
+    // and unbound Welcome were fully consumed by the authority observer.
     // An inner frame from a different identity cannot impersonate shadnet
     // even when the outer authenticated test server sends it.
     BloodborneCoop::CoopStream impostor("not-shadnet",800u);
