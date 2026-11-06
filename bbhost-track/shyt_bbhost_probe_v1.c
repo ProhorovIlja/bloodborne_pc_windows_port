@@ -21,6 +21,7 @@
 #include "shyt_yt_udp_endpoint_v406.h"
 #include "shyt_yt_server_session_v408.h"
 #include "shyt_yt_full_guest_preflight_v428.h"
+#include "shyt_yt_game_link_observer_v429.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdatomic.h>
@@ -53,6 +54,20 @@ static atomic_ullong outgoing_channels_v17[SHYT_V17_GAME_CHANNELS];
 static atomic_ullong outgoing_policy_v21[4];
 static atomic_ullong malformed_sends_v17;
 static int packet_hook_enabled_v17;
+static ShytYtGameLinkObserverV429 yt_calls_v429;
+static int yt_send_hook_enabled_v429;
+static int yt_update_hook_enabled_v429;
+/* Exact privately audited 1.09 code prefixes. Never use NULL expected
+ * bytes in hook2: that could hook a previously modified game function. */
+static const unsigned char yt_send_prologue_v429[14]={
+    0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+    0x41,0x55,0x41,0x54,0x53,0x50
+};
+static const unsigned char yt_update_prologue_v429[20]={
+    0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,
+    0x41,0x55,0x41,0x54,0x53,0x48,0x81,0xec,
+    0x18,0x21,0x00,0x00
+};
 static const unsigned char netsync_prologue_v17[20] = {
     /* V428 privately audited exact Bloodborne 1.09 decrypted EBOOT
      * (SHA-256 pinned by BBHost); original YT site 0x017894E0.
@@ -98,6 +113,37 @@ static int attach_netsync_readonly_v17(const BbHostApi *api) {
      */
     return api->hook2(SHYT_V17_NETSYNC_SEND_BN,actual,sizeof(actual),
                       on_netsync_send_v17,0)==0;
+}
+
+/* V429: opt-in live original YT game-link CALL observability only.
+ * This is the FIRST real hook at YT's send/update source sites. Both
+ * callbacks always return 0; the original Bloodborne functions execute
+ * unchanged. Do not read payloads, re-route packets or change NetSync.
+ * If only one passive hook attaches, keep the plugin loaded: BBHost
+ * has no hook unregister API and unloading would create dangling stubs.
+ */
+static void attach_yt_game_calls_v429(const BbHostApi *api) {
+    if (!api || api->version<8u ||
+        api->size<offsetof(BbHostApi,hook2)+sizeof(api->hook2) ||
+        !api->read || !api->hook2 || !api->eboot_is_109 ||
+        !api->eboot_sha256 || !api->eboot_is_109()) return;
+    ShytYtFullGuestPreflightV428 state={0};
+    if (!shyt_yt_full_guest_preflight_v428(
+         api->eboot_is_109(),api->eboot_sha256(),api->read,&state))
+        return;
+    const uint64_t send=SHYT_V427_PREFERRED_IMAGE_BASE+
+                        SHYT_V427_TRANSPORT_SEND_RVA;
+    const uint64_t update=SHYT_V427_PREFERRED_IMAGE_BASE+
+                          SHYT_V427_NETSYNC_UPDATE_RVA;
+    yt_send_hook_enabled_v429=
+        api->hook2(send,yt_send_prologue_v429,
+                   sizeof(yt_send_prologue_v429),
+                   shyt_yt_v429_observe_send,&yt_calls_v429)==0;
+    if (!yt_send_hook_enabled_v429)return;
+    yt_update_hook_enabled_v429=
+        api->hook2(update,yt_update_prologue_v429,
+                   sizeof(yt_update_prologue_v429),
+                   shyt_yt_v429_observe_update,&yt_calls_v429)==0;
 }
 
 /* V16: BBHost's version-8 on_world_load is the real main-thread transition.
@@ -159,6 +205,17 @@ static void on_game_frame(void *user) {
                   atomic_load_explicit(&outgoing_policy_v21[SHYT_YT_CHANNEL_OURS_V21],memory_order_relaxed),
                   atomic_load_explicit(&outgoing_policy_v21[SHYT_YT_CHANNEL_DROP_V21],memory_order_relaxed));
     }
+    if (yt_send_hook_enabled_v429 || yt_update_hook_enabled_v429) {
+        host->log("shyt-yt-v429: original YT game-link CALLS outgoing=%llu valid=%llu bad=%llu no-member=%llu reliable=%llu unreliable=%llu native-game-bytes=%llu netSyncUpdates=%llu; counts since init, NOT WAN bytes, NO network capture",
+                  atomic_load_explicit(&yt_calls_v429.outgoing_calls,memory_order_relaxed),
+                  atomic_load_explicit(&yt_calls_v429.outgoing_valid,memory_order_relaxed),
+                  atomic_load_explicit(&yt_calls_v429.outgoing_malformed,memory_order_relaxed),
+                  atomic_load_explicit(&yt_calls_v429.outgoing_without_member,memory_order_relaxed),
+                  atomic_load_explicit(&yt_calls_v429.outgoing_reliable,memory_order_relaxed),
+                  atomic_load_explicit(&yt_calls_v429.outgoing_unreliable,memory_order_relaxed),
+                  atomic_load_explicit(&yt_calls_v429.outgoing_game_bytes,memory_order_relaxed),
+                  atomic_load_explicit(&yt_calls_v429.update_calls,memory_order_relaxed));
+    }
     if (world_events.invalid_incremental && !reported_world_overflow) {
         host->log("shyt-bbhost-probe: world flag stream invalid (overflow or world load); future authenticated full snapshot required");
         reported_world_overflow=1;
@@ -199,6 +256,9 @@ BB_PLUGIN_EXPORT const BbOption bb_plugin_options[] = {
      "false", 0, 0, 0},
     {BB_OPT_BOOL, "inspect_yt_game_sites", "Inspect YT game send/NetSync code (diagnostic)",
      "Read-only full-instruction 14/20-byte compare of 1.09 YT send/NetSync sites. NO hooks, game changes or network. Restart required.",
+     "false", 0, 0, 0},
+    {BB_OPT_BOOL, "observe_yt_game_link_calls", "Observe original YT GameLink send/NetSync calls (experimental)",
+     "Opt-in PASS-THROUGH game hooks. Counts native sends, reliability and NetSync updates; no packet payloads, game writes, forwarding or P2P. Restart required.",
      "false", 0, 0, 0},
     {0}
 };
@@ -295,6 +355,9 @@ BB_PLUGIN_EXPORT int bb_plugin_init(const BbHostApi *api) {
     world_load_count=0;
     world_last_block=0;
     packet_hook_enabled_v17=0;
+    yt_send_hook_enabled_v429=0;
+    yt_update_hook_enabled_v429=0;
+    shyt_yt_v429_reset(&yt_calls_v429);
     for (unsigned i=0;i<SHYT_V17_GAME_CHANNELS;++i)
         atomic_store_explicit(&outgoing_channels_v17[i],0u,memory_order_relaxed);
     for (unsigned i=0;i<4u;++i)
@@ -374,6 +437,18 @@ BB_PLUGIN_EXPORT int bb_plugin_image(const BbHostApi *api) {
                  found ? "MATCHED":"REFUSED",
                  (unsigned)state.transport_matched,(unsigned)state.transport_read,
                  (unsigned)state.update_matched,(unsigned)state.update_read);
+    }
+    /* Keep V429 last. hook2 is a persistent engine detour; any partial
+     * installation is passive and must not cause plugin unload.
+     * Both hooks default OFF and require verified game SHA + full bytes. */
+    const char *game_opt=api->config("shyt_bbhost_probe.observe_yt_game_link_calls");
+    const int game_wanted=game_opt &&
+        (strcmp(game_opt,"true")==0 || strcmp(game_opt,"1")==0);
+    if (game_wanted) {
+        attach_yt_game_calls_v429(api);
+        api->log("shyt-bbhost-probe: V429 passive original YT GameLink source hooks send=%s update=%s; original game always continues, NO forwarding",
+                 yt_send_hook_enabled_v429?"INSTALLED":"REFUSED",
+                 yt_update_hook_enabled_v429?"INSTALLED":"REFUSED");
     }
     api->log("shyt-bbhost-probe: original Bloodborne 1.09 image accepted; observe-only");
     return 0;
