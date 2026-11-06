@@ -564,7 +564,7 @@ int main() {
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(73);
     if(shyt_yt_server_tick_v408(client,1431)!=1 ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
-       coop_counts.messages_held!=3u ||
+       coop_counts.messages_held!=2u ||
        !shyt_yt_server_world_observations_v420(client,&world_observations) ||
        world_observations.awaiting_game_snapshot_consumer!=1u)
         return bad(74);
@@ -597,19 +597,42 @@ int main() {
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(76);
     if(shyt_yt_server_tick_v408(client,1433)!=1 ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
-       coop_counts.messages_held!=4u ||
+       coop_counts.messages_held!=3u ||
        !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
        delta_obs.tracking!=1u || delta_obs.cursor!=11u ||
        delta_obs.server_last!=11u || delta_obs.advanced!=1u ||
        delta_obs.awaiting_more!=0u)
         return bad(77);
+    // V424: 24 original server-authenticated empty Entries heartbeats
+    // must not exhaust the 16-message quarantine cap, revoke a healthy
+    // link or discard the pending actual world Snapshot/new delta.
+    std::vector<u8> empty_entries,empty_envelope;
+    putnum(empty_entries,1u,77u);
+    putnum(empty_entries,2u,11u);
+    putbytes(empty_envelope,5u,empty_entries);
+    for(unsigned i=0u;i<24u;++i) {
+        const auto at=static_cast<s64>(1434u+i);
+        server_world.Send(empty_envelope,at);
+        const auto packets=server_world.Flush(at);
+        if(packets.empty())return bad(78);
+        for(const auto& frame:packets)
+            if(!send_encrypted(YT::EncodeCoop(frame)))return bad(79);
+        if(shyt_yt_server_tick_v408(client,static_cast<uint64_t>(at))!=1)
+            return bad(80);
+    }
+    if(!shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
+       !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
+       coop_counts.fail_closed!=0u || coop_counts.messages_held!=3u ||
+       delta_obs.heartbeats!=24u || delta_obs.cursor!=11u ||
+       delta_obs.tracking!=1u)
+        return bad(81);
     // An inner frame from a different identity cannot impersonate shadnet
     // even when the outer authenticated test server sends it.
     BloodborneCoop::CoopStream impostor("not-shadnet",800u);
-    impostor.Send(lobby_envelope,1435);
-    for(const auto& frame:impostor.Flush(1435))
+    impostor.Send(lobby_envelope,1460);
+    for(const auto& frame:impostor.Flush(1460))
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(51);
-    if(shyt_yt_server_tick_v408(client,1436)!=1 ||
+    if(shyt_yt_server_tick_v408(client,1461)!=1 ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        coop_counts.frames_rejected!=2u ||
        !shyt_yt_server_team_observations_v415(client,&observations) ||
@@ -619,7 +642,7 @@ int main() {
     // cannot go to the game. It must have the original Noise NK tag.
     if(!send_to(server,endpoint,YT::EncodeData(
            0x12345678u,0x4a5bu,fake_game)) ||
-       shyt_yt_server_tick_v408(client,1450)!=1)
+       shyt_yt_server_tick_v408(client,1470)!=1)
         return bad(24);
     if(!shyt_yt_server_counters_v408(client,&counts) ||
        counts.auth_errors==0 ||
