@@ -51,6 +51,9 @@ jobs:
             emulator/src/core/bloodborne_patches.cpp
             emulator/src/core/bloodborne_party.cpp
             server/src/bloodborne_world.cpp
+            server/coop/game_link.h
+            server/coop/packet_routes.h
+            server/coop/coop_types.h
           persist-credentials: false
       - name: Verify released YT v1.4.0 retains exact reliable/crypto core used by BBHost
         shell: bash
@@ -149,6 +152,19 @@ jobs:
             -Ibbhost-track bbhost-track/test_shyt_yt_guest_member_v432.c \
             -o "$RUNNER_TEMP/shyt-v432-guest-member"
           "$RUNNER_TEMP/shyt-v432-guest-member"
+      - name: Prove V433 game route parity against original YT v1.4.0 in ALL 68 channels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/check_yt_route_source_v433.py \
+            --yt pinned-yt-v140 \
+            --header bbhost-track/shyt_yt_game_route_assessment_v433.h \
+            --test bbhost-track/test_shyt_yt_game_route_assessment_v433.cpp
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -Ipinned-yt-v140/server \
+            bbhost-track/test_shyt_yt_game_route_assessment_v433.cpp \
+            -o "$RUNNER_TEMP/shyt-v433-game-route-parity"
+          "$RUNNER_TEMP/shyt-v433-game-route-parity"
       - name: Strict source pin and GPL3 plugin public API guard
         shell: bash
         run: |
@@ -494,6 +510,7 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_game_packet_stage_v430.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_peer_evidence_v431.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_guest_member_v432.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_game_route_assessment_v433.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
           test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
