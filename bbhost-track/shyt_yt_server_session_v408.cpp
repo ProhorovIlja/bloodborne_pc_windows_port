@@ -12,6 +12,7 @@
 #include "shyt_yt_team_authority_v414.h"
 #include "shyt_yt_team_wire_lite_v415.h"
 #include "shyt_yt_party_reply_v419.h"
+#include "shyt_yt_world_snapshot_v420.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
@@ -57,6 +58,7 @@ struct ShytYtServerSessionV408 {
     ShytYtCoopCountersV413 coop_counters{};
     ShytYtTeamObservationsV415 team_observations{};
     SeamlessHunt::YtPartyReplyV419 party_reply;
+    SeamlessHunt::YtWorldSnapshotV420 world_snapshot;
     std::unique_ptr<SeamlessHunt::YtTeamAuthorityV414> team_gate;
     size_t coop_observed=0;
     bool lobby_hello_submitted=false;
@@ -118,6 +120,7 @@ void reject(ShytYtServerSessionV408& s) noexcept {
 void invalidate_coop(ShytYtServerSessionV408& s) noexcept {
     if(s.team_gate)s.team_gate->Revoke();
     s.party_reply.Revoke();
+    s.world_snapshot.Revoke();
     s.coop_observed=0;
     if(s.coop_quarantine && s.coop_quarantine->Invalidate()) {
         ++s.coop_counters.fail_closed;
@@ -137,6 +140,7 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
         switch(decoded.kind) {
         case Kind::Lobby:
             s.party_reply.Revoke(); // any roster refresh fences in-flight Hello
+            s.world_snapshot.Revoke();
             if(!decoded.lobby_has_team) {
                 // Ordinary YT initial lobby: no group yet. Never a world
                 // grant and never a malformed-message error.
@@ -149,6 +153,7 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
             break;
         case Kind::Start:
             s.party_reply.Revoke(); // world/start refresh requires new session
+            s.world_snapshot.Revoke();
             if(s.team_gate->OnAuthenticatedTeamStart(decoded.start))
                 ++s.team_observations.team_starts_accepted;
             else
@@ -166,10 +171,29 @@ void observe_team_authority(ShytYtServerSessionV408& s,uint64_t now) {
                 decoded.accepted,now,prepared);
             if(result==SeamlessHunt::YtPartyReplyV419::Reply::Unbound)
                 ++s.team_observations.party_welcomes_unbound;
+            else if(result==SeamlessHunt::YtPartyReplyV419::Reply::CorrelatedCandidate &&
+                    !s.world_snapshot.Arm(decoded.epoch,decoded.last)) {
+                s.party_reply.Revoke();
+                ++s.team_observations.authority_messages_rejected;
+            }
+            break;
+        }
+        case Kind::Snapshot: {
+            // Never discard the actual world payload: our parser has
+            // inspected ONLY the original Snapshot epoch/last header.
+            // A real authenticated in-game world consumer is still absent.
+            const bool waiting=s.world_snapshot.WaitingForSnapshot();
+            const bool matched=s.world_snapshot.Observe(decoded.epoch,decoded.last);
+            if(waiting && !matched) {
+                s.party_reply.Revoke();
+                s.team_gate->Revoke();
+                ++s.team_observations.authority_messages_rejected;
+            }
             break;
         }
         case Kind::Invalid:
             s.party_reply.Revoke();
+            s.world_snapshot.Revoke();
             s.team_gate->Revoke();
             ++s.team_observations.authority_messages_rejected;
             break;
@@ -520,6 +544,7 @@ void handle_control(ShytYtServerSessionV408& s,
                         // never retain stale lobby grants across instances.
                         if(s.team_gate)s.team_gate->Revoke();
                         s.party_reply.Revoke();
+                        s.world_snapshot.Revoke();
                         s.coop_observed=0;
                         if(s.coop_counters.fail_closed==0u)
                             ++s.coop_counters.fail_closed;
@@ -778,6 +803,41 @@ extern "C" int shyt_yt_server_send_party_hello_v418(
         return -1;
     }
 }
+extern "C" int shyt_yt_server_send_snapshot_request_v420(
+    ShytYtServerSessionV408* s,uint64_t now) {
+    if(!s || !s->team_gate || !s->coop_quarantine ||
+       !s->party_reply.CandidateAwaitingSnapshot() ||
+       !s->world_snapshot.CanAsk() ||
+       s->phase!=SHYT_V408_LINKED || now<s->last_tick ||
+       s->coop_quarantine->Failed())return 0;
+    try {
+        bool host=false;
+        if(!s->team_gate->MaySendPartyHello(
+                s->party_reply.Party(),s->party_reply.Slot(),host))
+            return 0;
+        // Original YT protobuf Envelope.snapshot_request=6 with an empty
+        // nested SnapshotRequest: epoch=0 and seq=0 are proto3 defaults.
+        // This is the game's request for a complete new world snapshot.
+        const std::vector<u8> envelope{0x32u,0x00u};
+        if(!s->coop_quarantine->QueueOutgoing(envelope,static_cast<s64>(now)))
+            return 0;
+        if(!s->world_snapshot.MarkRequested()) {
+            invalidate_coop(*s);
+            s->phase=SHYT_V408_IO_FAILED;
+            return -1;
+        }
+        if(!flush_outgoing_coop_v416(*s,now)) {
+            invalidate_coop(*s);
+            s->phase=SHYT_V408_IO_FAILED;
+            return -1;
+        }
+        return 1;
+    }catch(...) {
+        invalidate_coop(*s);
+        s->phase=SHYT_V408_IO_FAILED;
+        return -1;
+    }
+}
 extern "C" int shyt_yt_server_team_observations_v415(
     const ShytYtServerSessionV408* s,ShytYtTeamObservationsV415* out) {
     if(out)*out={};
@@ -793,6 +853,16 @@ extern "C" int shyt_yt_server_party_observations_v419(
     *out={stats.party_hellos_sent,stats.replies_correlated,
           stats.replies_refused,stats.replies_unbound,stats.contexts_revoked,
           static_cast<uint8_t>(s->party_reply.CandidateAwaitingSnapshot()?1u:0u)};
+    return 1;
+}
+extern "C" int shyt_yt_server_world_observations_v420(
+    const ShytYtServerSessionV408* s,ShytYtWorldSnapshotObservationsV420* out) {
+    if(out)*out={};
+    if(!s || !out)return 0;
+    const auto stats=s->world_snapshot.Stats();
+    *out={stats.requests_sent,stats.metadata_matching,stats.metadata_rejected,
+          stats.metadata_unbound,stats.contexts_revoked,
+          static_cast<uint8_t>(s->world_snapshot.AwaitingGameSnapshotConsumer()?1u:0u)};
     return 1;
 }
 extern "C" int shyt_yt_server_take_member_v412(
