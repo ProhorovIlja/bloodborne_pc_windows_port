@@ -116,6 +116,71 @@ int main() {
     const std::vector<std::uint8_t> duplicate_meta{
         0x3au,0x04u,0x08u,0x4du,0x08u,0x4du};
     assert(Lite::Decode(duplicate_meta).kind==Lite::Kind::Invalid);
+    // V421: full source-generated original Snapshot with packed uint32
+    // handles, shown characters, ZigZag HP, map state, flags and wipe.
+    bbcoop::Envelope complex_snapshot;
+    auto* world=complex_snapshot.mutable_snapshot();
+    world->set_epoch(77u);
+    world->set_last(9u);
+    auto* killed=world->add_kills();
+    killed->set_map(0x18000000u);
+    killed->add_handles(7u);
+    killed->add_handles(300u);
+    world->set_shown_map(0x18000000u);
+    auto* shown=world->add_shown();
+    shown->set_handle(55u);
+    shown->set_bits(7u);
+    world->set_map_state_map(0x18000000u);
+    world->set_map_state_bits(std::string(128,'z'));
+    world->set_return_point(-12);
+    world->set_return_point_map(0x18000000u);
+    auto* hp=world->add_hp();
+    hp->set_source(0x123456789ull);
+    hp->set_map(0x18000000u);
+    auto* enemy=hp->add_enemies();
+    enemy->set_handle(55u);
+    enemy->set_value(-51);
+    enemy->set_max(100);
+    auto* flag=world->add_recent_flags();
+    flag->set_seq(7u);
+    flag->set_map(0x18000000u);
+    flag->set_kind(1u);
+    flag->set_subject(1200u);
+    flag->set_value(1u);
+    world->set_after_wipe(true);
+    auto full_lite=Lite::Decode(Encode(complex_snapshot));
+    assert(full_lite.kind==Lite::Kind::Snapshot);
+    assert(full_lite.epoch==77u && full_lite.last==9u);
+    // A protobuf-valid sequence beyond the snapshot's last cannot be
+    // used as a validated world descriptor.
+    world->mutable_recent_flags(0)->set_seq(10u);
+    assert(Lite::Decode(Encode(complex_snapshot)).kind==Lite::Kind::Invalid);
+    world->mutable_recent_flags(0)->set_seq(7u);
+    world->set_map_state_bits(std::string(16385,'x'));
+    assert(Lite::Decode(Encode(complex_snapshot)).kind==Lite::Kind::Invalid);
+    world->set_map_state_bits(std::string(128,'z'));
+    // Canonical v1.4.0 repeated packed handles share one bounded budget.
+    auto* extra=world->add_kills();
+    extra->set_map(1u);
+    for(unsigned i=0;i<8200u;++i)extra->add_handles(i);
+    assert(Lite::Decode(Encode(complex_snapshot)).kind==Lite::Kind::Invalid);
+    world->mutable_kills()->RemoveLast();
+    assert(Lite::Decode(Encode(complex_snapshot)).kind==Lite::Kind::Snapshot);
+    // Nested MapKills.map has wire-0 uint32, not length-delimited.
+    const std::vector<std::uint8_t> wrong_nested_map{
+        0x3au,0x06u,0x08u,0x4du,0x1au,0x02u,0x0au,0x00u};
+    assert(Lite::Decode(wrong_nested_map).kind==Lite::Kind::Invalid);
+    // after_wipe bool only accepts canonical 0 or 1.
+    const std::vector<std::uint8_t> wrong_bool{
+        0x3au,0x04u,0x08u,0x4du,0x60u,0x02u};
+    assert(Lite::Decode(wrong_bool).kind==Lite::Kind::Invalid);
+    // Original protobuf can put valid fields in different order.
+    const std::vector<std::uint8_t> out_of_order{
+        0x3au,0x08u,
+        0x5au,0x02u,0x08u,0x07u, // recent_flags seq=7
+        0x10u,0x09u,              // last=9
+        0x08u,0x4du};             // epoch=77
+    assert(Lite::Decode(out_of_order).kind==Lite::Kind::Snapshot);
     // Independently cross-check the V418 outbound party Hello wire tags
     // against the REAL YT v1.4.0 protobuf serializer, not a second local
     // homegrown parser. This locks protocol/party/member/run/host/owner.
