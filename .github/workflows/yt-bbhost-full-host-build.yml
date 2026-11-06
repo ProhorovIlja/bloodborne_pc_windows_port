@@ -16,6 +16,7 @@ on:
       - 'bbhost-track/shyt_yt_server_session_v408.*'
       - 'bbhost-track/shyt_yt_party_reply_v419.h'
       - 'bbhost-track/shyt_yt_world_snapshot_v420.h'
+      - 'bbhost-track/shyt_yt_world_delta_fence_v423.h'
       - 'bbhost-track/shyt_yt_signup_work_v409.*'
       - 'bbhost-track/shyt_yt_native_channel_policy_v21.h'
       - 'bbhost-track/yt_world_event_ledger_v4.h'
