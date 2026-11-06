@@ -360,7 +360,11 @@ private:
             default:break;
             }
         }
-        return r.Valid() && (seen&1u)!=0u;
+        // Original proto3 omits accepted=false. A declined Welcome with
+        // only text (or even an empty message) is legitimate and must
+        // surface as Refused, not a malformed corrupt stream. False
+        // remains fail-closed; no V419/V420 snapshot can be authorized.
+        return r.Valid();
     }
 };
 } // namespace SeamlessHunt
