@@ -8,12 +8,14 @@
 #include "shyt_yt_shlk_client_v401.h"
 #include "shyt_yt_link_wire_v403.h"
 #include "shyt_yt_signup_work_v409.h"
+#include "shyt_yt_coop_transport_v413.h"
 #include "core/libraries/network/net_link.h"
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <new>
+#include <memory>
 #include <string>
 #include <vector>
 #if defined(_WIN32)
@@ -52,6 +54,9 @@ struct ShytYtServerSessionV408 {
     std::array<ShytYtMemberNoticeV412,SHYT_V412_MEMBER_QUEUE_CAP> member_queue{};
     size_t member_head=0,member_count=0;
     bool member_overflow=false;
+    // Original YT ordered Coop stream, authenticated frames held in quarantine.
+    // This is NOT room membership and cannot feed BBHost game NetSync.
+    std::unique_ptr<SeamlessHunt::CoopTransportV413> coop_quarantine;
     ShytYtSignupWorkV409* signup_work=nullptr;
     int signup_work_bits=0;
 };
@@ -336,6 +341,21 @@ void handle_control(ShytYtServerSessionV408& s,
             if(shyt_yt_link_decode_coop_v403(
                   plain.data(),size,held.data(),held.size(),&body_size)) {
                 ++s.counters.authenticated_coop_quarantined;
+                // V413: only original YT GameFrames are accepted into the
+                // bounded stream after the server's Noise NK MAC/replay gate.
+                // Completed envelopes remain quarantined, NOT game-authorized.
+                if(s.coop_quarantine &&
+                   s.coop_quarantine->ReceiveAfterServerAuth(
+                       std::span<const u8>{held.data(),body_size},
+                       static_cast<s64>(now))) {
+                    ++s.counters.coop_frames_reassembled_v413;
+                    s.counters.coop_messages_held_v413=
+                        s.coop_quarantine->Quarantined();
+                } else {
+                    ++s.counters.coop_frames_rejected_v413;
+                    if(s.coop_quarantine && s.coop_quarantine->Failed())
+                        ++s.counters.coop_fail_closed_v413;
+                }
                 s.last_auth_recv=now;
                 s.phase=SHYT_V408_LINKED;
                 wipe_v408(held.data(),body_size);
@@ -375,6 +395,20 @@ extern "C" ShytYtServerSessionV408 *shyt_yt_server_new_v408(
         session->online_id=online_id;
         session->build=game_build;
         session->secret=secret;
+        // Unique per-link reliability instance. No network is initiated and
+        // no game data is authorized by constructing this stream.
+        std::array<uint8_t,4> run_entropy{};
+        if(!entropy_v408(run_entropy.data(),run_entropy.size())) {
+            shyt_yt_server_free_v408(session);
+            return nullptr;
+        }
+        const u32 run=u32{run_entropy[0]} |
+             (u32{run_entropy[1]}<<8) |
+             (u32{run_entropy[2]}<<16) |
+             (u32{run_entropy[3]}<<24);
+        session->coop_quarantine=
+            std::make_unique<SeamlessHunt::CoopTransportV413>(
+                session->online_id,run==0u?1u:run);
         return session;
     } catch(...) {
         shyt_yt_server_free_v408(session);
