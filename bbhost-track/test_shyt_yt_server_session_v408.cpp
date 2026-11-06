@@ -539,8 +539,15 @@ int main() {
        world_observations.metadata_matching!=1u ||
        world_observations.metadata_rejected!=0u ||
        world_observations.awaiting_game_snapshot_consumer!=1u ||
-       coop_counts.messages_held!=2u)
+       coop_counts.messages_held!=1u)
         return bad(72);
+    ShytYtWorldStagingObservationsV425 stage_obs{};
+    if(!shyt_yt_server_world_staging_observations_v425(client,&stage_obs) ||
+       stage_obs.snapshots_staged!=1u || stage_obs.delta_batches_staged!=0u ||
+       stage_obs.epoch!=77u || stage_obs.staged_cursor!=9u ||
+       stage_obs.staged_bytes!=snapshot_envelope.size() ||
+       stage_obs.pending_packets!=1u || stage_obs.active!=1u)
+        return bad(83);
     // V422: a real server-authenticated original reliable Entries message
     // must validate its consecutive log seqs, without delivering them to
     // game memory or consuming the still-quarantined world snapshot.
@@ -564,7 +571,7 @@ int main() {
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(73);
     if(shyt_yt_server_tick_v408(client,1431)!=1 ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
-       coop_counts.messages_held!=2u ||
+       coop_counts.messages_held!=1u ||
        !shyt_yt_server_world_observations_v420(client,&world_observations) ||
        world_observations.awaiting_game_snapshot_consumer!=1u)
         return bad(74);
@@ -573,7 +580,9 @@ int main() {
     if(!shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
        delta_obs.tracking!=1u || delta_obs.epoch!=77u ||
        delta_obs.cursor!=9u || delta_obs.replays!=1u ||
-       delta_obs.advanced!=0u)
+       delta_obs.advanced!=0u ||
+       !shyt_yt_server_world_staging_observations_v425(client,&stage_obs) ||
+       stage_obs.delta_batches_staged!=0u || stage_obs.pending_packets!=1u)
         return bad(75);
     // A subsequent legitimate original server delta advances the cursor
     // by exactly two world events, and is STILL NOT applied to gameplay.
@@ -597,11 +606,15 @@ int main() {
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(76);
     if(shyt_yt_server_tick_v408(client,1433)!=1 ||
        !shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
-       coop_counts.messages_held!=3u ||
+       coop_counts.messages_held!=1u ||
        !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
        delta_obs.tracking!=1u || delta_obs.cursor!=11u ||
        delta_obs.server_last!=11u || delta_obs.advanced!=1u ||
-       delta_obs.awaiting_more!=0u)
+       delta_obs.awaiting_more!=0u ||
+       !shyt_yt_server_world_staging_observations_v425(client,&stage_obs) ||
+       stage_obs.staged_cursor!=11u || stage_obs.delta_batches_staged!=1u ||
+       stage_obs.pending_packets!=2u ||
+       stage_obs.staged_bytes!=snapshot_envelope.size()+delta_envelope.size())
         return bad(77);
     // V424: 24 original server-authenticated empty Entries heartbeats
     // must not exhaust the 16-message quarantine cap, revoke a healthy
@@ -622,14 +635,14 @@ int main() {
     }
     if(!shyt_yt_server_coop_counters_v413(client,&coop_counts) ||
        !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
-       coop_counts.fail_closed!=0u || coop_counts.messages_held!=3u ||
+       coop_counts.fail_closed!=0u || coop_counts.messages_held!=1u ||
        delta_obs.heartbeats!=24u || delta_obs.cursor!=11u ||
        delta_obs.tracking!=1u)
         return bad(81);
     ShytYtRedundantWorldPruningV424 prune{};
     if(!shyt_yt_server_world_pruning_observations_v424(client,&prune) ||
        prune.heartbeats_pruned!=24u || prune.replays_pruned!=1u ||
-       prune.messages_still_held!=3u ||
+       prune.messages_still_held!=1u ||
        prune.bytes_pruned<24u*empty_envelope.size())
         return bad(82);
     // An inner frame from a different identity cannot impersonate shadnet
@@ -676,6 +689,9 @@ int main() {
        !shyt_yt_server_world_observations_v420(client,&world_observations) ||
        world_observations.awaiting_game_snapshot_consumer!=0u ||
        world_observations.contexts_revoked!=1u ||
+       !shyt_yt_server_world_staging_observations_v425(client,&stage_obs) ||
+       stage_obs.active!=0u || stage_obs.pending_packets!=0u ||
+       stage_obs.revoked!=1u ||
        !shyt_yt_server_world_delta_observations_v423(client,&delta_obs) ||
        delta_obs.tracking!=0u ||
        delta_obs.contexts_revoked!=1u ||
