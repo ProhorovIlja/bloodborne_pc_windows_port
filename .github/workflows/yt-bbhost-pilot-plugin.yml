@@ -61,6 +61,17 @@ jobs:
           grep -q '^#define BB_PLUGIN_API_VERSION 16$' pinned-bbhost/include/bbhost_plugin.h
           test -f pinned-bbhost/plugins/hello/hello.c
           grep -q 'GPL-3.0-or-later' bbhost-track/shyt_bbhost_probe_v1.c
+      - name: Exercise original YT CoopStream reliability and quarantine safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/game_link.h)" = 5029581251bfe5decf562c19a10bdd079150cdad
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/coop_stream.h)" = 3f488861bd94ab1cdba8a07a9324267bab7a76a8
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -Ipinned-yt/server \
+            bbhost-track/test_shyt_yt_coop_transport_v413.cpp \
+            -o "$RUNNER_TEMP/shyt-coop-stream-v413"
+          "$RUNNER_TEMP/shyt-coop-stream-v413"
       - name: Verify owner game compatibility probe never sends or prints game data
         shell: bash
         run: |
@@ -233,6 +244,9 @@ jobs:
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_secure_game_data_v405.cpp
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_udp_endpoint_v406.cpp
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_server_session_v408.cpp
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_coop_transport_v413.h
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.h
           test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_shlk_client_v401.cpp
