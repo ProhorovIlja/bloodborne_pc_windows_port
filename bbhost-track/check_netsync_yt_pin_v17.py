@@ -17,6 +17,9 @@ YT_SITE="bbport/patches/coop-sites.json"
 EXPECTED_BLOB="c181487f1b00fde76d7950d3e314204ae703c44a"
 EXPECTED_SITE=0x017894E0
 EXPECTED_BYTES=bytes.fromhex("55 48 89 E5 41 57")
+# V428: privately verified against exact decrypted Bloodborne 1.09
+# SHA-256 941f887a...aaa5ae7; no game executable enters CI.
+EXPECTED_FULL=bytes.fromhex("55 48 89 E5 41 57 41 56 41 55 41 54 53 48 81 EC 88 00 00 00")
 EXPECTED_SLOTS=68
 PREF_BASE=0x400000
 
@@ -44,22 +47,25 @@ def verify(site_file:Path,probe_file:Path)->None:
     if int(site["offset"],16)!=EXPECTED_SITE or bytes.fromhex(site["original"])!=EXPECTED_BYTES:
         raise ValueError("BBHost hook target differs from exact YT 1.09 site")
     probe=probe_file.read_text(encoding="utf-8")
-    head=re.search(r"netsync_prologue_v17\[16\]\s*=\s*\{([^}]+)\}",probe,re.S)
+    head=re.search(r"netsync_prologue_v17\[20\]\s*=\s*\{([^}]+)\}",probe,re.S)
     if not head:
         raise ValueError("BBHost NetSync site prologue missing")
     body=re.sub(r"/\*.*?\*/|//[^\n]*"," ",head.group(1),flags=re.S)
     bytes_in_source=bytes(int(x,16) for x in re.findall(r"0x([0-9A-Fa-f]{2})\b",body))
-    if len(bytes_in_source)!=16 or not bytes_in_source.startswith(EXPECTED_BYTES):
-        raise ValueError("BBHost plugin prologue not grounded in YT source")
+    if bytes_in_source!=EXPECTED_FULL:
+        raise ValueError("BBHost plugin exact 1.09 prologue differs from privately audited full instructions")
     if ("(UINT64_C(0x017894E0)+UINT64_C(0x400000))" not in probe or
         "#define SHYT_V17_GAME_CHANNELS 68u" not in probe or
-        "if (!ctx) return 0;" not in probe):
+        "if (!ctx) return 0;" not in probe or
+        'strcmp(api->eboot_sha256(),' not in probe or
+        'api->read(SHYT_V17_NETSYNC_SEND_BN,actual,sizeof(actual))' not in probe):
+        
         raise ValueError("BBHost BN/RVA translation or passive packet ABI changed")
     if "const uint64_t channel=ctx->arg[2]" not in probe or "const uint64_t size=ctx->arg[4]" not in probe:
         raise ValueError("original NetSync channel/size calling convention changed")
     if "return 0; /* NEVER intercept / alter gameplay, only observe */" not in probe:
         raise ValueError("non-intercepting packet observer semantics changed")
-    print("SHYT_V17_YT_131_NATIVE_PACKET_SEND_BN_AND_ABI_SOURCE_CONTRACT_PASS")
+    print("SHYT_V428_YT_140_109_FULL_NETSYNC_OBSERVER_BN_AND_ABI_SOURCE_CONTRACT_PASS")
 
 if __name__=="__main__":
     p=argparse.ArgumentParser()
