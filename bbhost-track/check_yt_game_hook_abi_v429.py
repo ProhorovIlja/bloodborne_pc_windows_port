@@ -43,6 +43,11 @@ def main(yt:Path,bbhost:Path,probe:Path,plugin:Path)->None:
         "const u32 size = static_cast<u32>(registers->r8);",
         "OnlineIdOfMember(registers->rdx)",
         "static_cast<u32>(registers->rsi) != 0",
+        # V430 original source constructs native 8-byte channel/length
+        # header in SendHitToOwner. The stage must not guess the format.
+        "std::memcpy(packet.data(), &channel, 4);",
+        "std::memcpy(packet.data() + 4, &size, 4);",
+        "std::memcpy(packet.data() + 8, reinterpret_cast<const void*>(payload), size);",
         "void PS4_SYSV_ABI DeliverAtNetSyncUpdate",
         "net_sync_updated_ms.store",
     ),"original YT send/update handler")
