@@ -216,6 +216,44 @@ int main() {
        counts.heartbeats_received!=1)
         return bad(21);
 
+    // V416: a connected BBHost plugin does NOT silently log into the
+    // lobby: explicit caller opt-in is required. No guest/NetSync access.
+    const char invalid_utf8[]={char(0xc0),char(0xaf),0};
+    if(shyt_yt_server_send_lobby_hello_v416(client,invalid_utf8,0,1301)!=0 ||
+       shyt_yt_server_send_lobby_hello_v416(client,"Hunter Test",2,1301)!=0 ||
+       shyt_yt_server_send_lobby_hello_v416(client,"",0,1301)!=0)
+        return bad(53);
+    if(shyt_yt_server_send_lobby_hello_v416(client,"Hunter Test",0,1301)!=1 ||
+       shyt_yt_server_send_lobby_hello_v416(client,"Hunter Test",0,1302)!=0)
+        return bad(54);
+    auto login_coop_wire=receive(server,endpoint);
+    if(login_coop_wire.empty() ||
+       answer.session.Open(login_coop_wire)!=LinkAuth::Session::Verdict::Ok)
+        return bad(55);
+    login_coop_wire.resize(login_coop_wire.size()-LinkAuth::TrailerBytes);
+    const auto login_frame=YT::DecodeCoop(login_coop_wire);
+    if(!login_frame)return bad(56);
+    BloodborneCoop::CoopStream from_client("shadnet",1u);
+    const auto login_envelopes=from_client.Receive(*login_frame,1301);
+    if(login_envelopes.size()!=1u)return bad(57);
+    // Canonical protobuf (original YT Envelope.lobby_hello=23):
+    // {protocol=8, member=lowercase hex authenticated ID, name, playing=0}.
+    std::string member_hex;
+    constexpr char hex[]="0123456789abcdef";
+    for(const unsigned char c:std::string("fictional-id")) {
+        member_hex.push_back(hex[c>>4u]);
+        member_hex.push_back(hex[c&15u]);
+    }
+    std::vector<u8> expected_inner{0x08u,0x08u,0x12u,static_cast<u8>(member_hex.size())};
+    expected_inner.insert(expected_inner.end(),member_hex.begin(),member_hex.end());
+    const std::string display="Hunter Test";
+    expected_inner.push_back(0x1au);
+    expected_inner.push_back(static_cast<u8>(display.size()));
+    expected_inner.insert(expected_inner.end(),display.begin(),display.end());
+    std::vector<u8> expected_lobby{0xbau,0x01u,static_cast<u8>(expected_inner.size())};
+    expected_lobby.insert(expected_lobby.end(),expected_inner.begin(),expected_inner.end());
+    if(login_envelopes.front()!=expected_lobby)return bad(58);
+
     // Real encrypted Data and Coop messages must be authenticated, but
     // WITHOUT room membership the engine must quarantine ALL payloads.
     const std::array<u8,9> fake_game{{
