@@ -108,6 +108,18 @@ int shyt_yt_server_coop_counters_v413(const ShytYtServerSessionV408 *session,
  * remains disabled and these are observation counters only. */
 int shyt_yt_server_team_observations_v415(const ShytYtServerSessionV408 *session,
                                           ShytYtTeamObservationsV415 *out);
+/* V416: EXPLICIT caller-opt-in original YT Envelope{LobbyHello}.
+ * Requires SHLK Noise-NK LINKED, a new empty reliable stream and a
+ * well-formed UTF-8 display name (1..96 bytes). Derives the lobby member
+ * from the *authenticated* online ID as lowercase hex, matching YT's
+ * AuthenticatedMember; caller cannot supply/forge a member ID.
+ * 1=queued/sent, 0=refused without network side effect, -1=send failure.
+ * Never called automatically at plugin init; no team/world or NetSync grant.
+ * The controller is single-threaded: call on the same thread as tick().
+ */
+int shyt_yt_server_send_lobby_hello_v416(ShytYtServerSessionV408 *session,
+                                          const char *display_name,
+                                          int playing,uint64_t monotonic_ms);
 /* Consume exactly one MAC-authenticated LINK presence notice.
  * Returns 1 for a notice; 0 if empty/bad args; -1 if the bounded
  * queue overflowed, permanently invalidating presence until a NEW
