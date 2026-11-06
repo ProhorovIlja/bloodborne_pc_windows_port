@@ -143,6 +143,7 @@ def main()->None:
     yt_projection_header=Path(__file__).resolve().parent/"shyt_yt_world_projection_v426.h"
     yt_guest_site_header=Path(__file__).resolve().parent/"shyt_yt_guest_hook_preflight_v427.h"
     yt_full_guest_site_header=Path(__file__).resolve().parent/"shyt_yt_full_guest_preflight_v428.h"
+    yt_calls_header=Path(__file__).resolve().parent/"shyt_yt_game_link_observer_v429.h"
     yt_work_source=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.cpp"
     yt_work_header=Path(__file__).resolve().parent/"shyt_yt_signup_work_v409.h"
     if (cmake.is_symlink() or not cmake.is_file() or
@@ -174,6 +175,7 @@ def main()->None:
         not yt_projection_header.is_file() or yt_projection_header.is_symlink() or
         not yt_guest_site_header.is_file() or yt_guest_site_header.is_symlink() or
         not yt_full_guest_site_header.is_file() or yt_full_guest_site_header.is_symlink() or
+        not yt_calls_header.is_file() or yt_calls_header.is_symlink() or
         not yt_work_source.is_file() or yt_work_source.is_symlink() or
         not yt_work_header.is_file() or yt_work_header.is_symlink() or
         plugin_root.exists() or plugin_root.is_symlink()):
@@ -209,6 +211,7 @@ def main()->None:
         shutil.copyfile(yt_projection_header,plugin_root/yt_projection_header.name)
         shutil.copyfile(yt_guest_site_header,plugin_root/yt_guest_site_header.name)
         shutil.copyfile(yt_full_guest_site_header,plugin_root/yt_full_guest_site_header.name)
+        shutil.copyfile(yt_calls_header,plugin_root/yt_calls_header.name)
         shutil.copyfile(yt_work_source,plugin_root/yt_work_source.name)
         shutil.copyfile(yt_work_header,plugin_root/yt_work_header.name)
         vendored=plugin_root/"yt_original"/"coop"
