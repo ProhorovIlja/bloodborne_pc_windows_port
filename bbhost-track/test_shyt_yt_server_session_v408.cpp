@@ -395,6 +395,51 @@ int main() {
     for(const auto& frame:server_world.Flush(1423))
         if(!send_encrypted(YT::EncodeCoop(frame)))return bad(46);
     if(shyt_yt_server_tick_v408(client,1424)!=1)return bad(47);
+    // V418: only a game-confirmed save slot and authentic TeamStart may
+    // cause a party Hello. These negative cases MUST send no datagrams.
+    if(shyt_yt_server_send_party_hello_v418(
+           client,"world:another",1u,707u,1,1424)!=0 ||
+       shyt_yt_server_send_party_hello_v418(
+           client,"world:world-v415",2u,707u,1,1424)!=0 ||
+       shyt_yt_server_send_party_hello_v418(
+           client,"world:world-v415",1u,0u,1,1424)!=0 ||
+       shyt_yt_server_send_party_hello_v418(
+           client,"world:world-v415",1u,707u,2,1424)!=0)
+        return bad(61);
+    if(shyt_yt_server_send_party_hello_v418(
+           client,"world:world-v415",1u,707u,1,1424)!=1 ||
+       shyt_yt_server_send_party_hello_v418(
+           client,"world:world-v415",1u,707u,1,1424)!=0)
+        return bad(62);
+    // Original YT Envelope.hello = 1, Hello fields:
+    // protocol=1, party=2, authenticated member=3, run=4,
+    // host=5 (server leader), enemy_owner=6.
+    std::vector<u8> expected_party_hello,expected_party_envelope;
+    putnum(expected_party_hello,1,8u);
+    puttext(expected_party_hello,2,"world:world-v415");
+    puttext(expected_party_hello,3,member_hex);
+    putnum(expected_party_hello,4,707u);
+    putnum(expected_party_hello,5,1u); // our fictional member is host
+    putnum(expected_party_hello,6,1u);
+    putbytes(expected_party_envelope,1,expected_party_hello);
+    bool party_hello_seen=false;
+    for(unsigned attempts=0;attempts<16u && !party_hello_seen;++attempts) {
+        auto reply=receive(server,endpoint);
+        if(reply.empty())return bad(63);
+        if(answer.session.Open(reply)!=LinkAuth::Session::Verdict::Ok)
+            return bad(64);
+        reply.resize(reply.size()-LinkAuth::TrailerBytes);
+        if(const auto coop=YT::DecodeCoop(reply)) {
+            for(const auto& original_message:
+                from_client.Receive(*coop,1424)) {
+                if(original_message==expected_party_envelope)
+                    party_hello_seen=true;
+            }
+        }
+    }
+    if(!party_hello_seen)return bad(65);
+    // Nothing above grants a BBHost P2P/NetSync/game-memory permission.
+    // World Welcome remains unbound until the next explicit world gate.
     std::vector<u8> party_welcome, welcome_envelope;
     putnum(party_welcome,1,1); // accepted, but no separate party link binding
     putnum(party_welcome,3,77); // synthetic world epoch
