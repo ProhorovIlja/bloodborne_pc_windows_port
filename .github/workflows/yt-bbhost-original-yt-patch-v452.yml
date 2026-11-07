@@ -1,0 +1,80 @@
+name: V452 coherent CLS YT v1.4.0 game source and BBHost 0.2.26
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/stage_cls_yt_source_v452.py'
+      - 'bbhost-track/stage_cls_yt_bbhost_v451.py'
+      - '.github/workflows/yt-bbhost-original-yt-patch-v452.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-crosssource-game-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          path: original-bbhost
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: new-bbhost
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: yt-v140
+          persist-credentials: false
+          submodules: false
+          filter: blob:none
+          sparse-checkout: |
+            bbport/gpu
+            bbport/launcher
+            emulator/src/core
+            server/coop
+      - name: Stage published source of BOTH game runtime and YT from exact CLS release
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/v452-original-cls-source.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+          python3 bbhost-track/stage_cls_yt_bbhost_v451.py \
+            --archive "$RUNNER_TEMP/v452-original-cls-source.zip" \
+            --parent original-bbhost --modern new-bbhost \
+            --report "$RUNNER_TEMP/v452-host-report.json"
+          python3 bbhost-track/stage_cls_yt_source_v452.py \
+            --archive "$RUNNER_TEMP/v452-original-cls-source.zip" \
+            --yt yt-v140 --report "$RUNNER_TEMP/v452-yt-report.json"
+          test -s new-bbhost/src/yt/yt_host.cpp
+          test -s new-bbhost/cmake/bbsc_yt.cmake
+          test -s yt-v140/bbport/launcher/bbhost_options.py
+          grep -Fq 'hle_thread_enter_guest' yt-v140/emulator/src/core/bloodborne_patches.cpp
+          echo SHYT_V452_BOTH_REAL_GAME_CLIENT_PARTS_MATCH_EXACT_RELEASE
+      - name: Retain only bounded source provenance reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V452-CLS-YT-v140-with-bbhost-v026-crosssource-report
+          path: |
+            ${{ runner.temp }}/v452-host-report.json
+            ${{ runner.temp }}/v452-yt-report.json
+          retention-days: 4
+          if-no-files-found: error
+      - name: No release/production game modification
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/v452-original-cls-source.zip"
+          echo SHYT_V452_NOT_GAME_RUNNING_NO_SERVER_DEPLOYMENT
