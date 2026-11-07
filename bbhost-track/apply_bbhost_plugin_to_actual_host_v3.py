@@ -17,11 +17,22 @@ UPSTREAM="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
 # Released BBHost 0.2.25 is a distinct, explicitly approved upstream source.
 # Candidate builds must never silently replace the proven 0.2.24 baseline.
 UPSTREAM_V025="7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13"
+# Opt-in evaluation ONLY. The PR217 networking also requires a matching
+# server protocol update; a passing plugin build does NOT deploy this PR.
+UPSTREAM_PR217="271f68ef8811b873c7e0cc31f98a92f8deb7e999"
 BBHOST_CMAKE_BLOBS={
     UPSTREAM:"672a3c1c3b9264cf3cc34d4606b844e5cba87717",
     UPSTREAM_V025:"c881ca32c838eb7a8162c45558cfdac135967f53",
+    UPSTREAM_PR217:"e0a428f592c78d858cc0bb192aa88a7df941ee03",
 }
 BBHOST_PLUGIN_ABI_BLOB="b437a16204a7a439d709054b8fa592034d42f990"
+BBHOST_PLUGIN_ABI_PR217="cbd729ccba75ef3e95711ffea4af6be6b2442778"
+BBHOST_PR217_NETWORK_BLOBS={
+    "src/hle/np_signaling.cpp":"4668783f279c9e6c65e48b3c31c956c29056bf61",
+    "src/hle/np_matching2.cpp":"a54fcf6e4eb717ec98d8cf50b5a6023f5c4e29c8",
+    "src/hle/net.cpp":"63f6847b4f760b3ad0015abef3c898fd6035e6dc",
+    "src/hle/net_p2p.h":"ed846bfc67919a7d492c98b9b5d866e56b35916b",
+}
 YT_UPSTREAM="5d2305ee611ef1e03be39ff925f0da75c9a70393"
 YT_NET_BLOBS={
     "emulator/src/core/libraries/network/net_link.h":"7f56fd1a5215eddb9edd9f13c91b216c16bc1651",
@@ -89,6 +100,8 @@ def main()->None:
     p.add_argument("--upstream-checkout",required=True,type=Path)
     p.add_argument("--original-yt-checkout",required=True,type=Path)
     p.add_argument("--mode",choices=("check","apply"),default="check")
+    p.add_argument("--allow-pr217-network-candidate",action="store_true",
+                   help="ONLY CI/sandbox PR217 API17 ABI evaluation, not promotion")
     a=p.parse_args()
     root=a.upstream_checkout.resolve(strict=True)
     yt=a.original_yt_checkout.resolve(strict=True)
@@ -110,10 +123,27 @@ def main()->None:
     expected_cmake_blob=BBHOST_CMAKE_BLOBS.get(actual_upstream)
     if not expected_cmake_blob:
         raise ValueError("unverified BBHost release")
+    candidate=actual_upstream==UPSTREAM_PR217
+    # A new API17 host must never silently replace the v16 production
+    # baseline. Conversely the flag must not pretend to test another SHA.
+    if candidate!=a.allow_pr217_network_candidate:
+        raise ValueError("BBHost PR217 candidate requires explicit exact opt-in")
     plugin_abi="include/bbhost_plugin.h"
-    if (git(root,"rev-parse","HEAD:"+plugin_abi)!=BBHOST_PLUGIN_ABI_BLOB or
-        git(root,"hash-object",plugin_abi)!=BBHOST_PLUGIN_ABI_BLOB):
-        raise ValueError("BBHost plugin ABI differs from validated v16")
+    expected_abi=(BBHOST_PLUGIN_ABI_PR217 if candidate else
+                  BBHOST_PLUGIN_ABI_BLOB)
+    if (git(root,"rev-parse","HEAD:"+plugin_abi)!=expected_abi or
+        git(root,"hash-object",plugin_abi)!=expected_abi):
+        raise ValueError("BBHost plugin ABI changed since pinned proof")
+    if candidate:
+        for source_path,source_blob in BBHOST_PR217_NETWORK_BLOBS.items():
+            member=root/source_path
+            if (not member.is_file() or member.is_symlink() or
+                git(root,"rev-parse","HEAD:"+source_path)!=source_blob or
+                git(root,"hash-object",source_path)!=source_blob):
+                raise ValueError("BBHost PR217 signaling/NP/M2 source drift")
+        if (not (root/"include/bbhost_plugin.h").read_text().count(
+                "#define BB_PLUGIN_API_VERSION 17")==1):
+            raise ValueError("BBHost PR217 API17 mismatch")
     cmake=root/"CMakeLists.txt"
     plugin_root=root/"plugins/shyt_probe"
     plugin=plugin_root/"shyt_bbhost_probe_v1.c"
@@ -243,6 +273,9 @@ def main()->None:
                                 PACKAGE_ANCHOR+" bb_plugin_shyt")
         cmake.write_text(updated,encoding="utf-8")
     print("SHYT_BBHOST_V3_REAL_HOST_PLUGIN_CMAKE_"+("APPLIED" if a.mode=="apply" else "PINNED"))
+    if candidate:
+        print("SHYT_V439_PR217_NETWORK_API17_EXPLICIT_CANDIDATE_ONLY_"+
+              ("APPLIED" if a.mode=="apply" else "PINNED"))
 
 if __name__=="__main__":
     try:main()
