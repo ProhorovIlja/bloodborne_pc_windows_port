@@ -15,7 +15,8 @@ import subprocess
 
 PIN="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
 PIN_V025="7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13"
-ALLOWED_RELEASE_HEADS=(PIN,PIN_V025)  # explicit source pins only
+PIN_V026="bdc5cdf8be5f37188da9c2368e92be444fdc04cb"
+ALLOWED_RELEASE_HEADS=(PIN,PIN_V025,PIN_V026)  # explicit source pins only
 FILES={
     "src/net/stun.cpp":"d4c950d9ce321ddc01134778b326017b1f282d86",
     "src/hle/net.cpp":"476fd20eb8acf1acbb5ca45cbb4e03af6b6da4a2",
@@ -110,12 +111,19 @@ def main()->None:
     p=argparse.ArgumentParser()
     p.add_argument("--upstream-checkout",type=Path,required=True)
     p.add_argument("--mode",choices=("check","apply"),default="check")
+    p.add_argument("--allow-v026-candidate",action="store_true",
+                   help="source-pinned v0.2.26 CI only; never change production")
     a=p.parse_args()
     root=a.upstream_checkout.resolve(strict=True)
-    if git(root,"rev-parse","HEAD") not in ALLOWED_RELEASE_HEADS:
-        raise ValueError("expected official BBHost v0.2.24/v0.2.25 commit")
+    head=git(root,"rev-parse","HEAD")
+    if head not in ALLOWED_RELEASE_HEADS:
+        raise ValueError("expected official source-pinned BBHost release")
+    if (head==PIN_V026)!=a.allow_v026_candidate:
+        raise ValueError("BBHost v0.2.26 CSPRNG requires explicit candidate opt-in")
     patches={}
-    for path,expected in FILES.items():
+    for path,original in FILES.items():
+        expected=("0deb07fd11745aa8c8a80b550f93c7f81d99cff8"
+                  if head==PIN_V026 and path=="src/hle/net.cpp" else original)
         file=root/path
         if (file.is_symlink() or not file.is_file() or
             git(root,"rev-parse","HEAD:"+path)!=expected or
@@ -127,6 +135,8 @@ def main()->None:
         for file,changed in patches.items():
             file.write_text(changed,encoding="utf-8")
     print("SHYT_BBHOST_V2_REAL_STUN_OS_ENTROPY_"+("APPLIED" if a.mode=="apply" else "PINNED"))
+    if head==PIN_V026:
+        print("SHYT_V444_BBHOST_V026_STUN_CSPRNG_CANDIDATE_ONLY")
 
 if __name__=="__main__":
     try:main()
