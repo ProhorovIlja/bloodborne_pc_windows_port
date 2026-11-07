@@ -37,8 +37,16 @@ jobs:
         run: |
           set -euo pipefail
           python3 bbhost-track/verify_cls_yt_bbhost_source_v441.py \
-            --archive "$RUNNER_TEMP/cls-bbhost-v140-source.zip"
+            --archive "$RUNNER_TEMP/cls-bbhost-v140-source.zip" \
+            --extract-to "$RUNNER_TEMP/v441-audit-source"
           echo SHYT_V441_SOURCE_ONLY_NOT_FIVE_REAL_GAME_CLIENTS
+      - name: Retain only 3 audited public BBHost YT integration files
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V441-CLS-v140-ONLY-yt-host-source
+          path: ${{ runner.temp }}/v441-audit-source/
+          retention-days: 2
+          if-no-files-found: error
       - name: Remove downloaded source on runner
         if: always()
         shell: bash
