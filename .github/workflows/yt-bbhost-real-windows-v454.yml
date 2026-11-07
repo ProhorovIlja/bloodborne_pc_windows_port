@@ -178,9 +178,20 @@ jobs:
         run: |
           set -euo pipefail
           ytroot="$(cygpath -m "$PWD/original-yt-v140")"
+          # MSYS2's official Vulkan Memory Allocator package installs the
+          # public header under /clang64/include/vma/, not /clang64/include/.
+          # YT's original bbport overlay includes <vk_mem_alloc.h> directly.
+          test -s "$MSYSTEM_PREFIX/include/vma/vk_mem_alloc.h"
+          vma_include="$(cygpath -m "$MSYSTEM_PREFIX/include/vma")"
+          case "$vma_include" in
+            */clang64/include/vma) ;;
+            *) echo V457_UNEXPECTED_VMA_HEADER_LOCATION; exit 1 ;;
+          esac
+          echo SHYT_V457_OFFICIAL_MSYS2_VMA_HEADER_PATH_VALIDATED
           if ! cmake -S modern-bbhost -B "$RUNNER_TEMP/v454-build" -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=tools/bbsc/clang64-toolchain.cmake \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PRODUCTION=ON \
+            "-DCMAKE_CXX_FLAGS=-I$vma_include" \
             "-DBB_YT_ROOT=$ytroot" >"$RUNNER_TEMP/v454-configure.log" 2>&1; then
             echo 'V454 original game client configure blocked (bounded diagnostic):'
             (grep -E 'CMake Error|Could NOT find|not found|error:|does not exist|No such file|FAILED' \
