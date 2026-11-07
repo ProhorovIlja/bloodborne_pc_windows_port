@@ -715,6 +715,23 @@ jobs:
           test -f pr217-bbhost/plugins/shyt_probe/shyt_yt_game_route_assessment_v433.h
           grep -q '^#define BB_PLUGIN_API_VERSION 17$' pr217-bbhost/include/bbhost_plugin.h
           echo SHYT_V439_PR217_API17_SOURCE_PINNED_NO_DEFAULT_PROMOTION_PASS
+      - name: V440 check PR217 original UDP signal receiver is intended target, never mistake it for authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/apply_bbhost_signaling_guard_v440.py \
+            --upstream-checkout pr217-bbhost \
+            --guard bbhost-track/shyt_bbhost_signal_target_v440.h --mode check
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Ibbhost-track \
+            bbhost-track/test_shyt_bbhost_signal_target_v440.cpp \
+            -o "$RUNNER_TEMP/shyt-v440-bbhost-signal-target"
+          "$RUNNER_TEMP/shyt-v440-bbhost-signal-target"
+          python3 bbhost-track/apply_bbhost_signaling_guard_v440.py \
+            --upstream-checkout pr217-bbhost \
+            --guard bbhost-track/shyt_bbhost_signal_target_v440.h --mode apply
+          grep -Fq 'BbhostSignalTargetV440::Inspect(' pr217-bbhost/src/hle/np_signaling.cpp
+          test -f pr217-bbhost/src/hle/shyt_bbhost_signal_target_v440.h
+          echo SHYT_V440_PR217_UDP_TARGET_ONLY_GUARD_PROVEN_NO_PEER_AUTH_GRANTED
       - name: Prove actual BBHost PR217 API17 .so plugin with original YT Noise NK and real dlopen fixture
         shell: bash
         run: |
