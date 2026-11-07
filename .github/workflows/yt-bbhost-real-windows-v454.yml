@@ -156,6 +156,23 @@ jobs:
           grep -Fq 'hle_thread_enter_guest' original-yt-v140/emulator/src/core/bloodborne_patches.cpp
           test -s modern-bbhost/cmake/bbsc_yt.cmake
           echo SHYT_V454_REAL_YT_BBHOST_WINCLANG_SOURCE_ADMISSION_PASS
+      - name: Unshadow standard libc++ <version> on case-insensitive Windows
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # The original BBHost 0.2.26 file 'third_party/imgui/VERSION' is
+          # found as libc++ <version> through the public ImGui include path on
+          # Windows, producing false 'no template numeric_limits' failures.
+          # The file is only documentation (CMakeLists references it in a comment).
+          # Do not patch or edit original source text. Move the exact file out of
+          # the compiler's include tree *only* in this throwaway CI checkout.
+          test "$(git -C modern-bbhost rev-parse HEAD:third_party/imgui/VERSION)" = bf33d11fb86b84596e3f1056c05c933ac26d01e9
+          test "$(cat modern-bbhost/third_party/imgui/VERSION)" = v1.92.9b
+          cp modern-bbhost/third_party/imgui/VERSION "$RUNNER_TEMP/BBHOST-0.2.26-IMGUI-ORIGINAL-VERSION.txt"
+          rm modern-bbhost/third_party/imgui/VERSION
+          test ! -e modern-bbhost/third_party/imgui/VERSION
+          test "$(cat "$RUNNER_TEMP/BBHOST-0.2.26-IMGUI-ORIGINAL-VERSION.txt")" = v1.92.9b
+          echo SHYT_V456_WINDOWS_CLANG_IMGUI_VERSION_SHADOWING_GUARD_PASS
       - name: Configure original YT full co-op + modern BBHost Windows CLANG64
         shell: msys2 {0}
         run: |
