@@ -834,7 +834,10 @@ jobs:
           test "$(git -C pr218-bbhost rev-parse HEAD:tests/sign_in_check_test.cpp)" = 5c3bacba08ae8fbe48647bb10c5aa7eed7aefd92
           test "$(git -C pr218-bbhost rev-parse HEAD:src/replay/json.h)" = e31f15c05631ce86b27e93a26f4fbeece74715c7
           test "$(git -C pr218-bbhost rev-parse HEAD:src/replay/json.cpp)" = 81233f5d277c3ebaeb1439dd2d5be5b859e93aa3
-          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Isrc \
+          # The original upstream json.cpp has aggregate-initializer omissions.
+          # Keep -Werror for our tests; suppress only this known upstream warning.
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Wno-missing-field-initializers \
             pr218-bbhost/tests/sign_in_check_test.cpp \
             pr218-bbhost/src/replay/json.cpp \
             -Ipr218-bbhost/src \
