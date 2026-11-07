@@ -645,6 +645,8 @@ jobs:
             --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
           python3 bbhost-track/extend_yt_qt_signed_in_five_v438.py \
             --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
+          python3 bbhost-track/extend_yt_qt_rebind_churn_v440.py \
+            --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
           test -z "$(git -C pinned-yt-v140 status --porcelain)"
           contracts="$PWD/pinned-yt-v140/server/tests/contracts/server_link_frames.txt"
           g++ -std=c++20 -O2 -fPIC -Wall -Wextra \
@@ -666,6 +668,7 @@ jobs:
           grep -Fq 'V436 YT ORIGINAL NOISE-NK 2-PEER AUTHENTIC GAME RELAY PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
           grep -Fq 'V437 YT ORIGINAL NOISE-NK FIVE HUNTER ROUTE REBIND PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
           grep -Fq 'V438 YT ORIGINAL FIVE DISTINCT HOSTED SIGN-IN IDENTITIES PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
+          grep -Fq 'V440 YT ORIGINAL FIVE MEMBER AUTHENTIC REBIND CHURN PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
           echo SHYT_V438_REAL_ORIGINAL_QT_FIVE_UNIQUE_SIGN_IN_5COOP_4PLUS1_3PLUS2_REBIND_PASS
 
   bbhost-pr217-network-api17-candidate:
