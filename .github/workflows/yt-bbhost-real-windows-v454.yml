@@ -173,6 +173,23 @@ jobs:
           test ! -e modern-bbhost/third_party/imgui/VERSION
           test "$(cat "$RUNNER_TEMP/BBHOST-0.2.26-IMGUI-ORIGINAL-VERSION.txt")" = v1.92.9b
           echo SHYT_V456_WINDOWS_CLANG_IMGUI_VERSION_SHADOWING_GUARD_PASS
+      - name: Fix exact BBHost 0.2.26 GCN missing stdlib header (not a second shader engine)
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # Original upstream src/gcn/lift.cpp calls std::getenv while omitting
+          # <cstdlib>. Windows CLANG64/libc++ does not guarantee transitive include.
+          test "$(git -C modern-bbhost rev-parse HEAD:src/gcn/lift.cpp)" = f61674f120d919eb918c1fb0883060f68b7c438a
+          python - <<'PYCODE'
+          from pathlib import Path
+          file = Path("modern-bbhost/src/gcn/lift.cpp")
+          data = file.read_bytes()
+          anchor = b"#include <cstdio>\n"
+          if data.count(anchor) != 1 or b"#include <cstdlib>" in data:
+              raise SystemExit("SHYT_V458_GCN_CSTDLIB_SOURCE_DRIFT")
+          file.write_bytes(data.replace(anchor, anchor + b"#include <cstdlib>\n", 1))
+          print("SHYT_V458_BBHOST_CSTDLIB_EXACT_SOURCE_HEADER_GUARD_PASS")
+          PYCODE
       - name: Configure original YT full co-op + modern BBHost Windows CLANG64
         shell: msys2 {0}
         run: |
