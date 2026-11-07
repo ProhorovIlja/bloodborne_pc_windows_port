@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <iterator>
 #include <vector>
 
 namespace BloodborneCoop::SHYT::MemoryV447 {
