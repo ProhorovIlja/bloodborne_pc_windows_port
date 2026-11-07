@@ -1,0 +1,84 @@
+name: V444 stable BBHost v0.2.26 exact-source candidate with YT plugin
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-v026-candidate-v444.yml'
+      - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
+      - 'bbhost-track/apply_bbhost_os_stun_v2.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bbhost-v026-source-runtime-candidate:
+    name: BBHost 0.2.26 complete original host and original YT-plugin candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: pinned-bbhost-v026
+          persist-credentials: false
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - name: Verify exactly released 0.2.26 and stage opt-in plugin & strong STUN IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-bbhost-v026 rev-parse HEAD)" = bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          test "$(git -C pinned-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          python3 bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost-v026 --original-yt-checkout pinned-yt --allow-v026-candidate --mode check
+          python3 bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost-v026 --allow-v026-candidate --mode check
+          # Neither 0.2.24 nor a floating master can pretend to be v0.2.26.
+          if python3 bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost-v026 --original-yt-checkout pinned-yt --mode check >"$RUNNER_TEMP/v444-negative.log" 2>&1; then
+            echo V444_FAILURE_OPTIONAL_PIN_WAS_BYPASSED
+            exit 1
+          fi
+          python3 bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost-v026 --original-yt-checkout pinned-yt --allow-v026-candidate --mode apply
+          python3 bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost-v026 --allow-v026-candidate --mode apply
+          grep -Fq 'add_library(bb_plugin_shyt MODULE' pinned-bbhost-v026/CMakeLists.txt
+          grep -Fq 'if (req_len == 0) return false;' pinned-bbhost-v026/src/hle/net.cpp
+          grep -Fq '#define BB_PLUGIN_API_VERSION 16' pinned-bbhost-v026/include/bbhost_plugin.h
+          echo SHYT_V444_RELEASED_BBHOST_026_SOURCE_AND_YT_PLUGIN_STAGED
+      - name: Compile real upstream STUN tests plus forced entropy failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost-v026/src             pinned-bbhost-v026/src/net/stun.cpp pinned-bbhost-v026/tests/stun_test.cpp             -o "$RUNNER_TEMP/v444-stun"
+          "$RUNNER_TEMP/v444-stun"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -DBBHOST_V2_TEST_ENTROPY_FAIL             -Ipinned-bbhost-v026/src -Ibbhost-track             pinned-bbhost-v026/src/net/stun.cpp             bbhost-track/test_bbhost_stun_entropy_failure_v2.cpp             -o "$RUNNER_TEMP/v444-fail-entropy"
+          "$RUNNER_TEMP/v444-fail-entropy"
+          echo SHYT_V444_BBHOST_026_REAL_OS_STUN_AND_ENTROPY_FAILURE_PASS
+      - name: Compile complete released BBHost renderer, engine and YT plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! (cd pinned-bbhost-v026 && tools/ci_build.sh) >"$RUNNER_TEMP/v444-build.log" 2>&1; then
+            echo "V444 complete host compile failed (bounded error summary):"
+            (grep -E 'CMake Error:|fatal error:|error:|FAILED:|Failed|failed|curl:|404|403' "$RUNNER_TEMP/v444-build.log" | tail -8 | cut -c1-160 || true)
+            tail -6 "$RUNNER_TEMP/v444-build.log" | cut -c1-160
+            exit 1
+          fi
+          test -x pinned-bbhost-v026/build-ci/build/bbhost
+          test -s pinned-bbhost-v026/build-ci/build/plugins/shyt_bbhost_probe.so
+          nm -D --defined-only pinned-bbhost-v026/build-ci/build/plugins/shyt_bbhost_probe.so | grep -q bb_plugin_init
+          nm -D --defined-only pinned-bbhost-v026/build-ci/build/plugins/shyt_bbhost_probe.so | grep -q shyt_yt_server_tick_v408
+          echo SHYT_V444_COMPLETE_RELEASED_BBHOST_026_PLUS_YT_PLUGIN_REAL_COMPILE_PASS
+      - name: No game content and no release promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git -C pinned-yt status --porcelain)"
+          test ! -e pinned-bbhost-v026/eboot.bin
+          echo SHYT_V444_CANDIDATE_ONLY_NO_GAME_BOOT_DIRECT_P2P_OR_LIVE_FORNEX
