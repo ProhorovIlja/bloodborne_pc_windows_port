@@ -24,7 +24,8 @@ WANTED = ("src/yt/yt_host.cpp", "src/yt/yt_ui.cpp", "src/yt/yt_host.h")
 class Refused(ValueError):
     pass
 
-def verify(archive: Path, digest: str = SOURCE_SHA256) -> dict[str, object]:
+def verify(archive: Path, digest: str = SOURCE_SHA256,
+           extract_to: Path | None = None) -> dict[str, object]:
     if archive.is_symlink() or not archive.is_file():
         raise Refused("archive must be an ordinary file")
     size = archive.stat().st_size
@@ -32,7 +33,8 @@ def verify(archive: Path, digest: str = SOURCE_SHA256) -> dict[str, object]:
         raise Refused("archive size outside source-only envelope")
     if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
         raise Refused("expected digest is not canonical sha256")
-    sha = hashlib.file_digest(archive.open("rb"), "sha256").hexdigest()
+    with archive.open("rb") as stream:
+        sha = hashlib.file_digest(stream, "sha256").hexdigest()
     if sha != digest:
         raise Refused("source archive digest differs from pinned release")
     with zipfile.ZipFile(archive) as z:
@@ -65,6 +67,11 @@ def verify(archive: Path, digest: str = SOURCE_SHA256) -> dict[str, object]:
                 sources[wanted] = z.read(i).decode("utf-8")
             except (UnicodeError, RuntimeError, EOFError) as exc:
                 raise Refused("BBHost-YT source unreadable") from exc
+
+    if extract_to is not None:
+        extract_to.mkdir(parents=True, exist_ok=True)
+        for wanted, source in sources.items():
+            (extract_to / Path(wanted).name).write_text(source, encoding="utf-8")
 
     host = sources[WANTED[0]]
     ui = sources[WANTED[1]]
@@ -100,9 +107,10 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--archive", required=True, type=Path)
     p.add_argument("--expected-sha256", default=SOURCE_SHA256)
+    p.add_argument("--extract-to", type=Path)
     a = p.parse_args()
     try:
-        result = verify(a.archive, a.expected_sha256)
+        result = verify(a.archive, a.expected_sha256, a.extract_to)
     except (Refused, OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as e:
         raise SystemExit("V441_CLS_RELEASE_SOURCE_REFUSED: " + type(e).__name__) from None
     print(json.dumps(result, sort_keys=True))
