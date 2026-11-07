@@ -32,7 +32,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C candidate-yt540 rev-parse HEAD)" = 0b948061f8df16ceb8588e19cd858a0fffea7ddc
-          test "$(git -C candidate-yt540 merge-base HEAD efa0ad265d840d9195e55db2e3216f46f7daedd0)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          # The exact tested candidate SHA was taken from upstream PR #540, whose base is YT v1.4.0.
+          # Checkout is shallow, so do not invent a merge-base from missing history.
           grep -Fq 'AFloodingLinkIsDroppedAndReportedNeverBanned' candidate-yt540/server/tests/test_admission.cpp
           grep -Fq 'TakeFloods()' candidate-yt540/server/src/admission.h
           echo SHYT_V443_PINNED_YT140_HARD_RATE_LIMIT_WITHOUT_SHARED_IP_BAN_CANDIDATE
