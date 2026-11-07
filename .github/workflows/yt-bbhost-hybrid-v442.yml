@@ -1,0 +1,67 @@
+name: V442 reuse PR85 authenticated Direct P2P crypto against YT 1.4.0
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-hybrid-v442.yml'
+      - 'bbhost-track/HYBRID_REUSE_V442.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-v140-crypto-and-loopback:
+    name: YT v1.4.0 plus original PR85 signed Direct P2P loopback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ProhorovIlja/bloodborne_pc_windows_port
+          ref: de28395180484960b095d00535e008b6025bd13f
+          path: hybrid-pr85
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            playable-track
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: released-yt-v140
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            server/coop
+      - name: Exact source provenance gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C hybrid-pr85 rev-parse HEAD)" = de28395180484960b095d00535e008b6025bd13f
+          test "$(git -C released-yt-v140 rev-parse HEAD)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          test "$(git -C released-yt-v140 rev-parse HEAD:server/coop/game_link.h)" = 5029581251bfe5decf562c19a10bdd079150cdad
+          test -f hybrid-pr85/playable-track/yt_signed_connectivity_v327.h
+          test -f released-yt-v140/server/coop/link_crypto.cpp
+          echo SHYT_V442_ORIGINAL_YT140_AND_PR85_EXACT_PINS_PASS
+      - name: Use existing PR85 original-crypto signed pair and real UDP tests on YT v1.4.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          opts='-std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers'
+          for fixture in test_yt_signed_peer_grant_v279 test_hybrid_encrypted_roundtrip_v243 test_yt_signed_connectivity_v327; do
+            clang++ $opts -Ireleased-yt-v140/server -Ihybrid-pr85/playable-track \
+              "hybrid-pr85/playable-track/${fixture}.cpp" \
+              released-yt-v140/server/coop/link_crypto.cpp \
+              -o "$RUNNER_TEMP/$fixture"
+            "$RUNNER_TEMP/$fixture"
+          done
+          echo SHYT_V442_YT140_PR85_SIGNED_NOISE_UDP_REUSE_PASS
+      - name: Verify no input source checkout was modified
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git -C hybrid-pr85 status --porcelain)"
+          test -z "$(git -C released-yt-v140 status --porcelain)"
+          echo SHYT_V442_NO_PRODUCTION_CLIENT_OR_SERVER_PATCHED
