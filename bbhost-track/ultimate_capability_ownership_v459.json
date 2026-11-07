@@ -25,7 +25,8 @@
     "concepts_only_no_parallel_world_persistence",
     "disabled_launcher_extension",
     "concepts_only_no_parallel_ui",
-    "concepts_only_no_parallel_overlay"
+    "concepts_only_no_parallel_overlay",
+    "disabled_rule_extension"
   ],
   "capabilities": [
     {
