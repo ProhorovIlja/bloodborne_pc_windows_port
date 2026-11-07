@@ -66,6 +66,10 @@ def run(archive:Path,base:Path,modern:Path,artifact:Path) -> dict:
             if path in EXTRACT:
                 artifact.mkdir(parents=True,exist_ok=True)
                 (artifact/EXTRACT[path]).write_bytes(z.read(entry))
+            if path.endswith(".patch") and "bbhost" in path.lower() and entry.file_size<=256000:
+                artifact.mkdir(parents=True,exist_ok=True)
+                (artifact/("PUBLIC_PATCH_"+Path(path).name)).write_bytes(z.read(entry))
+                result.setdefault("published_yt_patches",[]).append({"path":path,"size":entry.file_size})
             if not (path=="CMakeLists.txt" or Path(path).suffix in EXT):
                 continue
             if path not in original_paths:
