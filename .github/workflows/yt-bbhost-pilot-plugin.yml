@@ -784,3 +784,41 @@ jobs:
           grep -Fq 'on_camera_target' pr217-bbhost/include/bbhost_plugin.h
           test -z "$(git -C pinned-yt status --porcelain)"
           echo SHYT_V439_PR217_API17_BUILD_AND_DLOPEN_CANDIDATE_ONLY_PASS
+
+  bbhost-pr218-auth-check-candidate:
+    name: BBHost PR218 actual sign-in token response parser, isolated candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 57ecf8327b9201f801910934dde48f2dd592a714
+          path: pr218-bbhost
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            src/net/sign_in_check.h
+            src/replay/json.h
+            src/replay/json.cpp
+            tests/sign_in_check_test.cpp
+      - name: Pin original PR218 sign-in source, run REAL upstream negative/positive auth tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pr218-bbhost rev-parse HEAD)" = 57ecf8327b9201f801910934dde48f2dd592a714
+          test "$(git -C pr218-bbhost rev-parse HEAD:src/net/sign_in_check.h)" = 9c4def388c6610d4d72827a57e7392fb8d087c61
+          test "$(git -C pr218-bbhost rev-parse HEAD:tests/sign_in_check_test.cpp)" = 5c3bacba08ae8fbe48647bb10c5aa7eed7aefd92
+          test "$(git -C pr218-bbhost rev-parse HEAD:src/replay/json.h)" = e31f15c05631ce86b27e93a26f4fbeece74715c7
+          test "$(git -C pr218-bbhost rev-parse HEAD:src/replay/json.cpp)" = 81233f5d277c3ebaeb1439dd2d5be5b859e93aa3
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Isrc \
+            pr218-bbhost/tests/sign_in_check_test.cpp \
+            pr218-bbhost/src/replay/json.cpp \
+            -Ipr218-bbhost/src \
+            -o "$RUNNER_TEMP/shyt-v439-pr218-actual-signin"
+          "$RUNNER_TEMP/shyt-v439-pr218-actual-signin"
+          test -z "$(git -C pr218-bbhost status --porcelain)"
+          echo SHYT_V439_PR218_TOKEN_AUTH_PARSER_SOURCE_PIN_AND_ACTUAL_UPSTREAM_TEST_PASS
