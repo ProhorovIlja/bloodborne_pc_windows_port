@@ -1,0 +1,38 @@
+name: V446 full ecosystem public-source PR branch fork release audit
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/scan_ecosystem_v446.py'
+      - '.github/workflows/yt-bbhost-ecosystem-v446.yml'
+  workflow_dispatch:
+  # Activates only if and when this workflow is present on default branch.
+  schedule:
+    - cron: '19 6 * * *'
+permissions:
+  contents: read
+jobs:
+  public-ecosystem-inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate repository and query bounds
+        run: python3 bbhost-track/scan_ecosystem_v446.py --self-test --output "$RUNNER_TEMP/v446-selftest.json"
+      - name: Scan bounded public metadata, never game assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/scan_ecosystem_v446.py --output "$RUNNER_TEMP/SHYT-V446-public-metadata.json" >"$RUNNER_TEMP/v446-summary.log"
+          tail -n 10 "$RUNNER_TEMP/v446-summary.log" | cut -c1-180
+      - name: Archive bounded results, not game files
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V446-public-repos-forks-branches-PRs
+          path: ${{ runner.temp }}/SHYT-V446-public-metadata.json
+          retention-days: 7
+          if-no-files-found: error
