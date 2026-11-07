@@ -1,0 +1,62 @@
+name: V455 actual CLS BBHost online FPS ceiling override regression
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/*v455.py'
+      - '.github/workflows/yt-bbhost-fps-policy-v455.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-engine-fps-after-CLS-140:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          path: bbhost-original
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: bbhost-modern
+          persist-credentials: false
+          submodules: false
+      - name: Stage original CLS 1.4.0 game loader source exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/v455-cls-source.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+          python3 bbhost-track/stage_cls_yt_bbhost_v451.py \
+            --archive "$RUNNER_TEMP/v455-cls-source.zip" \
+            --parent bbhost-original --modern bbhost-modern \
+            --report "$RUNNER_TEMP/v455-stage-report.json"
+          echo SHYT_V455_ORIGINAL_CLS_140_BBHOST_026_FPS_SOURCE_PIN_PASS
+      - name: Confirm online FPS bypass in original and test opt-in repaired actual C++ function
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/guard_online_fps_override_v455.py \
+            --allow-candidate --source bbhost-modern/src/engine/frame_rate.cpp
+          python3 bbhost-track/guard_online_fps_override_v455.py \
+            --allow-candidate --apply --source bbhost-modern/src/engine/frame_rate.cpp
+          python3 bbhost-track/test_online_fps_override_v455.py \
+            --source bbhost-modern/src/engine/frame_rate.cpp --cxx clang++
+          grep -Fq 'Apply the online ceiling AFTER all FPS overrides' \
+            bbhost-modern/src/engine/frame_rate.cpp
+          echo SHYT_V455_ORIGINAL_ENGINE_OFFLINE_UNCHANGED_ONLINE_OVERRIDE_BOUNDARY_PASS
+          echo SHYT_V455_OPT_IN_SOURCE_ONLY_NOT_CLIENT_PROMOTION
+      - name: Clean downloaded public source
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/v455-cls-source.zip"
