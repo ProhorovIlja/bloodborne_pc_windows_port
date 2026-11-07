@@ -1,0 +1,60 @@
+name: V451 CLS 1.4.0 true game hook source staged on BBHost 0.2.26
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/stage_cls_yt_bbhost_v451.py'
+      - '.github/workflows/yt-bbhost-actual-game-v451.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pinned-real-coop-host-source-rebase:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          path: original-bbhost
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: candidate-bbhost-v026
+          persist-credentials: false
+          submodules: false
+      - name: Stage exact original CLS 1.4.0 co-op and NP game hooks onto released modern BBHost
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/v451-original-cls-bbhost-source.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+          python3 bbhost-track/stage_cls_yt_bbhost_v451.py \
+            --archive "$RUNNER_TEMP/v451-original-cls-bbhost-source.zip" \
+            --parent original-bbhost \
+            --modern candidate-bbhost-v026 \
+            --report "$RUNNER_TEMP/v451-source-integration-report.json"
+          test -s candidate-bbhost-v026/src/yt/yt_host.cpp
+          test -s candidate-bbhost-v026/cmake/bbsc_yt.cmake
+          grep -Fq 'BB_ONLINE_UNLOCKED_FPS' candidate-bbhost-v026/src/engine/frame_rate.cpp
+          grep -Fq 'target_link_libraries(bbhost PRIVATE bbnet)' candidate-bbhost-v026/cmake/bbsc_yt.cmake
+          echo SHYT_V451_TRUE_CLS_YT_GAME_NETSYNC_HOST_SRC_ON_026_STAGED
+      - name: Source-only report no proprietary content
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V451-actual-CLS-YT-v140-on-bbhost-v026-source-admission
+          path: ${{ runner.temp }}/v451-source-integration-report.json
+          retention-days: 4
+          if-no-files-found: error
+      - name: Cleanup public source archive
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/v451-original-cls-bbhost-source.zip"
