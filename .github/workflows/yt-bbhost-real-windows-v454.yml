@@ -190,6 +190,19 @@ jobs:
           file.write_bytes(data.replace(anchor, anchor + b"#include <cstdlib>\n", 1))
           print("SHYT_V458_BBHOST_CSTDLIB_EXACT_SOURCE_HEADER_GUARD_PASS")
           PYCODE
+          # json.cpp uses std::strtod without <cstdlib>, the second independently
+          # confirmed missing declaration in official BBHost 0.2.26.
+          test "$(git -C modern-bbhost rev-parse HEAD:src/replay/json.cpp)" = 81233f5d277c3ebaeb1439dd2d5be5b859e93aa3
+          python - <<'PYCODE'
+          from pathlib import Path
+          file = Path("modern-bbhost/src/replay/json.cpp")
+          data = file.read_bytes()
+          anchor = b"#include <cstdio>\n"
+          if data.count(anchor) != 1 or b"#include <cstdlib>" in data or b"std::strtod(" not in data:
+              raise SystemExit("SHYT_V460_JSON_CSTDLIB_SOURCE_DRIFT")
+          file.write_bytes(data.replace(anchor, anchor + b"#include <cstdlib>\n", 1))
+          print("SHYT_V460_ORIGINAL_BBHOST_JSON_STRTOD_DECLARATION_PASS")
+          PYCODE
       - name: Configure original YT full co-op + modern BBHost Windows CLANG64
         shell: msys2 {0}
         run: |
