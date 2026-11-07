@@ -28,6 +28,7 @@ EXTRACT={
     "cmake/bbsc_yt.cmake":"bbsc_yt.cmake",
     "tools/bbsc/README-BBSC.txt":"README-BBSC.txt",
     "tools/bbsc/clang64-toolchain.cmake":"clang64-toolchain.cmake",
+    "SOURCE-COMMIT.txt":"RELEASE-SOURCE-COMMIT.txt",
 }
 def git(root: Path, *args: str) -> str:
     r=subprocess.run(["git","-C",str(root),*args],text=True,capture_output=True,timeout=15)
@@ -85,6 +86,11 @@ def run(archive:Path,base:Path,modern:Path,artifact:Path) -> dict:
                 new=dest.decode("utf-8",errors="replace").splitlines(keepends=True)
                 patch="".join(difflib.unified_diff(old,new,
                          fromfile="a/"+path,tofile="b/"+path,n=3))
+                if path in {"src/engine/frame_rate.cpp","src/core/elf.cpp","src/main.cpp",
+                            "src/hle/system.cpp","src/host/window.cpp","CMakeLists.txt"}:
+                    outdir=artifact/"v451-port-hunks"
+                    outdir.mkdir(parents=True,exist_ok=True)
+                    (outdir/(path.replace("/","_")+".patch")).write_text(patch,encoding="utf-8")
                 item["diff_lines"]=sum(a[0] in "+-" for a in patch.splitlines()
                                        if a and not a.startswith(("+++","---")))
                 if not item["modern_blob"]:
