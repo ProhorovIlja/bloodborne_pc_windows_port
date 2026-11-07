@@ -1,0 +1,61 @@
+name: V450 exact CLS 1.4.0 host-port rebase versus BBHost 0.2.26
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/compare_cls_bbhost_rebase_v450.py'
+      - '.github/workflows/yt-bbhost-full-rebase-v450.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-cls-bbhost-026-semantic-rebase:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          path: original-bbhost-parent
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: modern-bbhost-v026
+          persist-credentials: false
+          submodules: false
+      - name: Compare original public YT BBHost source with exact original and new host
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/cls-v140-public-source.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+          python3 bbhost-track/compare_cls_bbhost_rebase_v450.py \
+            --archive "$RUNNER_TEMP/cls-v140-public-source.zip" \
+            --base original-bbhost-parent \
+            --modern modern-bbhost-v026 \
+            --report "$RUNNER_TEMP/v450-delta-report.json" \
+            --artifact "$RUNNER_TEMP/v450-public-integration-build-seams"
+          test -z "$(git -C original-bbhost-parent status --porcelain)"
+          test -z "$(git -C modern-bbhost-v026 status --porcelain)"
+          echo SHYT_V450_NONMUTATING_PINNED_REBASE_SCAN
+      - name: Preserve small public source build manifests and bounded delta only
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V450-CLS-v140-host-v026-rebase-evidence
+          path: |
+            ${{ runner.temp }}/v450-delta-report.json
+            ${{ runner.temp }}/v450-public-integration-build-seams/
+          if-no-files-found: error
+          retention-days: 3
+      - name: Remove public source ZIP
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/cls-v140-public-source.zip"
