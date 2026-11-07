@@ -46,7 +46,7 @@ DECISIONS={
  "concepts_only_no_parallel_writer","concepts_only_no_parallel_renderer",
  "concepts_only_no_parallel_frameclock",
  "concepts_only_no_parallel_world_persistence",
- "disabled_rule_extension","disabled_launcher_extension","concepts_only_no_parallel_ui",
+ "disabled_rule_extension","bugfix_candidate_only","disabled_launcher_extension","concepts_only_no_parallel_ui",
  "concepts_only_no_parallel_overlay",
 }
 LAYERS={"host-network-adapter","routing-policy","authenticated-control",
