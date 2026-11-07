@@ -438,7 +438,7 @@
           "decision": "concepts_only_no_parallel_overlay",
           "reason": "lift useful HUD/options only into existing YT widgets; never install competing widgets/NetSync refresh",
           "acceptance_gate": "same-screen five-player HUD and GPU frame cost, in-game accessibility",
-          "rollback": "YT HUD"
+          "rollback": "original YT 1.4.0 party HUD widgets and game state renderer"
         }
       ]
     }
