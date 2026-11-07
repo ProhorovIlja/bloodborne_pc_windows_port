@@ -1,0 +1,86 @@
+name: V447 opt-in CLS YT BBHost 1.4.0 guest-memory safety and cache audit
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/*v447*'
+      - '.github/workflows/yt-bbhost-memory-v447.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-pinned-safe-memory-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: original-bbhost-v026
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            src/hle
+      - name: Check exact original BBHost 0.2.26 memory API
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original-bbhost-v026 rev-parse HEAD)" = bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          test "$(git -C original-bbhost-v026 rev-parse HEAD:src/hle/kernel.cpp)" = 8c2e25d7cf980a04ebc61e9f05c2bf6ebfe4c22c
+          test "$(git -C original-bbhost-v026 rev-parse HEAD:src/hle/modules.h)" = 9541c94b4d2df60e01b9d3a51e9b44fb092f215b
+          grep -Fq 'hle_kernel_maps_generation()' original-bbhost-v026/src/hle/kernel.cpp
+          grep -Fq 'hle_kernel_snapshot_maps(' original-bbhost-v026/src/hle/modules.h
+          echo SHYT_V447_ORIGINAL_BBHOST_EXISTING_MAP_EPOCH_AND_SNAPSHOT_API_PASS
+      - name: Test portable accurate access, invalidation and concurrent remap
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O2 -Wall -Wextra -Werror -pedantic \
+            -Ibbhost-track bbhost-track/test_shyt_yt_bbhost_guest_memory_v447.cpp \
+            -o "$RUNNER_TEMP/v447-memory"
+          "$RUNNER_TEMP/v447-memory"
+          clang++ -std=c++20 -O1 -g -fsanitize=address,undefined \
+            -fno-omit-frame-pointer -Wall -Wextra -Werror -pedantic \
+            -Ibbhost-track bbhost-track/test_shyt_yt_bbhost_guest_memory_v447.cpp \
+            -o "$RUNNER_TEMP/v447-memory-sanitized"
+          "$RUNNER_TEMP/v447-memory-sanitized"
+      - name: Download only pinned official public CLS BBHost v1.4.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/yt-v140-bbhost-source.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+      - name: Produce isolated original-source overlay, never install by default
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/apply_cls_yt_bbhost_guest_memory_v447.py \
+            --archive "$RUNNER_TEMP/yt-v140-bbhost-source.zip" \
+            --output-dir "$RUNNER_TEMP/v447-ONLY-PUBLIC-SOURCE"
+          grep -Fq 'original CLS behavior and default' "$RUNNER_TEMP/v447-ONLY-PUBLIC-SOURCE/yt_host.cpp"
+          grep -Fq 'GuestMapCache<GuestMapInfo>' "$RUNNER_TEMP/v447-ONLY-PUBLIC-SOURCE/yt_host.cpp"
+          if cmp -s "$RUNNER_TEMP/v447-ONLY-PUBLIC-SOURCE/yt_host.cpp" \
+                   bbhost-track/apply_cls_yt_bbhost_guest_memory_v447.py; then
+            echo 'V447 fatal: unexpected source alias'
+            exit 1
+          fi
+          echo SHYT_V447_ORIGINAL_140_SOURCE_PIN_OPT_IN_FASTMEM_PROPOSAL_PASS
+      - name: Preserve two public integration files for later Windows in-game test
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V447-original-CLS-140-BBHost-opt-in-memory-source
+          path: ${{ runner.temp }}/v447-ONLY-PUBLIC-SOURCE/
+          retention-days: 2
+          if-no-files-found: error
+      - name: Clean up public source, no gameplay data
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/yt-v140-bbhost-source.zip"
+          echo SHYT_V447_NO_LIVE_CLIENT_HOOK_OR_FORNEX_CHANGE

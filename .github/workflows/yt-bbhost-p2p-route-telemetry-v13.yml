@@ -1,0 +1,113 @@
+name: BBHost V13 source-pinned direct UDP vs relay framed transport audit
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-p2p-route-telemetry-v13.yml'
+      - 'bbhost-track/shyt_route_telemetry_v13.h'
+      - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
+      - 'bbhost-track/apply_bbhost_route_rx_v19.py'
+      - 'bbhost-track/test_shyt_route_telemetry_v13.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  real-host-source-patch-and-native-counter-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: false
+      - name: Apply authentic hardened STUN + opt-in route audit to original BBHost net.cpp
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode apply
+          grep -Fq 'shyt_route_account_success_v13(shyt_relay_framed_v13,' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'if (hdr) shyt_route_account_received_v19(shyt_rx_relay_v19, shyt_rx_wire_v19);' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'shyt_route_account_received_v19' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
+          grep -Fq 'if (shyt_relay_framed_v13)' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'SHYT_ROUTE_AUDIT' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
+          echo SHYT_V13_AUTHENTIC_BBHOST_NET_CPP_HOOKS_PINNED_PASS
+      - name: Compile C++ route-accounting proof on Windows and Linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix=''
+          if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
+          if ! clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src \
+               bbhost-track/test_shyt_route_telemetry_v13.cpp \
+               -o "./shyt-v13-route-test$suffix" >shyt-v13-build.log 2>&1; then
+            echo 'COMPILE FAILED (only last 4 synthetic-source lines):'
+            tail -n 4 shyt-v13-build.log | cut -c1-170
+            exit 1
+          fi
+      - name: Run no-IP/no-payload direct and relay counters
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix=''
+          if [ "$RUNNER_OS" = Windows ]; then suffix='.exe'; fi
+          if ! SHYT_ROUTE_AUDIT=0 "./shyt-v13-route-test$suffix" disabled >shyt-v13-disabled.log 2>&1; then
+            echo 'DISABLED COUNTER FIXTURE FAILED'
+            tail -n 3 shyt-v13-disabled.log | cut -c1-170
+            exit 1
+          fi
+          if ! SHYT_ROUTE_AUDIT=1 "./shyt-v13-route-test$suffix" enabled >shyt-v13-enabled.log 2>&1; then
+            echo 'ENABLED COUNTER FIXTURE FAILED'
+            tail -n 3 shyt-v13-enabled.log | cut -c1-170
+            exit 1
+          fi
+          echo SHYT_V13_SOURCE_PINNED_OPTIN_P2P_ROUTE_COUNTERS_PASS
+      - name: Save ONLY 4 lines of fictional C++ compilation error
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > shyt-v13-4-line-error.txt
+          if [ -f shyt-v13-build.log ]; then
+            tail -n 4 shyt-v13-build.log | cut -c1-160 > shyt-v13-4-line-error.txt
+          fi
+      - name: Upload <=640 bytes of game-free compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V13-BOUNDED-WINDOWS-CPP-DIAGNOSTIC
+          path: shyt-v13-4-line-error.txt
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Report bounded, game-free failure to Draft PR for diagnosis
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          found='no local diagnostic'
+          for file in shyt-v13-build.log shyt-v13-disabled.log shyt-v13-enabled.log; do
+            if [ -f "$file" ]; then
+              found=$(tail -n 4 "$file" | cut -c1-160 | tr '\r' ' ' | tr -d '\000' )
+              if [ -n "$found" ]; then break; fi
+            fi
+          done
+          msg=$(printf 'V13 Windows/Linux synthetic route-counter check failed in Actions run %s (%s). Bounded compile/test diagnosis (no owner data):\n\`\`\`text\n%s\n\`\`\`' "$GITHUB_RUN_ID" "$RUNNER_OS" "$found")
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/86/comments" -f body="$msg" >/dev/null 2>&1 || true
+          printf '%s\n' "$found" | head -n 4 | cut -c1-160

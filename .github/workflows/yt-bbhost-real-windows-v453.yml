@@ -1,0 +1,148 @@
+name: V453 actual CLS YT 1.4.0 BBHost 0.2.26 Windows compile candidate
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-real-windows-v453.yml'
+      - 'bbhost-track/stage_cls_yt_bbhost_v451.py'
+      - 'bbhost-track/stage_cls_yt_source_v452.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-clang64-actual-game-client:
+    runs-on: windows-2022
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          path: original-bbhost
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: bbhost-v026
+          persist-credentials: false
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: yt-v140
+          persist-credentials: false
+          submodules: false
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          path-type: inherit
+          install: >-
+            git patch python
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-python
+            mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-vulkan-loader
+            mingw-w64-clang-x86_64-vulkan-memory-allocator
+            mingw-w64-clang-x86_64-glslang
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-fmt
+            mingw-w64-clang-x86_64-boost
+            mingw-w64-clang-x86_64-robin-map
+            mingw-w64-clang-x86_64-xxhash
+            mingw-w64-clang-x86_64-ffmpeg
+            mingw-w64-clang-x86_64-zydis
+            mingw-w64-clang-x86_64-spirv-tools
+            mingw-w64-clang-x86_64-spirv-headers
+            mingw-w64-clang-x86_64-spirv-cross
+            mingw-w64-clang-x86_64-protobuf
+            mingw-w64-clang-x86_64-openssl
+            mingw-w64-clang-x86_64-zlib
+            mingw-w64-clang-x86_64-nlohmann-json
+      - name: Load required YT source submodules, no emulator builds
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cd yt-v140
+          git -c protocol.version=2 submodule update --init --depth=1 \
+            bbport/gpu/third_party/imgui \
+            bbport/gpu/third_party/magic_enum \
+            bbport/gpu/third_party/miniz \
+            bbport/gpu/third_party/xbyak
+          echo SHYT_V453_REQUIRED_ORIGINAL_YT_THIRD_PARTY_CHECKED
+      - name: Stage complete original CLS public sources on actual Windows host
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # Git for Windows may check out LF-authored source as CRLF without
+          # reporting a dirty worktree. Original CLS patches are LF-pinned.
+          for checkout in original-bbhost bbhost-v026 yt-v140; do
+            git -C "$checkout" config core.autocrlf false
+            git -C "$checkout" config core.eol lf
+            git -C "$checkout" reset --hard HEAD >/dev/null
+          done
+          python - <<'PYCODE'
+          from pathlib import Path
+          for path in ("original-bbhost/CMakeLists.txt", "bbhost-v026/CMakeLists.txt"):
+              data=Path(path).read_bytes()
+              if b"\r\n" in data:
+                  raise SystemExit("V453_REFUSE_CRLF_SOURCE_AFTER_NORMALIZATION")
+          print("SHYT_V453_WINDOWS_GIT_SOURCE_LF_PINNED")
+          PYCODE
+          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/cls-bbhost-v140-source.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+          python bbhost-track/stage_cls_yt_bbhost_v451.py \
+            --archive "$RUNNER_TEMP/cls-bbhost-v140-source.zip" \
+            --parent original-bbhost --modern bbhost-v026 \
+            --report "$RUNNER_TEMP/v453-host-report.json"
+          python bbhost-track/stage_cls_yt_source_v452.py \
+            --archive "$RUNNER_TEMP/cls-bbhost-v140-source.zip" \
+            --yt yt-v140 --report "$RUNNER_TEMP/v453-yt-report.json"
+          echo SHYT_V453_PINNED_FULL_WINDOWS_SOURCE_STAGED
+      - name: Configure real YT/game-thread BBHost 0.2.26 using Windows CLANG64
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          ytroot="$(cygpath -m "$PWD/yt-v140")"
+          if ! cmake -S bbhost-v026 -B "$RUNNER_TEMP/v453-build" -G Ninja \
+             -DCMAKE_TOOLCHAIN_FILE=tools/bbsc/clang64-toolchain.cmake \
+             -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PRODUCTION=ON \
+             "-DBB_YT_ROOT=$ytroot" >"$RUNNER_TEMP/v453-configure.log" 2>&1; then
+            echo 'V453 CMake configuration failed; bounded diagnostics:'
+            (grep -E 'CMake Error|Could NOT find|not found|error:|does not exist|No such file|FAILED' \
+              "$RUNNER_TEMP/v453-configure.log" | tail -18 | cut -c1-210 || true)
+            tail -8 "$RUNNER_TEMP/v453-configure.log" | cut -c1-210
+            exit 1
+          fi
+          echo SHYT_V453_REAL_CLS_YT_140_BBHOST_026_WINDOWS_CMAKE_CONFIGURED
+      - name: Compile actual game runtime, YT NetSync and game hook loader
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          if ! cmake --build "$RUNNER_TEMP/v453-build" --target bbhost --parallel 2 \
+              >"$RUNNER_TEMP/v453-compile.log" 2>&1; then
+            echo 'V453 full-client compile failure, bounded diagnostics:'
+            (grep -E 'FAILED:|fatal error:|error:|undefined reference|No rule to make target|ninja: error' \
+              "$RUNNER_TEMP/v453-compile.log" | tail -18 | cut -c1-210 || true)
+            tail -9 "$RUNNER_TEMP/v453-compile.log" | cut -c1-210
+            exit 1
+          fi
+          test -s "$RUNNER_TEMP/v453-build/bbhost.exe"
+          echo SHYT_V453_ORIGINAL_YT_140_REAL_WINDOWS_BBHOST_026_CLIENT_COMPILED
+          echo SHYT_V453_NO_GAME_BOOT_NO_DIRECT_P2P_OR_LIVE_SERVER
+      - name: Never upload binary/game content or release
+        if: always()
+        shell: msys2 {0}
+        run: |
+          rm -f "$RUNNER_TEMP/cls-bbhost-v140-source.zip"
+          echo SHYT_V453_CI_ONLY_NO_PRODUCTION_OR_PUBLIC_CLIENT

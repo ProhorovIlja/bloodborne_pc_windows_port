@@ -1,0 +1,62 @@
+name: V443 YT hosted flood fallback source candidate from upstream PR540
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-hosted-flood-v443.yml'
+      - 'bbhost-track/UPSTREAM_GATES_20261107_V441_V443.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-cgnat-host-ban:
+    name: Original YT PR540 source hosted admission 1.4.0 regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: 0b948061f8df16ceb8588e19cd858a0fffea7ddc
+          path: candidate-yt540
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            server/src
+            server/tests
+      - name: Source and security boundary exactness
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C candidate-yt540 rev-parse HEAD)" = 0b948061f8df16ceb8588e19cd858a0fffea7ddc
+          # The exact tested candidate SHA was taken from upstream PR #540, whose base is YT v1.4.0.
+          # Checkout is shallow, so do not invent a merge-base from missing history.
+          grep -Fq 'AFloodingLinkIsDroppedAndReportedNeverBanned' candidate-yt540/server/tests/test_admission.cpp
+          grep -Fq 'TakeFloods()' candidate-yt540/server/src/admission.h
+          echo SHYT_V443_PINNED_YT140_HARD_RATE_LIMIT_WITHOUT_SHARED_IP_BAN_CANDIDATE
+      - name: Install Qt Core and Network for original YT admission tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq >"$RUNNER_TEMP/v443-apt.log" 2>&1
+          sudo apt-get install -qq -y --no-install-recommends qt6-base-dev pkg-config >>"$RUNNER_TEMP/v443-apt.log" 2>&1
+      - name: Compile and run original YT PR540 admission regression with actual Qt
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Unchanged upstream uses a currently unused address argument in AllowLink.
+          # Suppress only that warning, retaining -Werror elsewhere.
+          g++ -std=c++20 -O2 -fPIC -Wall -Wextra -Werror -Wno-unused-parameter \
+            -Icandidate-yt540/server/src -Icandidate-yt540/server/tests \
+            $(pkg-config --cflags Qt6Core Qt6Network) \
+            candidate-yt540/server/tests/test_admission.cpp \
+            candidate-yt540/server/src/admission.cpp \
+            -o "$RUNNER_TEMP/v443-admission" \
+            $(pkg-config --libs Qt6Core Qt6Network)
+          "$RUNNER_TEMP/v443-admission"
+          test -z "$(git -C candidate-yt540 status --porcelain)"
+          echo SHYT_V443_ORIGINAL_HOSTED_FLOOD_GUARD_TEST_PASS
+          echo SHYT_V443_CANDIDATE_ONLY_NO_LIVE_FORNEX_CHANGE

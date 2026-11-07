@@ -1,0 +1,26 @@
+name: V459 Ultimate single-owner capability and no-duplicate gate
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/ultimate_capability_ownership_v459.json'
+      - 'bbhost-track/validate_ultimate_capabilities_v459.py'
+      - '.github/workflows/yt-ultimate-capability-gate-v459.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-duplicate-state-owners:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate source-pinned ownership plus 10 adversarial duplicates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/validate_ultimate_capabilities_v459.py --self-test
+          echo SHYT_V459_DUPLICATE_ROUTE_MOD_LOOT_FPS_LAUNCHER_GATES_PASS
+          echo SHYT_V459_NOT_AN_INTEGRATION_OR_GAMEPLAY_TEST

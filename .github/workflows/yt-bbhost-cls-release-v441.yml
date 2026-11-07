@@ -1,0 +1,54 @@
+name: BBHost V441 released CLS YT 1.4.0 source integration audit
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/verify_cls_yt_bbhost_source_v441.py'
+      - 'bbhost-track/test_cls_yt_bbhost_source_v441.py'
+      - '.github/workflows/yt-bbhost-cls-release-v441.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-only-bbhost-yt-hook-loader:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Synthetic local original-shape admission regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/test_cls_yt_bbhost_source_v441.py
+      - name: Fetch pinned public CLS Yharnam Together v1.4.0 BBHost SOURCE only
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --connect-timeout 15 --max-time 160 --retry 2 \
+            --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/cls-bbhost-v140-source.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+          test -s "$RUNNER_TEMP/cls-bbhost-v140-source.zip"
+      - name: SHA-pin source and prove actual BBHost-YT game hook loader exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/verify_cls_yt_bbhost_source_v441.py \
+            --archive "$RUNNER_TEMP/cls-bbhost-v140-source.zip" \
+            --extract-to "$RUNNER_TEMP/v441-audit-source"
+          echo SHYT_V441_SOURCE_ONLY_NOT_FIVE_REAL_GAME_CLIENTS
+      - name: Retain only 3 audited public BBHost YT integration files
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V441-CLS-v140-ONLY-yt-host-source
+          path: ${{ runner.temp }}/v441-audit-source/
+          retention-days: 2
+          if-no-files-found: error
+      - name: Remove downloaded source on runner
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/cls-bbhost-v140-source.zip"

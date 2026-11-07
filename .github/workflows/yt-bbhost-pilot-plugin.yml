@@ -1,0 +1,847 @@
+name: BBHost pilot plugin cross-platform ABI compatibility
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-pilot-plugin.yml'
+      - 'bbhost-track/**'
+  pull_request:
+    paths:
+      - '.github/workflows/yt-bbhost-pilot-plugin.yml'
+      - 'bbhost-track/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bbhost-pilot-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  pinned-bbhost-plugin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          # Official v0.2.24 release commit, not floating master.
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: pinned-yt-v140
+          filter: blob:none
+          sparse-checkout: |
+            server/coop/coop.proto
+            server/coop/team_lobby.cpp
+            bbport/patches/coop-sites.json
+            emulator/src/core/bloodborne_patches.cpp
+            emulator/src/core/bloodborne_party.cpp
+            server/src/bloodborne_world.cpp
+            server/src/server_link.cpp
+            server/coop/game_link.h
+            server/coop/packet_routes.h
+            server/coop/coop_types.h
+          persist-credentials: false
+      - name: Verify released YT v1.4.0 retains exact reliable/crypto core used by BBHost
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test "$(git -C pinned-yt-v140 rev-parse HEAD)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          for file in coop_stream.h game_link.h link_auth.h link_crypto.cpp; do
+            old="$(git -C pinned-yt rev-parse "HEAD:server/coop/$file")"
+            now="$(git -C pinned-yt-v140 rev-parse "HEAD:server/coop/$file")"
+            test "$old" = "$now" || { echo "YT v1.4.0 core protocol drift: $file"; exit 1; }
+          done
+          echo SHYT_V140_RELEASED_ORIGINAL_YT_RELIABLE_NOISE_CORE_IDENTITY_PASS
+      - name: Verify actual original YT game packet send hook site against BBHost ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/check_netsync_yt_pin_v17.py \
+            --yt-source pinned-yt/bbport/patches/coop-sites.json \
+            --probe bbhost-track/shyt_bbhost_probe_v1.c
+      - name: Verify ALL 68 exact YT server channel policies against BBHost C plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          python bbhost-track/check_yt_native_channel_policy_v21.py \
+            --yt-policy pinned-yt/server/coop/packet_routes.h \
+            --host-policy bbhost-track/shyt_yt_native_channel_policy_v21.h
+      - name: Cross-check v427 real YT v1.4.0 1.09 hook sites against BBHost ABI (NO hooks)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/check_yt_guest_site_contract_v427.py \
+            --yt-source pinned-yt-v140/bbport/patches/coop-sites.json \
+            --header bbhost-track/shyt_yt_guest_hook_preflight_v427.h \
+            --plugin bbhost-track/shyt_bbhost_probe_v1.c \
+            --bbhost-api pinned-bbhost/include/bbhost_plugin.h
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_guest_hook_preflight_v427.c \
+            -o "$RUNNER_TEMP/shyt-yt-hook-preflight-v427"
+          "$RUNNER_TEMP/shyt-yt-hook-preflight-v427"
+      - name: Verify private-EBOOT-derived full instruction game hook boundaries (V428, source only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_full_guest_preflight_v428.c \
+            -o "$RUNNER_TEMP/shyt-yt-full-preflight-v428"
+          "$RUNNER_TEMP/shyt-yt-full-preflight-v428"
+      - name: Verify V429 original YT game send/update and exact BBHost hook2 register ABI source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/check_yt_game_hook_abi_v429.py \
+            --yt pinned-yt-v140 --bbhost pinned-bbhost \
+            --observer bbhost-track/shyt_yt_game_link_observer_v429.h \
+            --plugin bbhost-track/shyt_bbhost_probe_v1.c
+      - name: Verify V429 original YT send and NetSyncUpdate passive game ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ipinned-bbhost/include -Ibbhost-track \
+            bbhost-track/test_shyt_yt_game_link_observer_v429.c \
+            -o "$RUNNER_TEMP/shyt-yt-game-link-observer-v429"
+          "$RUNNER_TEMP/shyt-yt-game-link-observer-v429"
+      - name: Verify V430 YT native game frame bounded quarantine and production no-lease gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_game_packet_stage_v430.cpp \
+            -o "$RUNNER_TEMP/shyt-v430-authenticated-fixture"
+          "$RUNNER_TEMP/shyt-v430-authenticated-fixture"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_game_packet_closed_v430.cpp \
+            -o "$RUNNER_TEMP/shyt-v430-production-closed"
+          "$RUNNER_TEMP/shyt-v430-production-closed"
+      - name: Verify V431 original YT authenticated roster candidate evidence never grants P2P
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_peer_evidence_v431.cpp \
+            -o "$RUNNER_TEMP/shyt-v431-roster-candidate"
+          "$RUNNER_TEMP/shyt-v431-roster-candidate"
+      - name: Verify V432 original YT SceNpId/hex source and bounded guest read (NO traffic)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/check_yt_game_member_source_v432.py \
+            --yt pinned-yt-v140 \
+            --header bbhost-track/shyt_yt_guest_member_v432.h \
+            --session bbhost-track/shyt_yt_server_session_v408.cpp
+          cc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_guest_member_v432.c \
+            -o "$RUNNER_TEMP/shyt-v432-guest-member"
+          "$RUNNER_TEMP/shyt-v432-guest-member"
+      - name: Prove V433 game route parity against original YT v1.4.0 in ALL 68 channels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/check_yt_route_source_v433.py \
+            --yt pinned-yt-v140 \
+            --header bbhost-track/shyt_yt_game_route_assessment_v433.h \
+            --test bbhost-track/test_shyt_yt_game_route_assessment_v433.cpp
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -Ipinned-yt-v140/server \
+            bbhost-track/test_shyt_yt_game_route_assessment_v433.cpp \
+            -o "$RUNNER_TEMP/shyt-v433-game-route-parity"
+          "$RUNNER_TEMP/shyt-v433-game-route-parity"
+      - name: Check V434 genuine original YT GameFrame signed-in sender binding and server patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -Ipinned-yt-v140/server \
+            bbhost-track/test_shyt_yt_game_sender_binding_v434.cpp \
+            -o "$RUNNER_TEMP/shyt-v434-authenticated-sender"
+          "$RUNNER_TEMP/shyt-v434-authenticated-sender"
+          python3 bbhost-track/apply_yt_game_sender_guard_v434.py \
+            --yt pinned-yt-v140 \
+            --header bbhost-track/shyt_yt_game_sender_binding_v434.h \
+            --out "$RUNNER_TEMP/shyt-v434-yt-server-overlay"
+          grep -q 'YtGameSenderBindingV434::Inspect(' \
+            "$RUNNER_TEMP/shyt-v434-yt-server-overlay/server/src/server_link.cpp"
+          test -f "$RUNNER_TEMP/shyt-v434-yt-server-overlay/server/coop/shyt_yt_game_sender_binding_v434.h"
+          test -z "$(git -C pinned-yt-v140 status --porcelain)"
+      - name: Strict source pin and GPL3 plugin public API guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-bbhost rev-parse HEAD)" = b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          grep -q '^#define BB_PLUGIN_API_VERSION 16$' pinned-bbhost/include/bbhost_plugin.h
+          test -f pinned-bbhost/plugins/hello/hello.c
+          grep -q 'GPL-3.0-or-later' bbhost-track/shyt_bbhost_probe_v1.c
+      - name: Exercise original YT CoopStream reliability and quarantine safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo V413_SOURCE_PIN >v413-brief.txt
+          if [ "$(git -C pinned-yt rev-parse HEAD:server/coop/game_link.h)" != 5029581251bfe5decf562c19a10bdd079150cdad ] ||
+             [ "$(git -C pinned-yt rev-parse HEAD:server/coop/coop_stream.h)" != 3f488861bd94ab1cdba8a07a9324267bab7a76a8 ]; then
+            echo V413_SOURCE_DRIFT >>v413-brief.txt
+            exit 1
+          fi
+          if ! g++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server \
+            bbhost-track/test_shyt_yt_coop_transport_v413.cpp \
+            -o "$RUNNER_TEMP/shyt-coop-stream-v413" >v413-compile.log 2>&1; then
+            echo V413_COMPILE_FAIL >>v413-brief.txt
+            tail -n 6 v413-compile.log | cut -c1-150 >>v413-brief.txt
+            exit 1
+          fi
+          if ! "$RUNNER_TEMP/shyt-coop-stream-v413" >v413-test.log 2>&1; then
+            echo V413_RUNTIME_FAIL >>v413-brief.txt
+            tail -n 6 v413-test.log | cut -c1-150 >>v413-brief.txt
+            exit 1
+          fi
+          cat v413-test.log
+      - name: Upload bounded V413 diagnostic only on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V413-CoopStream-Diagnostic-Max7Lines
+          path: v413-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore
+      - name: Verify BBHost five-player team/world authorization is fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_team_authority_v414.cpp \
+            -o "$RUNNER_TEMP/shyt-authority-v414"
+          "$RUNNER_TEMP/shyt-authority-v414"
+      - name: Guard original YT party Hello/Welcome correlation without gameplay grant (V419)
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_party_reply_v419.cpp \
+            -o "$RUNNER_TEMP/shyt-party-reply-v419"
+          "$RUNNER_TEMP/shyt-party-reply-v419"
+      - name: Verify original YT world SnapshotRequest and replay-safe metadata gate (V420)
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_world_snapshot_v420.cpp \
+            -o "$RUNNER_TEMP/shyt-world-snapshot-v420"
+          "$RUNNER_TEMP/shyt-world-snapshot-v420"
+      - name: Verify original YT ordered delta world-epoch and gap fence (V423)
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_world_delta_fence_v423.cpp \
+            -o "$RUNNER_TEMP/shyt-world-delta-v423"
+          "$RUNNER_TEMP/shyt-world-delta-v423"
+      - name: Stage immutable bounded original YT Snapshot and Entries without gameplay writes (V425)
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_world_staging_v425.cpp \
+            -o "$RUNNER_TEMP/shyt-world-staging-v425"
+          "$RUNNER_TEMP/shyt-world-staging-v425"
+      - name: Validate V426 typed YT world projection without guest memory writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track bbhost-track/test_shyt_yt_world_projection_v426.cpp \
+            -o "$RUNNER_TEMP/shyt-world-projection-v426"
+          "$RUNNER_TEMP/shyt-world-projection-v426"
+      - name: Build and compare lite BBHost authority codec with real YT v1.4.0 protobuf
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt-v140 rev-parse HEAD)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          grep -Fq 'PROTOCOL_CURRENT = 8;' pinned-yt-v140/server/coop/coop.proto
+          grep -Fq 'GuestSigns{7, 6, 5,' pinned-yt-v140/server/coop/team_lobby.cpp
+          if ! sudo apt-get update -qq >v415-setup.log 2>&1 ||
+             ! sudo apt-get install -qq -y --no-install-recommends protobuf-compiler libprotobuf-dev >>v415-setup.log 2>&1; then
+            echo V415_PROTOC_DEPENDENCY_FAILED
+            tail -n 4 v415-setup.log | cut -c1-150
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/yt-v140-proto"
+          if ! protoc -I pinned-yt-v140/server/coop \
+              --cpp_out="$RUNNER_TEMP/yt-v140-proto" pinned-yt-v140/server/coop/coop.proto \
+              >v415-proto.log 2>&1; then
+            echo V415_PROTO_GENERATION_FAILED
+            tail -n 4 v415-proto.log | cut -c1-150
+            exit 1
+          fi
+          if ! g++ -std=c++20 -O2 -w \
+              -I"$RUNNER_TEMP/yt-v140-proto" \
+              -c "$RUNNER_TEMP/yt-v140-proto/coop.pb.cc" \
+              -o "$RUNNER_TEMP/v415-coop.pb.o" >v415-build.log 2>&1; then
+            echo V415_ORIGINAL_PROTO_COMPILE_FAILED
+            tail -n 5 v415-build.log | cut -c1-150
+            exit 1
+          fi
+          if ! g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+              -Ibbhost-track -I"$RUNNER_TEMP/yt-v140-proto" \
+              bbhost-track/test_shyt_yt_team_wire_v414.cpp \
+              "$RUNNER_TEMP/v415-coop.pb.o" -lprotobuf-lite \
+              -o "$RUNNER_TEMP/v415-real-protobuf" >>v415-build.log 2>&1; then
+            echo V415_LITE_CODEC_TEST_COMPILE_FAILED
+            tail -n 5 v415-build.log | cut -c1-150
+            exit 1
+          fi
+          "$RUNNER_TEMP/v415-real-protobuf"
+      - name: Exercise authenticated YT five-player lobby observation on real loopback UDP
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! g++ -std=c++20 -O2 -w -I pinned-yt/server \
+              -c pinned-yt/server/coop/link_crypto.cpp \
+              -o "$RUNNER_TEMP/v415-original-link-crypto.o" >v415-loopback-build.log 2>&1; then
+            echo V415_ORIGINAL_LINK_CRYPTO_COMPILE_FAIL
+            tail -n 6 v415-loopback-build.log | cut -c1-150
+            exit 1
+          fi
+          if ! g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+              -Wno-missing-field-initializers -pthread \
+              -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+              bbhost-track/shyt_yt_shlk_client_v401.cpp \
+              bbhost-track/shyt_yt_link_wire_v403.cpp \
+              bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
+              bbhost-track/shyt_yt_server_session_v408.cpp \
+              bbhost-track/shyt_yt_signup_work_v409.cpp \
+              bbhost-track/test_shyt_yt_server_session_v408.cpp \
+              "$RUNNER_TEMP/v415-original-link-crypto.o" \
+              -o "$RUNNER_TEMP/v415-authenticated-lobby" >>v415-loopback-build.log 2>&1; then
+            echo V415_AUTHENTICATED_LOBBY_BUILD_FAILED
+            tail -n 7 v415-loopback-build.log | cut -c1-150
+            exit 1
+          fi
+          if ! "$RUNNER_TEMP/v415-authenticated-lobby" >v415-loopback-run.log 2>&1; then
+            echo V415_AUTHENTICATED_LOBBY_TEST_FAILED
+            tail -n 6 v415-loopback-run.log | cut -c1-150
+            exit 1
+          fi
+          tail -n 4 v415-loopback-run.log | cut -c1-150
+      - name: Verify owner game compatibility probe never sends or prints game data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/test_owner_eboot_probe_v1.py
+      - name: Overlay hardened transaction IDs into original pinned BBHost STUN and HLE
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          grep -q 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
+          ! grep -q mt19937 pinned-bbhost/src/net/stun.cpp
+      - name: Run ACTUAL original BBHost STUN suite with OS entropy and fail-closed synthetic outage
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src \
+            pinned-bbhost/src/net/stun.cpp pinned-bbhost/tests/stun_test.cpp \
+            -o "$RUNNER_TEMP/bbhost-original-stun-v2"
+          "$RUNNER_TEMP/bbhost-original-stun-v2"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -DBBHOST_V2_TEST_ENTROPY_FAIL -Ipinned-bbhost/src \
+            pinned-bbhost/src/net/stun.cpp \
+            bbhost-track/test_bbhost_stun_entropy_failure_v2.cpp \
+            -o "$RUNNER_TEMP/bbhost-os-entropy-fail-v2"
+          "$RUNNER_TEMP/bbhost-os-entropy-fail-v2"
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Ibbhost-track \
+            bbhost-track/test_yt_world_event_ledger_v4.c \
+            -o "$RUNNER_TEMP/bbhost-world-ledger-v4"
+          "$RUNNER_TEMP/bbhost-world-ledger-v4"
+      - name: Compile an ACTUAL BBHost plugin with original YT SHLK4 crypto, run dlopen lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/link_auth.h)" = 589b823ae0733e9104fcc0140726c8080ade20db
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/link_crypto.cpp)" = b91b3affaca7e2da0a357f1a747a90246b167b79
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/monocypher/monocypher.c)" = fe5bbdc8bde356ae80fe0b136d8c8e9212c15db8
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ipinned-bbhost/include -Ibbhost-track \
+            -c bbhost-track/shyt_bbhost_probe_v1.c -o "$RUNNER_TEMP/shyt-plugin.o"
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -c bbhost-track/shyt_yt_game_frame_v362.c \
+            -o "$RUNNER_TEMP/shyt-frame.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_shlk_client_v401.cpp \
+            -o "$RUNNER_TEMP/shyt-crypto-client.o"
+          g++ -std=c++20 -O2 -w -fPIC \
+            -Ipinned-yt/server -c pinned-yt/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-original-crypto.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+            -c bbhost-track/shyt_yt_link_wire_v403.cpp \
+            -o "$RUNNER_TEMP/shyt-outer-link.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_secure_game_data_v405.cpp \
+            -o "$RUNNER_TEMP/shyt-secure-game.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -c bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
+            -o "$RUNNER_TEMP/shyt-udp-endpoint.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+            -c bbhost-track/shyt_yt_server_session_v408.cpp \
+            -o "$RUNNER_TEMP/shyt-server-session.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC -pthread \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_signup_work_v409.cpp \
+            -o "$RUNNER_TEMP/shyt-signup-work.o"
+          g++ -shared "$RUNNER_TEMP/shyt-plugin.o" "$RUNNER_TEMP/shyt-frame.o" \
+            "$RUNNER_TEMP/shyt-crypto-client.o" "$RUNNER_TEMP/yt-original-crypto.o" \
+            "$RUNNER_TEMP/shyt-outer-link.o" "$RUNNER_TEMP/shyt-secure-game.o" \
+            "$RUNNER_TEMP/shyt-udp-endpoint.o" "$RUNNER_TEMP/shyt-server-session.o" \
+            "$RUNNER_TEMP/shyt-signup-work.o" -pthread \
+            -o "$RUNNER_TEMP/shyt_bbhost_probe.so"
+          gcc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ipinned-bbhost/include bbhost-track/test_shyt_bbhost_probe_v1.c \
+            -ldl -o "$RUNNER_TEMP/shyt_bbhost_probe_test"
+          "$RUNNER_TEMP/shyt_bbhost_probe_test" "$RUNNER_TEMP/shyt_bbhost_probe.so"
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_init
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_image
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_game_frame_encode_v362
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_shlk_new_v401
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_shlk_seal_v401
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_link_encode_data_v403
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_secure_send_data_v405
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_udp_open_v406
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_server_tick_v408
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_work_start_v409
+      - name: Install cross compiler for REAL Windows BBHost plugin DLL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+      - name: Cross compile original BBHost public ABI Windows DLL WITH original YT crypto
+        shell: bash
+        run: |
+          set -euo pipefail
+          x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ipinned-bbhost/include -Ibbhost-track \
+            -c bbhost-track/shyt_bbhost_probe_v1.c -o "$RUNNER_TEMP/shyt-plugin-win.o"
+          x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -c bbhost-track/shyt_yt_game_frame_v362.c \
+            -o "$RUNNER_TEMP/shyt-frame-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_shlk_client_v401.cpp \
+            -o "$RUNNER_TEMP/shyt-crypto-client-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -w -Ipinned-yt/server \
+            -c pinned-yt/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-original-crypto-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+            -c bbhost-track/shyt_yt_link_wire_v403.cpp \
+            -o "$RUNNER_TEMP/shyt-outer-link-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_secure_game_data_v405.cpp \
+            -o "$RUNNER_TEMP/shyt-secure-game-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Ibbhost-track -c bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
+            -o "$RUNNER_TEMP/shyt-udp-endpoint-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+            -c bbhost-track/shyt_yt_server_session_v408.cpp \
+            -o "$RUNNER_TEMP/shyt-server-session-win.o"
+          x86_64-w64-mingw32-g++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_signup_work_v409.cpp \
+            -o "$RUNNER_TEMP/shyt-signup-work-win.o"
+          x86_64-w64-mingw32-g++ -shared -static -static-libgcc -static-libstdc++ \
+            "$RUNNER_TEMP/shyt-plugin-win.o" "$RUNNER_TEMP/shyt-frame-win.o" \
+            "$RUNNER_TEMP/shyt-crypto-client-win.o" "$RUNNER_TEMP/yt-original-crypto-win.o" \
+            "$RUNNER_TEMP/shyt-outer-link-win.o" "$RUNNER_TEMP/shyt-secure-game-win.o" \
+            "$RUNNER_TEMP/shyt-udp-endpoint-win.o" "$RUNNER_TEMP/shyt-server-session-win.o" \
+            "$RUNNER_TEMP/shyt-signup-work-win.o" \
+            -pthread -lws2_32 -lbcrypt \
+            -o "$RUNNER_TEMP/shyt_bbhost_probe.dll"
+          file "$RUNNER_TEMP/shyt_bbhost_probe.dll" | grep -Eq 'PE32\+.*DLL'
+          if x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" |
+               grep -Eiq 'DLL Name: (libstdc\+\+-6|libgcc_s_seh-1|libwinpthread-1)\.dll'; then
+            echo 'V402 plugin unexpectedly depends on non-packaged C++ runtime'
+            exit 1
+          fi
+          x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" \
+            | grep -q bb_plugin_image
+          x86_64-w64-mingw32-objdump -p "$RUNNER_TEMP/shyt_bbhost_probe.dll" \
+            | grep -q bb_plugin_init
+          echo SHYT_BBHOST_V402_REAL_WINDOWS_LINUX_CRYPTOLINK_PLUGIN_BUILT_PASS
+      - name: Verify real source-pinned BBHost CMake build graph also vendors original YT SHLK4
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py \
+            --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py \
+            --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode apply
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/link_auth.h
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/link_crypto.cpp
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/monocypher/monocypher.c
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/emu/common/types.h
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/emu/core/libraries/network/net_link.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_link_wire_v403.cpp
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_secure_game_data_v405.cpp
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_udp_endpoint_v406.cpp
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_server_session_v408.cpp
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_coop_transport_v413.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_team_authority_v414.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_team_wire_lite_v415.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_party_reply_v419.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_snapshot_v420.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_delta_fence_v423.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_staging_v425.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_world_projection_v426.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_guest_hook_preflight_v427.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_full_guest_preflight_v428.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_game_link_observer_v429.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_game_packet_stage_v430.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_peer_evidence_v431.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_guest_member_v432.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_game_route_assessment_v433.h
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/game_link.h
+          test -f pinned-bbhost/plugins/shyt_probe/yt_original/coop/coop_stream.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.cpp
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_signup_work_v409.h
+          test -f pinned-bbhost/plugins/shyt_probe/shyt_yt_shlk_client_v401.cpp
+          grep -Fq 'plugins/shyt_probe/yt_original/coop/link_crypto.cpp' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'plugins/shyt_probe/shyt_yt_link_wire_v403.cpp' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'plugins/shyt_probe/shyt_yt_secure_game_data_v405.cpp' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'plugins/shyt_probe/shyt_yt_udp_endpoint_v406.cpp' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'plugins/shyt_probe/shyt_yt_server_session_v408.cpp' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'plugins/shyt_probe/shyt_yt_signup_work_v409.cpp' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'bb_plugin_shyt PRIVATE ws2_32 bcrypt' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'bb_plugin_shyt PRIVATE' pinned-bbhost/CMakeLists.txt
+          grep -Fq -- '-static-libstdc++' pinned-bbhost/CMakeLists.txt
+          echo SHYT_V402_PINNED_ORIGINAL_YT_CRYPTO_INCLUDED_IN_ACTUAL_BBHOST_PLUGIN_BUILD_GRAPH
+      - name: Preserve ONLY optional experimental DLL and SO, no original game
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-BBHost-v0.2.24-plugin-api-EXPERIMENTAL-only
+          path: |
+            ${{ runner.temp }}/shyt_bbhost_probe.dll
+            ${{ runner.temp }}/shyt_bbhost_probe.so
+          retention-days: 7
+          if-no-files-found: error
+
+  bbhost-stun-real-windows:
+    runs-on: windows-2022
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: false
+      - name: Apply exact BBHost STUN/HLE CSPRNG patches on Windows
+        shell: pwsh
+        run: |
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          exit $LASTEXITCODE
+      - name: Run original Windows BBHost STUN protocol regression using real OS entropy
+        shell: pwsh
+        run: |
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Ipinned-bbhost/src pinned-bbhost/src/net/stun.cpp pinned-bbhost/tests/stun_test.cpp -o "$env:RUNNER_TEMP\bbhost-stun-v2.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:RUNNER_TEMP\bbhost-stun-v2.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          clang++ -std=c++20 -O2 -Wall -Wextra -Werror -DBBHOST_V2_TEST_ENTROPY_FAIL -Ipinned-bbhost/src pinned-bbhost/src/net/stun.cpp bbhost-track/test_bbhost_stun_entropy_failure_v2.cpp -o "$env:RUNNER_TEMP\bbhost-entropy-fail-v2.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:RUNNER_TEMP\bbhost-entropy-fail-v2.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          clang -std=c11 -O2 -Wall -Wextra -Werror -Ibbhost-track bbhost-track/test_yt_world_event_ledger_v4.c -o "$env:RUNNER_TEMP\bbhost-ledger-v4.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & "$env:RUNNER_TEMP\bbhost-ledger-v4.exe"
+          exit $LASTEXITCODE
+
+  yt-v435-original-qt-hub:
+    name: YT v1.4.0 original Qt Hub authenticated GameFrame integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: pinned-yt-v140
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            server/src/server_link.cpp
+            server/src/server_link.h
+            server/src/virtual_address.h
+            server/coop/coop_types.h
+            server/coop/game_link.h
+            server/coop/packet_routes.h
+            server/coop/build_fingerprint.h
+            server/coop/link_auth.h
+            server/coop/link_crypto.cpp
+            server/coop/monocypher/monocypher.c
+            server/coop/monocypher/monocypher.h
+            server/tests/test_server_link.cpp
+            server/tests/contracts/server_link_frames.txt
+      - name: Install ONLY Qt6 Core headers and compiler for actual YT test
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq >"$RUNNER_TEMP/v435-qt-apt.log" 2>&1
+          sudo apt-get install -qq -y --no-install-recommends qt6-base-dev pkg-config >>"$RUNNER_TEMP/v435-qt-apt.log" 2>&1
+          pkg-config --modversion Qt6Core
+      - name: Build original Qt Hub from source overlay and exercise actual encrypted/relay tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt-v140 rev-parse HEAD)" = efa0ad265d840d9195e55db2e3216f46f7daedd0
+          python3 bbhost-track/apply_yt_game_sender_guard_v434.py \
+            --yt pinned-yt-v140 \
+            --header bbhost-track/shyt_yt_game_sender_binding_v434.h \
+            --out "$RUNNER_TEMP/v435-yt-overlay"
+          python3 bbhost-track/apply_yt_server_link_test_v435.py \
+            --yt pinned-yt-v140 \
+            --out "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
+          python3 bbhost-track/extend_yt_qt_encrypted_gamelink_v436.py \
+            --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
+          python3 bbhost-track/extend_yt_qt_five_player_v437.py \
+            --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
+          python3 bbhost-track/extend_yt_qt_signed_in_five_v438.py \
+            --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
+          python3 bbhost-track/extend_yt_qt_rebind_churn_v440.py \
+            --overlay-test "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp"
+          test -z "$(git -C pinned-yt-v140 status --porcelain)"
+          contracts="$PWD/pinned-yt-v140/server/tests/contracts/server_link_frames.txt"
+          g++ -std=c++20 -O2 -fPIC -Wall -Wextra \
+            -I"$RUNNER_TEMP/v435-yt-overlay/server" \
+            -Ipinned-yt-v140/server -Ipinned-yt-v140/server/src \
+            $(pkg-config --cflags Qt6Core) \
+            "-DBLOODBORNE_SERVER_LINK_CONTRACTS=\"$contracts\"" \
+            "$RUNNER_TEMP/v435-yt-overlay/server/tests/test_server_link.cpp" \
+            "$RUNNER_TEMP/v435-yt-overlay/server/src/server_link.cpp" \
+            pinned-yt-v140/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/v435-yt-original-qt-hub" \
+            $(pkg-config --libs Qt6Core)
+          "$RUNNER_TEMP/v435-yt-original-qt-hub" >"$RUNNER_TEMP/v435-yt-hub-tests.log" 2>&1 || {
+            tail -n 14 "$RUNNER_TEMP/v435-yt-hub-tests.log" | cut -c1-150
+            exit 1
+          }
+          tail -n 12 "$RUNNER_TEMP/v435-yt-hub-tests.log" | cut -c1-150
+          grep -Fq 'V435 YT original Qt Hub sender spoofing/no-route: ok' "$RUNNER_TEMP/v435-yt-hub-tests.log"
+          grep -Fq 'V436 YT ORIGINAL NOISE-NK 2-PEER AUTHENTIC GAME RELAY PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
+          grep -Fq 'V437 YT ORIGINAL NOISE-NK FIVE HUNTER ROUTE REBIND PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
+          grep -Fq 'V438 YT ORIGINAL FIVE DISTINCT HOSTED SIGN-IN IDENTITIES PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
+          grep -Fq 'V440 YT ORIGINAL FIVE MEMBER AUTHENTIC REBIND CHURN PASS' "$RUNNER_TEMP/v435-yt-hub-tests.log"
+          echo SHYT_V438_REAL_ORIGINAL_QT_FIVE_UNIQUE_SIGN_IN_5COOP_4PLUS1_3PLUS2_REBIND_PASS
+
+  bbhost-pr217-network-api17-candidate:
+    name: BBHost PR217 genuine API17 signaling branch + SHYT plugin candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 271f68ef8811b873c7e0cc31f98a92f8deb7e999
+          path: pr217-bbhost
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - name: Enforce exact original BBHost PR217 signaling and opt-in source pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pr217-bbhost rev-parse HEAD)" = 271f68ef8811b873c7e0cc31f98a92f8deb7e999
+          test "$(git -C pinned-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          if python3 bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py \
+             --upstream-checkout pr217-bbhost --original-yt-checkout pinned-yt --mode check; then
+             echo ERROR_PR217_WAS_ALLOWED_WITHOUT_EXPLICIT_CANDIDATE_FLAG
+             exit 1
+          fi
+          python3 bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py \
+            --upstream-checkout pr217-bbhost --original-yt-checkout pinned-yt \
+            --allow-pr217-network-candidate --mode check
+          python3 bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py \
+            --upstream-checkout pr217-bbhost --original-yt-checkout pinned-yt \
+            --allow-pr217-network-candidate --mode apply
+          test -f pr217-bbhost/plugins/shyt_probe/shyt_bbhost_probe_v1.c
+          test -f pr217-bbhost/plugins/shyt_probe/yt_original/coop/link_crypto.cpp
+          test -f pr217-bbhost/plugins/shyt_probe/shyt_yt_game_route_assessment_v433.h
+          grep -q '^#define BB_PLUGIN_API_VERSION 17$' pr217-bbhost/include/bbhost_plugin.h
+          echo SHYT_V439_PR217_API17_SOURCE_PINNED_NO_DEFAULT_PROMOTION_PASS
+      - name: V440 check PR217 original UDP signal receiver is intended target, never mistake it for authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 bbhost-track/apply_bbhost_signaling_guard_v440.py \
+            --upstream-checkout pr217-bbhost \
+            --guard bbhost-track/shyt_bbhost_signal_target_v440.h --mode check
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -Ibbhost-track \
+            bbhost-track/test_shyt_bbhost_signal_target_v440.cpp \
+            -o "$RUNNER_TEMP/shyt-v440-bbhost-signal-target"
+          "$RUNNER_TEMP/shyt-v440-bbhost-signal-target"
+          python3 bbhost-track/apply_bbhost_signaling_guard_v440.py \
+            --upstream-checkout pr217-bbhost \
+            --guard bbhost-track/shyt_bbhost_signal_target_v440.h --mode apply
+          grep -Fq 'BbhostSignalTargetV440::Inspect(' pr217-bbhost/src/hle/np_signaling.cpp
+          test -f pr217-bbhost/src/hle/shyt_bbhost_signal_target_v440.h
+          echo SHYT_V440_PR217_UDP_TARGET_ONLY_GUARD_PROVEN_NO_PEER_AUTH_GRANTED
+      - name: Prove actual BBHost PR217 API17 .so plugin with original YT Noise NK and real dlopen fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/link_auth.h)" = 589b823ae0733e9104fcc0140726c8080ade20db
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/link_crypto.cpp)" = b91b3affaca7e2da0a357f1a747a90246b167b79
+          test "$(git -C pinned-yt rev-parse HEAD:server/coop/monocypher/monocypher.c)" = fe5bbdc8bde356ae80fe0b136d8c8e9212c15db8
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ipr217-bbhost/include -Ibbhost-track \
+            -c bbhost-track/shyt_bbhost_probe_v1.c -o "$RUNNER_TEMP/shyt-plugin.o"
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -c bbhost-track/shyt_yt_game_frame_v362.c \
+            -o "$RUNNER_TEMP/shyt-frame.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_shlk_client_v401.cpp \
+            -o "$RUNNER_TEMP/shyt-crypto-client.o"
+          g++ -std=c++20 -O2 -w -fPIC \
+            -Ipinned-yt/server -c pinned-yt/server/coop/link_crypto.cpp \
+            -o "$RUNNER_TEMP/yt-original-crypto.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+            -c bbhost-track/shyt_yt_link_wire_v403.cpp \
+            -o "$RUNNER_TEMP/shyt-outer-link.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_secure_game_data_v405.cpp \
+            -o "$RUNNER_TEMP/shyt-secure-game.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Ibbhost-track -c bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
+            -o "$RUNNER_TEMP/shyt-udp-endpoint.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC \
+            -Wno-missing-field-initializers \
+            -Ibbhost-track -Ipinned-yt/server -Ipinned-yt/emulator/src \
+            -c bbhost-track/shyt_yt_server_session_v408.cpp \
+            -o "$RUNNER_TEMP/shyt-server-session.o"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -fPIC -pthread \
+            -Ibbhost-track -Ipinned-yt/server \
+            -c bbhost-track/shyt_yt_signup_work_v409.cpp \
+            -o "$RUNNER_TEMP/shyt-signup-work.o"
+          g++ -shared "$RUNNER_TEMP/shyt-plugin.o" "$RUNNER_TEMP/shyt-frame.o" \
+            "$RUNNER_TEMP/shyt-crypto-client.o" "$RUNNER_TEMP/yt-original-crypto.o" \
+            "$RUNNER_TEMP/shyt-outer-link.o" "$RUNNER_TEMP/shyt-secure-game.o" \
+            "$RUNNER_TEMP/shyt-udp-endpoint.o" "$RUNNER_TEMP/shyt-server-session.o" \
+            "$RUNNER_TEMP/shyt-signup-work.o" -pthread \
+            -o "$RUNNER_TEMP/shyt_bbhost_probe.so"
+          gcc -std=c11 -O2 -Wall -Wextra -Werror \
+            -Ipr217-bbhost/include bbhost-track/test_shyt_bbhost_probe_v1.c \
+            -ldl -o "$RUNNER_TEMP/shyt_bbhost_probe_test"
+          "$RUNNER_TEMP/shyt_bbhost_probe_test" "$RUNNER_TEMP/shyt_bbhost_probe.so"
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_init
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q bb_plugin_image
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_game_frame_encode_v362
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_shlk_new_v401
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_shlk_seal_v401
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_link_encode_data_v403
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_secure_send_data_v405
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_udp_open_v406
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_server_tick_v408
+          nm -D --defined-only "$RUNNER_TEMP/shyt_bbhost_probe.so" | grep -q shyt_yt_work_start_v409
+
+      - name: Verify candidate source CMake registers real BBHost plugin without building a game package
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'add_library(bb_plugin_shyt MODULE' pr217-bbhost/CMakeLists.txt
+          grep -Fq 'DEPENDS bbhost bb_plugin_randomizer' pr217-bbhost/CMakeLists.txt
+          grep -Fq 'bb_plugin_debug_menu bb_plugin_shyt' pr217-bbhost/CMakeLists.txt
+          grep -Fq 'on_camera_target' pr217-bbhost/include/bbhost_plugin.h
+          test -z "$(git -C pinned-yt status --porcelain)"
+          echo SHYT_V439_PR217_API17_BUILD_AND_DLOPEN_CANDIDATE_ONLY_PASS
+
+  bbhost-pr218-auth-check-candidate:
+    name: BBHost PR218 actual sign-in token response parser, isolated candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 57ecf8327b9201f801910934dde48f2dd592a714
+          path: pr218-bbhost
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout: |
+            src/net/sign_in_check.h
+            src/replay/json.h
+            src/replay/json.cpp
+            tests/sign_in_check_test.cpp
+      - name: Pin original PR218 sign-in source, run REAL upstream negative/positive auth tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pr218-bbhost rev-parse HEAD)" = 57ecf8327b9201f801910934dde48f2dd592a714
+          test "$(git -C pr218-bbhost rev-parse HEAD:src/net/sign_in_check.h)" = 9c4def388c6610d4d72827a57e7392fb8d087c61
+          test "$(git -C pr218-bbhost rev-parse HEAD:tests/sign_in_check_test.cpp)" = 5c3bacba08ae8fbe48647bb10c5aa7eed7aefd92
+          test "$(git -C pr218-bbhost rev-parse HEAD:src/replay/json.h)" = e31f15c05631ce86b27e93a26f4fbeece74715c7
+          test "$(git -C pr218-bbhost rev-parse HEAD:src/replay/json.cpp)" = 81233f5d277c3ebaeb1439dd2d5be5b859e93aa3
+          # The original upstream json.cpp has aggregate-initializer omissions.
+          # Keep -Werror for our tests; suppress only this known upstream warning.
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -Wno-missing-field-initializers \
+            pr218-bbhost/tests/sign_in_check_test.cpp \
+            pr218-bbhost/src/replay/json.cpp \
+            -Ipr218-bbhost/src \
+            -o "$RUNNER_TEMP/shyt-v439-pr218-actual-signin"
+          "$RUNNER_TEMP/shyt-v439-pr218-actual-signin"
+          test -z "$(git -C pr218-bbhost status --porcelain)"
+          echo SHYT_V439_PR218_TOKEN_AUTH_PARSER_SOURCE_PIN_AND_ACTUAL_UPSTREAM_TEST_PASS

@@ -1,0 +1,32 @@
+name: SHYT V18 private original ELF NetSync readiness security contract
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-private-netsync-v18.yml'
+      - 'bbhost-track/private_netsync_original_preflight_v18.py'
+      - 'bbhost-track/test_private_netsync_original_preflight_v18.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-private-game-preflight:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify ELF read-only private NetSync preflight on invented segments
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile bbhost-track/private_netsync_original_preflight_v18.py
+          python -m py_compile bbhost-track/test_private_netsync_original_preflight_v18.py
+          python bbhost-track/test_private_netsync_original_preflight_v18.py
+          test ! -f eboot.bin-decrypted
+          echo SHYT_V18_PRIVATE_NETSYNC_ELF_NO_RETAIL_DATA_SYNTHETIC_PASS

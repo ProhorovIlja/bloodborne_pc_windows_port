@@ -1,0 +1,82 @@
+name: SHYT V406 real Windows/Linux UDP localhost server endpoint and spoofed-source refusal
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-real-udp-endpoint-v406.yml'
+      - 'bbhost-track/shyt_yt_udp_endpoint_v406.*'
+      - 'bbhost-track/test_shyt_yt_udp_endpoint_v406.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-udp-os-sockets-original-yt-wire:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: original-yt
+          persist-credentials: false
+      - name: Pin exact original YT SHLK datagram and common-types contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test "$(git -C original-yt rev-parse HEAD:emulator/src/core/libraries/network/net_link.h)" = 7f56fd1a5215eddb9edd9f13c91b216c16bc1651
+          test "$(git -C original-yt rev-parse HEAD:emulator/src/common/types.h)" = c2b7bd35ea2767287a80b84dc756394c72a7af03
+      - name: Build REAL OS UDP endpoint + original YT framing, run spoofed-source and exact loopback
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Windows ]; then
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+               /nologo /TP /std:c++20 /EHsc /W4 /WX /O2 \
+               -Wno-missing-field-initializers \
+               /Ibbhost-track /Ioriginal-yt/server /Ioriginal-yt/emulator/src \
+               bbhost-track/shyt_yt_link_wire_v403.cpp \
+               bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
+               bbhost-track/test_shyt_yt_udp_endpoint_v406.cpp \
+               ws2_32.lib /Fe:./shyt-v406-real-os-udp.exe >v406-build.log 2>&1; then
+              tail -n 6 v406-build.log | cut -c1-160 >v406-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-v406-real-os-udp.exe >v406-run.log 2>&1; then
+              tail -n 6 v406-run.log | cut -c1-160 >v406-brief.txt
+              exit 1
+            fi
+          else
+            if ! clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
+              -Wno-missing-field-initializers -pthread \
+              -Ibbhost-track -Ioriginal-yt/server -Ioriginal-yt/emulator/src \
+              bbhost-track/shyt_yt_link_wire_v403.cpp \
+              bbhost-track/shyt_yt_udp_endpoint_v406.cpp \
+              bbhost-track/test_shyt_yt_udp_endpoint_v406.cpp \
+              -o shyt-v406-real-os-udp >v406-build.log 2>&1; then
+              tail -n 6 v406-build.log | cut -c1-160 >v406-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-v406-real-os-udp >v406-run.log 2>&1; then
+              tail -n 6 v406-run.log | cut -c1-160 >v406-brief.txt
+              exit 1
+            fi
+          fi
+          cat v406-run.log
+          echo SHYT_V406_REAL_UDP_OS_SOURCE_VALIDATION_LOOPBACK_PASS
+      - name: Preserve only six lines of local-only UDP diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V406-Localhost-UDP-Error-Max6Lines
+          path: v406-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore

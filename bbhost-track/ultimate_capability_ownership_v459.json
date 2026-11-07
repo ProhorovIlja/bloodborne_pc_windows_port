@@ -1,0 +1,446 @@
+{
+  "schema": "SHYT_V459_ONE_CAPABILITY_ONE_AUTHORITY",
+  "generated_from_public_sources_on": "2026-11-07",
+  "scope": "BBSC Yharnam Together Ultimate BBHost playable track; NOT native port or production deployment",
+  "status_notice": "Selection is target architecture and upstream ownership, not proof all components are integrated, booted, playable or deployed",
+  "source_pins": {
+    "bbhost": "bdc5cdf8be5f37188da9c2368e92be444fdc04cb",
+    "yt": "efa0ad265d840d9195e55db2e3216f46f7daedd0",
+    "cls": "7c00d46f01b67ff1cf12cef346c245960b627141a9c1047d00e2ceadd167ca04",
+    "pr85": "de28395180484960b095d00535e008b6025bd13f",
+    "visy": "11cc47537fd4",
+    "libjuice": "b89c792e3612faf2f12cf35bcc56857313a06be3"
+  },
+  "allowed_decisions": [
+    "disabled_candidate_replace_only",
+    "disabled_extension",
+    "opt_in_bugfix",
+    "disabled_bugfix",
+    "candidate_bugfix_if_reproducible",
+    "adapter_not_parallel_route",
+    "adapter_not_parallel_authority",
+    "concepts_only_no_parallel_writer",
+    "concepts_only_no_parallel_renderer",
+    "concepts_only_no_parallel_frameclock",
+    "concepts_only_no_parallel_world_persistence",
+    "disabled_launcher_extension",
+    "concepts_only_no_parallel_ui",
+    "concepts_only_no_parallel_overlay",
+    "disabled_rule_extension",
+    "bugfix_candidate_only"
+  ],
+  "capabilities": [
+    {
+      "id": "udp_socket_and_nat",
+      "domain": "net.transport.udp_socket",
+      "selected": {
+        "owner": "bbhost",
+        "implementation": "existing P2P UDP + STUN/optional relay",
+        "layer": "host-network-adapter",
+        "status": "upstream_exists_but_yt_integration_not_playtested"
+      },
+      "evidence": [
+        "https://github.com/droogie/bbhost/blob/bdc5cdf8be5f37188da9c2368e92be444fdc04cb/docs/online.md"
+      ],
+      "acceptance_tests": [
+        "NAT-direct and symmetric-CGNAT two-client Windows routing; no duplicate sockets"
+      ],
+      "alternatives": [
+        {
+          "id": "libjuice-ice",
+          "source": "paullouisageneau/libjuice@b89c792e3612faf2f12cf35bcc56857313a06be3",
+          "decision": "disabled_candidate_replace_only",
+          "reason": "BBHost STUN already exists; libjuice adds ICE connectivity checks but would duplicate NAT discovery if enabled as a second owner",
+          "acceptance_gate": "p95 connect-success across four NAT combinations, consent freshness, TURN cost, license, memory and CPU baseline",
+          "rollback": "keep BBHost STUN"
+        }
+      ]
+    },
+    {
+      "id": "game_packet_route",
+      "domain": "net.gameframe.routing",
+      "selected": {
+        "owner": "yt-server",
+        "implementation": "one encrypted game link and server-directed relay",
+        "layer": "routing-policy",
+        "status": "upstream_exists_in_yt140"
+      },
+      "evidence": [
+        "https://github.com/Amanises-Yharnam-Together/BBSC-Yharnam-Together/blob/efa0ad265d840d9195e55db2e3216f46f7daedd0/docs/SERVER_COOP_PLAN.md"
+      ],
+      "acceptance_tests": [
+        "reliable and ACK remain single-path; 5 peers, loss/reorder/epoch/rebind/p99 relay throughput"
+      ],
+      "alternatives": [
+        {
+          "id": "pr85-direct-datagrams",
+          "source": "ProhorovIlja/bloodborne_pc_windows_port@de28395180484960b095d00535e008b6025bd13f",
+          "decision": "disabled_extension",
+          "reason": "route only explicitly eligible unreliable frames after signed peer grant and fresh Noise proof; reuse YT transport policy",
+          "acceptance_gate": "live original YT LinkAuth+game-frame integration and Windows NAT/relay fallback tests",
+          "rollback": "server-route-only for all frames"
+        },
+        {
+          "id": "bbhost-native-game-p2p",
+          "source": "droogie/bbhost@bdc5cdf8be5f37188da9c2368e92be444fdc04cb",
+          "decision": "adapter_not_parallel_route",
+          "reason": "BBHost's NP P2P socket is transport adapter, not an independent second world state/link policy",
+          "acceptance_gate": "one egress hook to select transport once and single receiver dedup",
+          "rollback": "YT server relay"
+        }
+      ]
+    },
+    {
+      "id": "server_identity_authority",
+      "domain": "net.session.auth_identity",
+      "selected": {
+        "owner": "yt-shadnet",
+        "implementation": "team/server account and game-session admission",
+        "layer": "authenticated-control",
+        "status": "present_in_yt140"
+      },
+      "evidence": [
+        "https://github.com/Amanises-Yharnam-Together/BBSC-Yharnam-Together/blob/efa0ad265d840d9195e55db2e3216f46f7daedd0/docs/SERVER_COOP_PLAN.md"
+      ],
+      "acceptance_tests": [
+        "forged account ID, unauthorized join, replay, world/party epoch change, invitation filter"
+      ],
+      "alternatives": [
+        {
+          "id": "bbhost-np-signaling",
+          "source": "droogie/bbhost#217",
+          "decision": "adapter_not_parallel_authority",
+          "reason": "NP Matching2 API17 lifecycle cannot establish YT identity or override YT party admission",
+          "acceptance_gate": "network API16/17 cross-compat + target server protocol migration",
+          "rollback": "pinned 0.2.26 API16"
+        },
+        {
+          "id": "pr85-signed-pair-grants",
+          "source": "ProhorovIlja/bloodborne_pc_windows_port@de28395180484960b095d00535e008b6025bd13f",
+          "decision": "disabled_extension",
+          "reason": "signed permissions must be issued by selected YT authenticated session, not by independent peer service",
+          "acceptance_gate": "real team epoch and membership revocation, 5-player PK authentication",
+          "rollback": "server-only path"
+        }
+      ]
+    },
+    {
+      "id": "world_state",
+      "domain": "world.team.progress",
+      "selected": {
+        "owner": "yt-server",
+        "implementation": "durable server-owned team world log",
+        "layer": "authoritative-world",
+        "status": "present_in_yt140"
+      },
+      "evidence": [
+        "https://github.com/Amanises-Yharnam-Together/BBSC-Yharnam-Together/blob/efa0ad265d840d9195e55db2e3216f46f7daedd0/docs/SERVER_COOP_PLAN.md"
+      ],
+      "acceptance_tests": [
+        "host migration, server restart/replay, boss death, flags, chalice, disconnected guest, no double writes"
+      ],
+      "alternatives": [
+        {
+          "id": "nightwatch-visy-world",
+          "source": "visy/bloodborne_pc_windows_port@11cc47537fd4",
+          "decision": "concepts_only_no_parallel_writer",
+          "reason": "different host-owned progression with incompatible wire protocol and save semantics",
+          "acceptance_gate": "event-level equivalence with original game hooks; no second HP/flag owner",
+          "rollback": "YT world-log authoritative"
+        }
+      ]
+    },
+    {
+      "id": "team_roster",
+      "domain": "world.session.membership",
+      "selected": {
+        "owner": "yt-server",
+        "implementation": "five-player team roster, joins, deaths and invasions",
+        "layer": "game-session-authority",
+        "status": "present_in_yt140"
+      },
+      "evidence": [
+        "https://github.com/Amanises-Yharnam-Together/BBSC-Yharnam-Together/blob/efa0ad265d840d9195e55db2e3216f46f7daedd0/docs/SERVER_COOP_PLAN.md"
+      ],
+      "acceptance_tests": [
+        "5 coop, 4+1, 3+2 gated by actual game slots; DBNO HUD persists until disconnect"
+      ],
+      "alternatives": [
+        {
+          "id": "visy-two-invaders",
+          "source": "visy/bloodborne_pc_windows_port@11cc47537fd4",
+          "decision": "disabled_rule_extension",
+          "reason": "its documented implementation counts only four player slots; adapt its per-invader reward/admission tests only",
+          "acceptance_gate": "five-player server roster membership and game-slot proof; game save/load and invasion refunds",
+          "rollback": "original YT team roster"
+        }
+      ]
+    },
+    {
+      "id": "renderer",
+      "domain": "graphics.vulkan.renderer",
+      "selected": {
+        "owner": "bbhost",
+        "implementation": "Vulkan/GCN renderer and framegraph",
+        "layer": "runtime-graphics",
+        "status": "pinned_host_026"
+      },
+      "evidence": [
+        "https://github.com/droogie/bbhost/tree/bdc5cdf8be5f37188da9c2368e92be444fdc04cb/src"
+      ],
+      "acceptance_tests": [
+        "same GPU scene 30/60/120, shader stalls, p95/p99 frametime, VRAM, driver hazard tests"
+      ],
+      "alternatives": [
+        {
+          "id": "lantern-renderer",
+          "source": "Awakenchan/LanternEngine",
+          "decision": "concepts_only_no_parallel_renderer",
+          "reason": "competing shader recompilers and Vulkan ownership cannot simply coexist with BBHost",
+          "acceptance_gate": "isolated equivalent bug reproducer, frame-time and driver correctness on BBHost implementation",
+          "rollback": "BBHost renderer"
+        },
+        {
+          "id": "deadinside-gpu-sampler-lifetime",
+          "source": "deadinside28/bloodborne_pc#442",
+          "decision": "bugfix_candidate_only",
+          "reason": "defer sampler GC if equivalent ownership hazard exists in BBHost; not a new texture manager",
+          "acceptance_gate": "same failing renderer race before/after and Vulkan validation",
+          "rollback": "current BBHost lifetime policy"
+        }
+      ]
+    },
+    {
+      "id": "fps_and_input",
+      "domain": "graphics.fps.pacing",
+      "selected": {
+        "owner": "bbhost",
+        "implementation": "native frame limiter, high-refresh rendering, input polling",
+        "layer": "engine-runtime",
+        "status": "pinned_host_026_with_cls_cap_staged"
+      },
+      "evidence": [
+        "https://github.com/droogie/bbhost/blob/bdc5cdf8be5f37188da9c2368e92be444fdc04cb/src/engine/frame_rate.cpp"
+      ],
+      "acceptance_tests": [
+        "offline 30/60/120/240/uncapped unchanged, online 60/120 max; frame p99 input latency measured"
+      ],
+      "alternatives": [
+        {
+          "id": "cls-online-cap-v455",
+          "source": "ProhorovIlja/bloodborne_pc_windows_port#86",
+          "decision": "opt_in_bugfix",
+          "reason": "fix early BBHOST_GAME_FPS override bypass; update existing BBHost wanted_fps, not second limiter",
+          "acceptance_gate": "V455 compiled original-engine test plus real Windows gameplay timings",
+          "rollback": "original CLS FPS function"
+        },
+        {
+          "id": "nightwatch-visy-fps",
+          "source": "visy/bloodborne_pc_windows_port@11cc47537fd4",
+          "decision": "concepts_only_no_parallel_frameclock",
+          "reason": "reuse frame pacing measurement ideas, never concurrently drive two engine frame clocks",
+          "acceptance_gate": "test one active authoritative step clock with Vulkan present and game NetSync",
+          "rollback": "BBHost frameclock"
+        }
+      ]
+    },
+    {
+      "id": "memory_mappings",
+      "domain": "runtime.guest_memory.permissions",
+      "selected": {
+        "owner": "bbhost",
+        "implementation": "guest mapping/protection epoch with CLS runtime glue",
+        "layer": "host-memory-adapter",
+        "status": "pinned_host_026_cls_loader_optin_off"
+      },
+      "evidence": [
+        "https://github.com/droogie/bbhost/blob/bdc5cdf8be5f37188da9c2368e92be444fdc04cb/src/hle/kernel.cpp"
+      ],
+      "acceptance_tests": [
+        "mapping snapshot atomicity, guest/stack boundaries, page protections, ASan/UBSan and game soak"
+      ],
+      "alternatives": [
+        {
+          "id": "cls-fastmem-v447",
+          "source": "ProhorovIlja/bloodborne_pc_windows_port#86",
+          "decision": "disabled_bugfix",
+          "reason": "avoid always-invalid cache and erroneous RW guest classification using existing BBHost generation; no second map table owner",
+          "acceptance_gate": "Windows in-game save/load stress and page-unmap races plus CPU measurements",
+          "rollback": "original CLS fallback per query"
+        }
+      ]
+    },
+    {
+      "id": "character_saves",
+      "domain": "save.personal_character",
+      "selected": {
+        "owner": "bbhost",
+        "implementation": "native game save read/write through BBHost guest IO",
+        "layer": "game-io-adapter",
+        "status": "pinned_host_026"
+      },
+      "evidence": [
+        "https://github.com/droogie/bbhost/tree/bdc5cdf8be5f37188da9c2368e92be444fdc04cb/src/hle"
+      ],
+      "acceptance_tests": [
+        "atomic save, permissions, corrupt/locked/full-disk, rollback, no shared-world substitution"
+      ],
+      "alternatives": [
+        {
+          "id": "mrsuss-save-manager",
+          "source": "Mrsuss60/bloodborne_pc_windows_port",
+          "decision": "disabled_launcher_extension",
+          "reason": "backup/restore and NG+ snapshots are outside hot game save write path",
+          "acceptance_gate": "cryptographic backup verify, offline-only editor gating, cold recovery",
+          "rollback": "original game save adapter"
+        }
+      ]
+    },
+    {
+      "id": "world_save",
+      "domain": "save.team_world_log",
+      "selected": {
+        "owner": "yt-server",
+        "implementation": "durable team world log and server-side snapshots",
+        "layer": "authoritative-persistence",
+        "status": "present_in_yt140"
+      },
+      "evidence": [
+        "https://github.com/Amanises-Yharnam-Together/BBSC-Yharnam-Together/blob/efa0ad265d840d9195e55db2e3216f46f7daedd0/docs/SERVER_COOP_PLAN.md"
+      ],
+      "acceptance_tests": [
+        "replay idempotent, restart, leader migration, no character save overwrite"
+      ],
+      "alternatives": [
+        {
+          "id": "visy-guest-progression",
+          "source": "visy/bloodborne_pc_windows_port@11cc47537fd4",
+          "decision": "concepts_only_no_parallel_world_persistence",
+          "reason": "host save/guest projection differs from YT server world log; avoid duplicate state authority",
+          "acceptance_gate": "map/boss flags replay with authoritative YT server and client solo state restoration",
+          "rollback": "YT server log"
+        }
+      ]
+    },
+    {
+      "id": "item_trade",
+      "domain": "gameplay.trade.transactions",
+      "selected": {
+        "owner": "yt-server",
+        "implementation": "YT cooperative trade and reward protocol",
+        "layer": "gameplay-authority",
+        "status": "present_in_yt140"
+      },
+      "evidence": [
+        "https://github.com/Amanises-Yharnam-Together/BBSC-Yharnam-Together/blob/efa0ad265d840d9195e55db2e3216f46f7daedd0/docs/SERVER_COOP_PLAN.md"
+      ],
+      "acceptance_tests": [
+        "duplication/rollback after drop and client crash, server durable transfer id, no story-key transfers"
+      ],
+      "alternatives": [
+        {
+          "id": "visy-give-gear-079",
+          "source": "visy/bloodborne_pc_windows_port@11cc47537fd4",
+          "decision": "disabled_extension",
+          "reason": "gear+gem trade UX useful, but its docs warn ACK-loss rollback can duplicate inventory; must not add second ledger",
+          "acceptance_gate": "single-server durable escrow or idempotent ACK across 90+ sec loss and save/load recovery",
+          "rollback": "original YT trades without gear extension"
+        }
+      ]
+    },
+    {
+      "id": "event_patching",
+      "domain": "gameplay.mod_event_patches",
+      "selected": {
+        "owner": "yt-launcher",
+        "implementation": "YT seamless game event build and mod overlay",
+        "layer": "launcher-setup",
+        "status": "present_in_yt140"
+      },
+      "evidence": [
+        "https://github.com/Amanises-Yharnam-Together/BBSC-Yharnam-Together/tree/efa0ad265d840d9195e55db2e3216f46f7daedd0/tools/re"
+      ],
+      "acceptance_tests": [
+        "patched event hash, zero-instruction events, existing mod collision, offline revert and online fingerprint"
+      ],
+      "alternatives": [
+        {
+          "id": "supermedo-empty-event-fix",
+          "source": "Supermedo/bloodborne_pc@windows-v1.9.8.1",
+          "decision": "candidate_bugfix_if_reproducible",
+          "reason": "zero instruction event patches may fail; modify YT event parser only if original YT reproduces; do not embed another patcher",
+          "acceptance_gate": "minimum failing YT script, byte-for-byte unchanged other events, modded game test",
+          "rollback": "current YT event generator"
+        },
+        {
+          "id": "visy-mod-host-only",
+          "source": "visy/bloodborne_pc_windows_port@11cc47537fd4",
+          "decision": "disabled_extension",
+          "reason": "host-only event ids and gameplay patch fingerprints can extend YT's current generator without parallel event engine",
+          "acceptance_gate": "active mod collision report, signed party fingerprint, host world-state authority",
+          "rollback": "YT event patcher"
+        }
+      ]
+    },
+    {
+      "id": "launcher_settings",
+      "domain": "launcher.settings_authority",
+      "selected": {
+        "owner": "yt-launcher",
+        "implementation": "single BLauncher UI using BBHost settings adapter",
+        "layer": "launcher-ui",
+        "status": "cls_140_present"
+      },
+      "evidence": [
+        "https://github.com/CLSAMG22/BBSC/releases/tag/v1.4.0"
+      ],
+      "acceptance_tests": [
+        "one config schema, roundtrip F9/F10 vs launcher, atomic write/backup, TEST ribbon later"
+      ],
+      "alternatives": [
+        {
+          "id": "supermedo-headless-recomplauncher",
+          "source": "Supermedo/bloodborne_pc#169",
+          "decision": "disabled_extension",
+          "reason": "reuse transactional staging and progress, no second launcher executable or settings datastore",
+          "acceptance_gate": "read-only original game, rollback after interrupted update, no account secrets",
+          "rollback": "existing YT BLauncher"
+        },
+        {
+          "id": "visy-launcher-settings",
+          "source": "visy/bloodborne_pc_windows_port@11cc47537fd4",
+          "decision": "concepts_only_no_parallel_ui",
+          "reason": "borrow useful profile switches and keybind accessibility, retain one launcher owner",
+          "acceptance_gate": "single canonical per-setting key and source-of-truth round trip",
+          "rollback": "YT BLauncher"
+        }
+      ]
+    },
+    {
+      "id": "hud_and_qol",
+      "domain": "gameplay.hud_party",
+      "selected": {
+        "owner": "yt-game",
+        "implementation": "original YT party HUD, spectating and DBNO presentation",
+        "layer": "gameplay-display",
+        "status": "present_in_yt140"
+      },
+      "evidence": [
+        "https://github.com/CLSAMG22/BBSC/releases/tag/v1.4.0"
+      ],
+      "acceptance_tests": [
+        "5 player statuses, DBNO persistent until disconnect, correct invader red/observer camera"
+      ],
+      "alternatives": [
+        {
+          "id": "nightwatch-ui",
+          "source": "vladtepes22/NightwatchCoop",
+          "decision": "concepts_only_no_parallel_overlay",
+          "reason": "lift useful HUD/options only into existing YT widgets; never install competing widgets/NetSync refresh",
+          "acceptance_gate": "same-screen five-player HUD and GPU frame cost, in-game accessibility",
+          "rollback": "original YT 1.4.0 party HUD widgets and game state renderer"
+        }
+      ]
+    }
+  ]
+}

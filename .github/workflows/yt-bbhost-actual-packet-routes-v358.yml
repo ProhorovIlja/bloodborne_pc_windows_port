@@ -1,0 +1,83 @@
+name: BBHost V358 parity with actual YT server map/enemy-owner packet router
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-actual-packet-routes-v358.yml'
+      - 'bbhost-track/shyt_yt_packet_routes_v358.h'
+      - 'bbhost-track/test_yt_packet_routes_parity_v358.cpp'
+      - 'bbhost-track/shyt_yt_native_channel_policy_v21.h'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-original-yharnam-together-server-policy-parity:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: original-yt
+          persist-credentials: false
+      - name: Verify exact original YT 1.3.1 route source before C/C++ execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test "$(git -C original-yt rev-parse HEAD:server/coop/packet_routes.h)" = f732c87cd0a030751f5ed23dfa225e98bb8ffc5c
+          # On Windows checkout autocrlf can convert this PUBLIC header to
+          # CRLF. Verify the committed canonical Git blob, not workspace bytes.
+          git -C original-yt show HEAD:server/coop/packet_routes.h >yt-v358-source-git-blob.txt
+          python bbhost-track/check_yt_native_channel_policy_v21.py \
+            --yt-policy yt-v358-source-git-blob.txt \
+            --host-policy bbhost-track/shyt_yt_native_channel_policy_v21.h
+      - name: Build and execute 10080 EXACT original YT server vs BBHost packet route cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Windows ]; then
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+                 /nologo /TP /std:c++20 /EHsc /W4 /WX /O2 -Wno-missing-field-initializers \
+                 /Ibbhost-track /Ioriginal-yt/server \
+                 bbhost-track/test_yt_packet_routes_parity_v358.cpp \
+                 /Fe:./shyt-yt-routes-v358.exe >v358-compile.log 2>&1; then
+              tail -n 6 v358-compile.log | cut -c1-160 >v358-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-yt-routes-v358.exe >v358-run.log 2>&1; then
+              tail -n 4 v358-run.log | cut -c1-160 >v358-brief.txt
+              exit 1
+            fi
+            cat v358-run.log
+          else
+            if ! clang++ -std=c++20 -Wall -Wextra -Werror -Wno-missing-field-initializers -O2 \
+                 -Ibbhost-track -Ioriginal-yt/server \
+                 bbhost-track/test_yt_packet_routes_parity_v358.cpp \
+                 -o ./shyt-yt-routes-v358 >v358-compile.log 2>&1; then
+              tail -n 6 v358-compile.log | cut -c1-160 >v358-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-yt-routes-v358 >v358-run.log 2>&1; then
+              tail -n 4 v358-run.log | cut -c1-160 >v358-brief.txt
+              exit 1
+            fi
+            cat v358-run.log
+          fi
+          echo SHYT_V358_YT_SERVER_MAP_OWNER_PACKET_POLICY_PARITY_PASS
+      - name: Preserve no more than six source-only compiler diagnostic lines
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BBHost-V358-YT-Route-Compiler-Error-Max6lines
+          path: v358-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore

@@ -1,0 +1,110 @@
+name: Original YT launcher with BBHost engine selector
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-yt-launcher-v6.yml'
+      - 'bbhost-track/shyt_yt_bbhost_launcher_v6.py'
+      - 'bbhost-track/test_shyt_yt_bbhost_launcher_v6.py'
+      - 'bbhost-track/apply_yt_bbhost_launcher_v6.py'
+      - 'bbhost-track/assemble_verified_upstream_bbhost_v7.py'
+      - 'bbhost-track/test_signed_bbhost_assembler_v7.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-original-yt-launcher:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Apply original YT GUI adapter and validate strict ELF and engine selection
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/test_shyt_yt_bbhost_launcher_v6.py
+          python bbhost-track/apply_yt_bbhost_launcher_v6.py --upstream-checkout pinned-yt --mode check
+          python bbhost-track/apply_yt_bbhost_launcher_v6.py --upstream-checkout pinned-yt --mode apply
+          python -m py_compile pinned-yt/bbport/launcher/bbport_launcher_win.py
+          python -m py_compile pinned-yt/bbport/launcher/shyt_yt_bbhost_launcher_v6.py
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          s=Path('pinned-yt/bbport/launcher/bbport_launcher_win.py').read_text(encoding='utf-8')
+          ast.parse(s)
+          assert 'shyt_bbhost_v6.launch_from_yt_v6(self, PORT_DIR, DATA_DIR)' in s
+          assert 'shyt_bbhost_v6.read_engine_v6(CONFIG_DIR)' in s
+          assert 'The Yharnam Together BBPort updater is unavailable' in s
+          assert 'self.play_coop()' in s
+          print('SHYT_V6_ORIGINAL_YT_GUI_BBHOST_SWITCH_AND_FALLBACK_PASS')
+          PY
+      - name: Freeze genuine patched YT Windows GUI into BLauncher.exe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet pyinstaller==6.22.3 pillow truststore
+          python -m PyInstaller --noconfirm --clean --log-level WARN --windowed --noupx --name BLauncher --distpath candidate-dist --workpath candidate-build --specpath candidate-build --paths pinned-yt/bbport/scripts --paths pinned-yt/bbport/tools --hidden-import fetch_fsr4vk --hidden-import bbport_icons --hidden-import truststore --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox --runtime-hook pinned-yt/bbport/packaging/windows/tk_runtime_hook.py pinned-yt/bbport/launcher/bbport_launcher_win.py
+          python -c "from pathlib import Path; p=Path('candidate-dist/BLauncher/BLauncher.exe'); assert p.is_file() and p.stat().st_size>100000 and p.open('rb').read(2)==b'MZ'"
+          echo SHYT_V6_ORIGINAL_YT_GUI_WITH_BBHOST_OPTION_FROZEN_EXE_PASS
+      - name: Execute real frozen BLauncher.exe without original game data
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > yt-bbhost-v6-smoke.py <<'PY'
+          import sys
+          from pathlib import Path
+          assert getattr(sys,'frozen',False)
+          Path(sys.argv[1]).write_text('SHYT_V6_REAL_WINDOWS_LAUNCHER_EXECUTED')
+          PY
+          python -c "from pathlib import Path; import subprocess; exe=Path('candidate-dist/BLauncher/BLauncher.exe').resolve(); fixture=Path('yt-bbhost-v6-smoke.py').resolve(); result=Path('yt-bbhost-v6.pass').resolve(); p=subprocess.run([str(exe),'--script',str(fixture),str(result)],capture_output=True,timeout=40); assert p.returncode==0 and result.read_text()=='SHYT_V6_REAL_WINDOWS_LAUNCHER_EXECUTED'"
+          echo SHYT_V6_REAL_YT_BBHOST_WINDOWS_EXECUTION_PASS
+      - name: Verify and assemble signed upstream BBHost Windows client alongside YT GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet pynacl
+          python bbhost-track/test_signed_bbhost_assembler_v7.py
+          mkdir -p signed-asset-input
+          origin=https://github.com/droogie/bbhost/releases/download/v0.2.24
+          for asset in SHA256SUMS SHA256SUMS.sig bbhost-win-v0.2.24.zip; do
+            curl --retry 3 --connect-timeout 12 --max-time 200 --max-filesize 80000000 -fLsS \
+              "$origin/$asset" -o "signed-asset-input/$asset"
+          done
+          python bbhost-track/assemble_verified_upstream_bbhost_v7.py \
+            --upstream-archive signed-asset-input/bbhost-win-v0.2.24.zip \
+            --sha256sums signed-asset-input/SHA256SUMS \
+            --signature signed-asset-input/SHA256SUMS.sig \
+            --launcher-folder candidate-dist/BLauncher
+          python -c "from pathlib import Path; root=Path('candidate-dist/BLauncher'); p=root/'bbhost'/'bbhost.exe'; assert p.is_file() and p.stat().st_size>65536 and p.open('rb').read(2)==b'MZ' and (root/'BLauncher.exe').is_file()"
+          echo SHYT_V7_ORIGINAL_YT_GUI_PLUS_SIGNED_BBHOST_WINDOWS_RUNTIME_READY_NO_GAME_ASSETS
+      - name: Upload unsigned launcher-only evaluation package
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V7-YT-Launcher-plus-SIGNED-BBHost-Windows-EXPERIMENTAL
+          path: candidate-dist/BLauncher/
+          retention-days: 7
+          if-no-files-found: error
+  linux-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate safe local BBHost engine selection using synthetic-only files
+        run: |
+          python bbhost-track/test_shyt_yt_bbhost_launcher_v6.py
+          python -m py_compile bbhost-track/apply_yt_bbhost_launcher_v6.py bbhost-track/shyt_yt_bbhost_launcher_v6.py

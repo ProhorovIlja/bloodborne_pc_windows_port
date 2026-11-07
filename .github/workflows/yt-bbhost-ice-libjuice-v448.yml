@@ -1,0 +1,72 @@
+name: V448 lightweight ICE NAT traversal candidate Linux and Windows
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-ice-libjuice-v448.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ice-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: paullouisageneau/libjuice
+          ref: b89c792e3612faf2f12cf35bcc56857313a06be3
+          path: libjuice-v174
+          persist-credentials: false
+      - name: Exact source, license, and secure ICE flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C libjuice-v174 rev-parse HEAD)" = b89c792e3612faf2f12cf35bcc56857313a06be3
+          grep -Fq 'Mozilla Public License Version 2.0' libjuice-v174/LICENSE
+          grep -Fq 'option(DISABLE_CONSENT_FRESHNESS "Disable RFC 7675 Consent Freshness" OFF)' libjuice-v174/CMakeLists.txt
+          grep -Fq 'option(NO_SERVER "Disable server support" OFF)' libjuice-v174/CMakeLists.txt
+          echo SHYT_V448_ORIGINAL_MPL2_ICE_RFC7675_SOURCE_PASS
+      - name: Build UDP ICE client-only library with consent freshness ON
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S libjuice-v174 -B "$RUNNER_TEMP/v448-ice" -G Ninja \
+            -DNO_SERVER=ON -DNO_TESTS=OFF \
+            -DBUILD_SHARED_LIBS=OFF -DDISABLE_CONSENT_FRESHNESS=OFF \
+            -DENABLE_LOCALHOST_ADDRESS=ON -DWARNINGS_AS_ERRORS=ON \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/v448-ice" --parallel 2 --target juice
+          test -s "$RUNNER_TEMP/v448-ice/libjuice.a"
+          nm -g "$RUNNER_TEMP/v448-ice/libjuice.a" | grep -q juice_create
+          echo SHYT_V448_LINUX_LIGHTWEIGHT_ICE_CONSENT_CLIENT_BUILD_PASS
+          echo SHYT_V448_NOT_DEPLOYED_NO_NAT_RELAY_OR_GAMEPLAY_PROOF
+  ice-windows:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: paullouisageneau/libjuice
+          ref: b89c792e3612faf2f12cf35bcc56857313a06be3
+          path: libjuice-v174
+          persist-credentials: false
+      - name: Compile original UDP ICE library on real MSVC Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ((git -C libjuice-v174 rev-parse HEAD) -ne 'b89c792e3612faf2f12cf35bcc56857313a06be3') { throw 'Upstream source drift' }
+          cmake -S libjuice-v174 -B "$env:RUNNER_TEMP/v448-ice" -G "Visual Studio 17 2022" -A x64 -DNO_SERVER=ON -DNO_TESTS=ON -DBUILD_SHARED_LIBS=OFF -DDISABLE_CONSENT_FRESHNESS=OFF -DWARNINGS_AS_ERRORS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'CMake failed' }
+          cmake --build "$env:RUNNER_TEMP/v448-ice" --config Release --target juice --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC build failed' }
+          $outputs = @(Get-ChildItem "$env:RUNNER_TEMP/v448-ice" -Recurse -Filter 'juice.lib' -File)
+          if ($outputs.Count -eq 0 -or $outputs[0].Length -eq 0) { throw 'Real lib missing' }
+          Write-Output 'SHYT_V448_WINDOWS_MSVCPP_LIGHTWEIGHT_ICE_CONSENT_CLIENT_BUILD_PASS'
+          Write-Output 'SHYT_V448_NOT_PRODUCTION_LINK_OR_5_CLIENT_NAT_PROOF'

@@ -1,0 +1,42 @@
+name: V449 exact CLS BBHost v1.4.0 game integration build graph
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/inspect_cls_bbhost_source_v449.py'
+      - '.github/workflows/yt-bbhost-source-graph-v449.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cls-bbhost-integration-layout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch public source only, pinned by original CLS SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/cls-v140-bbhost-source.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+          python3 bbhost-track/inspect_cls_bbhost_source_v449.py \
+            --archive "$RUNNER_TEMP/cls-v140-bbhost-source.zip" \
+            --report "$RUNNER_TEMP/SHYT-V449-source-graph.json"
+          test -s "$RUNNER_TEMP/SHYT-V449-source-graph.json"
+      - name: Publish metadata-only summary for next real compile
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V449-CLS-140-public-build-graph
+          path: ${{ runner.temp }}/SHYT-V449-source-graph.json
+          retention-days: 3
+          if-no-files-found: error
+      - name: Remove source ZIP from runner
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/cls-v140-bbhost-source.zip"
+          echo SHYT_V449_SOURCE_METADATA_ONLY_NO_RELEASE_OR_GAME_DATA

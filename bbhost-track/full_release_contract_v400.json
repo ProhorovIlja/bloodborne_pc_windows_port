@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "product": "Bloodborne Seamless Hunt BBHost × Yharnam Together",
+  "kind": "SINGLE_PACKAGE_SHIP_NO_PIECEMEAL_TEST_DOWNLOADS",
+  "release_policy": "DO_NOT_PUBLISH_UNTIL_REAL_GAME_AND_STAGING_PROOFS",
+  "candidate_source_sha": null,
+  "candidate_package_sha256": null,
+  "gates": {
+    "runtime_game": {
+      "requirement": "Authentic Bloodborne 1.09 boots and renders from packaged BBHost on fresh Windows install",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "yt_real_game_hook": {
+      "requirement": "Exact owner's original 1.09 NetSync and world hooks installed, tested against real game",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "server_shlk_authenticated": {
+      "requirement": "Full SHLK4 Noise NK live auth, cookie/work/TOFU/pinned key, encrypted game packets and replay defence",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "server_room_lifecycle": {
+      "requirement": "YT server registration, rooms, restarts, team ownership and reconnect against staging server",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "five_player_coop": {
+      "requirement": "Five real clients in one world, join/leave/rejoin and normal boss flows",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "coop_invasions": {
+      "requirement": "All supported 5-slot co-op/invader mixes, duels and host invasion toggle",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "world_enemy_boss_sync": {
+      "requirement": "Correct NPC ownership, map handoff, events, fog gates, boss phase and drops",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "gameplay_qol": {
+      "requirement": "Gameplay/QoL/DBNO/mod integration documented and validated in real games",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "p2p_direct_authenticated": {
+      "requirement": "Server-approved authenticated direct UDP P2P between clients, NAT punch and stable delivery",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "p2p_relay_fallback": {
+      "requirement": "Automatic relay fallback/recovery, loss and latency tests; quantified Fornex bandwidth",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "matchmaking_invites": {
+      "requirement": "Friends, invites, join codes, filters, who-can-join and permissions usable end-to-end",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "launcher_gui_and_settings": {
+      "requirement": "Original YT launcher plus custom BBHost client settings, install/update/rollback and integrity checks",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "performance_stability": {
+      "requirement": "Documented measured frame-time, memory, crash, leak and long-session results",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "server_ops": {
+      "requirement": "Staging Fornex-like server deploy/backup/restart/rollback, monitoring and no-production impact",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "installer_distribution": {
+      "requirement": "One signed or independently verifiable complete Windows installer/package, no game assets, all licenses",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "docs_support": {
+      "requirement": "Installation, hosting, joining, troubleshooting and version/compatibility instructions",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "privacy_security": {
+      "requirement": "No game assets or tokens in CI/installer; encrypted transport, secret redaction, threat review",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "real_two_pc_acceptance": {
+      "requirement": "Independent real Windows PCs + stage server co-op smoke/soak + disconnection recovery",
+      "status": "not_verified",
+      "evidence": []
+    },
+    "release_owner_approval": {
+      "requirement": "Owner explicitly approves THIS exact candidate hash after all prior gates pass",
+      "status": "not_verified",
+      "evidence": []
+    }
+  }
+}

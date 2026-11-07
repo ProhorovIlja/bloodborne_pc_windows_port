@@ -1,0 +1,89 @@
+name: BBHost V365 authentic YT SHLK v4 Noise NK server/client crypto compatibility
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-real-shlk-noise-nk-v365.yml'
+      - 'bbhost-track/test_yt_shlk_noise_nk_v365.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-yt-server-client-noise-nk-protocol:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: original-yt
+          persist-credentials: false
+      - name: Pin original YT SHLK v4 and its original Monocypher 4.0.3 crypto sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original-yt rev-parse HEAD)" = 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          test "$(git -C original-yt rev-parse HEAD:server/coop/link_auth.h)" = 589b823ae0733e9104fcc0140726c8080ade20db
+          test "$(git -C original-yt rev-parse HEAD:server/coop/link_crypto.cpp)" = b91b3affaca7e2da0a357f1a747a90246b167b79
+          test "$(git -C original-yt rev-parse HEAD:server/coop/monocypher/monocypher.c)" = fe5bbdc8bde356ae80fe0b136d8c8e9212c15db8
+          test "$(git -C original-yt rev-parse HEAD:server/coop/monocypher/monocypher.h)" = 291b8b9e6f9187e4df715227047c83ee88c95959
+      - name: Compile the ORIGINAL YT crypto and execute pinned Noise NK handshake, encrypted link and replay tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Windows ]; then
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+                 /nologo /c /TP /std:c++20 /EHsc /O2 /W0 \
+                 /Ioriginal-yt/server \
+                 original-yt/server/coop/link_crypto.cpp \
+                 /Fo:./yt-link-crypto-v365.obj >v365-compiler.log 2>&1; then
+              tail -n 5 v365-compiler.log | cut -c1-170 > v365-brief.txt
+              exit 1
+            fi
+            if ! MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+                 /nologo /TP /std:c++20 /EHsc /O2 /W4 /WX \
+                 -Wno-missing-field-initializers /Ioriginal-yt/server \
+                 bbhost-track/test_yt_shlk_noise_nk_v365.cpp \
+                 yt-link-crypto-v365.obj \
+                 /Fe:./shyt-v365-original-shlk.exe >>v365-compiler.log 2>&1; then
+              tail -n 5 v365-compiler.log | cut -c1-170 > v365-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-v365-original-shlk.exe >v365-run.log 2>&1; then
+              tail -n 5 v365-run.log | cut -c1-170 > v365-brief.txt
+              exit 1
+            fi
+            cat v365-run.log
+          else
+            if ! (clang++ -std=c++20 -O2 -w -Ioriginal-yt/server \
+                   -c original-yt/server/coop/link_crypto.cpp -o yt-link-crypto-v365.o &&
+                 clang++ -std=c++20 -O2 -Wall -Wextra -Werror -Wno-missing-field-initializers \
+                   -Ioriginal-yt/server \
+                   bbhost-track/test_yt_shlk_noise_nk_v365.cpp \
+                   yt-link-crypto-v365.o -o shyt-v365-original-shlk) >v365-compiler.log 2>&1; then
+              tail -n 5 v365-compiler.log | cut -c1-170 > v365-brief.txt
+              exit 1
+            fi
+            if ! ./shyt-v365-original-shlk >v365-run.log 2>&1; then
+              tail -n 5 v365-run.log | cut -c1-170 > v365-brief.txt
+              exit 1
+            fi
+            cat v365-run.log
+          fi
+          echo SHYT_V365_REAL_YT_SHLK4_NOISE_NK_CRYPTO_SUITE_PASS
+      - name: Upload only short fictional-key build/test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BBHost-V365-SHLK-Crypto-Synthetic-Error-Max5Lines
+          path: v365-brief.txt
+          retention-days: 2
+          if-no-files-found: ignore

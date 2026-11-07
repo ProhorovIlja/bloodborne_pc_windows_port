@@ -1,0 +1,118 @@
+name: BBHost pinned complete Windows-candidate baseline host compile
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-full-host-build.yml'
+      - 'bbhost-track/shyt_bbhost_probe_v1.c'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.cpp'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.h'
+      - 'bbhost-track/shyt_yt_game_frame_v362.c'
+      - 'bbhost-track/shyt_yt_game_frame_v362.h'
+      - 'bbhost-track/shyt_yt_packet_routes_v358.h'
+      - 'bbhost-track/shyt_yt_link_wire_v403.*'
+      - 'bbhost-track/shyt_yt_secure_game_data_v405.*'
+      - 'bbhost-track/shyt_yt_udp_endpoint_v406.*'
+      - 'bbhost-track/shyt_yt_server_session_v408.*'
+      - 'bbhost-track/shyt_yt_party_reply_v419.h'
+      - 'bbhost-track/shyt_yt_world_snapshot_v420.h'
+      - 'bbhost-track/shyt_yt_world_delta_fence_v423.h'
+      - 'bbhost-track/shyt_yt_world_staging_v425.h'
+      - 'bbhost-track/shyt_yt_world_projection_v426.h'
+      - 'bbhost-track/shyt_yt_guest_hook_preflight_v427.h'
+      - 'bbhost-track/shyt_yt_full_guest_preflight_v428.h'
+      - 'bbhost-track/shyt_yt_game_link_observer_v429.h'
+      - 'bbhost-track/shyt_yt_game_packet_stage_v430.h'
+      - 'bbhost-track/shyt_yt_peer_evidence_v431.h'
+      - 'bbhost-track/shyt_yt_guest_member_v432.h'
+      - 'bbhost-track/shyt_yt_game_route_assessment_v433.h'
+      - 'bbhost-track/shyt_yt_signup_work_v409.*'
+      - 'bbhost-track/shyt_yt_native_channel_policy_v21.h'
+      - 'bbhost-track/yt_world_event_ledger_v4.h'
+      - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
+      - 'bbhost-track/apply_bbhost_os_stun_v2.py'
+      - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
+      - 'bbhost-track/apply_bbhost_route_rx_v19.py'
+      - 'bbhost-track/shyt_route_telemetry_v13.h'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bbhost-full-host-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  original-bbhost-full-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          # EXACT released upstream v0.2.24. Don't build floating master.
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - name: Integrate actual SHYT plugin and OS-entropy STUN into original source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode apply
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode apply
+          grep -Fq 'add_library(bb_plugin_shyt MODULE' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'shyt_route_account_success_v13(shyt_relay_framed_v13,' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'if (hdr) shyt_route_account_received_v19(shyt_rx_relay_v19, shyt_rx_wire_v19);' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'shyt_route_account_received_v19' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
+          grep -Fq 'SHYT_ROUTE_AUDIT' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
+          echo SHYT_ORIGINAL_BBHOST_FULL_NATIVE_SOURCE_OS_ENTROPY_AND_PLUGIN_APPLIED
+      - name: Build full real BBHost engine, render pipeline and original tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C pinned-bbhost rev-parse HEAD)" = b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          mkdir -p pinned-bbhost/build-ci
+          if ! (cd pinned-bbhost && tools/ci_build.sh) >"$RUNNER_TEMP/shyt-bbhost-full-build.log" 2>&1; then
+            echo "BBHost real build failed; only bounded redacted public dependency diagnosis follows:"
+            (grep -E 'CMake Error:|fatal error:|error:|FAILED:|Failed|failed|curl:|404|403' "$RUNNER_TEMP/shyt-bbhost-full-build.log" | tail -8 | cut -c1-160 || true)
+            tail -8 "$RUNNER_TEMP/shyt-bbhost-full-build.log" | cut -c1-160
+            exit 1
+          fi
+          test -x pinned-bbhost/build-ci/build/bbhost
+          test -s pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so
+          grep -Fq 'shyt_bbhost_probe' pinned-bbhost/plugins/shyt_probe/shyt_bbhost_probe_v1.c
+
+          echo SHYT_BBHOST_V1_COMPLETE_PINNED_HOST_ENGINE_RENDERER_AND_TESTS_PASS
+      - name: Verify actual full-host-linked plugin exports, no original game content
+        shell: bash
+        run: |
+          set -euo pipefail
+          file pinned-bbhost/build-ci/build/bbhost | grep -q 'ELF 64-bit'
+          nm -D --defined-only pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so | grep -q bb_plugin_init
+          nm -D --defined-only pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so | grep -q bb_plugin_image
+          echo SHYT_BBHOST_V3_FULL_HOST_STUN_CSPRNG_AND_PLUGIN_REAL_COMPILE_PASS
+      - name: Upload nonportable host-compile proof, no original game binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-BBHost-v0.2.24-Linux-host-and-probe-COMPILE-test-only
+          path: |
+            pinned-bbhost/build-ci/build/bbhost
+            pinned-bbhost/build-ci/build/plugins/shyt_bbhost_probe.so
+          retention-days: 7
+          if-no-files-found: error

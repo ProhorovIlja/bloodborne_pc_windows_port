@@ -1,0 +1,100 @@
+name: SHYT V12 reuse verified Windows BBHost and YT launcher artifacts
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-reuse-verified-windows-v12.yml'
+      - 'bbhost-track/assemble_modded_bbhost_v10.py'
+      - 'bbhost-track/test_modded_bbhost_assembler_v10.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  repackage-source-pinned-existing-windows-artifacts:
+    runs-on: windows-2022
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Reuse YT v1.3.1 frozen GUI and Ed25519-verified BBHost release baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: SHYT-V7-YT-Launcher-plus-SIGNED-BBHost-Windows-EXPERIMENTAL
+          run-id: 41674920616
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+          path: candidate-dist/BLauncher
+      - name: Reuse real modified Windows BBHost EXE + DLL from successful compile job
+        uses: actions/download-artifact@v4
+        with:
+          name: SHYT-V10-CI-MODIFIED-WINDOWS-HOST-AND-PLUGIN
+          run-id: 41678892413
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+          path: modified-asset-input
+      - name: Validate both ORIGINAL CI artifacts and synthetic fail-closed checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/test_modded_bbhost_assembler_v10.py
+          test -s candidate-dist/BLauncher/BLauncher.exe
+          test -s candidate-dist/BLauncher/bbhost/bbhost.exe
+          test -s candidate-dist/BLauncher/bbhost/SHYT-EXPERIMENTAL.txt
+          test -s modified-asset-input/bbhost.exe
+          test -s modified-asset-input/shyt_bbhost_probe.dll
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('modified-asset-input/shyt-modified-build-v10.json').read_text())
+          assert m['source_commit']=='38a2d7640de1445617dfa98ecc90fefe16f19793'
+          assert m['workflow_run_id']==41678892413
+          print('SHYT_V12_PREVIOUSLY_COMPILED_MODIFIED_BBHOST_SOURCE_ATTESTED')
+          PY
+      - name: Atomically replace official BBHost with actual compiled UNSIGNED customized host
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python bbhost-track/assemble_modded_bbhost_v10.py \
+               --launcher-folder candidate-dist/BLauncher \
+               --modified-artifact modified-asset-input \
+               --source-commit 38a2d7640de1445617dfa98ecc90fefe16f19793 \
+               > "$RUNNER_TEMP/shyt-v12-result.txt" 2>&1; then
+            echo 'V12 package failed, bounded local-tool diagnosis (max 8 lines):'
+            tail -n 8 "$RUNNER_TEMP/shyt-v12-result.txt" | cut -c1-170
+            exit 1
+          fi
+          tail -n 2 "$RUNNER_TEMP/shyt-v12-result.txt" | cut -c1-170
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('candidate-dist/BLauncher')
+          m=json.loads((root/'bbhost/SHYT-V10-UNSIGNED-BUILD.json').read_text())
+          for key,name in [('host_sha256','bbhost/bbhost.exe'),
+                           ('plugin_sha256','bbhost/plugins/shyt_bbhost_probe.dll')]:
+              digest=hashlib.file_digest((root/name).open('rb'),'sha256').hexdigest()
+              assert digest==m[key], key
+          assert (root/'BLauncher.exe').is_file()
+          assert 'NOT SIGNED' in (root/'bbhost/SHYT-EXPERIMENTAL.txt').read_text()
+          print('SHYT_V12_REAL_CUSTOM_BBHOST_PLUS_FROZEN_YT_WINDOWS_BUNDLE_COMPLETE')
+          PY
+      - name: Upload short failure diagnosis, never full logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V12-REPACK-ERROR-MAX8LINES
+          path: ${{ runner.temp }}/shyt-v12-result.txt
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Upload REAL modified Windows BBHost + YT BLauncher candidate (game-free)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V12-CUSTOM-BBHOST-YT-LAUNCHER-WINDOWS-GAMEFREE-UNSIGNED
+          path: candidate-dist/BLauncher/
+          retention-days: 7
+          if-no-files-found: error

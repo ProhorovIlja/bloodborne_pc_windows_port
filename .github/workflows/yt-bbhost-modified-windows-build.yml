@@ -1,0 +1,257 @@
+# Real Windows cross-build of our patched BBHost, not official unmodified BBHost.
+# CI receives no retail Bloodborne or DS3 files.
+name: SHYT BBHost modified Windows executable and plugin
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - '.github/workflows/yt-bbhost-modified-windows-build.yml'
+      - 'bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py'
+      - 'bbhost-track/apply_bbhost_os_stun_v2.py'
+      - 'bbhost-track/apply_bbhost_route_telemetry_v13.py'
+      - 'bbhost-track/apply_bbhost_route_rx_v19.py'
+      - 'bbhost-track/shyt_route_telemetry_v13.h'
+      - 'bbhost-track/shyt_bbhost_probe_v1.c'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.cpp'
+      - 'bbhost-track/shyt_yt_shlk_client_v401.h'
+      - 'bbhost-track/shyt_yt_game_frame_v362.c'
+      - 'bbhost-track/shyt_yt_game_frame_v362.h'
+      - 'bbhost-track/shyt_yt_packet_routes_v358.h'
+      - 'bbhost-track/shyt_yt_link_wire_v403.*'
+      - 'bbhost-track/shyt_yt_secure_game_data_v405.*'
+      - 'bbhost-track/shyt_yt_udp_endpoint_v406.*'
+      - 'bbhost-track/shyt_yt_server_session_v408.*'
+      - 'bbhost-track/shyt_yt_signup_work_v409.*'
+      - 'bbhost-track/shyt_yt_native_channel_policy_v21.h'
+      - 'bbhost-track/yt_world_event_ledger_v4.h'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write  # only for a short, source-only diagnostic on failed owner push
+concurrency:
+  group: shyt-bbhost-modified-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-cross:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 100
+    steps:
+      - name: Install checkout dependencies
+        run: pacman -Syu --noconfirm --needed git ca-certificates python github-cli 7zip
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          path: pinned-bbhost
+          persist-credentials: false
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - name: Verify and patch authentic BBHost release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/pinned-bbhost"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/pinned-yt"
+          test "$(git -C pinned-bbhost rev-parse HEAD)" = b0098e04b889e2e70b4af84be1ce809d7af3ff95
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode check
+          python bbhost-track/apply_bbhost_plugin_to_actual_host_v3.py --upstream-checkout pinned-bbhost --original-yt-checkout pinned-yt --mode apply
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_os_stun_v2.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_telemetry_v13.py --upstream-checkout pinned-bbhost --mode apply
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode check
+          python bbhost-track/apply_bbhost_route_rx_v19.py --upstream-checkout pinned-bbhost --mode apply
+          grep -Fq 'add_library(bb_plugin_shyt MODULE' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'bb_plugin_debug_menu bb_plugin_shyt' pinned-bbhost/CMakeLists.txt
+          grep -Fq 'if (req_len == 0) return false;' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'shyt_route_account_success_v13(shyt_relay_framed_v13,' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'if (hdr) shyt_route_account_received_v19(shyt_rx_relay_v19, shyt_rx_wire_v19);' pinned-bbhost/src/hle/net.cpp
+          grep -Fq 'shyt_route_account_received_v19' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
+          grep -Fq 'SHYT_ROUTE_AUDIT' pinned-bbhost/src/hle/shyt_route_telemetry_v13.h
+      - name: Build genuine modified Windows bbhost.exe using upstream cross toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd pinned-bbhost
+          # Original BBHost Arch/Clang/mingw-w64 recipe. Logs stay in Actions.
+          # Establish a correct baseline before optional ThinLTO optimization.
+          if ! CI_PACMAN=1 CI_CMAKE_ARGS='-DBBHOST_LTO=OFF' \
+               tools/ci_windows.sh > "$RUNNER_TEMP/shyt-windows.log" 2>&1; then
+            echo 'Modified BBHost Windows cross-build failed:'
+            tail -n 18 "$RUNNER_TEMP/shyt-windows.log" | cut -c1-190
+            exit 1
+          fi
+          # The source-pinned package-win target now directly depends on
+          # bb_plugin_shyt. This should not be an independently built orphan.
+          test -s build-win/bbhost.exe
+          test -s build-win/plugins/shyt_bbhost_probe.dll
+          python - <<'PY'
+          from pathlib import Path
+          for path in (Path('build-win/bbhost.exe'), Path('build-win/plugins/shyt_bbhost_probe.dll')):
+              assert path.stat().st_size > 1024
+              with path.open('rb') as f:
+                  assert f.read(2) == b'MZ'
+          print('SHYT_MODIFIED_REAL_BBHOST_WINDOWS_EXE_PLUS_PLUGIN_COMPILED')
+          PY
+      - name: Record bounded Windows cross-build failure diagnosis in Draft PR
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/shyt-windows.log"
+          test -f "$log" || exit 0
+          # Pinned public-source toolchain only: NO retail data or private paths.
+          # Avoid full logs and repeat chat stream failures. Preserve 6 short
+          # compiler/dependency error lines for a future engineering fix.
+          excerpt=$(grep -E 'fatal error:|error:|CMake Error|FAILED:|404|403|No such file|failed|Killed' "$log" | tail -n 6 | cut -c1-180 || true)
+          if [ -z "$excerpt" ]; then
+            excerpt=$(tail -n 5 "$log" | cut -c1-180)
+          fi
+          excerpt=$(printf '%s\n' "$excerpt" |
+            sed -E 's/(gh[pousr]_[A-Za-z0-9]+)/[REDACTED]/g;s/(Bearer [A-Za-z0-9._-]+)/Bearer [REDACTED]/g')
+          msg=$(printf 'BBHost modified Windows cross-build **failed** in Actions run %s. Public pinned toolchain, no game input. Bounded diagnosis:\n\`\`\`text\n%s\n\`\`\`\n' "$GITHUB_RUN_ID" "$excerpt")
+          # GitHub PR comment permissions vary across installations; always
+          # leave a tiny diagnostic artifact even if commenting is denied.
+          printf '%s\n' "$msg" > "$RUNNER_TEMP/shyt-brief-diagnosis.txt"
+          wc -c < "$RUNNER_TEMP/shyt-brief-diagnosis.txt"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/86/comments" -f body="$msg" >/dev/null 2>&1 || true
+      - name: Upload SMALL failure diagnosis only, never full CI logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-BBHost-Windows-FAILURE-6-LINES
+          path: ${{ runner.temp }}/shyt-brief-diagnosis.txt
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Stage reproducible custom Windows CI binary inventory (no game input)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-v10-modified
+          cp pinned-bbhost/build-win/bbhost.exe ci-v10-modified/bbhost.exe
+          cp pinned-bbhost/build-win/plugins/shyt_bbhost_probe.dll ci-v10-modified/shyt_bbhost_probe.dll
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path("ci-v10-modified")
+          data={
+              "kind":"SHYT_V10_MODIFIED_BBHOST_WINDOWS_CI",
+              "upstream_commit":"b0098e04b889e2e70b4af84be1ce809d7af3ff95",
+              "source_commit":os.environ["GITHUB_SHA"],
+              "workflow_run_id":int(os.environ["GITHUB_RUN_ID"]),
+              "host_sha256":hashlib.sha256((root/"bbhost.exe").read_bytes()).hexdigest(),
+              "plugin_sha256":hashlib.sha256((root/"shyt_bbhost_probe.dll").read_bytes()).hexdigest()
+          }
+          (root/"shyt-modified-build-v10.json").write_text(
+              json.dumps(data,sort_keys=True,indent=2)+"\n")
+          print("SHYT_V10_MODIFIED_GAME_FREE_WINDOWS_BINARY_SHA256_INVENTORY_PASS")
+          PY
+      - name: Upload source-attributed modified engine + DLL for BLauncher integration
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V10-CI-MODIFIED-WINDOWS-HOST-AND-PLUGIN
+          path: ci-v10-modified/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Upload strictly experimental Windows binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V8-MODIFIED-BBHost-Windows-COMPILE-ONLY
+          path: |
+            pinned-bbhost/build-win/bbhost.exe
+            pinned-bbhost/build-win/plugins/shyt_bbhost_probe.dll
+          retention-days: 7
+          if-no-files-found: error
+
+  modified-bbhost-plus-yt-windows-gui:
+    needs: windows-cross
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: lKaniel/bloodborne-server
+          ref: 5d2305ee611ef1e03be39ff925f0da75c9a70393
+          path: pinned-yt
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: SHYT-V10-CI-MODIFIED-WINDOWS-HOST-AND-PLUGIN
+          path: modified-asset-input
+      - name: Verify artifact belongs to this exact successful Windows build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s modified-asset-input/bbhost.exe
+          test -s modified-asset-input/shyt_bbhost_probe.dll
+          test -s modified-asset-input/shyt-modified-build-v10.json
+          python bbhost-track/test_modded_bbhost_assembler_v10.py
+      - name: Rebuild original Yharnam Together 1.3.1 GUI with BBHost selector
+        shell: bash
+        run: |
+          set -euo pipefail
+          python bbhost-track/apply_yt_bbhost_launcher_v6.py --upstream-checkout pinned-yt --mode check
+          python bbhost-track/apply_yt_bbhost_launcher_v6.py --upstream-checkout pinned-yt --mode apply
+          python bbhost-track/test_shyt_yt_bbhost_launcher_v6.py
+          python -m pip install --disable-pip-version-check --quiet pyinstaller==6.22.3 pillow truststore pynacl
+          python -m PyInstaller --noconfirm --clean --log-level WARN --windowed --noupx --name BLauncher --distpath candidate-dist --workpath candidate-build --specpath candidate-build --paths pinned-yt/bbport/scripts --paths pinned-yt/bbport/tools --hidden-import fetch_fsr4vk --hidden-import bbport_icons --hidden-import truststore --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox --runtime-hook pinned-yt/bbport/packaging/windows/tk_runtime_hook.py pinned-yt/bbport/launcher/bbport_launcher_win.py
+          python -c "from pathlib import Path; p=Path('candidate-dist/BLauncher/BLauncher.exe'); assert p.is_file() and p.stat().st_size>100000 and p.open('rb').read(2)==b'MZ'"
+      - name: Verify official signed dependencies, THEN overlay exact CI-modified engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p signed-asset-input
+          origin=https://github.com/droogie/bbhost/releases/download/v0.2.24
+          for asset in SHA256SUMS SHA256SUMS.sig bbhost-win-v0.2.24.zip; do
+            curl --retry 3 --connect-timeout 12 --max-time 200 --max-filesize 80000000 -fLsS \
+              "$origin/$asset" -o "signed-asset-input/$asset"
+          done
+          python bbhost-track/assemble_verified_upstream_bbhost_v7.py \
+            --upstream-archive signed-asset-input/bbhost-win-v0.2.24.zip \
+            --sha256sums signed-asset-input/SHA256SUMS \
+            --signature signed-asset-input/SHA256SUMS.sig \
+            --launcher-folder candidate-dist/BLauncher
+          python bbhost-track/assemble_modded_bbhost_v10.py \
+            --launcher-folder candidate-dist/BLauncher \
+            --modified-artifact modified-asset-input \
+            --source-commit "${{ github.sha }}"
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path("candidate-dist/BLauncher")
+          info=json.loads((root/"bbhost/SHYT-V10-UNSIGNED-BUILD.json").read_text())
+          files={"host_sha256":root/"bbhost/bbhost.exe",
+                 "plugin_sha256":root/"bbhost/plugins/shyt_bbhost_probe.dll"}
+          for key,file in files.items():
+              assert hashlib.sha256(file.read_bytes()).hexdigest()==info[key]
+          assert (root/"BLauncher.exe").is_file()
+          assert "NOT SIGNED" in (root/"bbhost/SHYT-EXPERIMENTAL.txt").read_text()
+          print("SHYT_V10_REAL_MODIFIED_UNSIGNED_BBHOST_PLUS_YT_GUI_BUNDLE_INTEGRITY_PASS")
+          PY
+      - name: Upload game-free experimental YT GUI plus CUSTOM BBHost Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V10-YT-GUI-PLUS-CUSTOM-BBHOST-WIN64-UNSIGNED-EXPERIMENTAL
+          path: candidate-dist/BLauncher/
+          retention-days: 7
+          if-no-files-found: error

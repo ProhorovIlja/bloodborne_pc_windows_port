@@ -1,0 +1,251 @@
+name: V454 cross-OS verified true CLS YT 1.4.0 on BBHost 0.2.26 Windows
+on:
+  push:
+    branches: [feature/yt-bbhost-playable-evaluation-20261103]
+    paths:
+      - 'bbhost-track/package_cls_game_source_v454.py'
+      - '.github/workflows/yt-bbhost-real-windows-v454.yml'
+      - 'bbhost-track/stage_cls_yt_bbhost_v451.py'
+      - 'bbhost-track/stage_cls_yt_source_v452.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-verified-public-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: 8d8f07db3bad61dcdbf11511c9d34acfdfa162cd
+          path: original-bbhost
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: modern-bbhost
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: original-yt-v140
+          persist-credentials: false
+          submodules: false
+          filter: blob:none
+          sparse-checkout: |
+            bbport/gpu/shim
+            bbport/launcher
+            emulator/src/core
+      - name: Pin original release and stage real engine and YT integration with Linux Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
+            --output "$RUNNER_TEMP/CLS-YT-140-BBHOST-SOURCE.zip" \
+            https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
+          python3 bbhost-track/stage_cls_yt_bbhost_v451.py \
+            --archive "$RUNNER_TEMP/CLS-YT-140-BBHOST-SOURCE.zip" \
+            --parent original-bbhost --modern modern-bbhost \
+            --report "$RUNNER_TEMP/v454-host-stage.json"
+          python3 bbhost-track/stage_cls_yt_source_v452.py \
+            --archive "$RUNNER_TEMP/CLS-YT-140-BBHOST-SOURCE.zip" \
+            --yt original-yt-v140 --report "$RUNNER_TEMP/v454-yt-stage.json"
+          python3 bbhost-track/package_cls_game_source_v454.py \
+            --mode package --host modern-bbhost --yt original-yt-v140 \
+            --bundle "$RUNNER_TEMP/SHYT-V454-real-game-source-only.zip" \
+            --report "$RUNNER_TEMP/v454-source-provenance.json"
+          test -s "$RUNNER_TEMP/SHYT-V454-real-game-source-only.zip"
+          echo SHYT_V454_ORIGINAL_CLS_BOTH_ENGINES_LINUX_SOURCE_BUNDLE_PASS
+      - name: Transport only exact public source, never Bloodborne binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: SHYT-V454-verified-source-bridge
+          path: |
+            ${{ runner.temp }}/SHYT-V454-real-game-source-only.zip
+            ${{ runner.temp }}/v454-source-provenance.json
+          retention-days: 2
+          if-no-files-found: error
+      - name: Cleanup CLS public source
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/CLS-YT-140-BBHOST-SOURCE.zip"
+  windows-actual-game-client:
+    needs: linux-verified-public-source
+    runs-on: windows-2022
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: droogie/bbhost
+          ref: bdc5cdf8be5f37188da9c2368e92be444fdc04cb
+          path: modern-bbhost
+          persist-credentials: false
+          submodules: true
+      - uses: actions/checkout@v4
+        with:
+          repository: Amanises-Yharnam-Together/BBSC-Yharnam-Together
+          ref: efa0ad265d840d9195e55db2e3216f46f7daedd0
+          path: original-yt-v140
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: SHYT-V454-verified-source-bridge
+          path: ${{ runner.temp }}/v454-source-only
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          path-type: inherit
+          install: >-
+            git patch python
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-python
+            mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-vulkan-loader
+            mingw-w64-clang-x86_64-vulkan-memory-allocator
+            mingw-w64-clang-x86_64-glslang
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-fmt
+            mingw-w64-clang-x86_64-boost
+            mingw-w64-clang-x86_64-robin-map
+            mingw-w64-clang-x86_64-xxhash
+            mingw-w64-clang-x86_64-ffmpeg
+            mingw-w64-clang-x86_64-zydis
+            mingw-w64-clang-x86_64-spirv-tools
+            mingw-w64-clang-x86_64-spirv-headers
+            mingw-w64-clang-x86_64-spirv-cross
+            mingw-w64-clang-x86_64-protobuf
+            mingw-w64-clang-x86_64-openssl
+            mingw-w64-clang-x86_64-zlib
+            mingw-w64-clang-x86_64-nlohmann-json
+      - name: Fetch only original game runtime's required small public source submodules
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cd original-yt-v140
+          git -c protocol.version=2 submodule update --init --depth=1 \
+            bbport/gpu/third_party/imgui \
+            bbport/gpu/third_party/magic_enum \
+            bbport/gpu/third_party/miniz \
+            bbport/gpu/third_party/xbyak
+          echo SHYT_V454_REAL_YT_SMALL_SUBMODULES_PRESENT
+      - name: Source-hash checked overlay, no git apply on Windows
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          python bbhost-track/package_cls_game_source_v454.py \
+            --mode stage --host modern-bbhost --yt original-yt-v140 \
+            --bundle "$RUNNER_TEMP/v454-source-only/SHYT-V454-real-game-source-only.zip" \
+            --report "$RUNNER_TEMP/v454-windows-verified-source.json"
+          grep -Fq 'BB_ONLINE_UNLOCKED_FPS' modern-bbhost/src/engine/frame_rate.cpp
+          grep -Fq 'hle_thread_enter_guest' original-yt-v140/emulator/src/core/bloodborne_patches.cpp
+          test -s modern-bbhost/cmake/bbsc_yt.cmake
+          echo SHYT_V454_REAL_YT_BBHOST_WINCLANG_SOURCE_ADMISSION_PASS
+      - name: Unshadow standard libc++ <version> on case-insensitive Windows
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # The original BBHost 0.2.26 file 'third_party/imgui/VERSION' is
+          # found as libc++ <version> through the public ImGui include path on
+          # Windows, producing false 'no template numeric_limits' failures.
+          # The file is only documentation (CMakeLists references it in a comment).
+          # Do not patch or edit original source text. Move the exact file out of
+          # the compiler's include tree *only* in this throwaway CI checkout.
+          test "$(git -C modern-bbhost rev-parse HEAD:third_party/imgui/VERSION)" = bf33d11fb86b84596e3f1056c05c933ac26d01e9
+          test "$(cat modern-bbhost/third_party/imgui/VERSION)" = v1.92.9b
+          cp modern-bbhost/third_party/imgui/VERSION "$RUNNER_TEMP/BBHOST-0.2.26-IMGUI-ORIGINAL-VERSION.txt"
+          rm modern-bbhost/third_party/imgui/VERSION
+          test ! -e modern-bbhost/third_party/imgui/VERSION
+          test "$(cat "$RUNNER_TEMP/BBHOST-0.2.26-IMGUI-ORIGINAL-VERSION.txt")" = v1.92.9b
+          echo SHYT_V456_WINDOWS_CLANG_IMGUI_VERSION_SHADOWING_GUARD_PASS
+      - name: Fix exact BBHost 0.2.26 GCN missing stdlib header (not a second shader engine)
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          # Original upstream src/gcn/lift.cpp calls std::getenv while omitting
+          # <cstdlib>. Windows CLANG64/libc++ does not guarantee transitive include.
+          test "$(git -C modern-bbhost rev-parse HEAD:src/gcn/lift.cpp)" = f61674f120d919eb918c1fb0883060f68b7c438a
+          python - <<'PYCODE'
+          from pathlib import Path
+          file = Path("modern-bbhost/src/gcn/lift.cpp")
+          data = file.read_bytes()
+          anchor = b"#include <cstdio>\n"
+          if data.count(anchor) != 1 or b"#include <cstdlib>" in data:
+              raise SystemExit("SHYT_V458_GCN_CSTDLIB_SOURCE_DRIFT")
+          file.write_bytes(data.replace(anchor, anchor + b"#include <cstdlib>\n", 1))
+          print("SHYT_V458_BBHOST_CSTDLIB_EXACT_SOURCE_HEADER_GUARD_PASS")
+          PYCODE
+          # json.cpp uses std::strtod without <cstdlib>, the second independently
+          # confirmed missing declaration in official BBHost 0.2.26.
+          test "$(git -C modern-bbhost rev-parse HEAD:src/replay/json.cpp)" = 81233f5d277c3ebaeb1439dd2d5be5b859e93aa3
+          python - <<'PYCODE'
+          from pathlib import Path
+          file = Path("modern-bbhost/src/replay/json.cpp")
+          data = file.read_bytes()
+          anchor = b"#include <cstdio>\n"
+          if data.count(anchor) != 1 or b"#include <cstdlib>" in data or b"std::strtod(" not in data:
+              raise SystemExit("SHYT_V460_JSON_CSTDLIB_SOURCE_DRIFT")
+          file.write_bytes(data.replace(anchor, anchor + b"#include <cstdlib>\n", 1))
+          print("SHYT_V460_ORIGINAL_BBHOST_JSON_STRTOD_DECLARATION_PASS")
+          PYCODE
+      - name: Configure original YT full co-op + modern BBHost Windows CLANG64
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          ytroot="$(cygpath -m "$PWD/original-yt-v140")"
+          # MSYS2's official Vulkan Memory Allocator package installs the
+          # public header under /clang64/include/vma/, not /clang64/include/.
+          # YT's original bbport overlay includes <vk_mem_alloc.h> directly.
+          test -s "$MSYSTEM_PREFIX/include/vma/vk_mem_alloc.h"
+          vma_include="$(cygpath -m "$MSYSTEM_PREFIX/include/vma")"
+          case "$vma_include" in
+            */clang64/include/vma) ;;
+            *) echo V457_UNEXPECTED_VMA_HEADER_LOCATION; exit 1 ;;
+          esac
+          echo SHYT_V457_OFFICIAL_MSYS2_VMA_HEADER_PATH_VALIDATED
+          if ! cmake -S modern-bbhost -B "$RUNNER_TEMP/v454-build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=tools/bbsc/clang64-toolchain.cmake \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PRODUCTION=ON \
+            "-DCMAKE_CXX_FLAGS=-I$vma_include" \
+            "-DBB_YT_ROOT=$ytroot" >"$RUNNER_TEMP/v454-configure.log" 2>&1; then
+            echo 'V454 original game client configure blocked (bounded diagnostic):'
+            (grep -E 'CMake Error|Could NOT find|not found|error:|does not exist|No such file|FAILED' \
+              "$RUNNER_TEMP/v454-configure.log" | tail -15 | cut -c1-200 || true)
+            tail -8 "$RUNNER_TEMP/v454-configure.log" | cut -c1-200
+            exit 1
+          fi
+          echo SHYT_V454_BBHOST026_YT140_ACTUAL_GAME_WINDOWS_CMAKE_PASS
+      - name: Compile original YT NetSync, game hooks and released modern BBHost EXE
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          if ! cmake --build "$RUNNER_TEMP/v454-build" --target bbhost --parallel 2 \
+            >"$RUNNER_TEMP/v454-build.log" 2>&1; then
+            echo 'V454 source build blocked (bounded diagnostic):'
+            (grep -E 'FAILED:|fatal error:|error:|undefined reference|No rule to make target|ninja: error' \
+              "$RUNNER_TEMP/v454-build.log" | tail -15 | cut -c1-200 || true)
+            tail -9 "$RUNNER_TEMP/v454-build.log" | cut -c1-200
+            exit 1
+          fi
+          test -s "$RUNNER_TEMP/v454-build/bbhost.exe"
+          echo SHYT_V454_ACTUAL_ORIGINAL_CLS_YT_GAME_CLIENT_BBHOST026_WINDOWS_BUILD_PASS
+          echo SHYT_V454_BINARY_NOT_UPLOADED_NO_GAME_BOOT_NO_DIRECT_P2P_ASSERTED
+      - name: No game assets or production changes
+        if: always()
+        shell: msys2 {0}
+        run: echo SHYT_V454_NO_GAME_DATA_OR_PRODUCTION_DEPLOYMENT
