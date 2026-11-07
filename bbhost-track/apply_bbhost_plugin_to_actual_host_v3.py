@@ -17,12 +17,15 @@ UPSTREAM="b0098e04b889e2e70b4af84be1ce809d7af3ff95"
 # Released BBHost 0.2.25 is a distinct, explicitly approved upstream source.
 # Candidate builds must never silently replace the proven 0.2.24 baseline.
 UPSTREAM_V025="7dbe6f60f33fff45ea1bcbf6c6e61a6b35466e13"
+# Stable v0.2.26: isolated, opt-in tested candidate, not the current baseline.
+UPSTREAM_V026="bdc5cdf8be5f37188da9c2368e92be444fdc04cb"
 # Opt-in evaluation ONLY. The PR217 networking also requires a matching
 # server protocol update; a passing plugin build does NOT deploy this PR.
 UPSTREAM_PR217="271f68ef8811b873c7e0cc31f98a92f8deb7e999"
 BBHOST_CMAKE_BLOBS={
     UPSTREAM:"672a3c1c3b9264cf3cc34d4606b844e5cba87717",
     UPSTREAM_V025:"c881ca32c838eb7a8162c45558cfdac135967f53",
+    UPSTREAM_V026:"b991ba7346a808487b1fd2378e203510b4e8353d",
     UPSTREAM_PR217:"e0a428f592c78d858cc0bb192aa88a7df941ee03",
 }
 BBHOST_PLUGIN_ABI_BLOB="b437a16204a7a439d709054b8fa592034d42f990"
@@ -102,6 +105,8 @@ def main()->None:
     p.add_argument("--mode",choices=("check","apply"),default="check")
     p.add_argument("--allow-pr217-network-candidate",action="store_true",
                    help="ONLY CI/sandbox PR217 API17 ABI evaluation, not promotion")
+    p.add_argument("--allow-v026-candidate",action="store_true",
+                   help="ONLY CI/sandbox stable v0.2.26 source integration; no promotion")
     a=p.parse_args()
     root=a.upstream_checkout.resolve(strict=True)
     yt=a.original_yt_checkout.resolve(strict=True)
@@ -124,10 +129,13 @@ def main()->None:
     if not expected_cmake_blob:
         raise ValueError("unverified BBHost release")
     candidate=actual_upstream==UPSTREAM_PR217
+    stable_v026=actual_upstream==UPSTREAM_V026
     # A new API17 host must never silently replace the v16 production
     # baseline. Conversely the flag must not pretend to test another SHA.
     if candidate!=a.allow_pr217_network_candidate:
         raise ValueError("BBHost PR217 candidate requires explicit exact opt-in")
+    if stable_v026!=a.allow_v026_candidate:
+        raise ValueError("BBHost v0.2.26 candidate requires explicit exact opt-in")
     plugin_abi="include/bbhost_plugin.h"
     expected_abi=(BBHOST_PLUGIN_ABI_PR217 if candidate else
                   BBHOST_PLUGIN_ABI_BLOB)
@@ -275,6 +283,9 @@ def main()->None:
     print("SHYT_BBHOST_V3_REAL_HOST_PLUGIN_CMAKE_"+("APPLIED" if a.mode=="apply" else "PINNED"))
     if candidate:
         print("SHYT_V439_PR217_NETWORK_API17_EXPLICIT_CANDIDATE_ONLY_"+
+              ("APPLIED" if a.mode=="apply" else "PINNED"))
+    if stable_v026:
+        print("SHYT_V444_BBHOST_V026_API16_EXPLICIT_CANDIDATE_ONLY_"+
               ("APPLIED" if a.mode=="apply" else "PINNED"))
 
 if __name__=="__main__":
