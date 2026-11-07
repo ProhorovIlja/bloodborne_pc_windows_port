@@ -91,13 +91,13 @@ jobs:
             git -C "$checkout" reset --hard HEAD >/dev/null
           done
           python - <<'PYCODE'
-from pathlib import Path
-for path in ("original-bbhost/CMakeLists.txt", "bbhost-v026/CMakeLists.txt"):
-    data=Path(path).read_bytes()
-    if b"\r\n" in data:
-        raise SystemExit("V453_REFUSE_CRLF_SOURCE_AFTER_NORMALIZATION")
-print("SHYT_V453_WINDOWS_GIT_SOURCE_LF_PINNED")
-PYCODE
+          from pathlib import Path
+          for path in ("original-bbhost/CMakeLists.txt", "bbhost-v026/CMakeLists.txt"):
+              data=Path(path).read_bytes()
+              if b"\r\n" in data:
+                  raise SystemExit("V453_REFUSE_CRLF_SOURCE_AFTER_NORMALIZATION")
+          print("SHYT_V453_WINDOWS_GIT_SOURCE_LF_PINNED")
+          PYCODE
           curl --fail --silent --show-error --location --connect-timeout 15 --max-time 160 --retry 2 --max-filesize 33554432 \
             --output "$RUNNER_TEMP/cls-bbhost-v140-source.zip" \
             https://github.com/CLSAMG22/BBSC/releases/download/v1.4.0/YharnamTogether-v1.4.0-bbhost-source.zip
