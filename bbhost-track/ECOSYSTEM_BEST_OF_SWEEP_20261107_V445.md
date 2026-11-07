@@ -64,3 +64,33 @@ These are XML/source findings, not a verified currently enabled selection. Our l
 - V444: upgraded OS CSPRNG STUN overlay source pins for v0.2.26 changed net.cpp while retaining explicit opt-in and fail-closed entropy; no guessed route telemetry replacement.
 - V444: new GitHub Actions workflow yt-bbhost-v026-candidate-v444.yml builds the **real** source-only upstream host and YT-enabled plugin, plus OS STUN tests. Check CI status before claiming actual 0.2.26 full-host success.
 - This V445 inventory records candidates across upstreams, forks, release notes, PRs, branches, website research and Drive. No claim of total internet coverage.
+
+
+## 2026-11-07 extended external + private research: V447/V448
+
+### V444 released BBHost 0.2.26: actual complete-host compile PASS
+
+[Actions #42358003948](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/42358003948) built the real released BBHost 0.2.26 renderer and engine, our original YT protocol plugin, and proved OS STUN entropy failure is rejected. The candidate was staged on a disposable CI checkout. This is **not** CLS's complete game hook client, actual 5-game multiplayer, or a working public P2P route. The original 0.2.24 pilot remains pinned.
+
+### V447: exact published CLS BBHost loader has an avoidable map-cache invalidation
+
+Public `YharnamTogether-v1.4.0-bbhost-source.zip` pinned by SHA256 `7c00d46f01b67ff1cf12cef346c245960b627141a9c1047d00e2ceadd167ca04`; original `src/yt/yt_host.cpp` SHA256 `2223da0a3939fe0ba1218e47bfe3be1c0d585aa05558a6297f4077f80403a67e`.
+
+Its `runtime_memory_generation()` increments **on every query** while original BBHost 0.2.24 and 0.2.26 already export `hle_kernel_maps_generation()` and `hle_kernel_snapshot_maps()`. Consequently the original YT `MemoryWindows` guest mapping cache is invalidated on every check, undermining the cache. More importantly, the original `runtime_memory_protection` maps *any readable* guest range to `Read|Write`, including actual read-only maps, and reports the current host stack as guest RW. The exact original `HasMemoryAccess` caches only guest ranges; so simply replacing the epoch without correcting stack classification would be unsafe.
+
+**V447 introduced an opt-in candidate, default unchanged**, source-exact overlay of the real public CLS file, mapping snapshots with actual SCE CPU permission bits, no host-stack guest caching, epoch-snapshot race rejection and overflow/overlap tests. [Actions #42359482875](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/42359482875) PASS including AddressSanitizer and UBSan portable tests. Its new `BB_YT_FASTMEM_V447=1` path remains **EXPERIMENTAL, no in-game proof, not merged, not deployed**. Windows in-game crash/frametime/permission testing is the next gate before enabling it; test at 30/60/90/uncapped, loading/chalices/invasions, save and map transitions.
+
+### V448: external standards and a lightweight ICE library candidate
+
+Compared the original BBHost CSPRNG STUN and relay route to IETF [RFC 8445 ICE](https://www.rfc-editor.org/rfc/rfc8445) and [RFC 7675 consent freshness](https://www.rfc-editor.org/rfc/rfc7675). Consent is **per endpoint 5-tuple**, authenticated and periodically refreshed; new route/epoch requires new consent, and successful STUN mapping discovery alone never authenticates a gameplay peer. Our PR #85 already requires an authenticated recent direct probe (2.5 seconds) and signed grants; preserve this condition. Don't conflate STUN, ICE, game identity, and private shadNet control authority.
+
+Additional source candidate [paullouisageneau/libjuice v1.7.4](https://github.com/paullouisageneau/libjuice/releases/tag/v1.7.4) exact commit `b89c792e3612faf2f12cf35bcc56857313a06be3`: small portable C ICE/STUN/TURN/consent implementation, one UDP component, IPv4/IPv6 and optional built-in TURN server. Its **MPL 2.0** source requires license/provenance review before any distribution. It is **only a NAT traversal candidate**, not a replacement for YT GameLink/Noise/EdDSA nor a reason to send all game packets to a TURN relay on the Fornex VPS. Explicit `NO_SERVER=ON`, `DISABLE_CONSENT_FRESHNESS=OFF` and static build. Real upstream source was successfully compiled in both **Ubuntu and Windows MSVC** in [Actions #42359852364](https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/42359852364). No mixed NAT, CGNAT/IPv6, TURN budget, gameplay or tail-latency trials yet. Compare with existing BBHost STUN, not automatically adopt.
+
+### Additional private Google Drive source metadata reviewed
+
+The owner's account contains `CUSA03173`, the full Dark Souls III source-game materials, `CUSA03173-mods`, historical patch.xml/source compatibility reports and a `MODS` tree. In that tree, MOAL includes `script/talk`, the Jump O+L3 mod includes `action/script`, FPS Boost includes numerous `map` regions, and Compact HUD includes `menu/fe.gfx`. Those are high-risk **overlap categories** for seamless events, game behavior and the official YT HUD: never enable them together without file-path hashes, active patch XML overlap analysis, explicit host/client mod fingerprints, reversible profiles and a full game-save backup. The earlier source reports identify Performance Patch vs SSR and Performance Patch vs Uncap FPS++ contradictory bytes. **No mod payloads or proprietary game data are published or bundled into CI.**
+
+### Current basis decision
+
+The long-term product must **benchmark candidates**, not predeclare BBHost, Lantern, Nightwatch or BBPort universally best. BBHost 0.2.26 is the presently compiled source/runtime candidate. CLS YT 1.4.0 supplies actual game hooks, Nightwatch/visy supply mature *gameplay regression cases*, Supermedo/Lantern/deadinside/Mrsuss60/shadPS4 supply performance and stability ideas, and PR #85/BBHost/shadNet/libjuice offer complementary *network techniques*. An Ultimate build earns its name through objective, reproducible multi-client FPS/p99 CPU/bandwidth/save/NAT tests after legal, game ABI and server authority compatibility checks.
+
