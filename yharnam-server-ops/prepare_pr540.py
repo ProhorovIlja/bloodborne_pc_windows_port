@@ -63,7 +63,9 @@ RUN --mount=type=cache,id=shadnet-build,target=/src/server/build \\
     cmake --build build --target test_admission test_admin test_server_link test_watchdog \\
       -j"$BUILD_JOBS" \\
     && ctest --test-dir build --output-on-failure \\
-      -R '^(admission|admin|server_link|watchdog)
+      -R 'admission|admin|server_link|watchdog'
+
+"""
 
 def replace_exact(text, old, new, path):
     if text.count(old) != 1:
