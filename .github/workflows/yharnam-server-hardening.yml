@@ -69,7 +69,7 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/yharnam-server"
           git diff --name-only | tee "$RUNNER_TEMP/overlay_paths.txt"
-          diff -u <(printf '%s\n' server/src/admin.cpp server/tests/test_admin.cpp server/tests/test_admission.cpp) \
+          diff -u <(printf '%s\n' server/hosting/Dockerfile server/src/admin.cpp server/tests/test_admin.cpp server/tests/test_admission.cpp) \
             "$RUNNER_TEMP/overlay_paths.txt"
           echo 'Client, launcher, protocol definitions, live game and DNS: unchanged'
 
