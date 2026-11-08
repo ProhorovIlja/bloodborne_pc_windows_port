@@ -55,6 +55,109 @@ int ANoisyPeerDoesNotBanItsNatNeighbour() {
 NAT_CALL_OLD = '  failed |= AFloodingLinkIsDroppedAndReportedNeverBanned();'
 NAT_CALL_NEW = NAT_CALL_OLD + '\n  failed |= ANoisyPeerDoesNotBanItsNatNeighbour();'
 
+# Builder-only test target. Kept BEFORE final runtime stage so default is unaffected.
+DOCKER_ANCHOR = "FROM ubuntu:24.04 AS runtime"
+DOCKER_TEST_STAGE = """FROM build AS verification-tests
+ARG BUILD_JOBS=2
+RUN --mount=type=cache,id=shadnet-build,target=/src/server/build \\
+    cmake --build build --target test_admission test_admin test_server_link test_watchdog \\
+      -j"$BUILD_JOBS" \\
+    && ctest --test-dir build --output-on-failure \\
+      -R '^(admission|admin|server_link|watchdog)
+
+def replace_exact(text, old, new, path):
+    if text.count(old) != 1:
+        raise RuntimeError(f"unexpected upstream contents: {path}: {text.count(old)} anchors")
+    return text.replace(old, new, 1)
+
+
+def patch_file(root, relative, old, new):
+    path = root / relative
+    if not path.is_file() or path.is_symlink():
+        raise RuntimeError(f"missing or unsafe upstream file: {relative}")
+    before = path.read_text(encoding="utf-8")
+    after = replace_exact(before, old, new, relative)
+    path.write_text(after, encoding="utf-8")
+
+
+def run(*args):
+    subprocess.run(args, check=True, timeout=480, stdout=subprocess.PIPE,
+                   stderr=subprocess.PIPE, text=True)
+
+
+def output(*args):
+    result = subprocess.run(args, check=True, timeout=120, capture_output=True, text=True)
+    return result.stdout.strip()
+
+
+def prepare(destination):
+    if destination.exists() or destination.is_symlink():
+        raise RuntimeError("destination must not exist, to prevent accidental overwrites")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    run("git", "init", "-q", str(destination))
+    run("git", "-C", str(destination), "remote", "add", "origin", UPSTREAM)
+    for revision in (BASE, HEAD):
+        run("git", "-C", str(destination), "fetch", "--no-tags", "--depth=1", "origin", revision)
+    changed = set(output("git", "-C", str(destination), "diff", "--name-only", BASE, HEAD).splitlines())
+    if changed != ALLOWED:
+        raise RuntimeError("PR #540 changed-file scope drift: " +
+                           repr(sorted(changed ^ ALLOWED)))
+    run("git", "-C", str(destination), "checkout", "-q", "--detach", HEAD)
+    patch_file(destination, "server/src/admin.cpp", STATS_OLD, STATS_NEW)
+    patch_file(destination, "server/tests/test_admin.cpp", ADMIN_TEST_OLD, ADMIN_TEST_NEW)
+    patch_file(destination, "server/tests/test_admission.cpp", NAT_ANCHOR, NAT_CASE + NAT_ANCHOR)
+    patch_file(destination, "server/tests/test_admission.cpp", NAT_CALL_OLD, NAT_CALL_NEW)
+    patch_file(destination, "server/hosting/Dockerfile", DOCKER_ANCHOR,
+               DOCKER_TEST_STAGE + DOCKER_ANCHOR)
+    if output("git", "-C", str(destination), "rev-parse", "HEAD") != HEAD:
+        raise RuntimeError("source revision mismatch")
+    modified = set(output("git", "-C", str(destination), "diff", "--name-only").splitlines())
+    if modified != {"server/src/admin.cpp", "server/tests/test_admin.cpp",
+                    "server/tests/test_admission.cpp", "server/hosting/Dockerfile"}:
+        raise RuntimeError("unexpected overlay modifications")
+    print("CANDIDATE_READY source_pin=" + HEAD +
+          " pr=540 client_files=UNCHANGED launcher_files=UNCHANGED deploy=NO")
+
+
+def self_test():
+    assert replace_exact("a b", "a", "A", "fixture") == "A b"
+    try:
+        replace_exact("a b", "x", "y", "fixture")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("missing anchor accepted")
+    assert "server/src/admission.cpp" in ALLOWED and len(ALLOWED) == 8
+    assert all(p.startswith(("server/", "docs/")) for p in ALLOWED)
+    assert "ANoisyPeerDoesNotBanItsNatNeighbour" in NAT_CASE
+    assert '"bans"' in STATS_NEW and '"floods"' in STATS_NEW
+    assert "verification-tests" in DOCKER_TEST_STAGE and "test_admin" in DOCKER_TEST_STAGE
+    print("SELF_TEST_PASS anchored_overlays,server_only_allowlist,nat_regression")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("destination", nargs="?", help="new empty directory for upstream checkout")
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.self_test:
+        self_test()
+        return
+    if not args.destination:
+        parser.error("destination is required")
+    prepare(Path(args.destination).resolve(strict=False))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (RuntimeError, OSError, subprocess.CalledProcessError) as exc:
+        print(f"CANDIDATE_FAILED: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+"""
+
 
 def replace_exact(text, old, new, path):
     if text.count(old) != 1:
