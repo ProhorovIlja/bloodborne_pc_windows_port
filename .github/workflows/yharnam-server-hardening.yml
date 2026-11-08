@@ -1,0 +1,101 @@
+name: Yharnam 1.4 server-only regression
+
+on:
+  push:
+    branches:
+      - feature/yharnam-1-4-0-server-hardening-20261108
+    paths:
+      - 'yharnam-server-ops/**'
+      - '.github/workflows/yharnam-server-hardening.yml'
+  pull_request:
+    paths:
+      - 'yharnam-server-ops/**'
+      - '.github/workflows/yharnam-server-hardening.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yharnam-server-hardening-pr540
+  cancel-in-progress: true
+
+jobs:
+  server-only-unit-tests:
+    name: Pinned PR540 + NAT, protocol and watchdog tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native test dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends g++ pkg-config qt6-base-dev
+      - name: Prepare pinned server source with reviewed local overlays
+        run: |
+          python3 yharnam-server-ops/prepare_pr540.py --self-test
+          python3 yharnam-server-ops/prepare_pr540.py "$RUNNER_TEMP/yharnam-server"
+      - name: Compile and run hosted-admission regression tests
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/yharnam-server/server"
+          g++ -std=c++20 -O2 -fPIC -pthread -I"$src/src" \
+            "$src/tests/test_admission.cpp" "$src/src/admission.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -o "$RUNNER_TEMP/test_admission"
+          timeout 30s "$RUNNER_TEMP/test_admission"
+      - name: Compile and run encrypted link protocol regression tests
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/yharnam-server/server"
+          g++ -std=c++20 -O2 -fPIC -pthread -I"$src/src" -I"$src" \
+            -DBLOODBORNE_SERVER_LINK_CONTRACTS="\"$src/tests/contracts/server_link_frames.txt\"" \
+            "$src/tests/test_server_link.cpp" "$src/src/server_link.cpp" \
+            "$src/coop/link_crypto.cpp" \
+            $(pkg-config --cflags --libs Qt6Core Qt6Network) \
+            -o "$RUNNER_TEMP/test_server_link"
+          timeout 30s "$RUNNER_TEMP/test_server_link"
+      - name: Compile and run watchdog policy tests
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/yharnam-server/server"
+          g++ -std=c++20 -O2 -fPIC -pthread -I"$src/src" \
+            "$src/tests/test_watchdog.cpp" "$src/src/watchdog.cpp" \
+            $(pkg-config --cflags --libs Qt6Core) \
+            -o "$RUNNER_TEMP/test_watchdog"
+          timeout 30s "$RUNNER_TEMP/test_watchdog"
+      - name: Reject client and protocol source changes
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/yharnam-server"
+          git diff --name-only | tee "$RUNNER_TEMP/overlay_paths.txt"
+          diff -u <(printf '%s\n' server/src/admin.cpp server/tests/test_admin.cpp server/tests/test_admission.cpp) \
+            "$RUNNER_TEMP/overlay_paths.txt"
+          echo 'Client, launcher, protocol definitions, live game and DNS: unchanged'
+
+  full-runtime-build:
+    name: Full candidate Docker runtime build (manual only)
+    if: github.event_name == 'workflow_dispatch'
+    needs: server-only-unit-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free unused runner packages
+        run: |
+          df -h .
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+      - name: Prepare exact source
+        run: |
+          python3 yharnam-server-ops/prepare_pr540.py "$RUNNER_TEMP/yharnam-server"
+          git -C "$RUNNER_TEMP/yharnam-server" submodule update --init --depth=1 server/externals/protobuf
+      - name: Build nonproduction runtime image
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/yharnam-server"
+          DOCKER_BUILDKIT=1 docker build \
+            -f server/hosting/Dockerfile --target runtime \
+            --build-arg BUILD_JOBS=2 \
+            -t yharnam-shadnet:pr540-local .
+          docker image inspect yharnam-shadnet:pr540-local --format 'IMAGE_READY id={{.Id}} user={{.Config.User}}'
+          echo 'No push, no deploy, no access to VPS volumes or credentials.'
