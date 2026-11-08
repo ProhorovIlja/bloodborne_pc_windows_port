@@ -57,6 +57,11 @@ NAT_CALL_NEW = NAT_CALL_OLD + '\n  failed |= ANoisyPeerDoesNotBanItsNatNeighbour
 
 # Builder-only test target. Kept BEFORE final runtime stage so default is unaffected.
 DOCKER_ANCHOR = "FROM ubuntu:24.04 AS runtime"
+# Bounded transport retry for the *same pinned version and URL*. Do not
+# silently use a different mirror or turn off HTTPS validation on 504.
+FETCH_ORIGINAL = "RUN curl -fsSL -o /usr/local/bin/micromamba"
+FETCH_RETRIED = ("RUN curl -fL --retry 4 --retry-all-errors --retry-delay 5 "
+                 "--connect-timeout 20 --max-time 90 -o /usr/local/bin/micromamba")
 DOCKER_TEST_STAGE = """FROM build AS verification-tests
 ARG BUILD_JOBS=2
 RUN --mount=type=cache,id=shadnet-build,target=/src/server/build \\
@@ -111,6 +116,7 @@ def prepare(destination):
     patch_file(destination, "server/tests/test_admission.cpp", NAT_CALL_OLD, NAT_CALL_NEW)
     patch_file(destination, "server/hosting/Dockerfile", DOCKER_ANCHOR,
                DOCKER_TEST_STAGE + DOCKER_ANCHOR)
+    patch_file(destination, "server/hosting/Dockerfile", FETCH_ORIGINAL, FETCH_RETRIED)
     if output("git", "-C", str(destination), "rev-parse", "HEAD") != HEAD:
         raise RuntimeError("source revision mismatch")
     modified = set(output("git", "-C", str(destination), "diff", "--name-only").splitlines())
@@ -134,6 +140,7 @@ def self_test():
     assert "ANoisyPeerDoesNotBanItsNatNeighbour" in NAT_CASE
     assert '"bans"' in STATS_NEW and '"floods"' in STATS_NEW
     assert "verification-tests" in DOCKER_TEST_STAGE and "test_admin" in DOCKER_TEST_STAGE
+    assert "--retry-all-errors" in FETCH_RETRIED and "--max-time 90" in FETCH_RETRIED
     print("SELF_TEST_PASS anchored_overlays,server_only_allowlist,nat_regression")
 
 
