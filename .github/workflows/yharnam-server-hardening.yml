@@ -74,8 +74,7 @@ jobs:
           echo 'Client, launcher, protocol definitions, live game and DNS: unchanged'
 
   full-runtime-build:
-    name: Full candidate Docker runtime build (manual only)
-    if: github.event_name == 'workflow_dispatch'
+    name: Docker build + integrated server tests + image artifact
     needs: server-only-unit-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 110
@@ -89,6 +88,14 @@ jobs:
         run: |
           python3 yharnam-server-ops/prepare_pr540.py "$RUNNER_TEMP/yharnam-server"
           git -C "$RUNNER_TEMP/yharnam-server" submodule update --init --depth=1 server/externals/protobuf
+      - name: Build and execute integrated server tests inside Docker builder
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/yharnam-server"
+          DOCKER_BUILDKIT=1 docker build \
+            -f server/hosting/Dockerfile --target verification-tests \
+            --build-arg BUILD_JOBS=2 \
+            -t yharnam-shadnet:pr540-verified-builder .
       - name: Build nonproduction runtime image
         run: |
           set -euo pipefail
@@ -99,3 +106,18 @@ jobs:
             -t yharnam-shadnet:pr540-local .
           docker image inspect yharnam-shadnet:pr540-local --format 'IMAGE_READY id={{.Id}} user={{.Config.User}}'
           echo 'No push, no deploy, no access to VPS volumes or credentials.'
+      - name: Package verified candidate Docker image
+        run: |
+          set -euo pipefail
+          docker save yharnam-shadnet:pr540-local | gzip -1 > "$RUNNER_TEMP/yharnam-pr540-image.tar.gz"
+          cd "$RUNNER_TEMP"
+          sha256sum yharnam-pr540-image.tar.gz > yharnam-pr540-image.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yharnam-pr540-server-image
+          path: |
+            ${{ runner.temp }}/yharnam-pr540-image.tar.gz
+            ${{ runner.temp }}/yharnam-pr540-image.tar.gz.sha256
+          retention-days: 7
+          compression-level: 0
+
