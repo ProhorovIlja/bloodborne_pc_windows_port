@@ -1,0 +1,56 @@
+name: B67 safe party save replacement Windows and Linux
+on:
+  pull_request:
+    paths:
+      - 'scripts/party_saves.py'
+      - 'tests/test_party_saves.py'
+      - 'docs/ULTIMATE_SOURCE_B67_SAVE_SAFETY.md'
+      - '.github/workflows/b67-party-save-rollback.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  party-saves:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile real source and exercise isolated game-save fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/party_saves.py tests/test_party_saves.py
+          python -m unittest discover -s tests -p 'test_party_saves.py' -v
+      - name: Source-contract no-delete and recovery checks
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src=Path('scripts/party_saves.py').read_text(encoding='utf-8')
+          tests=Path('tests/test_party_saves.py').read_text(encoding='utf-8')
+          assert 'shutil.rmtree(party)' not in src
+          assert 'shutil.rmtree(aside)' not in src
+          assert '.pending-replaced' in src
+          assert 'party.rename(pending)' in src
+          assert 'staging.rename(party)' in src
+          assert 'pending.rename(party)' not in src or 'pending.rename(party)' in src
+          assert '_exclusive_copy(' in src
+          assert 'hashlib.sha256()' in src
+          for name in ('test_crash_between_moves_survives_in_pending_backup_and_recovers',
+                       'test_failed_restore_leaves_only_good_backup_not_destroyed',
+                       'test_same_size_corruption_in_staging_is_detected',
+                       'test_stale_lock_does_not_allow_overlapping_copy'):
+              assert name in tests,name
+          PY
+      - name: No production data loaded
+        shell: bash
+        run: echo B67_TEMP_FIXTURES_ONLY
