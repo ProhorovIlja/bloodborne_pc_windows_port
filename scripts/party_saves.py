@@ -154,7 +154,7 @@ def copy_solo_to_party(user: Path, replace: bool = False):
             if _files(staging) != before or _files(solo) != before:
                 raise OSError("source or staged party save changed during verification")
             if party_exists:
-                old = _files(party)
+                had_old_saves = bool(_files(party))
                 folder = _backup_dir(user)
                 _recover_interrupted(user, folder)
                 token = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex
@@ -180,8 +180,8 @@ def copy_solo_to_party(user: Path, replace: bool = False):
                 try:
                     pending.rename(finished)
                 except OSError:
-                    return pending  # still intact and easy to recover
-                return finished
+                    return pending if had_old_saves else None  # intact and recoverable
+                return finished if had_old_saves else None
             staging.rename(party)
             return None
         finally:
