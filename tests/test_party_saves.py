@@ -1,6 +1,7 @@
 """scripts/party_saves.py: the launcher's copy of the single-player save into the party save folder."""
 import paths  # noqa: F401  (puts scripts/ on sys.path)
 import tempfile
+from unittest import mock
 import unittest
 from pathlib import Path
 
@@ -64,6 +65,132 @@ class PartySaveTests(unittest.TestCase):
         self.assertEqual((backup / SAVE / "userdata0000").read_bytes(), b"party progress")
         self.assertEqual(backup.parent, self.user / ps.BACKUPS / ps.PARTY)
         self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(), b"A" * 4096)
+
+
+class PartySaveRecoveryTests(PartySaveTests):
+    """Run only on TemporaryDirectory user data, never real profile saves."""
+
+    def _old_party(self):
+        old = self.user / ps.PARTY / SAVE / "userdata0000"
+        write(old, b"older party with priceless progress")
+        return old
+
+    def test_older_backups_survive_multiple_replacements(self):
+        old = self._old_party()
+        original = old.read_bytes()
+        first = ps.copy_solo_to_party(self.user, replace=True)
+        self.assertEqual((first / SAVE / "userdata0000").read_bytes(), original)
+        self.assertEqual(old.read_bytes(), b"A" * 4096)
+        second = ps.copy_solo_to_party(self.user, replace=True)
+        self.assertNotEqual(first, second)
+        self.assertEqual((first / SAVE / "userdata0000").read_bytes(), original)
+        self.assertEqual((second / SAVE / "userdata0000").read_bytes(), b"A" * 4096)
+        self.assertEqual(old.read_bytes(), b"A" * 4096)
+
+    def test_staging_rename_fail_rolls_back_old_party(self):
+        original = self._old_party().read_bytes()
+        rename = Path.rename
+        def fail_new_staging(source, dest):
+            if source.name.startswith("." + ps.PARTY + ".copying-") and Path(dest).name == ps.PARTY:
+                raise PermissionError("simulated antivirus lock during promotion")
+            return rename(source, dest)
+        with mock.patch.object(Path, "rename", fail_new_staging):
+            with self.assertRaises(PermissionError):
+                ps.copy_solo_to_party(self.user, replace=True)
+        self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(), original)
+        self.assertEqual(list((self.user / ps.BACKUPS / ps.PARTY).glob("*.pending-replaced")), [])
+        self.assertFalse((self.user / ps.LOCK).exists())
+
+    def test_crash_between_moves_survives_in_pending_backup_and_recovers(self):
+        original = self._old_party().read_bytes()
+        rename = Path.rename
+        def interrupt(source, dest):
+            if source.name.startswith("." + ps.PARTY + ".copying-") and Path(dest).name == ps.PARTY:
+                raise KeyboardInterrupt("simulated process crash")
+            return rename(source, dest)
+        with mock.patch.object(Path, "rename", interrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                ps.copy_solo_to_party(self.user, replace=True)
+        pending = list((self.user / ps.BACKUPS / ps.PARTY).glob("*.pending-replaced"))
+        self.assertEqual(len(pending), 1)
+        self.assertFalse((self.user / ps.PARTY).exists())
+        self.assertEqual((pending[0] / SAVE / "userdata0000").read_bytes(), original)
+        with self.assertRaisesRegex(RuntimeError, "interrupted party copy recovered"):
+            ps.copy_solo_to_party(self.user, replace=True)
+        self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(), original)
+        self.assertFalse(pending[0].exists())
+
+    def test_failed_restore_leaves_only_good_backup_not_destroyed(self):
+        original = self._old_party().read_bytes()
+        rename = Path.rename
+        def fail_promote_and_restore(source, dest):
+            if Path(dest).name == ps.PARTY:
+                raise PermissionError("blocked party save location")
+            return rename(source, dest)
+        with mock.patch.object(Path, "rename", fail_promote_and_restore):
+            with self.assertRaises(PermissionError):
+                ps.copy_solo_to_party(self.user, replace=True)
+        pending = list((self.user / ps.BACKUPS / ps.PARTY).glob("*.pending-replaced"))
+        self.assertEqual(len(pending), 1)
+        self.assertEqual((pending[0] / SAVE / "userdata0000").read_bytes(), original)
+        self.assertFalse((self.user / ps.PARTY).exists())
+        with self.assertRaisesRegex(RuntimeError, "interrupted party copy recovered"):
+            ps.copy_solo_to_party(self.user, replace=True)
+        self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(), original)
+
+    def test_same_size_corruption_in_staging_is_detected(self):
+        original = self._old_party().read_bytes()
+        real = ps.shutil.copytree
+        def corrupt(source, dest, *args, **kwargs):
+            result = real(source, dest, *args, **kwargs)
+            copied = Path(dest) / SAVE / "userdata0000"
+            copied.write_bytes(b"X" * 4096)
+            return result
+        with mock.patch.object(ps.shutil, "copytree", side_effect=corrupt):
+            with self.assertRaisesRegex(OSError, "changed during verification"):
+                ps.copy_solo_to_party(self.user, replace=True)
+        self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(), original)
+
+    def test_stale_lock_does_not_allow_overlapping_copy(self):
+        self._old_party()
+        lock = self.user / ps.LOCK
+        lock.write_text("a second launcher is still working")
+        with self.assertRaises(FileExistsError):
+            ps.copy_solo_to_party(self.user, replace=True)
+        self.assertTrue(lock.exists())
+
+    def test_stale_pending_backup_not_deleted_when_active_exists(self):
+        self._old_party()
+        base = self.user / ps.BACKUPS / ps.PARTY
+        base.mkdir(parents=True)
+        pending = base / "prior.pending-replaced"
+        write(pending / SAVE / "userdata0000", b"last run backup")
+        old_copy = ps.copy_solo_to_party(self.user, replace=True)
+        self.assertFalse(pending.exists())
+        completed = base / "prior-replaced"
+        self.assertEqual((completed / SAVE / "userdata0000").read_bytes(), b"last run backup")
+        self.assertTrue((old_copy / SAVE / "userdata0000").is_file())
+
+    def test_existing_empty_party_dir_still_accepts_first_copy(self):
+        (self.user / ps.PARTY).mkdir()
+        self.assertIsNone(ps.copy_solo_to_party(self.user))
+        self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(), b"A" * 4096)
+
+    def test_symlink_source_and_party_are_rejected(self):
+        outside = self.user / "other"
+        outside.mkdir()
+        link = self.user / ps.SOLO / "symlink"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlink creation not permitted on runner")
+        with self.assertRaises(OSError):
+            ps.copy_solo_to_party(self.user)
+        link.unlink()
+        party = self.user / ps.PARTY
+        party.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(OSError):
+            ps.copy_solo_to_party(self.user, replace=True)
 
 
 class LauncherEnvTests(unittest.TestCase):
