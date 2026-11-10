@@ -120,6 +120,45 @@ def _recover_interrupted(user: Path, folder: Path) -> None:
     raise RuntimeError("interrupted party copy recovered; inspect saves and retry manually")
 
 
+def _recover_pending_and_legacy(user: Path) -> None:
+    """Under _exclusive_copy, restore or preserve old interrupted backups."""
+    party = user / PARTY
+    # Recovery always comes before source validation and before creating
+    # staging, even if this attempt has no valid solo save anymore.
+    backup_root = user / BACKUPS
+    if backup_root.exists() or backup_root.is_symlink():
+        _real_dir(backup_root)  # reject a symlinked ancestor as well
+    backup_parent = backup_root / PARTY
+    if backup_parent.exists() or backup_parent.is_symlink():
+        _real_dir(backup_parent)
+    # Upgrade path: visy's earlier fix used this fixed legacy aside.
+    # Do not silently hide that save behind a newly copied solo save.
+    legacy = user / (PARTY + ".replaced")
+    if legacy.exists() or legacy.is_symlink():
+        _real_dir(legacy)
+        if not _real_dir(party):
+            if backup_parent.is_dir() and list(backup_parent.glob("*.pending-replaced")):
+                raise RuntimeError("ambiguous old and new interrupted party saves; inspect manually")
+            legacy.rename(party)
+            raise RuntimeError("legacy interrupted party copy restored; inspect and retry")
+    if backup_parent.exists():
+        _recover_interrupted(user, backup_parent)
+
+def recover_interrupted_party_save(user: Path) -> bool:
+    """Before starting a party game: repair only an unambiguous old save.
+
+    Raises after recovery to force inspection before the game is allowed to
+    start. A stale lock or multiple candidate backups blocks the launch,
+    never silently discarding a possibly valid older party save.
+    """
+    user = Path(user)
+    if not _real_dir(user):
+        raise FileNotFoundError(f"invalid user directory: {user}")
+    with _exclusive_copy(user):
+        _recover_pending_and_legacy(user)
+    return True
+
+
 def copy_solo_to_party(user: Path, replace: bool = False):
     """Copy solo to party. Replace only if explicitly requested, never delete old.
 
@@ -132,26 +171,7 @@ def copy_solo_to_party(user: Path, replace: bool = False):
         raise FileNotFoundError(f"invalid user directory: {user}")
     with _exclusive_copy(user):
         solo, party = user / SOLO, user / PARTY
-        # Recovery always comes before source validation and before creating
-        # staging, even if this attempt has no valid solo save anymore.
-        backup_root = user / BACKUPS
-        if backup_root.exists() or backup_root.is_symlink():
-            _real_dir(backup_root)  # reject a symlinked ancestor as well
-        backup_parent = backup_root / PARTY
-        if backup_parent.exists() or backup_parent.is_symlink():
-            _real_dir(backup_parent)
-        # Upgrade path: visy's earlier fix used this fixed legacy aside.
-        # Do not silently hide that save behind a newly copied solo save.
-        legacy = user / (PARTY + ".replaced")
-        if legacy.exists() or legacy.is_symlink():
-            _real_dir(legacy)
-            if not _real_dir(party):
-                if backup_parent.is_dir() and list(backup_parent.glob("*.pending-replaced")):
-                    raise RuntimeError("ambiguous old and new interrupted party saves; inspect manually")
-                legacy.rename(party)
-                raise RuntimeError("legacy interrupted party copy restored; inspect and retry")
-        if backup_parent.exists():
-            _recover_interrupted(user, backup_parent)
+        _recover_pending_and_legacy(user)
         before = _files(solo)
         if not before:
             raise FileNotFoundError(f"no single-player saves in {solo}")
