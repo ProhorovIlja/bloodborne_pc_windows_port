@@ -132,16 +132,29 @@ def copy_solo_to_party(user: Path, replace: bool = False):
         raise FileNotFoundError(f"invalid user directory: {user}")
     with _exclusive_copy(user):
         solo, party = user / SOLO, user / PARTY
+        # Recovery always comes before source validation and before creating
+        # staging, even if this attempt has no valid solo save anymore.
+        backup_root = user / BACKUPS
+        if backup_root.exists() or backup_root.is_symlink():
+            _real_dir(backup_root)  # reject a symlinked ancestor as well
+        backup_parent = backup_root / PARTY
+        if backup_parent.exists() or backup_parent.is_symlink():
+            _real_dir(backup_parent)
+        # Upgrade path: visy's earlier fix used this fixed legacy aside.
+        # Do not silently hide that save behind a newly copied solo save.
+        legacy = user / (PARTY + ".replaced")
+        if legacy.exists() or legacy.is_symlink():
+            _real_dir(legacy)
+            if not _real_dir(party):
+                if backup_parent.is_dir() and list(backup_parent.glob("*.pending-replaced")):
+                    raise RuntimeError("ambiguous old and new interrupted party saves; inspect manually")
+                legacy.rename(party)
+                raise RuntimeError("legacy interrupted party copy restored; inspect and retry")
+        if backup_parent.exists():
+            _recover_interrupted(user, backup_parent)
         before = _files(solo)
         if not before:
             raise FileNotFoundError(f"no single-player saves in {solo}")
-        # Check for interrupted operations BEFORE starting any new copy,
-        # even when the new user request is not replace=True.
-        backup_parent = user / BACKUPS / PARTY
-        if backup_parent.exists() or backup_parent.is_symlink():
-            if not _real_dir(backup_parent):
-                raise OSError("invalid party backup directory")
-            _recover_interrupted(user, backup_parent)
         party_exists = _real_dir(party)
         if party_exists and _files(party) and not replace:
             raise FileExistsError(f"{party} contains saves; explicit replace=True required")
