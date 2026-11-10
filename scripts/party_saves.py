@@ -143,8 +143,8 @@ def copy_solo_to_party(user: Path, replace: bool = False):
                 raise OSError("invalid party backup directory")
             _recover_interrupted(user, backup_parent)
         party_exists = _real_dir(party)
-        if party_exists and not replace:
-            raise FileExistsError(f"{party} exists; explicit replace=True required")
+        if party_exists and _files(party) and not replace:
+            raise FileExistsError(f"{party} contains saves; explicit replace=True required")
         staging = Path(tempfile.mkdtemp(prefix=f".{PARTY}.copying-", dir=user))
         # Unique staging directory is created by mkdtemp (no reuse or
         # destructive cleanup of any stale user-owned staging path).
