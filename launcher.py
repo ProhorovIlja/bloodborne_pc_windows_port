@@ -3386,8 +3386,8 @@ class BloodborneLauncher(tk.Tk):
             return False
         try:
             backup = ps.copy_solo_to_party(user, replace=replace)
-        except (OSError, ValueError) as ex:
-            messagebox.showerror("Party save", f"The copy failed; nothing was changed:\n{ex}")
+        except (OSError, ValueError, RuntimeError) as ex:
+            messagebox.showerror("Party save", f"The copy did not complete. Previous saves were kept or recovered; inspect backups before retrying:\n{ex}")
             return False
         self.log(f"[PARTY] Copied {user / ps.SOLO} to {user / ps.PARTY}"
                  + (f" (the old party save is in {backup})" if backup else ""))
@@ -4524,9 +4524,27 @@ class BloodborneLauncher(tk.Tk):
         env["BB_GAME_DIR"] = str(game_dir)
         if warper:
             warper_env(env, warper_paths())
-        elif not self.offer_party_save_copy(env):
-            self.log("[PARTY] Not started (party save copy cancelled).")
-            return
+        elif env.get("BB_PARTY"):
+            # B67: BEFORE starting a new game, detect and recover interrupted
+            # solo->party copies from this port and the older visy ".replaced"
+            # format. Recovery of an unambiguous old party blocks this launch
+            # so the player can inspect progress rather than silently start
+            # a new character into an empty/partially promoted save.
+            try:
+                ps = party_saves_module()
+                ps.recover_interrupted_party_save(party_user_dir())
+            except (ImportError, OSError, ValueError, RuntimeError) as ex:
+                self.log(f"[PARTY SAFETY] Launch blocked pending save inspection: {ex}")
+                messagebox.showerror(
+                    "Party save recovery",
+                    "A previous party-save copy may have been interrupted. "
+                    "The old save remains available in the party folder or its "
+                    "pending backup. No game has been launched. Check progress "
+                    "and backup folders before trying again.\n\n" + str(ex))
+                return
+            if not self.offer_party_save_copy(env):
+                self.log("[PARTY] Not started (party save copy cancelled).")
+                return
         res_choice = self.res_var.get() if self.feat_res_scaling.get() else "Native (1080p, scaling off)"
         active_patches = sorted(list(self.enabled_patches))
 
