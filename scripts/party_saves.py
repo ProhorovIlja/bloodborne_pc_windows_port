@@ -152,6 +152,8 @@ def recover_interrupted_party_save(user: Path) -> bool:
     never silently discarding a possibly valid older party save.
     """
     user = Path(user)
+    if not user.exists() and not user.is_symlink():
+        return True  # first-ever party: game creates this profile on launch
     if not _real_dir(user):
         raise FileNotFoundError(f"invalid user directory: {user}")
     with _exclusive_copy(user):
