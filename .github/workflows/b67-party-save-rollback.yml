@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile scripts/party_saves.py tests/test_party_saves.py
+          python -m py_compile scripts/party_saves.py tests/test_party_saves.py launcher.py
           python -m unittest discover -s tests -p 'test_party_saves.py' -v
       - name: Source-contract no-delete and recovery checks
         shell: bash
@@ -37,6 +37,7 @@ jobs:
           from pathlib import Path
           src=Path('scripts/party_saves.py').read_text(encoding='utf-8')
           tests=Path('tests/test_party_saves.py').read_text(encoding='utf-8')
+          launcher=Path('launcher.py').read_text(encoding='utf-8')
           assert 'shutil.rmtree(party)' not in src
           assert 'shutil.rmtree(aside)' not in src
           assert '.pending-replaced' in src
@@ -44,11 +45,18 @@ jobs:
           assert 'staging.rename(party)' in src
           assert 'pending.rename(party)' not in src or 'pending.rename(party)' in src
           assert '_exclusive_copy(' in src
+          assert 'def recover_interrupted_party_save(' in src
+          assert 'def _recover_pending_and_legacy(' in src
+          live=launcher.split('def launch_game(', 1)[1]
+          assert 'ps.recover_interrupted_party_save(party_user_dir())' in live
+          assert live.index('ps.recover_interrupted_party_save(party_user_dir())') < live.index('self.proc = subprocess.Popen(')
           assert 'hashlib.sha256()' in src
           for name in ('test_crash_between_moves_survives_in_pending_backup_and_recovers',
                        'test_failed_restore_leaves_only_good_backup_not_destroyed',
                        'test_same_size_corruption_in_staging_is_detected',
-                       'test_stale_lock_does_not_allow_overlapping_copy'):
+                       'test_stale_lock_does_not_allow_overlapping_copy',
+                       'test_prelaunch_recovery_restores_after_crash_and_stops_this_launch',
+                       'test_legacy_upstream_replaced_folder_restores_before_new_copy'):
               assert name in tests,name
           PY
       - name: No production data loaded
