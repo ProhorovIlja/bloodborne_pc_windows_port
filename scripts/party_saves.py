@@ -1,71 +1,189 @@
-"""Party save folder (BB_PARTY_SAVE=separate) helpers for the launcher.
+"""Safe, offline-only initial solo->party save copy with recoverable replacement.
 
-A party session with separate saves plays from <user>\\savedata_party (src/runtime_savepolicy.c);
-the single-player saves in <user>\\savedata are never written by it. The first time, the launcher
-offers to copy the single-player save into the party folder: that copy only reads savedata.
-Backups of either folder are in <user>\\save_backups (made by the game, README.txt there).
+Provenance: original ProhorovIlja/bloodborne_pc_windows_port party_saves.py
+and a later upstream visy/bloodborne_pc_windows_port aside/rollback fix.
+B67: old party data is never deleted; a unique .pending-replaced backup
+survives every interruption of the two-rename promotion.
+
+IMPORTANT: this is not a cross-process atomic directory swap or a coherent
+snapshot of a game that is running. Launcher must not invoke during gameplay.
 """
+import hashlib
+import os
 import shutil
+import stat
+import tempfile
 import time
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 SOLO = "savedata"
 PARTY = "savedata_party"
 BACKUPS = "save_backups"
+LOCK = ".party-copy.lock"
+
+
+def _real_dir(path: Path) -> bool:
+    try:
+        st = path.lstat()
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISDIR(st.st_mode) or path.is_symlink():
+        raise OSError(f"refusing symlink or non-directory: {path}")
+    return True
+
+
+def _files(folder: Path) -> dict:
+    """Hash complete regular files, reject links, exclude incomplete .bbtmp."""
+    if not _real_dir(folder):
+        return {}
+    result = {}
+    for directory, subdirs, filenames in os.walk(folder, followlinks=False):
+        parent = Path(directory)
+        _real_dir(parent)
+        for name in subdirs:
+            _real_dir(parent / name)  # os.walk will not follow, but reject
+        for name in sorted(filenames):
+            path = parent / name
+            mode = path.lstat().st_mode
+            if not stat.S_ISREG(mode) or path.is_symlink():
+                raise OSError(f"unsafe save-file entry: {path}")
+            if name.endswith(".bbtmp"):
+                continue
+            h = hashlib.sha256()
+            with path.open("rb") as stream:
+                while data := stream.read(1024 * 1024):
+                    h.update(data)
+            result[path.relative_to(folder).as_posix()] = (path.stat().st_size, h.hexdigest())
+    return result
 
 
 def has_saves(folder: Path) -> bool:
-    """Any save file (not a leftover .bbtmp) under folder."""
-    folder = Path(folder)
-    if not folder.is_dir():
-        return False
-    return any(p.is_file() and not p.name.endswith(".bbtmp") for p in folder.rglob("*"))
+    return bool(_files(Path(folder)))
 
 
 def should_offer_copy(user: Path) -> bool:
-    """First party session with separate saves: no party save yet, a single-player save to copy."""
     user = Path(user)
     return has_saves(user / SOLO) and not has_saves(user / PARTY)
 
 
-def _files(folder: Path) -> dict:
-    return {p.relative_to(folder).as_posix(): p.stat().st_size
-            for p in folder.rglob("*") if p.is_file() and not p.name.endswith(".bbtmp")}
+@contextmanager
+def _exclusive_copy(user: Path):
+    # Never silently replace a leftover lock after process termination.
+    # Manual recovery only after confirming no launcher or game is running.
+    lock = user / LOCK
+    with lock.open("x", encoding="utf-8") as f:
+        f.write(f"created={time.time()}\npid={os.getpid()}\n")
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def _backup_dir(user: Path) -> Path:
+    root = user / BACKUPS
+    if not _real_dir(root):
+        root.mkdir()
+    folder = root / PARTY
+    if not _real_dir(folder):
+        folder.mkdir()
+    return folder
+
+
+def _recover_interrupted(user: Path, folder: Path) -> None:
+    """Never discard an earlier pending backup or guess among multiple ones."""
+    party = user / PARTY
+    pending = sorted(x for x in folder.glob("*.pending-replaced")
+                     if x.is_dir() and not x.is_symlink())
+    # Reject any symlink named like a previous pending backup.
+    for x in folder.glob("*.pending-replaced"):
+        if x.is_symlink() or not x.is_dir():
+            raise OSError(f"invalid pending backup: {x}")
+    if not pending:
+        return
+    if _real_dir(party):
+        # An interrupted cleanup AFTER successful promotion. Preserve old
+        # snapshots and merely rename them to a completed backup name.
+        for x in pending:
+            finished = x.with_name(x.name.removesuffix(".pending-replaced") + "-replaced")
+            if finished.exists() or finished.is_symlink():
+                raise FileExistsError(f"backup collision: {finished}")
+            x.rename(finished)
+        return
+    if len(pending) != 1:
+        raise RuntimeError("multiple interrupted party copies; manual inspection required")
+    pending[0].rename(party)
+    # Do not immediately replace the just-recovered party during this call.
+    raise RuntimeError("interrupted party copy recovered; inspect saves and retry manually")
 
 
 def copy_solo_to_party(user: Path, replace: bool = False):
-    """Copy <user>\\savedata to <user>\\savedata_party (savedata is only read).
+    """Copy solo to party. Replace only if explicitly requested, never delete old.
 
-    An existing party save is kept: FileExistsError unless replace=True, which first copies it to
-    <user>\\save_backups\\savedata_party\\<time>-replaced (a backup the game's rotation also keeps).
-    Returns that backup's path, or None. The copy is made next to the target and renamed into
-    place, so an interrupted copy never looks like a party save.
+    The only restore-on-error is renaming the PREVIOUS party directory back
+    into place. A crash between directory renames leaves it in an obvious
+    .pending-replaced backup, recoverable on next launcher invocation.
     """
     user = Path(user)
-    solo, party = user / SOLO, user / PARTY
-    if not has_saves(solo):
-        raise FileNotFoundError(f"no single-player save in {solo}")
-    backup = None
-    if has_saves(party) and not replace:
-        raise FileExistsError(f"{party} already has a party save")
-    staging = user / (PARTY + ".copying")
-    if staging.exists():
-        shutil.rmtree(staging)
-    shutil.copytree(solo, staging, ignore=shutil.ignore_patterns("*.bbtmp"))
-    if _files(staging) != _files(solo):
-        shutil.rmtree(staging, ignore_errors=True)
-        raise OSError(f"the copy of {solo} is incomplete; nothing changed")
-    if party.exists():
-        if has_saves(party):
-            backup = user / BACKUPS / PARTY / (time.strftime("%Y%m%d-%H%M%S") + "-replaced")
-            n = 2
-            while backup.exists():
-                backup = backup.with_name(f"{time.strftime('%Y%m%d-%H%M%S')}-replaced-{n:02d}")
-                n += 1
-            shutil.copytree(party, backup)
-            if _files(backup) != _files(party):
-                shutil.rmtree(staging, ignore_errors=True)
-                raise OSError(f"could not back up {party}; nothing changed")
-        shutil.rmtree(party)
-    staging.rename(party)
-    return backup
+    if not _real_dir(user):
+        raise FileNotFoundError(f"invalid user directory: {user}")
+    with _exclusive_copy(user):
+        solo, party = user / SOLO, user / PARTY
+        before = _files(solo)
+        if not before:
+            raise FileNotFoundError(f"no single-player saves in {solo}")
+        # Check for interrupted operations BEFORE starting any new copy,
+        # even when the new user request is not replace=True.
+        backup_parent = user / BACKUPS / PARTY
+        if backup_parent.exists() or backup_parent.is_symlink():
+            if not _real_dir(backup_parent):
+                raise OSError("invalid party backup directory")
+            _recover_interrupted(user, backup_parent)
+        party_exists = _real_dir(party)
+        if party_exists and not replace:
+            raise FileExistsError(f"{party} exists; explicit replace=True required")
+        staging = Path(tempfile.mkdtemp(prefix=f".{PARTY}.copying-", dir=user))
+        # Unique staging directory is created by mkdtemp (no reuse or
+        # destructive cleanup of any stale user-owned staging path).
+        try:
+            shutil.copytree(solo, staging, ignore=shutil.ignore_patterns("*.bbtmp"),
+                            dirs_exist_ok=True)
+            if _files(staging) != before or _files(solo) != before:
+                raise OSError("source or staged party save changed during verification")
+            if party_exists:
+                old = _files(party)
+                folder = _backup_dir(user)
+                _recover_interrupted(user, folder)
+                token = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex
+                pending = folder / (token + ".pending-replaced")
+                finished = folder / (token + "-replaced")
+                if pending.exists() or finished.exists():
+                    raise FileExistsError("unique backup path unexpectedly occupied")
+                # Atomic single-dir move on the same volume. NEVER remove
+                # the existing party to make space and NEVER delete backups.
+                party.rename(pending)
+                try:
+                    staging.rename(party)
+                except OSError:
+                    if not party.exists() and pending.exists():
+                        try:
+                            pending.rename(party)
+                        except OSError:
+                            # Old save is STILL safely in pending; caller
+                            # must recover rather than start a fresh game.
+                            pass
+                    raise
+                # Promotion succeeded; old backup remains valuable.
+                try:
+                    pending.rename(finished)
+                except OSError:
+                    return pending  # still intact and easy to recover
+                return finished
+            staging.rename(party)
+            return None
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
