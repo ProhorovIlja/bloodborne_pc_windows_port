@@ -179,6 +179,35 @@ class PartySaveRecoveryTests(PartySaveTests):
         self.assertIsNone(ps.copy_solo_to_party(self.user))
         self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(), b"A" * 4096)
 
+    def test_prelaunch_recovery_accepts_new_profiles_and_normal_party(self):
+        self.assertTrue(ps.recover_interrupted_party_save(self.user / "new_profile"))
+        self.assertTrue(ps.recover_interrupted_party_save(self.user))
+        old = self._old_party()
+        self.assertTrue(ps.recover_interrupted_party_save(self.user))
+        self.assertEqual(old.read_bytes(), b"older party with priceless progress")
+
+    def test_prelaunch_recovery_restores_after_crash_and_stops_this_launch(self):
+        original = self._old_party().read_bytes()
+        party = self.user / ps.PARTY
+        backup = self.user / ps.BACKUPS / ps.PARTY / "broken.pending-replaced"
+        backup.parent.mkdir(parents=True)
+        party.rename(backup)
+        self.assertFalse(party.exists())
+        with self.assertRaisesRegex(RuntimeError, "interrupted party copy recovered"):
+            ps.recover_interrupted_party_save(self.user)
+        self.assertEqual((party / SAVE / "userdata0000").read_bytes(), original)
+        self.assertTrue(ps.recover_interrupted_party_save(self.user))
+
+    def test_prelaunch_blocks_a_leftover_lock_without_renaming_any_save(self):
+        old = self._old_party()
+        data = old.read_bytes()
+        lock = self.user / ps.LOCK
+        lock.write_text("previous launcher stopped unexpectedly")
+        with self.assertRaises(FileExistsError):
+            ps.recover_interrupted_party_save(self.user)
+        self.assertEqual(old.read_bytes(), data)
+        self.assertTrue(lock.exists())
+
     def test_legacy_upstream_replaced_folder_restores_before_new_copy(self):
         original = self._old_party().read_bytes()
         party = self.user / ps.PARTY
