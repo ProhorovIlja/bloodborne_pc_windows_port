@@ -179,6 +179,55 @@ class PartySaveRecoveryTests(PartySaveTests):
         self.assertIsNone(ps.copy_solo_to_party(self.user))
         self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(), b"A" * 4096)
 
+    def test_legacy_upstream_replaced_folder_restores_before_new_copy(self):
+        original = self._old_party().read_bytes()
+        party = self.user / ps.PARTY
+        old = self.user / (ps.PARTY + ".replaced")
+        party.rename(old)  # simulate an old visy interrupted migration
+        with self.assertRaisesRegex(RuntimeError, "legacy interrupted"):
+            ps.copy_solo_to_party(self.user, replace=True)
+        self.assertEqual((party / SAVE / "userdata0000").read_bytes(), original)
+        self.assertFalse(old.exists())
+        self.assertFalse((self.user / ps.LOCK).exists())
+
+    def test_legacy_restore_takes_priority_over_missing_solo(self):
+        original = self._old_party().read_bytes()
+        party = self.user / ps.PARTY
+        old = self.user / (ps.PARTY + ".replaced")
+        party.rename(old)
+        solo = self.user / ps.SOLO
+        ps.shutil.rmtree(solo)
+        with self.assertRaisesRegex(RuntimeError, "legacy interrupted"):
+            ps.copy_solo_to_party(self.user)
+        self.assertEqual((party / SAVE / "userdata0000").read_bytes(), original)
+
+    def test_ambiguous_legacy_and_pending_backups_fail_closed(self):
+        self._old_party()
+        party = self.user / ps.PARTY
+        party.rename(self.user / (ps.PARTY + ".replaced"))
+        pending = self.user / ps.BACKUPS / ps.PARTY / "another.pending-replaced"
+        write(pending / SAVE / "userdata0000", b"alternate old save")
+        with self.assertRaisesRegex(RuntimeError, "ambiguous"):
+            ps.copy_solo_to_party(self.user, replace=True)
+        self.assertFalse(party.exists())
+        self.assertTrue(pending.is_dir())
+        self.assertTrue((self.user / (ps.PARTY + ".replaced")).is_dir())
+
+    def test_symlinked_save_backups_parent_is_rejected(self):
+        self._old_party()
+        outside = self.user / "external"
+        outside.mkdir()
+        backup_root = self.user / ps.BACKUPS
+        try:
+            backup_root.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlink creation not permitted")
+        with self.assertRaises(OSError):
+            ps.copy_solo_to_party(self.user, replace=True)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertEqual((self.user / ps.PARTY / SAVE / "userdata0000").read_bytes(),
+                         b"older party with priceless progress")
+
     def test_symlink_source_and_party_are_rejected(self):
         outside = self.user / "other"
         outside.mkdir()
