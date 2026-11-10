@@ -143,8 +143,11 @@ class PartySaveRecoveryTests(PartySaveTests):
         real = ps.shutil.copytree
         def corrupt(source, dest, *args, **kwargs):
             result = real(source, dest, *args, **kwargs)
-            copied = Path(dest) / SAVE / "userdata0000"
-            copied.write_bytes(b"X" * 4096)
+            # shutil.copytree recursively invokes itself. Corrupt only
+            # once the complete TOP-LEVEL tree exists, not nested calls.
+            if Path(source) == self.user / ps.SOLO:
+                copied = Path(dest) / SAVE / "userdata0000"
+                copied.write_bytes(b"X" * 4096)
             return result
         with mock.patch.object(ps.shutil, "copytree", side_effect=corrupt):
             with self.assertRaisesRegex(OSError, "changed during verification"):
