@@ -16,6 +16,19 @@ static uint32_t le32_v364(const unsigned char *p) {
 static int bounded_v364(uint64_t offset,uint64_t count,uint64_t size) {
     return offset<=size && count<=size-offset;
 }
+/* Distinct caller-owned output ranges must never mutate FLVER source,
+ * descriptor arrays, or the published stats during plan construction.
+ * Checked unsigned addresses avoid undefined cross-allocation comparisons.
+ */
+static int ranges_overlap_v364(
+    const void *a,size_t a_len,const void *b,size_t b_len) {
+    if (!a_len || !b_len) return 0;
+    if (!a || !b) return 1;
+    const uintptr_t start_a=(uintptr_t)a,start_b=(uintptr_t)b;
+    if (a_len>UINTPTR_MAX-start_a || b_len>UINTPTR_MAX-start_b)
+        return 1;
+    return start_a<start_b+b_len && start_b<start_a+a_len;
+}
 static int align4_v364(uint64_t *value) {
     if (*value>UINT64_MAX-3u) return 0;
     *value=(*value+3u)&~(uint64_t)3u;
@@ -71,6 +84,9 @@ int shyt_native_flver2_gpu_requirements_v364(
     const ShytNativeFlver2AssetV363 *asset,
     ShytNativeGpuUploadCountsV364 *out) {
     if (!out) return 0;
+    if (asset && asset->flver && ranges_overlap_v364(
+            out,sizeof(*out),asset->flver,asset->flver_bytes))
+        return 0; /* aliased output is a caller contract violation */
     memset(out,0,sizeof(*out));
     ShytNativeFlver2GeometryV362 g;
     ShytNativeGpuUploadCountsV364 counts={0};
@@ -87,6 +103,9 @@ int shyt_native_flver2_gpu_plan_v364(
     uint64_t staging_budget_bytes,
     ShytNativeGpuUploadCountsV364 *out) {
     if (!out) return 0;
+    if (asset && asset->flver && ranges_overlap_v364(
+            out,sizeof(*out),asset->flver,asset->flver_bytes))
+        return 0; /* aliased output is a caller contract violation */
     memset(out,0,sizeof(*out));
     ShytNativeFlver2GeometryV362 g;
     ShytNativeGpuUploadCountsV364 counts={0};
@@ -99,6 +118,19 @@ int shyt_native_flver2_gpu_plan_v364(
         indices_capacity<counts.index_buffers ||
         draws_capacity<counts.draws ||
         counts.staging_bytes_total>staging_budget_bytes) return 0;
+    const size_t vb_bytes=(size_t)counts.vertex_buffers*sizeof(*vertices);
+    const size_t ib_bytes=(size_t)counts.index_buffers*sizeof(*indices);
+    const size_t draw_bytes=(size_t)counts.draws*sizeof(*draws);
+    if (ranges_overlap_v364(vertices,vb_bytes,asset->flver,asset->flver_bytes) ||
+        ranges_overlap_v364(indices,ib_bytes,asset->flver,asset->flver_bytes) ||
+        ranges_overlap_v364(draws,draw_bytes,asset->flver,asset->flver_bytes) ||
+        ranges_overlap_v364(vertices,vb_bytes,indices,ib_bytes) ||
+        ranges_overlap_v364(vertices,vb_bytes,draws,draw_bytes) ||
+        ranges_overlap_v364(indices,ib_bytes,draws,draw_bytes) ||
+        ranges_overlap_v364(vertices,vb_bytes,out,sizeof(*out)) ||
+        ranges_overlap_v364(indices,ib_bytes,out,sizeof(*out)) ||
+        ranges_overlap_v364(draws,draw_bytes,out,sizeof(*out)))
+        return 0;
     const unsigned char *p=asset->flver;
     const uint64_t limit=asset->flver_bytes;
     const uint64_t data_start=g.data_offset;
@@ -172,6 +204,14 @@ int shyt_native_flver2_stage_bytes_v364(
     uint32_t source_offset,uint32_t bytes,
     void *destination,size_t destination_capacity,size_t *written) {
     if (!written) return 0;
+    /* An aliased size output would corrupt model input or staged bytes.
+     * Such pointers violate the API contract and are not written at all. */
+    if (asset && asset->flver &&
+        ranges_overlap_v364(written,sizeof(*written),
+                            asset->flver,asset->flver_bytes)) return 0;
+    if (destination &&
+        ranges_overlap_v364(written,sizeof(*written),destination,bytes))
+        return 0;
     *written=0;
     if (!asset || !asset->flver || !destination ||
         bytes==0 || destination_capacity<(size_t)bytes ||
