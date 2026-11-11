@@ -40,6 +40,15 @@ Continue a **strict no-runtime-EBOOT/PS4-ELF** Windows Bloodborne port by prepar
 
 Search is targeted and paginated: not an assertion that all GitHub repositories, forks, PRs and branches were exhaustively inspected. Candidate code imports require compatibility and license/provenance review per component.
 
+
+### Additional source-port architectures checked in the public GitHub search
+
+- [Astrr00/BloodbornePC](https://github.com/Astrr00/BloodbornePC) describes a Windows x86-64 recompiler that emits C++ and a local compiled `bbgame.exe`, with differential testing of generated guest functions. Its [ARCHITECTURE](https://github.com/Astrr00/BloodbornePC/blob/main/docs/ARCHITECTURE.md) and [ROADMAP](https://github.com/Astrr00/BloodbornePC/blob/main/docs/ROADMAP.md) are important donors for function-boundary discovery, test harness design and cross-ABI semantics. Its documented `bbgame <eboot.bin>` path maps ELF data at runtime, so **its published flow cannot be called our strict no-runtime-ELF target as-is**. Performance/playthrough percentages in its README are maintainer claims, not our independent verification.
+- [bloodborne-native/bloodborne-recomp](https://github.com/bloodborne-native/bloodborne-recomp) includes meaningful AOT speed optimizations and instruction-family coverage; its current fallback to `bbcpu` for unsupported instructions likewise does not satisfy our final no-interpreter runtime constraint.
+- [Yharnam-Hunters/Paleblood](https://github.com/Yharnam-Hunters/Paleblood) supplies a careful function-by-function oracle and native runtime model, with an explicitly incomplete original-game rewrite. Its status is not equivalent to a fully native game release.
+- [Awakenchan/LanternEngine](https://github.com/Awakenchan/LanternEngine), [Jgamrot/yharnam-pc](https://github.com/Jgamrot/yharnam-pc), [RandomAlien0x33/bloodborne-win-native](https://github.com/RandomAlien0x33/bloodborne-win-native), and [theitsnschool/bloodborne-windows-native-loader](https://github.com/theitsnschool/bloodborne-windows-native-loader) all describe working PC-host paths that **still load the original PS4 game code**. They are useful reference implementations for stability, input, shader caching, memory modes, network and UX, not replacements for an ELF-independent Windows executable.
+- The upstream corpus should be revisited by **subsystem, issues, branches and PR diffs**, with actual test cases and license checks. A ranking search and eight README inspections are not an exhaustive scan of every GitHub fork or private repository.
+
 ## Important remaining work
 
 1. Add a real Vulkan/Direct3D allocation and staging backend (separate PR), with validation layers, buffer-usage flags, copy-region safety, synchronization fences, and GPU memory residency/eviction budgets; verify frame-time and memory changes on representative original scenes.
