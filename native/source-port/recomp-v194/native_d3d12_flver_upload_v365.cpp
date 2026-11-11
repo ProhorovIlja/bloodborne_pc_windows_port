@@ -55,12 +55,24 @@ UploadV365::~UploadV365() {
 }
 bool UploadV365::ready() const noexcept {
     if (!submitted) return true;
-    return completion_fence &&
-           completion_fence->GetCompletedValue() >= completion_value;
+    if (!completion_fence) return false;
+    const uint64_t value=completion_fence->GetCompletedValue();
+    /* UINT64_MAX is D3D12's device-removal sentinel, not completion. */
+    return value!=UINT64_MAX && value>=completion_value;
 }
 bool UploadV365::wait_for(uint32_t timeout_milliseconds) noexcept {
     if (!submitted) return true;
     if (!completion_fence) return false;
+    if (completion_fence->GetCompletedValue()==UINT64_MAX) {
+        /* The device is removed. No submitted GPU commands can finish.
+         * Releasing the now-dead device's staging memory is safe, but
+         * report failure rather than falsely reporting a completed copy. */
+        staging_upload.Reset();
+        command_list.Reset();
+        command_allocator.Reset();
+        submitted=false;
+        return false;
+    }
     if (!ready()) {
         const HANDLE event_handle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (!event_handle) return false;
@@ -89,6 +101,16 @@ std::unique_ptr<UploadV365> submit_flver_d3d12_v365(
     const ShytNativeFlver2AssetV363* model, uint64_t staging_budget_bytes) {
     if (!device || !direct_queue || !model ||
         direct_queue->GetDesc().Type != D3D12_COMMAND_LIST_TYPE_DIRECT)
+        return nullptr;
+    /* A queue from a different D3D12 device must never receive our
+     * resources. COM IUnknown identity avoids comparing interface views. */
+    ComPtr<ID3D12Device> queue_device;
+    ComPtr<IUnknown> own_identity;
+    ComPtr<IUnknown> queue_identity;
+    if (FAILED(direct_queue->GetDevice(IID_PPV_ARGS(&queue_device))) ||
+        FAILED(device->QueryInterface(IID_PPV_ARGS(&own_identity))) ||
+        FAILED(queue_device->QueryInterface(IID_PPV_ARGS(&queue_identity))) ||
+        own_identity.Get()!=queue_identity.Get())
         return nullptr;
     ShytNativeGpuUploadCountsV364 counts{};
     if (!shyt_native_flver2_gpu_requirements_v364(model,&counts) ||
