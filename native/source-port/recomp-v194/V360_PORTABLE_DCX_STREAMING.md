@@ -28,6 +28,27 @@ testable zlib decoding core instead of duplicating the Deflate state machine.
 - No original game resources, EBOOT, ELF, keys, saves, addresses, or encrypted
   artifacts are committed or uploaded. Tests use deterministic synthetic DCX.
 
+## Private real-game header parity (verified 2026-11-11)
+
+With the owner's connected private Google Drive, two small `s_template.gparam.dcx`
+resources were inspected for **header metadata only**. No resources or
+decompressed game bytes are committed, copied into CI, or published.
+
+| Owned game | Container size | DCX version | Header offset 0x10/0x14 | Compression | Declared uncompressed/compressed |
+|---|---:|---|---|---|---:|
+| Bloodborne CUSA03173 | 6,066 bytes | 0x10000 | **0x24 / 0x2C** | DFLT level 9 | 30,812 / 5,990 bytes |
+| Dark Souls III PC | 4,641 bytes | 0x10000 | **0x44 / 0x4C** | DFLT level 9 | 22,940 / 4,565 bytes |
+
+Existing V354 parser accepted the second family only; as a result, real
+Bloodborne DCX files in this supported family would fail before decompression.
+V360 now allows the verified 0x24/0x2C + version 0x10000 + level 9
+combination and retains 0x44/0x4C for DS3. Both header pairs have generated
+synthetic positive tests; mixed pairings and unverified Bloodborne variants
+must fail closed. The envelope distinction also matches the public
+SoulsFormats DCX reader (JKAnderson/SoulsFormats). *This confirms the
+previous rejection risk; it does not prove every resource or compression
+family in either game is covered.*
+
 ## Regression coverage
 
 `test_native_dcx_dflt_stream_core_v360.c` exercises real zlib compression,
