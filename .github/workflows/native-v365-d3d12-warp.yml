@@ -1,0 +1,72 @@
+name: Native V365 real Win64 D3D12 WARP GPU transfer
+on:
+  push:
+    branches: [feature/native-v365-d3d12-warp-upload-20261111]
+    paths:
+      - '.github/workflows/native-v365-d3d12-warp.yml'
+      - 'native/source-port/recomp-v194/native_d3d12_flver_upload_v365.*'
+      - 'native/source-port/recomp-v194/test_native_d3d12_flver_upload_v365.cpp'
+      - 'native/source-port/recomp-v194/native_flver2_gpu_plan_v364.*'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-d3d12-warp-copy-readback:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Build source-only C geometry contracts
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 /c "$src/native_flver2_geometry_v362.c" /Fo:flver_v362.obj
+          if ($LASTEXITCODE -ne 0) { throw 'FLVER contract compile failed' }
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 /c "$src/native_flver2_gpu_plan_v364.c" /Fo:gpu_plan_v364.obj
+          if ($LASTEXITCODE -ne 0) { throw 'GPU planning compile failed' }
+      - name: Compile real Windows Direct3D12 backend and GPU readback test
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TP /std:c++17 /EHsc /W4 /WX /O2 `
+            "$src/native_d3d12_flver_upload_v365.cpp" `
+            "$src/test_native_d3d12_flver_upload_v365.cpp" `
+            flver_v362.obj gpu_plan_v364.obj `
+            d3d12.lib dxgi.lib /Fe:native-v365-warp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'D3D12 backend compile/link failed' }
+      - name: Run GPU upload and readback on Microsoft's software WARP adapter
+        shell: pwsh
+        run: |
+          & .\native-v365-warp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Real D3D12/WARP copy and readback failed' }
+      - name: No original game assets in repository
+        shell: pwsh
+        run: |
+          if (Test-Path CUSA03173) { throw 'Private game bytes found' }
+          if (Test-Path 'Dark Souls III') { throw 'Private DS3 bytes found' }
+          Write-Host 'NATIVE_V365_WIN_D3D12_WARP_SYNTHETIC_ONLY_PASS'
+  portable-source-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Validate inherited source-only GPU contracts with ASan/UBSan
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -I"$src" "$src/native_flver2_geometry_v362.c" \
+            "$src/native_flver2_gpu_plan_v364.c" \
+            "$src/test_native_flver2_gpu_plan_v364.c" \
+            -o native-v365-portable-contracts
+          ./native-v365-portable-contracts
+          echo 'NATIVE_V365_PORTABLE_INHERITED_CONTRACTS_PASS'
