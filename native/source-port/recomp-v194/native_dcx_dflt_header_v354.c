@@ -21,7 +21,12 @@ int shyt_native_dcx_dflt_probe_v354(
     if (memcmp(p,"DCX\0",4)!=0 ||
         (be32_v354(p+4)!=0x10000u && be32_v354(p+4)!=0x11000u) ||
         be32_v354(p+8)!=0x18u || be32_v354(p+12)!=0x24u ||
-        be32_v354(p+16)!=0x44u || be32_v354(p+20)!=0x4Cu ||
+        /* BB 1.09 DFLT_10000_24_9 uses 0x24/0x2C, while
+         * DS3 DFLT_10000_44_9 uses 0x44/0x4C. Pair values: do
+         * not let a malformed hybrid bypass the header gate. */
+        !((be32_v354(p+16)==0x24u && be32_v354(p+20)==0x2Cu &&
+           be32_v354(p+4)==0x10000u && p[48]==9u && p[56]==0u) ||
+          (be32_v354(p+16)==0x44u && be32_v354(p+20)==0x4Cu)) ||
         memcmp(p+24,"DCS\0",4)!=0 ||
         memcmp(p+36,"DCP\0",4)!=0 || memcmp(p+40,"DFLT",4)!=0 ||
         be32_v354(p+44)!=0x20u ||

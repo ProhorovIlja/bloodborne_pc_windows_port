@@ -94,6 +94,20 @@ int main(void) {
     rejects(data,full,decoded,sizeof(decoded));
     data[76]=0x78;
     assert(shyt_native_dcx_dflt_inflate_v355(data,full,decoded,sizeof(decoded),&written));
+
+    /* Real Bloodborne 1.09 DCX_DFLT has 0x24/0x2C fields;
+     * real DS3 uses the existing 0x44/0x4C pair. Payload is invented. */
+    be32(data+16,0x24u);
+    be32(data+20,0x2cu);
+    assert(shyt_native_dcx_dflt_inflate_v355(data,full,decoded,sizeof(decoded),&written));
+    assert(written==n && memcmp(decoded,game_like_invented,n)==0);
+    be32(data+20,0x4cu);
+    rejects(data,full,decoded,sizeof(decoded)); /* forbid mixed variant */
+    be32(data+20,0x2cu);
+    be32(data+16,0x44u);
+    rejects(data,full,decoded,sizeof(decoded));
+    be32(data+16,0x24u);
+    assert(shyt_native_dcx_dflt_inflate_v355(data,full,decoded,sizeof(decoded),&written));
 #ifdef _WIN32
     wchar_t temp[1024], root[1024], file[1024];
     DWORD m=GetTempPathW(1024,temp);

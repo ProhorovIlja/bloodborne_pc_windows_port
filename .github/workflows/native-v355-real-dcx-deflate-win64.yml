@@ -6,6 +6,7 @@ on:
       - '.github/workflows/native-v355-real-dcx-deflate-win64.yml'
       - 'native/source-port/recomp-v194/native_dcx_dflt_inflate_v355.*'
       - 'native/source-port/recomp-v194/native_win_dcx_stream_v359.*'
+      - 'native/source-port/recomp-v194/native_dcx_dflt_stream_core_v360.*'
       - 'native/source-port/recomp-v194/test_native_dcx_dflt_inflate_v355.c'
       - 'native/source-port/recomp-v194/native_dcx_dflt_header_v354.*'
       - 'native/source-port/recomp-v194/native_win_asset_fs_v351.*'
@@ -65,6 +66,7 @@ jobs:
                  "$src/native_win_asset_fs_v351.c" \
                  "$src/native_dcx_dflt_header_v354.c" \
                  "$src/native_dcx_dflt_inflate_v355.c" \
+                 "$src/native_dcx_dflt_stream_core_v360.c" \
                  "$src/native_win_dcx_stream_v359.c" \
                  "$src/test_native_dcx_dflt_inflate_v355.c" \
                  zlib-build/Release/zlibstatic.lib \
@@ -83,6 +85,7 @@ jobs:
                  "$src/native_win_asset_fs_v351.c" \
                  "$src/native_dcx_dflt_header_v354.c" \
                  "$src/native_dcx_dflt_inflate_v355.c" \
+                 "$src/native_dcx_dflt_stream_core_v360.c" \
                  "$src/native_win_dcx_stream_v359.c" \
                  "$src/test_native_dcx_dflt_inflate_v355.c" \
                  zlib-build/libz.a -o ./shyt-v355-native-linux \
