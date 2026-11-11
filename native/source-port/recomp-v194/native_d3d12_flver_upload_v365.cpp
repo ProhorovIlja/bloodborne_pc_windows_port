@@ -164,7 +164,7 @@ std::unique_ptr<UploadV365> submit_flver_d3d12_v365(
         ticket->staging_upload->Unmap(0,&written_range);
         if (!copied) return nullptr;
         const D3D12_GPU_VIRTUAL_ADDRESS gpu=ticket->gpu_buffer->GetGPUVirtualAddress();
-        if (!gpu || gpu>std::numeric_limits<UINT64>::max()-plan.staging_bytes_total)
+        if (!gpu || gpu>UINT64_MAX-plan.staging_bytes_total)
             return nullptr;
         ticket->vertex_views.reserve(vertices.size());
         for (const auto& v:vertices) {
