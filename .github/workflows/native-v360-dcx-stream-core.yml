@@ -1,0 +1,107 @@
+name: Native V360 standalone DCX stream core validation
+on:
+  push:
+    branches: [feature/native-v360-stream-dcx-verification-20261111]
+    paths:
+      - '.github/workflows/native-v360-dcx-stream-core.yml'
+      - 'native/source-port/recomp-v194/native_dcx_dflt_stream_core_v360.*'
+      - 'native/source-port/recomp-v194/test_native_dcx_dflt_stream_core_v360.c'
+      - 'native/source-port/recomp-v194/native_win_dcx_stream_v359.*'
+      - 'native/source-port/recomp-v194/native_dcx_dflt_header_v354.*'
+      - 'native/source-port/recomp-v194/native_win_asset_fs_v351.*'
+      - 'native/source-port/recomp-v194/test_native_dcx_dflt_inflate_v355.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-native-decompression:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 14
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: madler/zlib
+          ref: 51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf
+          path: public-zlib-v131
+          persist-credentials: false
+      - name: Build pinned public zlib 1.3.1 (NO game inputs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-zlib-v131 rev-parse HEAD)" = 51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf
+          grep -Fq '#define ZLIB_VERSION "1.3.1"' public-zlib-v131/zlib.h
+          if [ "$RUNNER_OS" = Windows ]; then
+            cmake -S public-zlib-v131 -B zlib-build \
+              -G "Visual Studio 17 2022" -A x64 \
+              -DZLIB_BUILD_EXAMPLES=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+              >v360-build.log 2>&1 || { tail -n 4 v360-build.log; exit 1; }
+            cmake --build zlib-build --config Release --target zlibstatic \
+              >>v360-build.log 2>&1 || { tail -n 4 v360-build.log; exit 1; }
+            test -s zlib-build/Release/zlibstatic.lib
+          else
+            cmake -S public-zlib-v131 -B zlib-build \
+              -DCMAKE_BUILD_TYPE=Release -DZLIB_BUILD_EXAMPLES=OFF \
+              -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+              >v360-build.log 2>&1 || { tail -n 4 v360-build.log; exit 1; }
+            cmake --build zlib-build --target zlibstatic --parallel 2 \
+              >>v360-build.log 2>&1 || { tail -n 4 v360-build.log; exit 1; }
+            test -s zlib-build/libz.a
+      - name: Run real portable decoder and existing Win32 integration fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          if [ "$RUNNER_OS" = Windows ]; then
+            MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl /nologo /TC /std:c11 /W4 /WX /O2 \
+              "/I$src" /Ipublic-zlib-v131 /Izlib-build \
+              "$src/native_dcx_dflt_header_v354.c" \
+              "$src/native_dcx_dflt_stream_core_v360.c" \
+              "$src/test_native_dcx_dflt_stream_core_v360.c" \
+              zlib-build/Release/zlibstatic.lib /Fe:./native-v360-core.exe \
+              >v360-compile.log 2>&1 || { tail -n 8 v360-compile.log; exit 1; }
+            ./native-v360-core.exe
+            MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl /nologo /TC /std:c11 /W4 /WX /O2 \
+              "/I$src" /Ipublic-zlib-v131 /Izlib-build \
+              "$src/native_win_asset_fs_v351.c" \
+              "$src/native_dcx_dflt_header_v354.c" \
+              "$src/native_dcx_dflt_inflate_v355.c" \
+              "$src/native_dcx_dflt_stream_core_v360.c" \
+              "$src/native_win_dcx_stream_v359.c" \
+              "$src/test_native_dcx_dflt_inflate_v355.c" \
+              zlib-build/Release/zlibstatic.lib /Fe:./native-v360-winio.exe \
+              >>v360-compile.log 2>&1 || { tail -n 8 v360-compile.log; exit 1; }
+            ./native-v360-winio.exe
+          else
+            clang -std=c11 -O2 -Wall -Wextra -Werror -I"$src" \
+              -Ipublic-zlib-v131 -Izlib-build \
+              "$src/native_dcx_dflt_header_v354.c" \
+              "$src/native_dcx_dflt_stream_core_v360.c" \
+              "$src/test_native_dcx_dflt_stream_core_v360.c" \
+              zlib-build/libz.a -o ./native-v360-core
+            ./native-v360-core
+            clang -std=c11 -O2 -Wall -Wextra -Werror -I"$src" \
+              -Ipublic-zlib-v131 -Izlib-build \
+              "$src/native_win_asset_fs_v351.c" \
+              "$src/native_dcx_dflt_header_v354.c" \
+              "$src/native_dcx_dflt_inflate_v355.c" \
+              "$src/native_dcx_dflt_stream_core_v360.c" \
+              "$src/native_win_dcx_stream_v359.c" \
+              "$src/test_native_dcx_dflt_inflate_v355.c" \
+              zlib-build/libz.a -o ./native-v360-winio
+            ./native-v360-winio
+          fi
+      - name: Protect against accidental private assets in repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e "Dark Souls III"
+          echo "NATIVE_V360_PUBLIC_SYNTHETIC_ONLY_SOURCE_GATE_PASS"
