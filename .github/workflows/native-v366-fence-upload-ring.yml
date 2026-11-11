@@ -1,0 +1,75 @@
+name: Native V366 fence-owned staging ring WARP
+on:
+  push:
+    branches: [feature/native-v366-fence-ring-proton-research-20261111]
+    paths:
+      - '.github/workflows/native-v366-fence-upload-ring.yml'
+      - 'native/source-port/recomp-v194/native_fence_upload_ring_v366.*'
+      - 'native/source-port/recomp-v194/test_native_fence_upload_ring_v366.cpp'
+      - 'native/source-port/recomp-v194/test_native_d3d12_upload_ring_v366.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Clang, GCC and sanitizer synthetic tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for compiler in clang++ g++; do
+            "$compiler" -std=c++17 -O2 -Wall -Wextra -Werror \
+              "$src/native_fence_upload_ring_v366.cpp" \
+              "$src/test_native_fence_upload_ring_v366.cpp" \
+              -o native-v366-ring
+            ./native-v366-ring
+          done
+          clang++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_fence_upload_ring_v366.cpp" \
+            "$src/test_native_fence_upload_ring_v366.cpp" \
+            -o native-v366-sanitized
+          ./native-v366-sanitized
+  windows-real-warp-fence-reuse:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Windows clang-cl portable tests
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TP /std:c++17 /EHsc /W4 /WX /O2 `
+            "$src/native_fence_upload_ring_v366.cpp" `
+            "$src/test_native_fence_upload_ring_v366.cpp" `
+            /Fe:native-v366-ring.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V366 portable test build failed' }
+          & .\native-v366-ring.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V366 portable tests failed' }
+      - name: Run real Direct3D12 WARP ring GPU readback
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TP /std:c++17 /EHsc /W4 /WX /O2 `
+            "$src/native_fence_upload_ring_v366.cpp" `
+            "$src/test_native_d3d12_upload_ring_v366.cpp" `
+            d3d12.lib dxgi.lib /Fe:native-v366-warp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V366 WARP build failed' }
+          & .\native-v366-warp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V366 real WARP copy failed' }
+      - name: Private game assets must not be committed
+        shell: pwsh
+        run: |
+          if (Test-Path 'CUSA03173') { throw 'Private Bloodborne assets found' }
+          if (Test-Path 'Dark Souls III') { throw 'Private DS3 assets found' }
+          Write-Host 'NATIVE_V366_PUBLIC_SYNTHETIC_ONLY_PASS'
