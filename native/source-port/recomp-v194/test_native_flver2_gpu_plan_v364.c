@@ -128,6 +128,31 @@ static void good_v364(void){
         &asset,vertex,1,index,1,draw,0,42,&counts));
     assert(!shyt_native_flver2_gpu_plan_v364(
         &asset,vertex,1,index,1,draw,1,42,NULL));
+    /* Output buffers cannot be placed inside the immutable model, or
+     * overlap each other, or alias the output stats structure. */
+    unsigned char guard_model[FILE_BYTES_V364];
+    memcpy(guard_model,model,sizeof(model));
+    assert(!shyt_native_flver2_gpu_plan_v364(
+        &asset,(ShytNativeGpuVertexSpanV364 *)(void *)(model+0x80),1,
+        index,1,draw,1,42,&counts));
+    assert(memcmp(model,guard_model,sizeof(model))==0);
+    assert(!shyt_native_flver2_gpu_plan_v364(
+        &asset,vertex,1,(ShytNativeGpuIndexSpanV364 *)(void *)vertex,1,
+        draw,1,42,&counts));
+    assert(!shyt_native_flver2_gpu_plan_v364(
+        &asset,vertex,1,index,1,
+        (ShytNativeGpuDrawV364 *)(void *)vertex,1,42,&counts));
+    /* No size-output pointer inside an immutable asset or staging region. */
+    assert(!shyt_native_flver2_gpu_requirements_v364(
+        &asset,(ShytNativeGpuUploadCountsV364 *)(void *)(model+0x80)));
+    assert(memcmp(model,guard_model,sizeof(model))==0);
+    assert(!shyt_native_flver2_stage_bytes_v364(
+        &asset,VERTICES_OFF_V364,6,destination,sizeof(destination),
+        (size_t *)(void *)destination));
+    assert(!shyt_native_flver2_stage_bytes_v364(
+        &asset,VERTICES_OFF_V364,6,destination,sizeof(destination),
+        (size_t *)(void *)(model+0x80)));
+    assert(memcmp(model,guard_model,sizeof(model))==0);
     /* Revalidate after source mutation: old stats may not be trusted. */
     write16_v364(model,VERTICES_OFF_V364+4,99);
     counts.vertex_buffers=88;
