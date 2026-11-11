@@ -54,7 +54,7 @@ index probe on caller-owned decoded resource memory. It:
   a generic loader and does not open arbitrary filesystem paths.
 
 `test_native_bnd4_index_v361.c` uses only invented synthetic data,
-including both extended modes, stored/compressed file flags, invalid
+including both extended modes, one- and two-bucket hash indices, stored/compressed file flags, invalid
 offsets, truncation, counters, malformed names, invalid hash
 descriptors, and names running into hash table. CI compiles and
 executes under Ubuntu (GCC and Clang) and Windows (clang-cl).
