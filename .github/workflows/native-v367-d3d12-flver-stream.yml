@@ -1,0 +1,78 @@
+name: Native V367 persistent D3D12 FLVER stream and GPU readback
+on:
+  push:
+    branches: [feature/native-v367-d3d12-shared-stream-20261111]
+    paths:
+      - '.github/workflows/native-v367-d3d12-flver-stream.yml'
+      - 'native/source-port/recomp-v194/native_d3d12_flver_stream_v367.*'
+      - 'native/source-port/recomp-v194/test_native_d3d12_flver_stream_v367.cpp'
+      - 'native/source-port/recomp-v194/native_fence_upload_ring_v366.*'
+      - 'native/source-port/recomp-v194/native_flver2_gpu_plan_v364.*'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-d3d12-warp-multifile-stream:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Compile source-only FLVER validation and GPU planning
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 /c "$src/native_flver2_geometry_v362.c" /Fo:flver_v362.obj
+          if ($LASTEXITCODE -ne 0) { throw 'V362 compile failed' }
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 /c "$src/native_flver2_gpu_plan_v364.c" /Fo:gpu_v364.obj
+          if ($LASTEXITCODE -ne 0) { throw 'V364 compile failed' }
+      - name: Compile real persistent D3D12 streaming backend and WARP readback
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TP /std:c++17 /EHsc /W4 /WX /O2 `
+            "$src/native_fence_upload_ring_v366.cpp" `
+            "$src/native_d3d12_flver_stream_v367.cpp" `
+            "$src/test_native_d3d12_flver_stream_v367.cpp" `
+            flver_v362.obj gpu_v364.obj d3d12.lib dxgi.lib `
+            /Fe:native-v367-warp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V367 Windows compile/link failed' }
+      - name: Verify multi-model GPU readback with WARP
+        shell: pwsh
+        run: |
+          & .\native-v367-warp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V367 WARP multi-model stream failed' }
+      - name: No proprietary game assets committed
+        shell: pwsh
+        run: |
+          if (Test-Path 'CUSA03173') { throw 'Private Bloodborne assets found' }
+          if (Test-Path 'Dark Souls III') { throw 'Private DS3 assets found' }
+          Write-Host 'NATIVE_V367_PUBLIC_SYNTHETIC_ONLY_PASS'
+  portable-ring-sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC Clang and sanitizers on ring API
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for cc in g++ clang++; do
+            "$cc" -std=c++17 -O2 -Wall -Wextra -Werror \
+              "$src/native_fence_upload_ring_v366.cpp" \
+              "$src/test_native_fence_upload_ring_v366.cpp" -o ring-test
+            ./ring-test
+          done
+          clang++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_fence_upload_ring_v366.cpp" \
+            "$src/test_native_fence_upload_ring_v366.cpp" -o ring-sanitized
+          ./ring-sanitized
+          echo 'NATIVE_V367_PORTABLE_RING_SANITIZER_PASS'
