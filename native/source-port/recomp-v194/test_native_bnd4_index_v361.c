@@ -126,6 +126,35 @@ int main(void) {
     le64w_v361(p+0x90,0xA8);
     p[0x9c]=0;rejects_v361(p,n);p[0x9c]=0x10;
     verifies_v361(p,n,1);
+
+    /* Two hash buckets and one file: verified DS3 archive uses this
+     * organization. Rebuild only invented bytes, never game content. */
+    n=invented_bnd_v361(p,1);
+    memmove(p+0xC0,p+0xB0,24u);
+    le64w_v361(p+40,0xC0u); /* header ends after 2 buckets + 1 hash */
+    le32w_v361(p+0x58,0xC0u);
+    le64w_v361(p+0x90,0xB0u); /* hash entries move after groups */
+    le32w_v361(p+0x98,2u); /* two buckets */
+    le32w_v361(p+0xA0,1u);
+    le32w_v361(p+0xA4,0u);
+    le32w_v361(p+0xA8,0u);
+    le32w_v361(p+0xAC,1u);
+    le32w_v361(p+0xB0,0x12345678u);
+    le32w_v361(p+0xB4,0u);
+    n=0xC0u+24u;
+    ShytNativeBnd4IndexV361 two_buckets={0};
+    ShytNativeBnd4FileV361 two_bucket_file={0};
+    assert(shyt_native_bnd4_index_probe_v361(p,n,&two_buckets));
+    assert(two_buckets.file_count==1 && two_buckets.extended==4);
+    assert(shyt_native_bnd4_file_at_v361(
+        p,n,&two_buckets,0,&two_bucket_file));
+    assert(two_bucket_file.data_offset==0xC0u &&
+           two_bucket_file.stored_bytes==24u);
+    le32w_v361(p+0xA8,1u); /* two groups claim same single file */
+    rejects_v361(p,n);
+    le32w_v361(p+0xA8,0u);
+    assert(shyt_native_bnd4_index_probe_v361(p,n,&two_buckets));
+
     /* Fails before touching memory on an impossible large archive. */
     rejects_v361(p,(size_t)(512ull*1024ull*1024ull+1ull));
     assert(!shyt_native_bnd4_index_probe_v361(p,n,NULL));
