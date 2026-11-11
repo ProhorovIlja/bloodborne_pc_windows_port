@@ -64,7 +64,7 @@ static void verifies_v361(unsigned char *p,size_t n,int extended) {
     ShytNativeBnd4IndexV361 index={0};
     ShytNativeBnd4FileV361 f={0};
     assert(shyt_native_bnd4_index_probe_v361(p,n,&index));
-    assert(index.file_count==1 && index.extended==(unsigned)extended);
+    assert(index.file_count==1 && index.extended==(unsigned)(extended?4:0));
     assert(index.header_end==(extended?0xB0u:0x90u));
     assert(shyt_native_bnd4_file_at_v361(p,n,&index,0,&f));
     assert(f.file_id==200 && f.name_utf16_offset==0x64);
