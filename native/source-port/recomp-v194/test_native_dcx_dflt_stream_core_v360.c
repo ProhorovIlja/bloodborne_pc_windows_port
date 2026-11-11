@@ -97,6 +97,29 @@ int main(void) {
     expect_success_v360(&source,output,UNPACKED+2,plaintext,UNPACKED);
     assert(source.calls>=4u);
 
+    /* Two real-world envelope families, represented by invented data:
+     * BB 1.09 uses 0x24/0x2C and DS3 uses 0x44/0x4C.
+     * No game-owned bytes appear in these fixtures. */
+    be32_v360(archive+16,0x24u);
+    be32_v360(archive+20,0x2cu);
+    expect_success_v360(&source,output,UNPACKED+2,plaintext,UNPACKED);
+    be32_v360(archive+20,0x4cu); /* wrong pair */
+    expect_refusal_v360(&source,output,UNPACKED+2);
+    be32_v360(archive+16,0x44u);
+    be32_v360(archive+20,0x2cu); /* wrong pair */
+    expect_refusal_v360(&source,output,UNPACKED+2);
+    be32_v360(archive+16,0x24u);
+    archive[48]=8u; /* 0x24 is only accepted for BB's level 9 */
+    expect_refusal_v360(&source,output,UNPACKED+2);
+    archive[48]=9u;
+    archive[56]=15u; /* reject another unknown 0x24 variant */
+    expect_refusal_v360(&source,output,UNPACKED+2);
+    archive[56]=0u;
+    expect_success_v360(&source,output,UNPACKED+2,plaintext,UNPACKED);
+    be32_v360(archive+16,0x44u);
+    be32_v360(archive+20,0x4cu);
+    expect_success_v360(&source,output,UNPACKED+2,plaintext,UNPACKED);
+
     /* Zero alignment bytes are permitted; nonzero hiding is not. */
     source.length=file_bytes+7;
     expect_success_v360(&source,output,UNPACKED+2,plaintext,UNPACKED);
