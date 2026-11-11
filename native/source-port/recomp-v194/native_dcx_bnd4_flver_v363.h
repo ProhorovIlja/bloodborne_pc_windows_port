@@ -45,6 +45,16 @@ int shyt_native_dcx_bnd4_open_v363(
 int shyt_native_dcx_bnd4_flver_at_v363(
     const ShytNativeDcxBnd4ViewV363 *view, uint32_t file_number,
     ShytNativeFlver2AssetV363 *out);
+/* Scan a validated BND4 for a supported little-endian FLVER2 payload,
+ * skipping other entry formats such as TPF and HKX. This matters for
+ * real Bloodborne character binders where FLVER is not entry zero.
+ * A FLVER-magic candidate that fails structural validation is an ERROR,
+ * not a reason to silently select another entry. Output is cleared on
+ * failure; *file_number is set to UINT32_MAX when supplied.
+ */
+int shyt_native_dcx_bnd4_first_flver_v363(
+    const ShytNativeDcxBnd4ViewV363 *view, uint32_t *file_number,
+    ShytNativeFlver2AssetV363 *out);
 #ifdef __cplusplus
 }
 #endif
