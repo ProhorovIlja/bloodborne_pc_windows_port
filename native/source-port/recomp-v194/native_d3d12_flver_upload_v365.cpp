@@ -54,6 +54,7 @@ UploadV365::~UploadV365() {
     }
 }
 bool UploadV365::ready() const noexcept {
+    if (failed) return false;
     if (!submitted) return true;
     if (!completion_fence) return false;
     const uint64_t value=completion_fence->GetCompletedValue();
@@ -61,7 +62,7 @@ bool UploadV365::ready() const noexcept {
     return value!=UINT64_MAX && value>=completion_value;
 }
 bool UploadV365::wait_for(uint32_t timeout_milliseconds) noexcept {
-    if (!submitted) return true;
+    if (!submitted) return !failed;
     if (!completion_fence) return false;
     if (completion_fence->GetCompletedValue()==UINT64_MAX) {
         /* The device is removed. No submitted GPU commands can finish.
@@ -70,6 +71,12 @@ bool UploadV365::wait_for(uint32_t timeout_milliseconds) noexcept {
         staging_upload.Reset();
         command_list.Reset();
         command_allocator.Reset();
+        gpu_buffer.Reset();
+        vertex_views.clear();
+        index_views.clear();
+        draws.clear();
+        uploaded_bytes=0;
+        failed=true;
         submitted=false;
         return false;
     }
