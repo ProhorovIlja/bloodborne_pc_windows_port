@@ -51,6 +51,7 @@ struct UploadV365 {
     Microsoft::WRL::ComPtr<ID3D12Fence> completion_fence;
     uint64_t completion_value = 0;
     bool submitted = false;
+    bool failed = false; /* device-lost state cannot masquerade as ready */
 };
 
 /* Enqueue an actual D3D12 GPU upload; NEVER blocks for GPU completion.
