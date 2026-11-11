@@ -57,7 +57,9 @@ typedef struct ShytNativeGpuUploadCountsV364 {
 /* Preflight exact capacities, not a GPU allocation. Zeroes output on error.
  * Re-runs V362 full validation so a forged/stale V363 geometry summary is
  * not trusted. The asset source must stay immutable during and after this
- * call until all staging copies finish. Never pass unvalidated game bytes.
+ * call until all staging copies finish. The stats output must never overlap
+ * the model source; that invalid pointer combination is refused without
+ * writing to the aliased output. Never pass unvalidated game bytes.
  */
 int shyt_native_flver2_gpu_requirements_v364(
     const ShytNativeFlver2AssetV363 *asset,
@@ -68,8 +70,10 @@ int shyt_native_flver2_gpu_requirements_v364(
  * Returns failure if any output capacity or staging budget is too small.
  * Staging ranges are 4-byte aligned for portable graphics backends; zero-
  * length buffers must not result in zero-size GPU copy commands.
- * On failure, summary
- * is zero and partial output arrays MUST NOT be used.
+ * All descriptor output arrays must be mutually disjoint and disjoint
+ * from the model source and result struct. On failure, summary is zero
+ * (unless the summary aliases immutable source, which is a rejected
+ * caller contract violation) and partial arrays MUST NOT be used.
  */
 int shyt_native_flver2_gpu_plan_v364(
     const ShytNativeFlver2AssetV363 *asset,
@@ -83,7 +87,9 @@ int shyt_native_flver2_gpu_plan_v364(
  * No GPU operation occurs here. Destination MUST NOT alias ANY part of
  * caller-owned source model. Exactly bytes is written or nothing is written;
  * capacity/offset/overlap must all pass before memcpy. Caller keeps staging
- * alive until the backend has completed the transfer (GPU fence).
+ * alive until the backend has completed the transfer (GPU fence). The
+ * `written` size output must never alias the model or destination. Invalid
+ * aliasing is rejected without writing that size output.
  */
 int shyt_native_flver2_stage_bytes_v364(
     const ShytNativeFlver2AssetV363 *asset,
