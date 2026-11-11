@@ -1,0 +1,55 @@
+name: Native V361 BND4 index bounds (no EBOOT)
+on:
+  push:
+    branches: [feature/native-v361-safe-bnd4-index-20261111]
+    paths:
+      - '.github/workflows/native-v361-bnd4-index.yml'
+      - 'native/source-port/recomp-v194/native_bnd4_index_v361.*'
+      - 'native/source-port/recomp-v194/test_native_bnd4_index_v361.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-bnd4-index:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Compile and run narrow source-only BND4 index
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          if [ "$RUNNER_OS" = Windows ]; then
+            MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+              /nologo /TC /std:c11 /W4 /WX /O2 \
+              "$src/native_bnd4_index_v361.c" \
+              "$src/test_native_bnd4_index_v361.c" \
+              /Fe:./native-v361-bnd4.exe
+            ./native-v361-bnd4.exe
+          else
+            clang -std=c11 -O2 -Wall -Wextra -Werror \
+              "$src/native_bnd4_index_v361.c" \
+              "$src/test_native_bnd4_index_v361.c" \
+              -o ./native-v361-bnd4-clang
+            ./native-v361-bnd4-clang
+            gcc -std=c11 -O2 -Wall -Wextra -Werror \
+              "$src/native_bnd4_index_v361.c" \
+              "$src/test_native_bnd4_index_v361.c" \
+              -o ./native-v361-bnd4-gcc
+            ./native-v361-bnd4-gcc
+          fi
+      - name: Ensure no private original assets shipped
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e "Dark Souls III"
+          echo NATIVE_V361_PUBLIC_SYNTHETIC_ONLY_PASS
