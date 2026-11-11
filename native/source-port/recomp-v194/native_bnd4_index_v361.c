@@ -25,7 +25,7 @@ static int bounded_v361(uint64_t start, uint64_t count, uint64_t limit) {
 }
 static int safe_file_v361(
     const unsigned char *p, uint64_t bytes, uint64_t headers_end,
-    uint64_t records_end, uint32_t number,
+    uint64_t records_end, uint64_t names_end, uint32_t number,
     ShytNativeBnd4FileV361 *out) {
     const uint64_t record=(uint64_t)SHYT_BND4_HEADER_V361+
                           (uint64_t)number*SHYT_BND4_RECORD_V361;
@@ -51,7 +51,7 @@ static int safe_file_v361(
           !bounded_v361(data_offset,stored,bytes))) ||
         (stored==0 && data_offset!=0 && data_offset<headers_end) ||
         (stored==0 && !bounded_v361(data_offset,0,bytes)) ||
-        name_offset<records_end || name_offset>=headers_end ||
+        name_offset<records_end || name_offset>=names_end ||
         (name_offset&1u))
         return 0;
     /* Names are UTF16LE, NUL-terminated inside the INDEX area. Do not
@@ -60,7 +60,7 @@ static int safe_file_v361(
     uint64_t pos=name_offset;
     uint32_t code_units=0;
     int terminated=0;
-    while(bounded_v361(pos,2,headers_end)) {
+    while(bounded_v361(pos,2,names_end)) {
         if (p[(size_t)pos]==0 && p[(size_t)pos+1]==0) {
             terminated=1;
             break;
@@ -148,7 +148,7 @@ int shyt_native_bnd4_index_probe_v361(
     }
     for (uint32_t i=0;i<count;++i) {
         if (!safe_file_v361(p,(uint64_t)bytes,headers_end,
-                            records_end,i,0))
+                            records_end,p[50]==4u?hash_offset:headers_end,i,0))
             return 0;
     }
     out->file_count=count;
@@ -174,5 +174,7 @@ int shyt_native_bnd4_file_at_v361(
     if (records_end>index->header_end)
         return 0;
     return safe_file_v361((const unsigned char *)data,
-        (uint64_t)bytes,index->header_end,records_end,file_number,out);
+        (uint64_t)bytes,index->header_end,records_end,
+        index->extended==4u?index->hash_table_offset:index->header_end,
+        file_number,out);
 }
