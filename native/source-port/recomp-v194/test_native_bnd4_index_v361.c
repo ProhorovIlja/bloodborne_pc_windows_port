@@ -112,6 +112,12 @@ int main(void) {
     assert(file.compressed==1 && file.original_bytes==99);
     n=invented_bnd_v361(p,1);
     verifies_v361(p,n,1);
+    /* An unterminated name cannot run into the hash table, even if that
+     * table contains zero bytes that would look like a UTF16 NUL. */
+    for(size_t i=0x64;i<0x90;++i) p[i]='x';
+    rejects_v361(p,n);
+    n=invented_bnd_v361(p,1);
+    verifies_v361(p,n,1);
     le32w_v361(p+0xA0,2);rejects_v361(p,n);
     le32w_v361(p+0xA0,1);
     le32w_v361(p+0xAC,7);rejects_v361(p,n);
