@@ -1,0 +1,102 @@
+name: Native V363 end-to-end DCX BND4 FLVER2 (no EBOOT)
+on:
+  push:
+    branches: [feature/native-v363-dcx-bnd4-flver-pipeline-20261111]
+    paths:
+      - '.github/workflows/native-v363-asset-pipeline.yml'
+      - 'native/source-port/recomp-v194/native_dcx_bnd4_flver_v363.*'
+      - 'native/source-port/recomp-v194/test_native_dcx_bnd4_flver_v363.c'
+      - 'native/source-port/recomp-v194/native_dcx_dflt_header_v354.*'
+      - 'native/source-port/recomp-v194/native_dcx_dflt_stream_core_v360.*'
+      - 'native/source-port/recomp-v194/native_bnd4_index_v361.*'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cross-platform-data-only-pipeline:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: madler/zlib
+          ref: 51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf
+          path: public-zlib-v131
+          persist-credentials: false
+      - name: Build pinned public zlib 1.3.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-zlib-v131 rev-parse HEAD)" = 51b7f2abdade71cd9bb0e7a373ef2610ec6f9daf
+          grep -Fq '#define ZLIB_VERSION "1.3.1"' public-zlib-v131/zlib.h
+          if [ "$RUNNER_OS" = Windows ]; then
+            cmake -S public-zlib-v131 -B zlib-build \
+              -G "Visual Studio 17 2022" -A x64 \
+              -DZLIB_BUILD_EXAMPLES=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+              >v363-build.log 2>&1 || { tail -n 8 v363-build.log; exit 1; }
+            cmake --build zlib-build --config Release --target zlibstatic \
+              >>v363-build.log 2>&1 || { tail -n 8 v363-build.log; exit 1; }
+            test -s zlib-build/Release/zlibstatic.lib
+          else
+            cmake -S public-zlib-v131 -B zlib-build \
+              -DCMAKE_BUILD_TYPE=Release -DZLIB_BUILD_EXAMPLES=OFF \
+              -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+              >v363-build.log 2>&1 || { tail -n 8 v363-build.log; exit 1; }
+            cmake --build zlib-build --target zlibstatic --parallel 2 \
+              >>v363-build.log 2>&1 || { tail -n 8 v363-build.log; exit 1; }
+            test -s zlib-build/libz.a
+          fi
+      - name: Compile and run complete synthetic native pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          common=(
+            "$src/native_dcx_dflt_header_v354.c"
+            "$src/native_dcx_dflt_stream_core_v360.c"
+            "$src/native_bnd4_index_v361.c"
+            "$src/native_flver2_geometry_v362.c"
+            "$src/native_dcx_bnd4_flver_v363.c"
+            "$src/test_native_dcx_bnd4_flver_v363.c"
+          )
+          if [ "$RUNNER_OS" = Windows ]; then
+            MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+              /nologo /TC /std:c11 /W4 /WX /O2 \
+              "/I$src" /Ipublic-zlib-v131 /Izlib-build \
+              "${common[@]}" zlib-build/Release/zlibstatic.lib \
+              /Fe:./native-v363-win64.exe >v363-compile.log 2>&1 || \
+              { tail -n 12 v363-compile.log; exit 1; }
+            ./native-v363-win64.exe
+          else
+            clang -std=c11 -O2 -Wall -Wextra -Werror \
+              -I"$src" -Ipublic-zlib-v131 -Izlib-build \
+              "${common[@]}" zlib-build/libz.a \
+              -o ./native-v363-clang
+            ./native-v363-clang
+            gcc -std=c11 -O2 -Wall -Wextra -Werror \
+              -I"$src" -Ipublic-zlib-v131 -Izlib-build \
+              "${common[@]}" zlib-build/libz.a \
+              -o ./native-v363-gcc
+            ./native-v363-gcc
+            clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+              -fsanitize=address,undefined -fno-omit-frame-pointer \
+              -I"$src" -Ipublic-zlib-v131 -Izlib-build \
+              "${common[@]}" zlib-build/libz.a -o ./native-v363-sanitized
+            ./native-v363-sanitized
+          fi
+      - name: Ensure original game resources are never checked into CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e "Dark Souls III"
+          echo "NATIVE_V363_PUBLIC_SYNTHETIC_ONLY_PIPELINE_PASS"
