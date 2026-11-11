@@ -304,9 +304,8 @@ bool D3D12FlverStreamV367::submit_flver(
         *out=std::move(result);
         return true;
     } catch (const std::bad_alloc&) {
-        /* In normal OOM paths no commands were submitted. See docs:
-         * pending-container insertion is the final allocating operation
-         * before ExecuteCommandLists. */
+        /* The last allocation occurs before queue submission. */
+        if (reserved && !lost_) ring_->cancel(slice);
         return false;
     }
 }
