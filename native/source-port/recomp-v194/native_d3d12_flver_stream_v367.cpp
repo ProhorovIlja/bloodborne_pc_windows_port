@@ -161,6 +161,8 @@ bool D3D12FlverStreamV367::submit_flver(
         counts.draws>kMaxDraws ||
         counts.staging_bytes_total>ring_->capacity())
         return false;
+    shyt_native_v366::RingSliceV366 slice{};
+    bool reserved=false;
     try {
         auto result=std::make_unique<UploadedModelV367>();
         std::vector<ShytNativeGpuVertexSpanV364> vertices(counts.vertex_buffers);
@@ -179,8 +181,8 @@ bool D3D12FlverStreamV367::submit_flver(
             *out=std::move(result);
             return true;
         }
-        shyt_native_v366::RingSliceV366 slice{};
         if (!ring_->reserve(plan.staging_bytes_total,4,&slice)) return false;
+        reserved=true;
         /* Every failure before ExecuteCommandLists may undo reservation.
          * Do not use ring.cancel once GPU execution has been enqueued. */
         bool staged=true;
@@ -211,6 +213,7 @@ bool D3D12FlverStreamV367::submit_flver(
         }
         if (!staged) {
             ring_->cancel(slice);
+            reserved=false;
             return false;
         }
         const auto default_props=heap_v367(D3D12_HEAP_TYPE_DEFAULT);
@@ -228,18 +231,20 @@ bool D3D12FlverStreamV367::submit_flver(
                 0,D3D12_COMMAND_LIST_TYPE_DIRECT,pending.allocator.Get(),
                 nullptr,IID_PPV_ARGS(&pending.list)))) {
             ring_->cancel(slice);
+            reserved=false;
             return false;
         }
         const auto gpu=result->gpu_buffer->GetGPUVirtualAddress();
         if (!gpu || gpu>UINT64_MAX-plan.staging_bytes_total) {
             ring_->cancel(slice);
+            reserved=false;
             return false;
         }
         result->vertices.reserve(vertices.size());
         result->indices.reserve(indices.size());
         for (const auto& v:vertices) {
             if (!bounded_v367(v.staging_offset,v.bytes,plan.staging_bytes_total)) {
-                ring_->cancel(slice);return false;
+                ring_->cancel(slice);reserved=false;return false;
             }
             D3D12_VERTEX_BUFFER_VIEW view{};
             view.BufferLocation=gpu+v.staging_offset;
@@ -250,7 +255,7 @@ bool D3D12FlverStreamV367::submit_flver(
         for (const auto& i:indices) {
             if (!bounded_v367(i.staging_offset,i.bytes,plan.staging_bytes_total) ||
                 (i.index_element_bytes!=2 && i.index_element_bytes!=4)) {
-                ring_->cancel(slice);return false;
+                ring_->cancel(slice);reserved=false;return false;
             }
             D3D12_INDEX_BUFFER_VIEW view{};
             view.BufferLocation=gpu+i.staging_offset;
@@ -272,6 +277,7 @@ bool D3D12FlverStreamV367::submit_flver(
         pending.list->ResourceBarrier(1,&barrier);
         if (FAILED(pending.list->Close())) {
             ring_->cancel(slice);
+            reserved=false;
             return false;
         }
         pending.destination=result->gpu_buffer;
@@ -292,6 +298,7 @@ bool D3D12FlverStreamV367::submit_flver(
             lost_=true;  // fail closed: an enqueued slice cannot be cancelled
             return false;
         }
+        reserved=false;
         next_fence_=signal_value;
         result->fence=signal_value;
         *out=std::move(result);
