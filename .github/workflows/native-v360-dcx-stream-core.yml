@@ -54,6 +54,7 @@ jobs:
             cmake --build zlib-build --target zlibstatic --parallel 2 \
               >>v360-build.log 2>&1 || { tail -n 4 v360-build.log; exit 1; }
             test -s zlib-build/libz.a
+          fi
       - name: Run real portable decoder and existing Win32 integration fixture
         shell: bash
         run: |
