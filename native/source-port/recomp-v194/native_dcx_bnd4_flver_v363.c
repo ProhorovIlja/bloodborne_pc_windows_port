@@ -52,3 +52,32 @@ int shyt_native_dcx_bnd4_flver_at_v363(
     out->geometry = geometry;
     return 1;
 }
+
+int shyt_native_dcx_bnd4_first_flver_v363(
+    const ShytNativeDcxBnd4ViewV363 *view, uint32_t *file_number,
+    ShytNativeFlver2AssetV363 *out) {
+    if (file_number) *file_number = UINT32_MAX;
+    if (!out) return 0;
+    memset(out,0,sizeof(*out));
+    if (!view || !view->decoded_bnd4 || !file_number) return 0;
+    for (uint32_t i=0;i<view->index.file_count;++i) {
+        ShytNativeBnd4FileV361 entry;
+        if (!shyt_native_bnd4_file_at_v361(
+                view->decoded_bnd4,view->decoded_bytes,
+                &view->index,i,&entry)) return 0;
+        /* Per-file compressed entries require a separate, not-yet-
+         * implemented decoder. Do not guess their contents. */
+        if (entry.compressed || entry.stored_bytes<8u) continue;
+        if (entry.data_offset>view->decoded_bytes ||
+            entry.stored_bytes>view->decoded_bytes-entry.data_offset ||
+            entry.stored_bytes>SIZE_MAX) return 0;
+        const unsigned char *candidate =
+            view->decoded_bnd4 + (size_t)entry.data_offset;
+        if (memcmp(candidate,"FLVER\0L\0",8)!=0) continue;
+        if (!shyt_native_dcx_bnd4_flver_at_v363(view,i,out))
+            return 0;
+        *file_number=i;
+        return 1;
+    }
+    return 0;
+}
