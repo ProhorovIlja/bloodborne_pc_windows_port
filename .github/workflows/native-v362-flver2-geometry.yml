@@ -1,0 +1,61 @@
+name: Native V362 FLVER2 geometry bounds and index validation
+on:
+  push:
+    branches: [feature/native-v362-flver2-geometry-contract-20261111]
+    paths:
+      - '.github/workflows/native-v362-flver2-geometry.yml'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+      - 'native/source-port/recomp-v194/test_native_flver2_geometry_v362.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-flver2-geometry:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Compile and execute invented geometry fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          if [ "$RUNNER_OS" = Windows ]; then
+            MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+              /nologo /TC /std:c11 /W4 /WX /O2 \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/test_native_flver2_geometry_v362.c" \
+              /Fe:./native-v362-flver2.exe
+            ./native-v362-flver2.exe
+          else
+            clang -std=c11 -O2 -Wall -Wextra -Werror -Wconversion \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/test_native_flver2_geometry_v362.c" \
+              -o ./native-v362-clang
+            ./native-v362-clang
+            gcc -std=c11 -O2 -Wall -Wextra -Werror \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/test_native_flver2_geometry_v362.c" \
+              -o ./native-v362-gcc
+            ./native-v362-gcc
+            clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+              -fsanitize=address,undefined -fno-omit-frame-pointer \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/test_native_flver2_geometry_v362.c" \
+              -o ./native-v362-sanitized
+            ./native-v362-sanitized
+          fi
+      - name: Verify no private game resources are part of CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e "Dark Souls III"
+          echo NATIVE_V362_FLVER2_PUBLIC_SYNTHETIC_SOURCE_ONLY_PASS
