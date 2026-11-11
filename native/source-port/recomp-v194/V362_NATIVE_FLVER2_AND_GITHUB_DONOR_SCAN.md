@@ -47,6 +47,42 @@ This pass searched repository names/description and known upstream layouts for F
 
 Use licenses/provenance/third-party obligations **per file** before copying code. The new C parser is independently authored based on format observations and public structural descriptions; no third-party source files were pasted into it.
 
+## Additional PR and branch review (not limited to default branches)
+
+Global GitHub PR search identified useful changes that would have been missed
+by looking at only a repository's README:
+
+- [SoulsFormatsNEXT PR #56](https://github.com/soulsmods/SoulsFormatsNEXT/pull/56)
+  (merged, 2026-08-13): FLVER2 can be inspected **without fully
+  materializing vertices**; consumers can manage GPU buffer IO themselves.
+  V362 follows the same principle but is an independent C validator.
+  Future data ownership and GPU uploads should maintain this separation.
+- [SoulsFormatsNEXT PR #58](https://github.com/soulsmods/SoulsFormatsNEXT/pull/58)
+  (merged, 2026-10-24): temporary allocations removed from its reader,
+  pooled buffers and span-based paths. Investigate a bounded slice/cache
+  approach for our native asset streamer instead of per-file copies;
+  do not import .NET runtime structures.
+- [SoulsFormatsNEXT PR #55](https://github.com/soulsmods/SoulsFormatsNEXT/pull/55)
+  (merged, 2026-07-01): multiple vertex positions/normals for cloth.
+  Ensure future FLVER vertex decoder supports repeated semantics; V362
+  **does not decode** these values and should never claim compatibility.
+- [SoulsFormatsNEXT PR #39](https://github.com/soulsmods/SoulsFormatsNEXT/pull/39)
+  (merged, 2025-08-04): material tiling U/V properties were previously
+  misnamed; keep PC material settings tied to observed semantics.
+- [Paleblood PR #496](https://github.com/Yharnam-Hunters/Paleblood/pull/496)
+  (closed without merge as of this review): compressed BC1/BC4 Vulkan
+  images must not be initialized using invalid `vkCmdClearColorImage`
+  operations. Validate upload transitions with `VK_LAYER_KHRONOS_validation`.
+  Treat as a candidate regression, not proof the fix was merged.
+- [Paleblood PR #560](https://github.com/Yharnam-Hunters/Paleblood/pull/560)
+  (open draft, 2026-11-11): engine-specific opaque auto-draw packet
+  reconstruction; gameplay reachability and GPU execution are explicitly
+  unverified. Do not transplant as a known renderer fix.
+
+These are tracked **research inputs**, not silently merged code.
+Any reuse requires independent reproduction, license compatibility and
+real Bloodborne 1.09 test evidence.
+
 ## Priorities after V362
 
 1. Validate the complete V360→V361→V362 flow on synthetic end-to-end resources and a larger private sample set, with guards against malformed BND entry ranges; build native mesh upload descriptors with explicit lifetime ownership.
