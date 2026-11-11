@@ -167,6 +167,11 @@ static void run_case_v363(int extended,int bloodborne_header) {
     assert(source.calls==before); /* no repeated I/O or DCX inflation */
     assert(asset.file.file_id==200u && asset.flver_bytes==V363_FLVER_BYTES);
     assert(asset.flver==scratch+asset.file.data_offset);
+    uint32_t discovered=UINT32_MAX;
+    ShytNativeFlver2AssetV363 found={0};
+    assert(shyt_native_dcx_bnd4_first_flver_v363(&v,&discovered,&found));
+    assert(discovered==0u && found.flver==asset.flver);
+    assert(source.calls==before); /* discovery is memory-only */
     assert(asset.geometry.mesh_count==1u && asset.geometry.total_vertices==3u &&
            asset.geometry.total_index_elements==3u &&
            asset.geometry.validated_vertex_bytes==36u);
@@ -183,6 +188,9 @@ static void run_case_v363(int extended,int bloodborne_header) {
     memset(&asset,0xA5,sizeof(asset));
     assert(!shyt_native_dcx_bnd4_flver_at_v363(&v,0u,&asset));
     assert(asset.flver==NULL && asset.flver_bytes==0);
+    discovered=0u;
+    assert(!shyt_native_dcx_bnd4_first_flver_v363(&v,&discovered,&found));
+    assert(discovered==UINT32_MAX && found.flver==NULL);
     /* Corrupt a triangle index: BND opens, FLVER rejects the model. */
     bnd[0x40]=0x40;
     bnd[(extended?0xB0u:0x90u)+V363_FLVER_DATA+4u]=8u;
@@ -191,6 +199,9 @@ static void run_case_v363(int extended,int bloodborne_header) {
     assert(shyt_native_dcx_bnd4_open_v363(
         reader_v363,&source,source.bytes,scratch,sizeof(scratch),&v));
     assert(!shyt_native_dcx_bnd4_flver_at_v363(&v,0u,&asset));
+    discovered=0u;
+    assert(!shyt_native_dcx_bnd4_first_flver_v363(&v,&discovered,&found));
+    assert(discovered==UINT32_MAX && found.flver==NULL);
     bnd[(extended?0xB0u:0x90u)+V363_FLVER_DATA+4u]=2u;
     /* A malformed decoded BND must not publish an asset view. */
     bnd[0]='X';
@@ -214,9 +225,82 @@ static void run_case_v363(int extended,int bloodborne_header) {
     assert(shyt_native_dcx_bnd4_open_v363(
         reader_v363,&source,source.bytes,scratch,sizeof(scratch),&v));
 }
+static size_t make_bnd_mixed_v363(unsigned char *p) {
+    memset(p,0,1024u);
+    memcpy(p,"BND4",4);
+    p[10]=1;
+    w32_v363(p,12,3u);
+    w64_v363(p,16,0x40u);
+    memcpy(p+24,"TESTMIX3",8);
+    w64_v363(p,32,0x24u);
+    w64_v363(p,40,0x110u);
+    p[48]=1; p[49]=0x74;
+    const uint32_t offsets[]={0x110u,0x120u,0x2d4u};
+    const uint32_t sizes[]={16u,V363_FLVER_BYTES,8u};
+    const uint32_t names[]={0xb0u,0xc8u,0xe0u};
+    const char *const filenames[]={"fake.tpf","fake.flver","fake.hkx"};
+    for (unsigned i=0;i<3u;++i) {
+        const size_t rec=0x40u+(size_t)i*0x24u;
+        p[rec]=0x40u;
+        w32_v363(p,rec+4u,0xFFFFFFFFu);
+        w64_v363(p,rec+8u,sizes[i]);
+        w64_v363(p,rec+16u,sizes[i]);
+        w32_v363(p,rec+24u,offsets[i]);
+        w32_v363(p,rec+28u,(i+1u)*100u);
+        w32_v363(p,rec+32u,names[i]);
+        const size_t count=strlen(filenames[i]);
+        assert(count<11u);
+        for (size_t j=0;j<=count;++j) {
+            p[names[i]+j*2u]=(unsigned char)filenames[i][j];
+            p[names[i]+j*2u+1u]=0;
+        }
+    }
+    memcpy(p+0x110u,"TPF0inventedXXXX",16u);
+    make_flver_v363(p+0x120u);
+    memcpy(p+0x2d4u,"HKX0xxxx",8u);
+    return 0x2dcu;
+}
+static void run_mixed_v363(void) {
+    unsigned char bnd[1024u],dcx[2048u],scratch[1024u];
+    const size_t bnd_bytes=make_bnd_mixed_v363(bnd);
+    const size_t packed=make_dcx_v363(dcx,bnd,bnd_bytes,1);
+    SourceV363 source={dcx,packed,0u,0u};
+    ShytNativeDcxBnd4ViewV363 view={0};
+    assert(shyt_native_dcx_bnd4_open_v363(
+        reader_v363,&source,source.bytes,scratch,sizeof(scratch),&view));
+    assert(view.index.file_count==3u);
+    ShytNativeFlver2AssetV363 asset={0};
+    assert(!shyt_native_dcx_bnd4_flver_at_v363(&view,0u,&asset));
+    uint32_t discovered=UINT32_MAX;
+    unsigned previous_reads=source.calls;
+    assert(shyt_native_dcx_bnd4_first_flver_v363(&view,&discovered,&asset));
+    assert(discovered==1u && asset.file.file_id==200u &&
+           asset.geometry.mesh_count==1u &&
+           asset.geometry.total_vertices==3u);
+    assert(source.calls==previous_reads);
+    assert(!shyt_native_dcx_bnd4_flver_at_v363(&view,2u,&asset));
+    assert(asset.flver==NULL);
+    /* Failed FLVER selection must not accidentally fall through to HKX. */
+    bnd[0x120u+V363_FLVER_DATA+4u]=99u;
+    source.bytes=make_dcx_v363(dcx,bnd,bnd_bytes,1);
+    assert(shyt_native_dcx_bnd4_open_v363(
+        reader_v363,&source,source.bytes,scratch,sizeof(scratch),&view));
+    discovered=0u;
+    assert(!shyt_native_dcx_bnd4_first_flver_v363(&view,&discovered,&asset));
+    assert(discovered==UINT32_MAX && asset.flver==NULL);
+    /* A 3-entry binder may not contain a model at all. */
+    bnd[0x120u]='X';
+    source.bytes=make_dcx_v363(dcx,bnd,bnd_bytes,1);
+    assert(shyt_native_dcx_bnd4_open_v363(
+        reader_v363,&source,source.bytes,scratch,sizeof(scratch),&view));
+    discovered=0u;
+    assert(!shyt_native_dcx_bnd4_first_flver_v363(&view,&discovered,&asset));
+    assert(discovered==UINT32_MAX && asset.flver==NULL);
+}
 int main(void) {
     run_case_v363(0,1); /* Bloodborne envelope, BND4 no hash */
     run_case_v363(1,0); /* Dark Souls III envelope, BND4 extended hash */
+    run_mixed_v363(); /* Bloodborne character TPF -> FLVER -> HKX */
     puts("NATIVE_V363_SYNTHETIC_DCX_BND4_FLVER_PIPELINE_PASS");
     return 0;
 }
