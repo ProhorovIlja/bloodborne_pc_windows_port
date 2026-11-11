@@ -1,0 +1,59 @@
+name: Native V364 renderer-neutral GPU staging contracts
+on:
+  push:
+    branches: [feature/native-v364-renderer-neutral-gpu-staging-20261111]
+    paths:
+      - '.github/workflows/native-v364-gpu-staging.yml'
+      - 'native/source-port/recomp-v194/native_flver2_gpu_plan_v364.*'
+      - 'native/source-port/recomp-v194/test_native_flver2_gpu_plan_v364.c'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-upload-contracts:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Compile and test data-only upload planner
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          sources=(
+            "$src/native_flver2_geometry_v362.c"
+            "$src/native_flver2_gpu_plan_v364.c"
+            "$src/test_native_flver2_gpu_plan_v364.c"
+          )
+          if [ "$RUNNER_OS" = Windows ]; then
+            MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' clang-cl \
+              /nologo /TC /std:c11 /W4 /WX /O2 \
+              "/I$src" "${sources[@]}" /Fe:./native-v364.exe
+            ./native-v364.exe
+          else
+            clang -std=c11 -O2 -Wall -Wextra -Werror -Wconversion \
+              -I"$src" "${sources[@]}" -o ./native-v364-clang
+            ./native-v364-clang
+            gcc -std=c11 -O2 -Wall -Wextra -Werror -Wconversion \
+              -I"$src" "${sources[@]}" -o ./native-v364-gcc
+            ./native-v364-gcc
+            clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+              -fsanitize=address,undefined -fno-omit-frame-pointer \
+              -I"$src" "${sources[@]}" -o ./native-v364-sanitized
+            ./native-v364-sanitized
+          fi
+      - name: Prevent accidental private resource publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e "Dark Souls III"
+          echo NATIVE_V364_SYNTHETIC_GPU_STAGING_SOURCE_GATE_PASS
