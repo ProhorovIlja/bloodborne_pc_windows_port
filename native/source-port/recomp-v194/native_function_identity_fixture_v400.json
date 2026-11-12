@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "scope": "invented-only",
+  "upstream_revision": "8f31ec7c41f252730c6325d52647046baef7549f",
+  "image_sha256": "a87ec8ea0ede452e068c5d6529a88e0759e3738bec917c6624437e10051505af",
+  "image_base": "0x400000",
+  "hash_algorithm": "bbcpu_recomp_hash_fnv1a64_no_tcb",
+  "functions": [
+    {
+      "offset": "0x1000",
+      "code_hex": "f0480fb137c3",
+      "size": 6,
+      "expected_hash": "0xcaf2b035bd6212e7"
+    },
+    {
+      "offset": "0x1020",
+      "code_hex": "f30f6f07c3",
+      "size": 5,
+      "expected_hash": "0x52a0aa93ab618e9a"
+    },
+    {
+      "offset": "0x1040",
+      "code_hex": "f30f7f07c3",
+      "size": 5,
+      "expected_hash": "0xc807fa935cdff0ea"
+    },
+    {
+      "offset": "0x1060",
+      "code_hex": "c5fe6f07c3",
+      "size": 5,
+      "expected_hash": "0xd3a4d7bcf8b8f381"
+    },
+    {
+      "offset": "0x1080",
+      "code_hex": "c5fe7f07c3",
+      "size": 5,
+      "expected_hash": "0x490c27bcaa3755d1"
+    },
+    {
+      "offset": "0x10a0",
+      "code_hex": "ffd0c3",
+      "size": 3,
+      "expected_hash": "0xfa30281be4fbf37b"
+    },
+    {
+      "offset": "0x10c0",
+      "code_hex": "ffd0c3",
+      "size": 3,
+      "expected_hash": "0xfa30281be4fbf37b"
+    }
+  ]
+}
