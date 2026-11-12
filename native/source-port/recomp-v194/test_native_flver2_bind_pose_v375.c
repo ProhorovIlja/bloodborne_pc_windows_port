@@ -65,6 +65,19 @@ static void positive(void) {
     assert(approx(out[1].world[12],-1.0f)&&approx(out[1].world[13],0.0f));
     assert(approx(out[2].world[12],-2.0f)&&approx(out[2].world[13],0.0f));
     assert(approx(out[0].world[0],0.0f) && approx(out[0].world[1],1.0f));
+    /* Probe X then Z then Y Euler order, non-uniform parent scale and
+     * parent-space child translation, independently of the Z-only case. */
+    fixture(p);
+    wrf(p,BONE_START+16+0,1.5707963267948966f); /* rotation X */
+    wrf(p,BONE_START+16+4,1.5707963267948966f); /* rotation Y */
+    wrf(p,BONE_START+16+8,0.0f); /* no Z */
+    wrf(p,BONE_START+32,2.0f);
+    wrf(p,BONE_START+36,3.0f);
+    wrf(p,BONE_START+40,4.0f);
+    assert(shyt_native_flver2_bind_pose_v375(p,sizeof p,out,BONES,&stats));
+    assert(approx(out[1].world[12],7.0f));
+    assert(approx(out[1].world[13],0.0f) && approx(out[1].world[14],0.0f));
+    fixture(p);
     /* Parent indices need not precede child records. */
     bone(p,0,-1,2,-1,-1,NAME_START);
     bone(p,1,2,-1,-1,-1,NAME_START+16);
