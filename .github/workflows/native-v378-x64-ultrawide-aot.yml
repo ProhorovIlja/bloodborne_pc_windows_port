@@ -1,0 +1,90 @@
+name: Native V378 x64 arbitrary display aspects and private AOT gap gates
+on:
+  push:
+    branches: [feature/native-v378-x64-dynamic-display-20261112]
+    paths:
+      - '.github/workflows/native-v378-x64-ultrawide-aot.yml'
+      - 'native/source-port/recomp-v194/native_display_contract_v378.*'
+      - 'native/source-port/recomp-v194/test_native_display_contract_v378.c'
+      - 'native/source-port/recomp-v194/native_aot_closure_dashboard_v378.py'
+      - 'native/source-port/recomp-v194/test_native_aot_closure_dashboard_v378.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-native-x64-aspect-and-private-safe-aot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Linux GCC and Clang C11 64-bit display modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir=native/source-port/recomp-v194
+          for compiler in gcc clang; do
+            "$compiler" -std=c11 -O2 -Wall -Wextra -Werror \
+              "$source_dir/native_display_contract_v378.c" \
+              "$source_dir/test_native_display_contract_v378.c" \
+              -lm -o native-display-v378
+            ./native-display-v378
+          done
+      - name: Linux ASan UBSan rendering-layout contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$source_dir/native_display_contract_v378.c" \
+            "$source_dir/test_native_display_contract_v378.c" \
+            -lm -o native-display-v378-san
+          ./native-display-v378-san
+      - name: AOT scanner/COFF privacy gates, synthetic-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir=native/source-port/recomp-v194
+          PYTHONDONTWRITEBYTECODE=1 python3 "$source_dir/test_native_aot_closure_dashboard_v378.py"
+          PYTHONDONTWRITEBYTECODE=1 python3 "$source_dir/verify_generated_coverage_v207.py" --self-test
+          PYTHONDONTWRITEBYTECODE=1 python3 "$source_dir/test_private_coff_symbol_closure_v287.py"
+          status=$(PYTHONDONTWRITEBYTECODE=1 python3 "$source_dir/native_aot_closure_dashboard_v378.py")
+          python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["strict_native_game_ready"] is False and len(d["blockers"])>=5' "$status"
+          echo 'NATIVE_V378_AOT_REAL_GAME_NOT_PROMOTED_PASS'
+  windows-native-amd64-display:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Windows AMD64 clang-cl C11 resolution, aspect and target reuse contracts
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$src/native_display_contract_v378.c" `
+            "$src/test_native_display_contract_v378.c" `
+            /Fe:native-display-v378.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V378 native AMD64 display compile failed' }
+          & .\native-display-v378.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V378 Windows display contract failed' }
+      - name: Windows synthetic-only AOT disclosure gate
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          $env:PYTHONDONTWRITEBYTECODE='1'
+          & python "$src/test_native_aot_closure_dashboard_v378.py"
+          if ($LASTEXITCODE -ne 0) { throw 'AOT privacy gate failed' }
+          & python "$src/native_aot_closure_dashboard_v378.py"
+          if ($LASTEXITCODE -ne 0) { throw 'AOT dashboard failed' }
+      - name: No game assets committed or linked
+        shell: pwsh
+        run: |
+          if (Test-Path 'CUSA03173') { throw 'Private Bloodborne files in public CI' }
+          if (Test-Path 'Dark Souls III') { throw 'Private DS3 files in public CI' }
+          Write-Host 'NATIVE_V378_WINDOWS_X64_NO_ORIGINAL_ASSETS_PASS'
