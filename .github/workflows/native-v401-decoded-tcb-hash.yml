@@ -1,0 +1,365 @@
+name: Native V401 source-pinned decoded FS GS TCB hash parity and native imports
+on:
+  push:
+    branches: [feature/native-v401-decoded-tcb-hash-20261112]
+    paths:
+      - '.github/workflows/native-v401-decoded-tcb-hash.yml'
+      - 'native/source-port/recomp-v194/generate_verified_imports_v395.py'
+      - 'native/source-port/recomp-v194/native_generated_scope_v392.*'
+      - 'native/source-port/recomp-v194/native_host_recovery_v393.*'
+      - 'native/source-port/recomp-v194/native_verified_import_v395.*'
+      - 'native/source-port/recomp-v194/native_shared_import_manifest_fixture_v397.json'
+      - 'native/source-port/recomp-v194/audit_import_closure_v396.py'
+      - 'native/source-port/recomp-v194/native_shared_import_v397.*'
+      - 'native/source-port/recomp-v194/native_scaled_import_v398.*'
+      - 'native/source-port/recomp-v194/native_attested_import_v399.*'
+      - 'native/source-port/recomp-v194/native_exact_identity_v400.*'
+      - 'native/source-port/recomp-v194/native_tcb_hash_v401.*'
+      - 'native/source-port/recomp-v194/native_tcb_hash_fixture_v401.json'
+      - 'native/source-port/recomp-v194/generate_tcb_probe_v401.py'
+      - 'native/source-port/recomp-v194/verify_tcb_hash_v401.py'
+      - 'native/source-port/recomp-v194/test_verify_tcb_hash_v401.py'
+      - 'native/source-port/recomp-v194/test_native_tcb_hash_v401.c'
+      - 'native/source-port/recomp-v194/native_function_identity_fixture_v400.json'
+      - 'native/source-port/recomp-v194/verify_native_function_identity_v400.py'
+      - 'native/source-port/recomp-v194/test_verify_native_function_identity_v400.py'
+      - 'native/source-port/recomp-v194/native_verified_import_v395.*'
+      - 'native/source-port/recomp-v194/test_audit_shared_import_v397.py'
+      - 'native/source-port/recomp-v194/test_audit_import_closure_v396.py'
+      - 'native/source-port/recomp-v194/verify_generated_host_callback_v394.py'
+      - 'native/source-port/recomp-v194/verify_generated_import_v395.py'
+      - 'native/source-port/recomp-v194/test_verify_generated_import_v395.py'
+      - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
+      - 'native/source-port/recomp-v194/audit_generated_shards_v392.py'
+      - 'native/source-port/recomp-v194/test_audit_generated_shards_v392.py'
+      - 'native/source-port/recomp-v194/test_native_exact_identity_v400.c'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v401-decoded-tcb-hash.yml'
+      - 'native/source-port/recomp-v194/generate_verified_imports_v395.py'
+      - 'native/source-port/recomp-v194/native_generated_scope_v392.*'
+      - 'native/source-port/recomp-v194/native_host_recovery_v393.*'
+      - 'native/source-port/recomp-v194/native_verified_import_v395.*'
+      - 'native/source-port/recomp-v194/native_shared_import_manifest_fixture_v397.json'
+      - 'native/source-port/recomp-v194/audit_import_closure_v396.py'
+      - 'native/source-port/recomp-v194/native_shared_import_v397.*'
+      - 'native/source-port/recomp-v194/native_scaled_import_v398.*'
+      - 'native/source-port/recomp-v194/native_attested_import_v399.*'
+      - 'native/source-port/recomp-v194/native_exact_identity_v400.*'
+      - 'native/source-port/recomp-v194/native_tcb_hash_v401.*'
+      - 'native/source-port/recomp-v194/native_tcb_hash_fixture_v401.json'
+      - 'native/source-port/recomp-v194/generate_tcb_probe_v401.py'
+      - 'native/source-port/recomp-v194/verify_tcb_hash_v401.py'
+      - 'native/source-port/recomp-v194/test_verify_tcb_hash_v401.py'
+      - 'native/source-port/recomp-v194/test_native_tcb_hash_v401.c'
+      - 'native/source-port/recomp-v194/native_function_identity_fixture_v400.json'
+      - 'native/source-port/recomp-v194/verify_native_function_identity_v400.py'
+      - 'native/source-port/recomp-v194/test_verify_native_function_identity_v400.py'
+      - 'native/source-port/recomp-v194/native_verified_import_v395.*'
+      - 'native/source-port/recomp-v194/test_audit_shared_import_v397.py'
+      - 'native/source-port/recomp-v194/test_audit_import_closure_v396.py'
+      - 'native/source-port/recomp-v194/verify_generated_host_callback_v394.py'
+      - 'native/source-port/recomp-v194/verify_generated_import_v395.py'
+      - 'native/source-port/recomp-v194/test_verify_generated_import_v395.py'
+      - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
+      - 'native/source-port/recomp-v194/audit_generated_shards_v392.py'
+      - 'native/source-port/recomp-v194/test_audit_generated_shards_v392.py'
+      - 'native/source-port/recomp-v194/test_native_exact_identity_v400.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-generator-and-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Compile pinned REAL offline bbrecomp original full-function generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          python3 "$d/patch_upstream_linux_generator_v196.py" --upstream-checkout pinned-upstream
+          python3 "$d/patch_upstream_ret_flags_v199.py" --upstream-checkout pinned-upstream
+          if ! (cd pinned-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v391-compiler.log" 2>&1; then
+            echo '::error title=V391::Source-pinned offline generator failed'
+            grep -m2 -E 'error:|fatal error|undefined reference' "$RUNNER_TEMP/v391-compiler.log" | cut -c1-200 || true
+            exit 1
+          fi
+      - name: Generate actual native whole-function C from five INVENTED x86 instructions
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          mkdir -p "$RUNNER_TEMP/v391"
+          python3 "$d/generate_verified_imports_v395.py" \
+            --upstream-checkout pinned-upstream \
+            --out "$RUNNER_TEMP/v391/recomp.c"
+          python3 "$d/instrument_generated_aot_memory_v390.py" \
+            --upstream-checkout pinned-upstream \
+            --source "$RUNNER_TEMP/v391/recomp_00000.c" \
+            --output "$RUNNER_TEMP/v391/recomp_00000_v390.c"
+          python3 "$d/test_audit_generated_shards_v392.py"
+          python3 "$d/audit_generated_shards_v392.py" \
+            --upstream-checkout pinned-upstream \
+            --table "$RUNNER_TEMP/v391/recomp.c" \
+            --expected-functions 7
+          python3 "$d/test_audit_import_closure_v396.py"
+          python3 "$d/test_audit_shared_import_v397.py"
+          python3 "$d/audit_import_closure_v396.py" \
+            --allow-shared-targets \
+            --scope invented-test-only \
+            --upstream-checkout pinned-upstream \
+            --manifest "$d/native_shared_import_manifest_fixture_v397.json" \
+            --image "$RUNNER_TEMP/v391/V395_INVENTED_TWO_CALL_SITES_NOT_BLOODBORNE.elf" \
+            --table "$RUNNER_TEMP/v391/recomp.c" \
+            --out-header "$RUNNER_TEMP/v391/native_import_closure_v396_generated.h"
+          test -s "$RUNNER_TEMP/v391/native_import_closure_v396_generated.h"
+          python3 "$d/test_verify_native_function_identity_v400.py"
+          python3 "$d/verify_native_function_identity_v400.py" \
+            --upstream-checkout pinned-upstream \
+            --fixture "$d/native_function_identity_fixture_v400.json" \
+            --image "$RUNNER_TEMP/v391/V395_INVENTED_TWO_CALL_SITES_NOT_BLOODBORNE.elf" \
+            --table "$RUNNER_TEMP/v391/recomp.c" \
+            --out-header "$RUNNER_TEMP/v391/native_function_identity_v400_generated.h"
+          test -s "$RUNNER_TEMP/v391/native_function_identity_v400_generated.h"
+          cp -a pinned-upstream/deps/include "$RUNNER_TEMP/v391/include"
+          test -s "$RUNNER_TEMP/v391/recomp_00000_v390.c"
+          echo NATIVE_V400_PINNED_BYTE_AND_FUNCTION_REGISTRY_IDENTITY_SOURCE_READY
+      - name: Audit compiled pinned generator ELF function object and relocation provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v391"
+          python3 "$d/test_verify_generated_import_v395.py"
+          clang -std=gnu11 -O2 -ffp-contract=off -fno-strict-aliasing \
+            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+            -I"$d" -I"$a" -Inative/source-port/recomp-v187 -Ipinned-upstream/src -I"$a/include" \
+            -c "$a/recomp_00000_v390.c" -o "$RUNNER_TEMP/v393-real-generated.o"
+          python3 "$d/verify_generated_import_v395.py" \
+            --object "$RUNNER_TEMP/v393-real-generated.o" \
+            --source "$a/recomp_00000.c" \
+            --patched "$a/recomp_00000_v390.c"
+      - name: Independently verify TRUE pinned bbcpu decoded FS GS TCB hashes on 12 invented x86 functions
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v401-tcb"
+          mkdir -p "$a"
+          python3 "$d/test_verify_tcb_hash_v401.py"
+          python3 "$d/generate_tcb_probe_v401.py" \
+            --upstream-checkout pinned-upstream \
+            --out "$a/recomp.c"
+          python3 "$d/verify_tcb_hash_v401.py" \
+            --upstream-checkout pinned-upstream \
+            --manifest "$d/native_tcb_hash_fixture_v401.json" \
+            --image "$a/V401_INVENTED_FS_GS_TCB_NOT_BLOODBORNE.elf" \
+            --table "$a/recomp.c" --shard "$a/recomp_00000.c"
+          clang -std=gnu11 -O2 -ffp-contract=off -fno-strict-aliasing \
+            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+            -I"$d" -Inative/source-port/recomp-v187 -Ipinned-upstream/src \
+            -I"$RUNNER_TEMP/v391/include" \
+            -c "$a/recomp_00000.c" -o "$a/pinned-real-tcb-generated.o"
+          test -s "$a/pinned-real-tcb-generated.o"
+          for cc in clang gcc; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$d" \
+              "$d/native_tcb_hash_v401.c" "$d/test_native_tcb_hash_v401.c" \
+              -o "$a/host-tcb-$cc"
+            "$a/host-tcb-$cc"
+          done
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer -I"$d" \
+            "$d/native_tcb_hash_v401.c" "$d/test_native_tcb_hash_v401.c" \
+            -o "$a/host-tcb-san"
+          "$a/host-tcb-san"
+          echo NATIVE_V401_PINNED_TCB_SOURCE_OBJECT_AND_SANITIZER_PASS
+      - name: Linux Clang and GCC run actual generated LOCK CMPXCHG SIMD 128 and 256
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v391"
+          python3 "$d/patch_upstream_win32_clock_v195.py" --upstream-checkout pinned-upstream
+          ulimit -c 0
+          for cc in clang gcc; do
+            "$cc" -std=gnu11 -O2 -Wall -Wextra -pthread \
+              -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+              -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
+              -I"$d" -I"$a" -Inative/source-port/recomp-v187 -Ipinned-upstream/src -I"$a/include" \
+              "$d/native_multi_region_vm_v386.c" \
+              "$d/native_os_vm_v388.c" \
+              "$d/native_os_vm_reconfigure_v389.c" \
+              "$d/native_generated_memory_v390.c" \
+              "$d/native_generated_scope_v392.c" \
+              "$d/native_host_recovery_v393.c" \
+              "$d/native_verified_import_v395.c" \
+              "$d/native_shared_import_v397.c" \
+              "$d/native_scaled_import_v398.c" \
+              "$d/native_attested_import_v399.c" \
+              "$d/native_exact_identity_v400.c" \
+              "$d/test_native_exact_identity_v400.c" \
+              "$a/recomp.c" "$a/recomp_00000_v390.c" \
+              -o "$RUNNER_TEMP/v391-actual-$cc"
+            "$RUNNER_TEMP/v391-actual-$cc"
+          done
+      - name: Linux AddressSanitizer UndefinedBehaviorSanitizer original-generated LOCK SIMD
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v391"
+          ulimit -c 0
+          clang -std=gnu11 -O1 -g -Wall -Wextra -pthread \
+            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+            -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -I"$d" -I"$a" -Inative/source-port/recomp-v187 -Ipinned-upstream/src -I"$a/include" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/native_generated_memory_v390.c" \
+            "$d/native_generated_scope_v392.c" \
+              "$d/native_host_recovery_v393.c" \
+              "$d/native_verified_import_v395.c" \
+              "$d/native_shared_import_v397.c" \
+              "$d/native_scaled_import_v398.c" \
+              "$d/native_attested_import_v399.c" \
+              "$d/native_exact_identity_v400.c" \
+            "$d/test_native_exact_identity_v400.c" \
+            "$a/recomp.c" "$a/recomp_00000_v390.c" \
+            -o "$RUNNER_TEMP/v391-actual-san"
+          "$RUNNER_TEMP/v391-actual-san"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v391-INVENTED-upstream-C-public-headers
+          path: ${{ runner.temp }}/v391/
+          if-no-files-found: error
+          retention-days: 1
+  windows-amd64-real-generator:
+    needs: real-generator-and-linux
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v391-INVENTED-upstream-C-public-headers
+          path: ${{ runner.temp }}/v391
+      - name: Strict host bridge Win64 and actual pinned generated C native PE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $d='native/source-port/recomp-v194'
+          $a=Join-Path $env:RUNNER_TEMP 'v391'
+          $o=Join-Path $env:RUNNER_TEMP 'v391-objs'
+          New-Item -ItemType Directory -Force -Path $o | Out-Null
+          $incs=@("/I$d",'/Inative/source-port/recomp-v187',
+                  '/Ipinned-upstream/src',"/I$a","/I$a/include",
+                  "/FI$d/native_win_rc_time_v270.h")
+          foreach($name in @('native_multi_region_vm_v386.c','native_os_vm_v388.c',
+              'native_os_vm_reconfigure_v389.c','native_generated_memory_v390.c','native_generated_scope_v392.c','native_host_recovery_v393.c','native_verified_import_v395.c','native_shared_import_v397.c','native_scaled_import_v398.c','native_attested_import_v399.c','native_exact_identity_v400.c',
+              'test_native_exact_identity_v400.c')) {
+            & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 $incs `
+              /c (Join-Path $d $name) "/Fo:$(Join-Path $o ($name + '.obj'))"
+            if($LASTEXITCODE -ne 0){throw "V391 handwritten strict Windows compile failed"}
+          }
+          foreach($name in @('recomp.c','recomp_00000_v390.c')) {
+            & clang-cl /nologo /TC /std:c11 /W3 /O2 $incs `
+              /c (Join-Path $a $name) "/Fo:$(Join-Path $o ($name + '.obj'))"
+            if($LASTEXITCODE -ne 0){throw 'V391 real upstream generated Win64 compile failed'}
+          }
+          $exe=Join-Path $env:RUNNER_TEMP 'v391-generated-lock-simd.exe'
+          & clang-cl /nologo (Get-ChildItem -Path $o -Filter '*.obj' | ForEach-Object FullName) "/Fe:$exe"
+          if($LASTEXITCODE -ne 0){throw 'V391 PE x64 link failed'}
+          $data=[IO.File]::ReadAllBytes($exe)
+          if($data.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($data,0,2) -ne 'MZ') {
+            throw 'Not a Windows native PE'
+          }
+          & $exe
+          if($LASTEXITCODE -ne 0){throw 'V391 actual generated LOCK SIMD native Win64 test failed'}
+          $v401a=Join-Path $o 'native_tcb_hash_v401.obj'
+          $v401b=Join-Path $o 'test_native_tcb_hash_v401.obj'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$d" /c (Join-Path $d 'native_tcb_hash_v401.c') "/Fo:$v401a"
+          if($LASTEXITCODE -ne 0){throw 'V401 standalone TCB hash source compile failed'}
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$d" /c (Join-Path $d 'test_native_tcb_hash_v401.c') "/Fo:$v401b"
+          if($LASTEXITCODE -ne 0){throw 'V401 standalone TCB hash test compile failed'}
+          $v401exe=Join-Path $env:RUNNER_TEMP 'native-v401-tcb-win64.exe'
+          & clang-cl /nologo $v401a $v401b "/Fe:$v401exe"
+          if($LASTEXITCODE -ne 0){throw 'V401 standalone TCB hash PE link failed'}
+          & $v401exe
+          if($LASTEXITCODE -ne 0){throw 'V401 native Win64 FS GS hash test failed'}
+          'NATIVE_V401_PINNED_TCB_HASH_NATIVE_WIN64_PE_PASS'
+  macos-arm64-host:
+    needs: real-generator-and-linux
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v391-INVENTED-upstream-C-public-headers
+          path: ${{ runner.temp }}/v391
+      - name: Native Apple Silicon host executes invented x86-origin real generated C
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v391"
+          ulimit -c 0
+          clang -std=gnu11 -O2 -Wall -Wextra -pthread \
+            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+            -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
+            -I"$d" -I"$a" -Inative/source-port/recomp-v187 -Ipinned-upstream/src -I"$a/include" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/native_generated_memory_v390.c" \
+            "$d/native_generated_scope_v392.c" \
+              "$d/native_host_recovery_v393.c" \
+              "$d/native_verified_import_v395.c" \
+              "$d/native_shared_import_v397.c" \
+              "$d/native_scaled_import_v398.c" \
+              "$d/native_attested_import_v399.c" \
+              "$d/native_exact_identity_v400.c" \
+            "$d/test_native_exact_identity_v400.c" \
+            "$a/recomp.c" "$a/recomp_00000_v390.c" \
+            -o "$RUNNER_TEMP/native-v391-macos-arm64"
+          "$RUNNER_TEMP/native-v391-macos-arm64"
+          clang -std=c11 -O2 -Wall -Wextra -Werror -I"$d" \
+            "$d/native_tcb_hash_v401.c" "$d/test_native_tcb_hash_v401.c" \
+            -o "$RUNNER_TEMP/native-v401-macos-tcb-hash"
+          "$RUNNER_TEMP/native-v401-macos-tcb-hash"
+          echo NATIVE_V401_TCB_HASH_NATIVE_MACOS_ARM64_PASS
