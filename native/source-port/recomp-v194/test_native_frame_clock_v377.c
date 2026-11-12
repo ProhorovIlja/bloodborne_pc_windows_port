@@ -16,6 +16,17 @@ static void render_fps_independent_ticks(unsigned presentation_hz) {
     }
     assert(c.simulated_steps==600);
 }
+static void unlimited_display_independent_ticks(void) {
+    ShytNativeFrameClockV377 c;
+    ShytNativeFrameUpdateV377 out;
+    assert(shyt_native_frame_init_v377(&c,0)); /* no render cap */
+    for(uint64_t i=0;i<=10000ull;++i) {
+        const uint64_t now=i*1000000ull; /* 1000 display updates/sec */
+        assert(shyt_native_frame_advance_v377(&c,now,&out));
+        assert(out.steps<=1 && out.backlog_steps==0);
+    }
+    assert(c.simulated_steps==600); /* identical game simulation time */
+}
 static void basics(void) {
     ShytNativeFrameClockV377 c;
     ShytNativeFrameUpdateV377 out,prior;
@@ -66,6 +77,7 @@ int main(void) {
     render_fps_independent_ticks(60);
     render_fps_independent_ticks(120);
     render_fps_independent_ticks(240);
+    unlimited_display_independent_ticks();
     basics();
     puts("NATIVE_V377_FIXED60_SIM_30_60_120_240_UNLIMITED_RENDER_CAPS_PASS");
     return 0;
