@@ -143,7 +143,7 @@ static int run(void) {
     CHECK(shyt_native_os_vm_read_v388(&o,&lease,base,8,&value));
     CHECK(value==UINT64_C(0xEF22334455667788));
     CHECK(shyt_native_os_vm_read_v388(&o,&lease,base+8,8,&value));
-    CHECK(value==UINT64_C(0x99AABBCCDDEE00CD));
+    CHECK(value==UINT64_C(0x99AABBCCDDEEFFCD));
     /* Unaligned cross-word 8-byte access: two atomics, not one. */
     CHECK(shyt_native_os_vm_write_v388(
         &o,&lease,base+3,8,UINT64_C(0x0102030405060708)));
@@ -155,7 +155,7 @@ static int run(void) {
     unchanged=value;
     CHECK(!shyt_native_os_vm_write_v388(
         &o,&lease,base+16*8-1,2,0xBEEF));
-    CHECK(shyt_native_os_vm_read_v388(&o,&lease,base+15*8,&value));
+    CHECK(shyt_native_os_vm_read_v388(&o,&lease,base+15*8,8,&value));
     CHECK(value==unchanged);
     CHECK(!shyt_native_os_vm_write_v388(
         &o,&lease,base+6,3,0xDEAD)); /* width 3 unsupported */
