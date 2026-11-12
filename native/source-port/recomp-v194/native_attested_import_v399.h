@@ -16,7 +16,7 @@ extern "C" {
 typedef struct ShytNativeFunctionProofV399 {
     uint64_t offset;      /* actual emitted RcFunction offset */
     uint64_t size;        /* genuine generated function size */
-    const char *hash;     /* nonempty public generator hash */
+    uint64_t hash;        /* nonzero public generator function hash */
     uint8_t compiled;     /* genuine RcFunction.fn != NULL */
     uint8_t direct_slot;  /* genuine RcFunction.direct != NULL */
 } ShytNativeFunctionProofV399;
