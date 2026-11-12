@@ -84,6 +84,8 @@ def load_manifest(path:Path,scope:str)->dict:
             raise ValueError("callsite schema mismatch")
         for attr in ("function_offset","next_offset","guest_target","constant"):
             number(x[attr])
+        if number(x["guest_target"])==0:
+            raise ValueError("null guest native import target")
         if x["service"] not in {"return_constant","add_qwords","cooperative_failure"} or (
             not isinstance(x["recover_code"],int) or isinstance(x["recover_code"],bool) or
             not 0<=x["recover_code"]<=32767):
