@@ -6,6 +6,11 @@
 #include "recomp/rc.h"
 #include "native_generated_memory_calls_v390.h"
 #include "native_os_vm_reconfigure_v389.h"
+/* Genuine pinned upstream recomp/rc.h already defines RcApi/RcFunction.
+ * Do not redeclare them with the standalone V187 ABI mirror here. */
+#ifndef BB_V187_RECOMP_ABI_H
+#define BB_V187_RECOMP_ABI_H
+#endif
 #include "native_strict_aot_v381.h"
 #include <stdint.h>
 #include <stdio.h>
