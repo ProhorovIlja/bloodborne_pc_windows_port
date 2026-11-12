@@ -1,0 +1,43 @@
+# Native V392 — generated RcFn entry lease scopes and complete synthetic AOT shard inventory
+
+Date: 2026-11-12. Native source-port track in `ProhorovIlja/bloodborne_pc_windows_port`. Based on V391 draft PR #121; opened V392 draft PR #122: https://github.com/ProhorovIlja/bloodborne_pc_windows_port/pull/122. This is NOT the playable BBPort / BBSC Yharnam Together Ultimate branch and NOT an independently bootable Bloodborne game.
+
+## Source-backed problem addressed
+
+V390 proved scalar guest memory could be rerouted from **actual pinned original-free `bbrecomp` generated C** through the V389 OS-backed guest VM. V391 extended that to actual output for invented x86-64 `LOCK CMPXCHG`, 128-bit `MOVDQU`, and 256-bit `VMOVDQU` with C11 guest address translation. But V390's host entry pattern used manual `shyt_generated_enter_v390` / `shyt_generated_leave_v390` around calls; an early normal-return path could forget to unpin, and the V390 instrumentation gate handled one shard at a time, without proving an entire source-generated shard set had been instrumented.
+
+## Committed V392 changes
+
+1. `native_generated_scope_v392.h/.c`: explicit synchronous host scope, `shyt_generated_scope_begin_v392` and `shyt_generated_scope_end_v392`, and `shyt_generated_call_v392`. Calls take `ShytNativeOsVmV388 *owner`, a source-generated `void (*)(BbCpu *)` compatible with pinned public `RcFn`, and optional preflight `int (*)(const BbCpu*,void*)`. Normal-return execution and controlled preflight refusal both end a V390 thread-local lease before returning. Nested calls on the **same owner** borrow the existing TLS pin, never unpin the outer owner; nested calls requesting another owner are refused. If the end-state lease invariant is broken after a function, the wrapper aborts instead of claiming successful cleanup.
+2. `native_generated_memory_v390.h/.c`: added read-only `shyt_generated_owner_v392` identity query for validating a same-owner nested borrow without exposing a mutable TLS pointer or bypassing V386.
+3. `test_native_generated_scope_v392.c`: based on the real V391 synthetic five-function compiler fixture, but all actual generated `RcFn` invocations now go through V392's scoped host API. Tests successful/failed generated `LOCK CMPXCHG`, actual generated SSE128/AVX256 loads and stores, exact YMM upper half and flags/return semantics, V389 OS remap and pin exclusion. Adds preflight refusal with unchanged CPU and guest memory, normal cleanup even after denial, a preflight callback that executes a nested **actual compiler-generated function** on the same guest VM, confirms the outer lease remains pinned, and checks PAUSE becomes possible after exit. Also checks an attempted nested borrow of an independent fully sealed VM owner is rejected while the original owner remains active. POSIX negative child tests still assert genuine generated code aborts on unsupported cross-word LOCK CAS, read-only writes and out-of-range SIMD memory.
+4. `audit_generated_shards_v392.py`: checks the EXACT PINNED upstream public `bloodborne-native/bloodborne-recomp` revision `8f31ec7c41f252730c6325d52647046baef7549f` and generator blob via V390; expects a contiguous set of source-generated `recomp_NNNNN.c` files outside git, exactly one `recomp_NNNNN_v390.c` per file, and reconstructs the **exact byte-for-byte output of V390's trusted overlay insertion**. It rejects missing, extra, altered or oversized shards and source files with obvious raw `bb_load/bb_store`/host pointer `memcpy` sites, `rc->step` interpreter fallback, duplicate native function bodies, absent/duplicate generated `bb_recomp_init` declarations and direct slots. For the V391 synthetic fixture it requires actual `rc_cas`, at least two `rc_vld` and two `rc_vst` callsites. Reports only bounded counts, not original generated code.
+5. `test_audit_generated_shards_v392.py`: unit tests positive inventory and deliberate malformed/uninstrumented/untrusted/duplicate cases. The inventory's source verification is not a C AST or binary-level proof; unknown code-generation pathways could still bypass the named helpers.
+6. `.github/workflows/native-v392-generated-entry-scope.yml`: Linux builds actual pinned offline `bbrecomp` from public source, emits five invented x86-64 instruction function bodies, instrument them through V390, asserts complete V392 shard inventory, compiles/runs genuine generated C plus V392 scoped host on Linux Clang and GCC, then ASan/UBSan. Shares only invented test generated C and PUBLIC dependencies with Windows AMD64 clang-cl and macOS ARM64 host-only C build/run. Strict `/W4 /WX` on handwritten host units is retained, generated C uses its own warning level. The original PS4 EBOOT/ELF/SELF is NEVER passed to a test executable at runtime.
+
+## Verification and scope
+
+CI must be checked on the FINAL V392 PR head after all changes; it is not enough that an earlier branch SHA passed. Useful log markers:
+- `NATIVE_V392_AOT_INVENTORY_NEGATIVE_TESTS_PASS`
+- `NATIVE_V392_ALL_REAL_GENERATED_AOT_SHARDS_INSTRUMENTED_PASS`
+- `NATIVE_V392_REAL_GENERATED_LOCK_SIMD_SCOPED_NESTED_RETURN_PASS`
+- `NATIVE_V392_SCOPED_GENERATED_WIN64_PE_PASS`
+
+The first V392 PR CI run verified Linux generated original-free tests under GCC/Clang/ASan/UBSan, and a macOS ARM64 host job reached SUCCESS. Windows result and newer SHA with the cross-owner negative test must be independently verified and recorded in the corresponding Drive handoff.
+
+**Precise limitations**:
+- Scoped cleanup works only for **synchronous normal C return** and controlled return from a const-state preflight. It does **NOT** cleanup across C `longjmp`, pthread cancellation, OS signals, SEH, a thrown C++ exception across generated C or process abort. This is a production blocker and cannot be called "exception-safe".
+- Direct calls to legacy `shyt_generated_enter_v390` outside the wrapper remain possible; all generated entrypoints and host callbacks must migrate and be audited. A direct raw guest-pointer or host import outside V386 leases remains unsafe during V389 remap.
+- Inventory covers the known source-locked generator's C shards, named memory helper call sites and text byte equivalence. Real original Bloodborne 1.09 generated code requires a PRIVATE full corpus scan and compiled disassembly/AST checks. No guarantee a different generator revision or unusual code path is safe.
+- V390/V391 `LOCK` CAS is C11 seq_cst within ONE 64-bit backing word; a 64-bit guest `LOCK` crossing a backing word aborts, it is not full x86 atomic semantics. Vector stores of 16/32 bytes use multiple atomic chunks. Original guest page faults, exception semantics, aliasing, TLS, mapped files, dirty pages/asset streaming, CPU coherency and multithreaded memory patterns remain incomplete.
+- The five synthetic functions are original-free **invented** instructions. No authentic original Bloodborne 1.09 game AOT code/function hash closure, full host import services, real standalone Windows PE32+ / Linux ELF64 main game executable boot without PS4 runtime, renderer/AI/physics/audio/DLC/saves, client/server/launcher, network latency or native user-control features have been demonstrated by V392. Apple ARM64 host source validation is NOT an original game native macOS ARM64 build.
+- Retail game code/assets and user's private Drive original files, DS3 files and credentials MUST remain owner-private, not on public GitHub or runner logs.
+
+## Next P0
+
+1. Verify all current V392 CI jobs and fail closed on regressions. Broaden whole-generated-code audit to AST/LLVM/COFF/ELF binary-level coverage with owner-private original game 1.09 AOT corpus.
+2. Build a rigorous multi-platform unwind/recovery model that cannot strand V386 pins across abort/cancellation/signal/SEH/C++ exceptions; no fake exception-safety claim. Bind scoped host entry to genuine V381/V382 native-only function dispatch, imports and original owner-private startup; avoid interpreter guest fallback.
+3. Complete original-game AOT code and import closure, Linux-native clock/service ABI, actual PE32+/ELF64 independent original-game entrypoint and link/boot trace proving no guest PS4 ELF/runtime.
+4. Native D3D12/Vulkan renderer, GPU streaming and fences, shaders, CPU/GPU optimization and frame pacing, physics/AI/save/DLC, native keyboard/mouse/chords/controller HUD/NG+, seamless low-latency online/LAN/dedicated co-op server/client/launcher and later Apple ARM64/Metal. Never claim zero latency or game performance from synthetic unit tests.
+
+Keep playable BBPort and BBSC Yharnam Together Ultimate distinct. Keep continuity anchors in GitHub and linked Drive `00-START-HERE`; source attribution/licenses should be verified before borrowing public projects.
