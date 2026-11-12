@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "scope": "invented-only",
+  "upstream_revision": "8f31ec7c41f252730c6325d52647046baef7549f",
+  "upstream_bbcpu_recomp_git_blob": "2e005442aacaa835e5b3c2f3522d63b0c04bc8fd",
+  "upstream_bbcpu_decode_git_blob": "e3a84f800ae70f78ccaea6ea7c456ebd97d502fc",
+  "image_sha256": "2760a66cf59de42bec003c189ca64f6c9a67bb1e38492626fdcd5bcb5789a94f",
+  "image_base": "0x400000",
+  "hash_algorithm": "pinned_bbcpu_decoded_fnv1a64_tcb_special",
+  "functions": [
+    {
+      "offset": "0x1000",
+      "code_hex": "f0480fb137c3",
+      "size": 6,
+      "hash_mode": "raw",
+      "expected_hash": "0xcaf2b035bd6212e7"
+    },
+    {
+      "offset": "0x1020",
+      "code_hex": "f30f6f07c3",
+      "size": 5,
+      "hash_mode": "raw",
+      "expected_hash": "0x52a0aa93ab618e9a"
+    },
+    {
+      "offset": "0x1040",
+      "code_hex": "f30f7f07c3",
+      "size": 5,
+      "hash_mode": "raw",
+      "expected_hash": "0xc807fa935cdff0ea"
+    },
+    {
+      "offset": "0x1060",
+      "code_hex": "c5fe6f07c3",
+      "size": 5,
+      "hash_mode": "raw",
+      "expected_hash": "0xd3a4d7bcf8b8f381"
+    },
+    {
+      "offset": "0x1080",
+      "code_hex": "c5fe7f07c3",
+      "size": 5,
+      "hash_mode": "raw",
+      "expected_hash": "0x490c27bcaa3755d1"
+    },
+    {
+      "offset": "0x10a0",
+      "code_hex": "ffd0c3",
+      "size": 3,
+      "hash_mode": "raw",
+      "expected_hash": "0xfa30281be4fbf37b"
+    },
+    {
+      "offset": "0x10c0",
+      "code_hex": "ffd0c3",
+      "size": 3,
+      "hash_mode": "raw",
+      "expected_hash": "0xfa30281be4fbf37b"
+    },
+    {
+      "offset": "0x10e0",
+      "code_hex": "64488b042500000000c3",
+      "size": 10,
+      "hash_mode": "tcb_rax_fs0",
+      "expected_hash": "0xa2827e1bb306bdc9"
+    },
+    {
+      "offset": "0x1100",
+      "code_hex": "65488b042540000000c3",
+      "size": 10,
+      "hash_mode": "tcb_rax_gs40",
+      "expected_hash": "0xa2827e1bb306bdc9"
+    },
+    {
+      "offset": "0x1120",
+      "code_hex": "64488b1c2500000000c3",
+      "size": 10,
+      "hash_mode": "tcb_rbx_fs0",
+      "expected_hash": "0xa28cae1bb30f63de"
+    },
+    {
+      "offset": "0x1140",
+      "code_hex": "64488b042540000000c3",
+      "size": 10,
+      "hash_mode": "raw_fs_nonzero",
+      "expected_hash": "0x844cf2c7d6d2b746"
+    },
+    {
+      "offset": "0x1160",
+      "code_hex": "65488b1c2540000000c3",
+      "size": 10,
+      "hash_mode": "tcb_rbx_gs40",
+      "expected_hash": "0xa28cae1bb30f63de"
+    }
+  ]
+}
