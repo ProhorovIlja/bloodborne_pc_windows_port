@@ -25,12 +25,14 @@ static int functions_valid(const ShytNativeFunctionProofV399 *functions,
 int shyt_native_bind_attested_v399(ShytNativeScaledRouterV398 *router,
     ShytNativeOsVmV388 *owner,
     const ShytNativeSourceSiteV399 *sites,size_t site_count,
+    size_t independently_attested_site_count,
     const ShytNativeFunctionProofV399 *functions,size_t function_count,
     uint64_t image_base) {
     if(!router || router->owner || router->sites || router->count ||
        router->capacity || router->sealed ||
        !owner || owner->initialized!=1 || owner->sealed!=1 ||
        owner->released || !sites || !site_count ||
+       site_count!=independently_attested_site_count ||
        site_count>SHYT_V398_MAX_SITES ||
        !functions_valid(functions,function_count,image_base))return 0;
     /* Fail closed BEFORE allocating any router backing. No unverified
