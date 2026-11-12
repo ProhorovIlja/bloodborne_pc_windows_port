@@ -5,6 +5,17 @@
 #ifndef SHYT_NATIVE_BOOT_CHAIN_V384_H
 #define SHYT_NATIVE_BOOT_CHAIN_V384_H
 #include "native_aot_services_bootstrap_v245.h"
+/* V245 includes the PINNED real upstream recomp/rc.h. The small V187
+ * standalone ABI shim declares equivalent anonymous structs for isolated
+ * V381/V382 CI, but MUST NOT redeclare them inside this real RcApi TU.
+ * This is a narrow header-interoperability guard, not a version bypass.
+ */
+#if !defined(BB_RECOMP_RC_H)
+#error "V384 requires pinned upstream recomp/rc.h through V245"
+#endif
+#ifndef BB_V187_RECOMP_ABI_H
+#define BB_V187_RECOMP_ABI_H
+#endif
 #include "native_aot_route_v382.h"
 #include "native_pinned_stack_v383.h"
 #ifdef __cplusplus
