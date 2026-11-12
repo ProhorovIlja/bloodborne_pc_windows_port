@@ -1,0 +1,161 @@
+name: Native V385 unified logical guest VM math clock AOT
+on:
+  push:
+    branches: [feature/native-v385-unified-import-vm-20261112]
+    paths:
+      - '.github/workflows/native-v385-unified-vm.yml'
+      - 'native/source-port/recomp-v194/native_guest_vm_v385.*'
+      - 'native/source-port/recomp-v194/native_unified_import_v385.*'
+      - 'native/source-port/recomp-v194/test_native_*_v385.c'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v385-unified-vm.yml'
+      - 'native/source-port/recomp-v194/native_guest_vm_v385.*'
+      - 'native/source-port/recomp-v194/native_unified_import_v385.*'
+      - 'native/source-port/recomp-v194/test_native_*_v385.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-vm-atomic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC and Clang C11 1/2/4/8 byte VM bounds and concurrent CAS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread \
+              "$d/native_pinned_stack_v383.c" \
+              "$d/native_guest_vm_v385.c" \
+              "$d/test_native_guest_vm_v385.c" -o "native-v385-$cc"
+            "./native-v385-$cc"
+          done
+      - name: Clang ASan UBSan guest VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic -pthread \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_pinned_stack_v383.c" \
+            "$d/native_guest_vm_v385.c" \
+            "$d/test_native_guest_vm_v385.c" -o native-v385-asan
+          ./native-v385-asan
+  macos-arm64-vm:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Apple Silicon ARM64 atomic VM host-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread \
+            "$d/native_pinned_stack_v383.c" \
+            "$d/native_guest_vm_v385.c" \
+            "$d/test_native_guest_vm_v385.c" -o native-v385-macos
+          ./native-v385-macos
+  prepare-public-upstream:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Dependency headers only; never retail game data
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream
+          if ! (cd public-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v385-public-deps.log" 2>&1; then
+            echo '::error title=V385::Pinned public dependency preparation failed'
+            exit 1
+          fi
+          test -s public-upstream/deps/include/Zydis/Zydis.h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v385-public-headers
+          path: public-upstream/deps/include/
+          retention-days: 1
+  windows-x64-integrated:
+    needs: prepare-public-upstream
+    runs-on: windows-2022
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v385-public-headers
+          path: public-upstream/deps/include
+      - name: Win64 standalone logical VM atomic unit regression
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$d/native_pinned_stack_v383.c" `
+            "$d/native_guest_vm_v385.c" `
+            "$d/test_native_guest_vm_v385.c" /Fe:native-v385-vm.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Win64 V385 VM build failed' }
+          & .\native-v385-vm.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Win64 V385 VM test failed' }
+      - name: Real Win64 pinned RcApi V245 + V384 + V385 math/clock/AOT
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          $exe=Join-Path $env:RUNNER_TEMP 'native-v385-unified-rcapi.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/FI$src/native_win_rc_time_v270.h" `
+            "/I$src" "/Inative/source-port/recomp-v187" `
+            "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/native_math_shim_v222.c" `
+            "$src/native_math_guest_bridge_v223.c" `
+            "$src/native_math_import_dispatch_v224.c" `
+            "$src/native_math_rcapi_route_v226.c" `
+            "$src/native_win_clock_v236.c" `
+            "$src/native_clock_rcapi_route_v239.c" `
+            "$src/native_aot_services_bootstrap_v245.c" `
+            "$src/native_strict_aot_v381.c" `
+            "$src/native_aot_route_v382.c" `
+            "$src/native_pinned_stack_v383.c" `
+            "$src/native_boot_chain_v384.c" `
+            "$src/native_guest_vm_v385.c" `
+            "$src/native_unified_import_v385.c" `
+            "$src/test_native_unified_import_v385.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'V385 Win64 real chain compile failed' }
+          $raw=[IO.File]::ReadAllBytes($exe)
+          if ($raw.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($raw,0,2) -ne 'MZ') {
+            throw 'V385 fixture is not a Win64 PE'
+          }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'V385 Win64 unified import fixture failed' }
+          'V385 synthetic VM and real RcApi registration chain passed; NOT an original game.'
