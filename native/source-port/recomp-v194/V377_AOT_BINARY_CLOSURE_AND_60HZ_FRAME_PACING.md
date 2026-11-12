@@ -65,3 +65,11 @@ Source: public `bloodborne-native/bloodborne-runtime/docs/layers/` and `bloodbor
 ## Current proof scope / security / non-destructive operation
 
 All public fixtures are independently invented C/Python bytes, never original Bloodborne/DS3. Fail closed on unknown imports and corrupt headers, but no static dependency scanner can prove a native binary never dynamically loads a guest executable; runtime file-access traces and code-review are separately required. No production Fornex server writes, user save modifications, deployed launcher updates or automatic merge of stacked draft PRs. Existing V376 skinning, V367 D3D12/V372 Vulkan and BBSC playable guest compatibility branch remain intact.
+
+## Verified cross-platform V377 CI
+
+**PASS, Windows and Linux (2/2):** https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/43194377093 . The workflow source commit is `797fc5e79c23128851a8fac86a1a5f19e24fe044`.
+
+Linux ran GCC and Clang C11 frame-clock tests, Clang ASan/UBSan frame-clock tests, Python malformed synthetic PE/ELF preflight and a **real compiled, executed Linux ELF64** analyzed with one reviewed `libc` import. Windows ran clang-cl C11 fixed-clock tests, Python malformed synthetic PE/ELF tests, and a **real compiled, executed Win64 PE32+** with one reviewed import. Both static checks emitted `native_container_verified: true`, **`runtime_no_guest_proven: false`, `whole_game_boot_proven: false`**. These false values are intentional and must not be replaced by optimistic inference.
+
+The fixed-60 clock synthetic test emitted `NATIVE_V377_FIXED60_SIM_30_60_120_240_UNLIMITED_RENDER_CAPS_PASS` across GCC, Clang, Linux sanitizers and Windows clang-cl. No genuine Bloodborne gameplay or graphics frames were used in these tests.
