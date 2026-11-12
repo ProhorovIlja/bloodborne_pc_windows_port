@@ -24,7 +24,9 @@ source=('static const RcFunction table[] = {\n'+
 shard=""
 for item in m["functions"]:
     off=item["offset"][2:]
-    body="c->tcb;" if item["hash_mode"].startswith("tcb_") else "c->r[0]=0;"
+    body=("c->tcb;" if item["hash_mode"].startswith("tcb_") else
+          "rc->step(c);" if item["hash_mode"]=="raw_fs_nonzero" else
+          "c->r[0]=0;")
     shard+=f"void f_{off}(BbCpu *c) {{ {body} }}\n"
 status=v.verify(m,image,source,shard)
 assert status["compiled_functions"]==12 and status["direct_tcb_functions"]==4
@@ -57,7 +59,7 @@ for mode in range(8):
     if mode==4: source_mut=source.replace("{0x1160, 10,","{0x1161, 10,")
     if mode==5: body_mut=shard.replace("void f_10e0(BbCpu *c) { c->tcb; }",
                                    "void f_10e0(BbCpu *c) { rc->step(c); }")
-    if mode==6: body_mut=shard.replace("void f_1140(BbCpu *c) { c->r[0]=0; }",
+    if mode==6: body_mut=shard.replace("void f_1140(BbCpu *c) { rc->step(c); }",
                                    "void f_1140(BbCpu *c) { c->tcb; }")
     if mode==7: image_mut=image[:0x1100]+b"\x90"+image[0x1101:]
     try:v.verify(m,image_mut,source_mut,body_mut)
