@@ -28,15 +28,18 @@ TCB=(
  (0x1160,bytes.fromhex("65488b1c2540000000c3"),"mov_rbx_gs_absolute_40_ret")
 )
 FUNCTIONS=v395.FUNCTIONS+TCB
+NATIVE_ONLY=tuple(f for f in FUNCTIONS if f[0]!=0x1140)
+NATIVE_SHA256='d0a4371cc49793958cca2900f9b4e89c15031e8c71d9398d8cb5fe0e062676a5'
 
-def build_elf()->bytes:
+def build_elf(native_only:bool=False)->bytes:
     elf=bytearray(v395.build_elf())
     for off,body,_ in TCB:
+        if native_only and off==0x1140:continue
         assert off>=0x1000 and off+len(body)<=len(elf)
         elf[off:off+len(body)]=body
     return bytes(elf)
 
-def generate(checkout:Path,out:Path)->None:
+def generate(checkout:Path,out:Path,native_only:bool=False)->None:
     root=checkout.resolve(strict=True)
     rev=subprocess.check_output(["git","-C",str(root),"rev-parse","HEAD"],
         text=True,stderr=subprocess.DEVNULL).strip()
@@ -51,16 +54,22 @@ def generate(checkout:Path,out:Path)->None:
     if any((p/".git").exists() for p in (out.parent,*out.parent.parents)):
         raise ValueError("cannot write generated code into source checkout")
     scratch=out.parent
-    image=scratch/"V401_INVENTED_FS_GS_TCB_NOT_BLOODBORNE.elf"
+    functions=NATIVE_ONLY if native_only else FUNCTIONS
+    image=scratch/("V402_INVENTED_11_NATIVE_ONLY_NOT_BLOODBORNE.elf" if native_only else
+                   "V401_INVENTED_FS_GS_TCB_NOT_BLOODBORNE.elf")
     tsv=scratch/"functions.tsv"
     offsets=scratch/"function_offsets.txt"
     if image.exists() or tsv.exists() or offsets.exists():
         raise ValueError("refuse to overwrite source attestation inputs")
-    image.write_bytes(build_elf())
+    from hashlib import sha256
+    image_bytes=build_elf(native_only)
+    if native_only and sha256(image_bytes).hexdigest()!=NATIVE_SHA256:
+        raise ValueError("11-function independently pinned image SHA256 mismatch")
+    image.write_bytes(image_bytes)
     tsv.write_text("start\tsize\tinsns\tundecodable\n"+
         "".join(f"0x{off:016x}\t{len(body)}\t2\t0\n"
-                for off,body,_ in FUNCTIONS),encoding="ascii")
-    offsets.write_text("".join(f"0x{off:x}\n" for off,_,_ in FUNCTIONS),
+                for off,body,_ in functions),encoding="ascii")
+    offsets.write_text("".join(f"0x{off:x}\n" for off,_,_ in functions),
                        encoding="ascii")
     run=subprocess.run([str(exe),str(image),str(tsv),str(out),
         "@"+str(offsets)],cwd=root,stdout=subprocess.PIPE,
@@ -74,7 +83,7 @@ def generate(checkout:Path,out:Path)->None:
         raise ValueError("pinned compiler did not emit 12-function source")
     a=out.read_text(encoding="utf-8")
     b=shard.read_text(encoding="utf-8")
-    for off,_,_ in FUNCTIONS:
+    for off,_,_ in functions:
         if a.count(f"void f_{off:x}(BbCpu *c);")!=1 or (
             b.count(f"void f_{off:x}(BbCpu *c) {{")!=1) or (
             a.count(f"&d_{off:x}")!=1):
@@ -86,7 +95,7 @@ def generate(checkout:Path,out:Path)->None:
     # compile into a runtime guest image or execute that callback.
     import re
     matches=list(re.finditer(r"void f_([0-9a-f]+)\(BbCpu \*c\) \{",b))
-    if len(matches)!=len(FUNCTIONS):
+    if len(matches)!=len(functions):
         raise ValueError("incomplete generated function scope inventory")
     direct_tcb=0
     quarantined=0
@@ -104,17 +113,27 @@ def generate(checkout:Path,out:Path)->None:
             direct_tcb+=1
         elif "rc->step(" in body:
             raise ValueError("ordinary invented function contains interpreter STEP")
-    if direct_tcb!=4 or quarantined!=1:
+    if direct_tcb!=4 or quarantined!=(0 if native_only else 1):
         raise ValueError("TCB native/quarantined source scopes incomplete")
-    print("NATIVE_V401_PINNED_GENERATED_12_FUNCTION_TCB_C_SOURCE_PASS")
-    print("synthetic_TCB_native_sites=4 FS_nonzero_interpreter_fallback_QUARANTINED=1 retail_Bloodborne=0")
+    if native_only:
+        if "rc->step(" in b or "rc->bail(" in b or (
+            "void f_1140(BbCpu *c)" in b) or (
+            "f_1140" in a):
+            raise ValueError("unsafe fallback/forbidden function entered native-only source")
+        print("NATIVE_V402_REAL_PINNED_GENERATOR_11_NATIVE_ONLY_FUNCTIONS_PASS")
+        print("linked_guest_interpreter_fallback=FALSE retail_Bloodborne=FALSE")
+    else:
+        print("NATIVE_V401_PINNED_GENERATED_12_FUNCTION_TCB_C_SOURCE_PASS")
+        print("synthetic_TCB_native_sites=4 FS_nonzero_interpreter_fallback_QUARANTINED=1 retail_Bloodborne=0")
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("--upstream-checkout",type=Path,required=True)
     parser.add_argument("--out",type=Path,required=True)
+    parser.add_argument("--native-only",action="store_true",
+        help="V402: independently SHA-pinned 11 function subset, no FS:[0x40] fallback")
     args=parser.parse_args()
-    try:generate(args.upstream_checkout,args.out)
+    try:generate(args.upstream_checkout,args.out,args.native_only)
     except (ValueError,OSError,RuntimeError,subprocess.CalledProcessError) as e:
         print("V401_TCB_GENERATE_REFUSED: "+type(e).__name__+": "+str(e)[:400],
               file=sys.stderr)
