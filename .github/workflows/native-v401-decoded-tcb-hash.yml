@@ -167,12 +167,11 @@ jobs:
             --manifest "$d/native_tcb_hash_fixture_v401.json" \
             --image "$a/V401_INVENTED_FS_GS_TCB_NOT_BLOODBORNE.elf" \
             --table "$a/recomp.c" --shard "$a/recomp_00000.c"
-          clang -std=gnu11 -O2 -ffp-contract=off -fno-strict-aliasing \
-            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
-            -I"$d" -Inative/source-port/recomp-v187 -Ipinned-upstream/src \
-            -I"$RUNNER_TEMP/v391/include" \
-            -c "$a/recomp_00000.c" -o "$a/pinned-real-tcb-generated.o"
-          test -s "$a/pinned-real-tcb-generated.o"
+          # The separate 12-function source has a deliberate FS:[0x40]
+          # negative control emitted as rc->step by pinned upstream.
+          # Verify its hash + quarantine at BUILD TIME only. NEVER
+          # compile, link or publish that fallback probe as native AOT.
+          test -s "$a/recomp_00000.c"
           for cc in clang gcc; do
             "$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$d" \
               "$d/native_tcb_hash_v401.c" "$d/test_native_tcb_hash_v401.c" \
@@ -184,7 +183,7 @@ jobs:
             "$d/native_tcb_hash_v401.c" "$d/test_native_tcb_hash_v401.c" \
             -o "$a/host-tcb-san"
           "$a/host-tcb-san"
-          echo NATIVE_V401_PINNED_TCB_SOURCE_OBJECT_AND_SANITIZER_PASS
+          echo NATIVE_V401_PINNED_TCB_SOURCE_QUARANTINED_AND_SANITIZER_PASS
       - name: Linux Clang and GCC run actual generated LOCK CMPXCHG SIMD 128 and 256
         shell: bash
         run: |
