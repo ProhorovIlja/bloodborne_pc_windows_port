@@ -6,7 +6,9 @@
 #include "native_unified_import_v387.h"
 #include "native_os_vm_v388.h"
 #if defined(_WIN32)
+#if !defined(WIN32_LEAN_AND_MEAN)
 #define WIN32_LEAN_AND_MEAN 1
+#endif
 #include <windows.h>
 #endif
 /* The real pinned upstream V245 public header already defines BbCpu.
