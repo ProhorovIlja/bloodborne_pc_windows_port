@@ -21,6 +21,7 @@ on:
       - 'native/source-port/recomp-v194/test_verify_tcb_hash_v401.py'
       - 'native/source-port/recomp-v194/test_native_tcb_hash_v401.c'
       - 'native/source-port/recomp-v194/audit_native_only_v402.py'
+      - 'native/source-port/recomp-v194/native_failclosed_overlay_v402.py'
       - 'native/source-port/recomp-v194/test_audit_native_only_v402.py'
       - 'native/source-port/recomp-v194/native_11_function_import_manifest_v402.json'
       - 'native/source-port/recomp-v194/test_native_only_tcb_v402.c'
@@ -211,6 +212,10 @@ jobs:
           python3 "$d/audit_generated_shards_v392.py" \
             --upstream-checkout pinned-upstream \
             --table "$a/recomp.c" --expected-functions 11
+          python3 "$d/native_failclosed_overlay_v402.py" \
+            --upstream-checkout pinned-upstream \
+            --source "$a/recomp_00000_native_v402.c" \
+            --out "$a/recomp_00000_native_v402.c"
           python3 "$d/audit_import_closure_v396.py" \
             --scope invented-test-only --allow-shared-targets \
             --upstream-checkout pinned-upstream \
@@ -225,6 +230,8 @@ jobs:
             --full-image "$full/V401_INVENTED_FS_GS_TCB_NOT_BLOODBORNE.elf" \
             --native-table "$a/recomp.c" \
             --native-shard "$a/recomp_00000.c" \
+            --native-v390-shard "$a/recomp_00000_native_v402.c" \
+            --native-overlay "$a/recomp_00000_native_v402.c" \
             --native-image "$a/V402_INVENTED_11_NATIVE_ONLY_NOT_BLOODBORNE.elf" \
             --manifest "$d/native_11_function_import_manifest_v402.json" \
             --out-ledger "$a/native_only_source_ledger.json" \
@@ -235,7 +242,7 @@ jobs:
             -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
             -I"$d" -I"$a" -Inative/source-port/recomp-v187 \
             -Ipinned-upstream/src -I"$RUNNER_TEMP/v391/include" \
-            -c "$a/recomp_00000_v390.c" -o "$a/native_11_compiled_source.o"
+            -c "$a/recomp_00000_native_v402.c" -o "$a/native_11_compiled_source.o"
           test -s "$a/native_11_compiled_source.o"
           for cc in clang gcc; do
             "$cc" -std=gnu11 -O2 -Wall -Wextra -pthread \
@@ -250,7 +257,7 @@ jobs:
               "$d/native_generated_scope_v392.c" \
               "$d/native_host_recovery_v393.c" \
               "$d/test_native_only_tcb_v402.c" \
-              "$a/recomp.c" "$a/recomp_00000_v390.c" \
+              "$a/recomp.c" "$a/recomp_00000_native_v402.c" \
               -o "$a/native-only-$cc"
             "$a/native-only-$cc"
           done
@@ -267,7 +274,7 @@ jobs:
             "$d/native_generated_scope_v392.c" \
             "$d/native_host_recovery_v393.c" \
             "$d/test_native_only_tcb_v402.c" \
-            "$a/recomp.c" "$a/recomp_00000_v390.c" \
+            "$a/recomp.c" "$a/recomp_00000_native_v402.c" \
             -o "$a/native-only-sanitized"
           "$a/native-only-sanitized"
           echo NATIVE_V402_STRICT_11_FUNCTION_NATIVE_ELF_NO_INTERPRETER_FALLBACK_PASS
@@ -276,7 +283,7 @@ jobs:
           name: native-v402-INVENTED-11-native-only-C-not-bloodborne
           path: |
             ${{ runner.temp }}/v402-native11/recomp.c
-            ${{ runner.temp }}/v402-native11/recomp_00000_v390.c
+            ${{ runner.temp }}/v402-native11/recomp_00000_native_v402.c
             ${{ runner.temp }}/v402-native11/native_only_approved_v402_generated.h
             ${{ runner.temp }}/v402-native11/native_only_source_ledger.json
           retention-days: 1
@@ -423,7 +430,7 @@ jobs:
               /c (Join-Path $d $file) "/Fo:$(Join-Path $nobj ($file + '.obj'))"
             if($LASTEXITCODE -ne 0){throw 'V402 native-only strict host compile failed'}
           }
-          foreach($file in @('recomp.c','recomp_00000_v390.c')) {
+          foreach($file in @('recomp.c','recomp_00000_native_v402.c')) {
             & clang-cl /nologo /TC /std:c11 /W3 /O2 $nativeincs `
               /c (Join-Path $n $file) "/Fo:$(Join-Path $nobj ($file + '.obj'))"
             if($LASTEXITCODE -ne 0){throw 'V402 approved source compile failed'}
@@ -503,7 +510,7 @@ jobs:
             "$d/native_generated_scope_v392.c" \
             "$d/native_host_recovery_v393.c" \
             "$d/test_native_only_tcb_v402.c" \
-            "$n/recomp.c" "$n/recomp_00000_v390.c" \
+            "$n/recomp.c" "$n/recomp_00000_native_v402.c" \
             -o "$RUNNER_TEMP/native-v402-macos-11-approved"
           "$RUNNER_TEMP/native-v402-macos-11-approved"
           echo NATIVE_V402_APPROVED_11_FUNCTION_NATIVE_MACOS_ARM64_PASS
