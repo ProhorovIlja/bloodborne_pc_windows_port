@@ -156,12 +156,15 @@ def verify(m:dict,image:bytes,table:str,shard:str)->dict:
             if not re.search(r"c->tcb\s*;",body) or "rc->step(" in body:
                 raise ValueError("upstream did not emit direct native TCB load")
             normalized+=1
-        if mode=="raw_fs_nonzero" and "c->tcb" in body:
-            raise ValueError("FS nonzero was incorrectly TCB-normalized")
+        if mode=="raw_fs_nonzero":
+            if "c->tcb" in body or "rc->step(" not in body:
+                raise ValueError("FS nonzero fallback must be visibly quarantined")
+        elif "rc->step(" in body:
+            raise ValueError("guest interpreter STEP found in native eligible probe")
     if normalized!=4:
         raise ValueError("TCB source/compiled hash normalization coverage incomplete")
     return {"compiled_functions":len(EXPECTED),"direct_tcb_functions":normalized,
-            "fs_nonzero_negative":True,
+            "fs_nonzero_interpreter_fallback_quarantined":True,
             "real_game_hashes_verified":False}
 
 def main()->None:
