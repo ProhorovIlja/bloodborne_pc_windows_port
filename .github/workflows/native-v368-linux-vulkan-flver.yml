@@ -1,0 +1,79 @@
+name: Native V368 Linux Vulkan real GPU upload and lavapipe readback
+on:
+  push:
+    branches: [feature/native-v368-linux-vulkan-flver-20261112]
+    paths:
+      - '.github/workflows/native-v368-linux-vulkan-flver.yml'
+      - 'native/source-port/recomp-v194/native_vulkan_flver_upload_v368.*'
+      - 'native/source-port/recomp-v194/test_native_vulkan_flver_upload_v368.cpp'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+      - 'native/source-port/recomp-v194/native_flver2_gpu_plan_v364.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-real-vulkan-lavapipe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Install native Vulkan headers loader and Mesa software ICD
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq >/dev/null
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            --no-install-recommends libvulkan-dev mesa-vulkan-drivers >/dev/null
+          test -s /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          test -s /usr/include/vulkan/vulkan.h
+      - name: Compile FLVER geometry contracts with C11
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O2 -Wall -Wextra -Werror -c \
+            "$src/native_flver2_geometry_v362.c" -o flver_v362.o
+          clang -std=c11 -O2 -Wall -Wextra -Werror -c \
+            "$src/native_flver2_gpu_plan_v364.c" -o gpu_v364.o
+      - name: Compile native Linux Vulkan FLVER backend and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for compiler in clang++ g++; do
+            "$compiler" -std=c++17 -O2 -Wall -Wextra -Werror \
+              "$src/native_vulkan_flver_upload_v368.cpp" \
+              "$src/test_native_vulkan_flver_upload_v368.cpp" \
+              flver_v362.o gpu_v364.o -lvulkan \
+              -o native-v368-lavapipe
+            VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
+              ./native-v368-lavapipe
+          done
+      - name: Sanitizer build and real software GPU readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -c "$src/native_flver2_geometry_v362.c" -o flver_san.o
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -c "$src/native_flver2_gpu_plan_v364.c" -o plan_san.o
+          clang++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_vulkan_flver_upload_v368.cpp" \
+            "$src/test_native_vulkan_flver_upload_v368.cpp" \
+            flver_san.o plan_san.o -lvulkan -o native-v368-sanitized
+          VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
+            ./native-v368-sanitized
+      - name: Check no proprietary Bloodborne or Dark Souls files in CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e 'Dark Souls III'
+          echo 'NATIVE_V368_NATIVE_LINUX_NO_PROTON_NO_EBOOT_SYNTHETIC_ONLY_PASS'
