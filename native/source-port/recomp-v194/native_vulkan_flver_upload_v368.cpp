@@ -35,7 +35,8 @@ bool allocate_buffer(
     *out_buffer=VK_NULL_HANDLE;
     *out_memory=VK_NULL_HANDLE;
     if (!logical_bytes) return false;
-    VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    VkBufferCreateInfo info{};
+    info.sType=VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     info.size=logical_bytes;
     info.usage=usage;
     info.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
@@ -45,7 +46,8 @@ bool allocate_buffer(
     vkGetBufferMemoryRequirements(device,*out_buffer,&req);
     const uint32_t idx=memory_type(physical,req.memoryTypeBits,required);
     if (idx==UINT32_MAX || !req.size) return false;
-    VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    VkMemoryAllocateInfo alloc{};
+    alloc.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     alloc.allocationSize=req.size;
     alloc.memoryTypeIndex=idx;
     if (vkAllocateMemory(device,&alloc,nullptr,out_memory)!=VK_SUCCESS)
@@ -56,8 +58,8 @@ bool queue_is_graphics(VkPhysicalDevice physical,uint32_t family) {
     uint32_t count=0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical,&count,nullptr);
     if (family>=count || !count || count>256) return false;
-    std::vector<VkQueueFamilyProperties> props(count);
-    vkGetPhysicalDeviceQueueFamilyProperties(physical,&count,props.data());
+    VkQueueFamilyProperties props[256]{};
+    vkGetPhysicalDeviceQueueFamilyProperties(physical,&count,props);
     return family<count && props[family].queueCount!=0 &&
            (props[family].queueFlags & VK_QUEUE_GRAPHICS_BIT)!=0;
 }
@@ -192,26 +194,30 @@ std::unique_ptr<VulkanFlverUploadV368> submit_flver_vulkan_v368(
         vkUnmapMemory(device,ticket->staging_memory_);
         if (!copied) return nullptr;
 
-        VkCommandPoolCreateInfo pool{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+        VkCommandPoolCreateInfo pool{};
+        pool.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         pool.flags=VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
         pool.queueFamilyIndex=family;
         if (vkCreateCommandPool(device,&pool,nullptr,&ticket->command_pool_)!=VK_SUCCESS)
             return nullptr;
-        VkCommandBufferAllocateInfo alloc{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+        VkCommandBufferAllocateInfo alloc{};
+        alloc.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         alloc.commandPool=ticket->command_pool_;
         alloc.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         alloc.commandBufferCount=1;
         VkCommandBuffer cmd=VK_NULL_HANDLE;
         if (vkAllocateCommandBuffers(device,&alloc,&cmd)!=VK_SUCCESS)
             return nullptr;
-        VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+        VkCommandBufferBeginInfo begin{};
+        begin.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         begin.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         if (vkBeginCommandBuffer(cmd,&begin)!=VK_SUCCESS)
             return nullptr;
         VkBufferCopy copy{};
         copy.size=plan.staging_bytes_total;
         vkCmdCopyBuffer(cmd,ticket->staging_buffer_,ticket->gpu_buffer_,1,&copy);
-        VkBufferMemoryBarrier barrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        VkBufferMemoryBarrier barrier{};
+        barrier.sType=VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
         barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask=VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
                               VK_ACCESS_INDEX_READ_BIT;
@@ -224,10 +230,12 @@ std::unique_ptr<VulkanFlverUploadV368> submit_flver_vulkan_v368(
             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,0,0,nullptr,1,&barrier,0,nullptr);
         if (vkEndCommandBuffer(cmd)!=VK_SUCCESS) return nullptr;
 
-        VkFenceCreateInfo fence_info{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        VkFenceCreateInfo fence_info{};
+        fence_info.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         if (vkCreateFence(device,&fence_info,nullptr,&ticket->fence_)!=VK_SUCCESS)
             return nullptr;
-        VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+        VkSubmitInfo submit{};
+        submit.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submit.commandBufferCount=1;
         submit.pCommandBuffers=&cmd;
         if (vkQueueSubmit(queue,1,&submit,ticket->fence_)!=VK_SUCCESS)
