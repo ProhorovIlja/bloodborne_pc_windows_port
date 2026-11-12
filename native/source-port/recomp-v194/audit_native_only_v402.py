@@ -60,8 +60,16 @@ def inventory(table:str,shard:str)->dict[int,dict]:
         if DANGEROUS.search(body):
             raise ValueError("source has uninstrumentable raw host guest pointer")
         seen=API_CALL.findall(body)
-        if set(seen)-KNOWN_CALLBACKS:
-            raise ValueError("unknown native RcApi callback requires ABI audit")
+        if set(seen)-KNOWN_CALLBACKS or "trace" in seen:
+            raise ValueError("unknown/trace native RcApi callback requires ABI audit")
+        # Even recognized BAIL/TAIL are native execution BLOCKERS in
+        # the raw source. Only these pinned exact callback signatures
+        # can be converted to fail-closed abort by the V402 overlay.
+        overlay=module("v402_overlay","native_failclosed_overlay_v402.py")
+        if (seen.count("bail")!=len(overlay.BAIL.findall(body)) or
+            seen.count("tail")!=len(overlay.TAIL.findall(body)) or
+            seen.count("bail")<1 or seen.count("tail")<1):
+            raise ValueError("unknown or missing pinned generic guest fallback edge")
         out[offset]={"size":int(size),"hash":int(h,16),
                      "callbacks":tuple(seen),"body":body}
     return out
@@ -94,17 +102,22 @@ def evaluate(table12:str,shard12:str,image12:bytes,
         if record["size"]!=expected_row["size"] or (
             record["hash"]!=expected_row["hash"]):
             raise ValueError("full source hash/size changed")
-        unsafe=[c for c in record["callbacks"] if c in ("step","bail","tail","trace")]
+        unsafe=[c for c in record["callbacks"] if c=="step"]
         if unsafe:
             unsupported[offset]=tuple(unsafe)
     if unsupported!={0x1140:("step",)}:
         raise ValueError("unexpected/bypassed interpreter or translator fallback")
+    fallback_edges=0
     for offset,record in safe.items():
         expected_row=expected[offset]
         if record["size"]!=expected_row["size"] or record["hash"]!=expected_row["hash"]:
             raise ValueError("native-only source hash/size changed")
-        if any(x in ("step","bail","tail","trace") for x in record["callbacks"]):
-            raise ValueError("interpreter/translator/tail/trace callback in promoted AOT")
+        if "step" in record["callbacks"] or "trace" in record["callbacks"]:
+            raise ValueError("interpreter STEP/TRACE in native-only candidate")
+        # NOTE: raw generated source still contains generic BAIL/TAIL.
+        # It cannot be published until the exact fail-closed overlay
+        # has replaced all of them with C11 abort().
+        fallback_edges+=record["callbacks"].count("bail")+record["callbacks"].count("tail")
         if record["callbacks"].count("call"):
             if offset not in (0x10a0,0x10c0) or (
                 record["callbacks"].count("call")!=1):
@@ -128,6 +141,7 @@ def evaluate(table12:str,shard12:str,image12:bytes,
     return {"generated_source_functions":len(full),
             "quarantined_fallbacks":{"0x1140":["rc->step"]},
             "native_only_functions":len(safe),
+            "failclosed_guest_bail_tail_edges":fallback_edges,
             "native_indirect_call_sites":len(observed_calls),
             "runtime_original_game_proven":False}
 
@@ -146,6 +160,8 @@ def main()->None:
     p.add_argument("--full-image",required=True,type=Path)
     p.add_argument("--native-table",required=True,type=Path)
     p.add_argument("--native-shard",required=True,type=Path)
+    p.add_argument("--native-v390-shard",required=True,type=Path)
+    p.add_argument("--native-overlay",required=True,type=Path)
     p.add_argument("--native-image",required=True,type=Path)
     p.add_argument("--manifest",required=True,type=Path)
     p.add_argument("--out-ledger",required=True,type=Path)
@@ -166,6 +182,20 @@ def main()->None:
     manifest=v396.load_manifest(a.manifest,"invented-test-only")
     ledger=evaluate(fulltable,fullshard,fullimage,nativetable,
                     nativeshard,nativeimage,manifest)
+    # Exact chain: genuine raw C -> V390 safe guest memory overlay ->
+    # V402 fail-closed replacement of EVERY translator/tail exit.
+    # Neither the intermediate C nor the 12-fn source (contains STEP)
+    # is ever eligible to be compiled into the native binary.
+    expected_v390,_=v390.transform(nativeshard)
+    actual_v390=checked_file(a.native_v390_shard,".c").decode("utf-8")
+    if expected_v390!=actual_v390:
+        raise ValueError("V390 guest memory overlay missing or changed")
+    overlay=module("v402_overlay","native_failclosed_overlay_v402.py")
+    expected_compiled,counts=overlay.transform(actual_v390)
+    compiled=checked_file(a.native_overlay,".c").decode("utf-8")
+    if expected_compiled!=compiled or (
+        counts["bail_abort"]+counts["tail_abort"]!=ledger["failclosed_guest_bail_tail_edges"]):
+        raise ValueError("native-only generated shard still has unmediated fallback")
     out=a.out_ledger
     if out.exists() or out.suffix!=".json" or not out.parent.is_dir() or (
         out.parent.is_symlink()) or (
