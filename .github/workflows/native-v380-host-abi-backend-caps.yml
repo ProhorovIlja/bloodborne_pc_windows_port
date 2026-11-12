@@ -78,6 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           d=native/source-port/recomp-v194
+          test "$(uname -m)" = arm64
           clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
             "$d/native_platform_caps_v380.c" \
             "$d/test_native_platform_caps_v380.c" \
