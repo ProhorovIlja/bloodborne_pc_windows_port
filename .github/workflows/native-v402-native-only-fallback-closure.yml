@@ -1,7 +1,7 @@
-name: Native V402 native-only AOT source fallback quarantine and 11-function closure
+name: Native V403 source-attested 11-function synthetic route closure (V402 baseline)
 on:
   push:
-    branches: [feature/native-v402-fallback-closure-20261112]
+    branches: [feature/native-v402-fallback-closure-20261112, feature/native-v403-source-route-attestation-20261112]
     paths:
       - '.github/workflows/native-v402-native-only-fallback-closure.yml'
       - 'native/source-port/recomp-v194/generate_verified_imports_v395.py'
@@ -21,6 +21,9 @@ on:
       - 'native/source-port/recomp-v194/test_verify_tcb_hash_v401.py'
       - 'native/source-port/recomp-v194/test_native_tcb_hash_v401.c'
       - 'native/source-port/recomp-v194/audit_native_only_v402.py'
+      - 'native/source-port/recomp-v194/native_route_attestation_v403.py'
+      - 'native/source-port/recomp-v194/test_native_route_attestation_v403.py'
+      - 'native/source-port/recomp-v194/test_native_route_guard_v403.c'
       - 'native/source-port/recomp-v194/native_failclosed_overlay_v402.py'
       - 'native/source-port/recomp-v194/test_audit_native_only_v402.py'
       - 'native/source-port/recomp-v194/native_11_function_import_manifest_v402.json'
@@ -58,6 +61,9 @@ on:
       - 'native/source-port/recomp-v194/test_verify_tcb_hash_v401.py'
       - 'native/source-port/recomp-v194/test_native_tcb_hash_v401.c'
       - 'native/source-port/recomp-v194/audit_native_only_v402.py'
+      - 'native/source-port/recomp-v194/native_route_attestation_v403.py'
+      - 'native/source-port/recomp-v194/test_native_route_attestation_v403.py'
+      - 'native/source-port/recomp-v194/test_native_route_guard_v403.c'
       - 'native/source-port/recomp-v194/test_audit_native_only_v402.py'
       - 'native/source-port/recomp-v194/native_11_function_import_manifest_v402.json'
       - 'native/source-port/recomp-v194/test_native_only_tcb_v402.c'
@@ -238,6 +244,28 @@ jobs:
             --out-header "$a/native_only_approved_v402_generated.h"
           test -s "$a/native_only_approved_v402_generated.h"
           test -s "$a/native_only_source_ledger.json"
+          # V403 re-verifies the exact V402 source/hash/ABI/overlay chain
+          # before emitting a synthetic-only default-deny route membership map.
+          python3 "$d/test_native_route_attestation_v403.py"
+          python3 "$d/native_route_attestation_v403.py" \
+            --full-table "$full/recomp.c" \
+            --full-shard "$full/recomp_00000.c" \
+            --full-image "$full/V401_INVENTED_FS_GS_TCB_NOT_BLOODBORNE.elf" \
+            --native-table "$a/recomp.c" \
+            --native-shard "$a/recomp_00000.c" \
+            --native-image "$a/V402_INVENTED_11_NATIVE_ONLY_NOT_BLOODBORNE.elf" \
+            --native-v390-shard "$a/recomp_00000_v390.c" \
+            --native-overlay "$a/recomp_00000_native_v402.c" \
+            --manifest "$d/native_11_function_import_manifest_v402.json" \
+            --v402-ledger "$a/native_only_source_ledger.json" \
+            --out-report "$a/native_route_ledger_v403.json" \
+            --out-header "$a/native_route_guard_v403_generated.h"
+          python3 -m json.tool "$a/native_route_ledger_v403.json" >/dev/null
+          for cc in clang gcc; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -I"$a" \
+              "$d/test_native_route_guard_v403.c" -o "$a/v403-guard-$cc"
+            "$a/v403-guard-$cc"
+          done
           clang -std=gnu11 -O2 -ffp-contract=off -fno-strict-aliasing \
             -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
             -I"$d" -I"$a" -Inative/source-port/recomp-v187 \
@@ -286,6 +314,8 @@ jobs:
             ${{ runner.temp }}/v402-native11/recomp_00000_native_v402.c
             ${{ runner.temp }}/v402-native11/native_only_approved_v402_generated.h
             ${{ runner.temp }}/v402-native11/native_only_source_ledger.json
+            ${{ runner.temp }}/v402-native11/native_route_ledger_v403.json
+            ${{ runner.temp }}/v402-native11/native_route_guard_v403_generated.h
           retention-days: 1
       - name: Linux Clang and GCC run actual generated LOCK CMPXCHG SIMD 128 and 256
         shell: bash
@@ -441,6 +471,14 @@ jobs:
           & $exe402
           if($LASTEXITCODE -ne 0){throw 'V402 4 native generated TCB function execution failed'}
           'NATIVE_V402_APPROVED_11_FUNCTION_NATIVE_WIN64_PE_PASS'
+          $v403obj=Join-Path $nobj 'test_native_route_guard_v403.obj'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$n" /c (Join-Path $d 'test_native_route_guard_v403.c') "/Fo:$v403obj"
+          if($LASTEXITCODE -ne 0){throw 'V403 Win64 route guard compile failed'}
+          $v403exe=Join-Path $env:RUNNER_TEMP 'native-v403-route-guard.exe'
+          & clang-cl /nologo $v403obj "/Fe:$v403exe"
+          if($LASTEXITCODE -ne 0){throw 'V403 Win64 route guard link failed'}
+          & $v403exe
+          if($LASTEXITCODE -ne 0){throw 'V403 Win64 route guard execution failed'}
   macos-arm64-host:
     needs: real-generator-and-linux
     runs-on: macos-15
