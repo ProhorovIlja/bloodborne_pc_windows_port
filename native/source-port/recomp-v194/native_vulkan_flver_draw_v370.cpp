@@ -177,7 +177,8 @@ bool shader_module_v370(VkDevice device,const uint32_t* words,size_t count,
 }
 
 bool create_pipeline_v370(FrameResourcesV370& f,
-    const uint32_t* vs,size_t vlen,const uint32_t* fs,size_t flen) noexcept {
+    const uint32_t* vs,size_t vlen,const uint32_t* fs,size_t flen,
+    uint32_t validated_stride) noexcept {
     if(!shader_module_v370(f.device,vs,vlen,&f.vertex_module) ||
        !shader_module_v370(f.device,fs,flen,&f.fragment_module)) return false;
     VkPipelineLayoutCreateInfo layout{};
@@ -195,7 +196,7 @@ bool create_pipeline_v370(FrameResourcesV370& f,
     shaders[1].module=f.fragment_module;
     VkVertexInputBindingDescription binding{};
     binding.binding=0;
-    binding.stride=12;
+    binding.stride=validated_stride;
     binding.inputRate=VK_VERTEX_INPUT_RATE_VERTEX;
     VkVertexInputAttributeDescription attr{};
     attr.location=0;
@@ -259,9 +260,10 @@ bool create_pipeline_v370(FrameResourcesV370& f,
 
 } // namespace
 
-bool draw_offscreen_flver_v370(VkPhysicalDevice physical,VkDevice device,
+bool draw_offscreen_flver_strided_v372(VkPhysicalDevice physical,VkDevice device,
     VkQueue queue,uint32_t family,
     const shyt_native_v369::UploadedModelV369& model,
+    uint32_t verified_stride,
     const uint32_t* vertex_spirv,size_t vertex_words,
     const uint32_t* fragment_spirv,size_t fragment_words,
     std::vector<uint8_t>* out) {
@@ -269,14 +271,15 @@ bool draw_offscreen_flver_v370(VkPhysicalDevice physical,VkDevice device,
     out->clear();
     if (!physical || !device || !queue || !model.gpu_buffer() ||
         model.vertices.size()!=1 || model.indices.size()!=1 ||
-        model.draws.size()!=1 || model.vertices[0].stride!=12 ||
+        model.draws.size()!=1 || verified_stride<12 || verified_stride>1024 ||
+        model.vertices[0].stride!=verified_stride ||
         model.vertices[0].count!=3 || model.indices[0].count!=3 ||
         model.indices[0].type!=VK_INDEX_TYPE_UINT16 ||
         model.draws[0].vertex_buffer_count!=1 ||
         model.draws[0].vertex_buffer_indices[0]!=0 ||
         model.draws[0].face_set_index!=0 ||
         model.vertices[0].offset>model.bytes ||
-        36u>model.bytes-model.vertices[0].offset ||
+        (uint64_t)verified_stride*3u>model.bytes-model.vertices[0].offset ||
         model.indices[0].offset>model.bytes ||
         6u>model.bytes-model.indices[0].offset)
         return false;
@@ -298,7 +301,7 @@ bool draw_offscreen_flver_v370(VkPhysicalDevice physical,VkDevice device,
         !allocation_for_readback_v370(physical,f) ||
         !create_pass_v370(f) ||
         !create_pipeline_v370(f,vertex_spirv,vertex_words,fragment_spirv,
-                              fragment_words)) return false;
+                              fragment_words,verified_stride)) return false;
     VkCommandPoolCreateInfo pool{};
     pool.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool.queueFamilyIndex=family;
@@ -389,5 +392,18 @@ bool draw_offscreen_flver_v370(VkPhysicalDevice physical,VkDevice device,
     vkUnmapMemory(device,f.readback_mem);
     if (!copied) out->clear();
     return copied;
+}
+
+/* V370 remains an unmodified, strict position-only 12-byte interface.
+ * V372's explicit-stride entrypoint is called only by the independent
+ * source-layout validation wrapper in native_vulkan_flver_semantic_draw_v372.
+ */
+bool draw_offscreen_flver_v370(VkPhysicalDevice physical,VkDevice device,
+    VkQueue queue,uint32_t family,
+    const shyt_native_v369::UploadedModelV369& model,
+    const uint32_t* vs,size_t vlen,const uint32_t* fs,size_t flen,
+    std::vector<uint8_t>* out) {
+    return draw_offscreen_flver_strided_v372(
+        physical,device,queue,family,model,12,vs,vlen,fs,flen,out);
 }
 } // namespace shyt_native_v370
