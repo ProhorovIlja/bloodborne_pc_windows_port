@@ -39,6 +39,13 @@ int shyt_unified_import_prepare_v385(
  * V245's OLD raw-pointer handlers must never be separately invoked
  * in production after this finalization.
  */
+/* Explicit diagnostic before publication: +1 handled by native VM,
+ * 0 unknown target, -1 known import but unsafe. Unknown may be sent
+ * to native-only V382; -1 must abort/trap without guest code fallback.
+ * On -1 guest CPU registers/memory remain unchanged.
+ */
+int shyt_unified_import_try_v385(ShytUnifiedImportV385 *route,
+    BbCpu *cpu, uint64_t target, uint64_t next);
 int shyt_unified_import_publish_v385(ShytUnifiedImportV385 *route);
 #ifdef __cplusplus
 }
