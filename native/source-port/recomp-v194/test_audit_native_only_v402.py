@@ -90,7 +90,7 @@ cases=[
     (full_table,full_shard,fullimage,native_table,
      native_shard.replace("c->r[RAX] = 0;","bb_load(c,1);",1),nativeimage,manifest),
     (full_table,full_shard,fullimage,native_table,
-     native_shard.replace("void f_1160(BbCpu *c) {\n c->r[0] = c->tcb;\n}",""),nativeimage,manifest),
+     native_shard.replace("void f_1160(BbCpu *c) {","void f_11ff(BbCpu *c) {"),nativeimage,manifest),
     (full_table,full_shard.replace("rc->step(c);","c->r[RAX] = 0;"),
      fullimage,native_table,native_shard,nativeimage,manifest),
     (full_table,full_shard.replace("rc->step(c);","rc->bail(c,0);"),
