@@ -3,7 +3,8 @@
 #include <stdint.h>
 #include <string.h>
 #define SHYT_V386_CLOSING UINT32_C(0x80000000)
-#define SHYT_V386_COUNT_MASK UINT32_C(0x7fffffff)
+#define SHYT_V386_PAUSED UINT32_C(0x40000000)
+#define SHYT_V386_COUNT_MASK UINT32_C(0x3fffffff)
 _Static_assert(sizeof(void*)==8,"64-bit native host required");
 _Static_assert(sizeof(_Atomic(uint64_t))==8,"8-byte C11 atomic backing required");
 
@@ -55,7 +56,7 @@ int shyt_native_vm_pin_v386(ShytNativeVmV386 *vm,
         return 0;
     old=atomic_load_explicit(&vm->pins_and_closing,memory_order_acquire);
     for(;;) {
-        if ((old&SHYT_V386_CLOSING) ||
+        if ((old&(SHYT_V386_CLOSING|SHYT_V386_PAUSED)) ||
             (old&SHYT_V386_COUNT_MASK)==SHYT_V386_COUNT_MASK) return 0;
         if (atomic_compare_exchange_weak_explicit(
                 &vm->pins_and_closing,&old,old+1u,
@@ -80,10 +81,18 @@ int shyt_native_vm_unpin_v386(ShytNativeVmLeaseV386 *lease) {
     return 1;
 }
 int shyt_native_vm_close_v386(ShytNativeVmV386 *vm) {
+    uint32_t old;
     if (!vm || vm->sealed!=1)return 0;
-    atomic_fetch_or_explicit(&vm->pins_and_closing,SHYT_V386_CLOSING,
-                             memory_order_acq_rel);
-    return 1;
+    old=atomic_load_explicit(&vm->pins_and_closing,memory_order_acquire);
+    for(;;) {
+        /* V389 requires controller to RESUME a paused map before
+         * irreversible shutdown. Never close during OS page reprotect. */
+        if(old&SHYT_V386_PAUSED)return 0;
+        if(old&SHYT_V386_CLOSING)return 1;
+        if(atomic_compare_exchange_weak_explicit(
+               &vm->pins_and_closing,&old,old|SHYT_V386_CLOSING,
+               memory_order_acq_rel,memory_order_acquire))return 1;
+    }
 }
 int shyt_native_vm_quiescent_v386(const ShytNativeVmV386 *vm) {
     return vm && vm->sealed==1 &&

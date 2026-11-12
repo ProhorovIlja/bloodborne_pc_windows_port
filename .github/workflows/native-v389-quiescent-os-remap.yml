@@ -1,0 +1,213 @@
+name: Native V389 quiescent OS remap and original-free AOT
+on:
+  push:
+    branches: [feature/native-v389-quiescent-os-remap-20261112]
+    paths:
+      - '.github/workflows/native-v389-quiescent-os-remap.yml'
+      - 'native/source-port/recomp-v194/native_os_vm_reconfigure_v389.*'
+      - 'native/source-port/recomp-v194/test_native_os_vm_reconfigure_v389.c'
+      - 'native/source-port/recomp-v194/native_multi_region_vm_v386.*'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v389-quiescent-os-remap.yml'
+      - 'native/source-port/recomp-v194/native_os_vm_reconfigure_v389.*'
+      - 'native/source-port/recomp-v194/test_native_os_vm_reconfigure_v389.c'
+      - 'native/source-port/recomp-v194/native_multi_region_vm_v386.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Linux GCC and Clang native OS remap AOT tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+              "$d/native_strict_aot_v381.c" \
+              "$d/native_aot_route_v382.c" \
+              "$d/native_multi_region_vm_v386.c" \
+              "$d/native_os_vm_v388.c" \
+              "$d/native_os_vm_reconfigure_v389.c" \
+              "$d/test_native_os_vm_reconfigure_v389.c" \
+              -o "native-v389-$cc"
+            "./native-v389-$cc"
+          done
+      - name: Clang AddressSanitizer UndefinedBehaviorSanitizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/test_native_os_vm_reconfigure_v389.c" \
+            -o native-v389-asan
+          ./native-v389-asan
+      - name: Inherited V388 cross-word and native call regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/test_native_os_vm_v388.c" -o native-v388-inherited
+          ./native-v388-inherited
+  windows-amd64:
+    runs-on: windows-2022
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Native Win64 VirtualProtect remap and AOT regression
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          $i='native/source-port/recomp-v187'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$i" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/native_aot_route_v382.c" `
+            "$d/native_multi_region_vm_v386.c" `
+            "$d/native_os_vm_v388.c" `
+            "$d/native_os_vm_reconfigure_v389.c" `
+            "$d/test_native_os_vm_reconfigure_v389.c" /Fe:native-v389.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V389 Win64 native remap compilation failed' }
+          & .\native-v389.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V389 Win64 native remap execution failed' }
+      - name: Inherited V388 native Win64 OS memory regression
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          $i='native/source-port/recomp-v187'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$i" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/native_aot_route_v382.c" `
+            "$d/native_multi_region_vm_v386.c" `
+            "$d/native_os_vm_v388.c" `
+            "$d/test_native_os_vm_v388.c" /Fe:native-v388-inherited.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Inherited V388 Win64 compile failed' }
+          & .\native-v388-inherited.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Inherited V388 Win64 test failed' }
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Apple Silicon host-only OS memory pause, remap and native AOT
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/test_native_os_vm_reconfigure_v389.c" -o native-v389-macos
+          ./native-v389-macos
+  public-upstream-deps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Pinned upstream public recomp header dependencies only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream
+          if ! (cd public-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v389-public-headers.log" 2>&1; then
+            echo '::error title=V389::Pinned public dependency build failed'
+            exit 1
+          fi
+          test -s public-upstream/deps/include/Zydis/Zydis.h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v389-public-headers
+          path: public-upstream/deps/include/
+          retention-days: 1
+  win64-original-free-rcapi-chain:
+    needs: public-upstream-deps
+    runs-on: windows-2022
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v389-public-headers
+          path: public-upstream/deps/include
+      - name: Full inherited pinned RcApi math clock native AOT with OS pages
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          $exe=Join-Path $env:RUNNER_TEMP 'native-v389-inherited-v388-rcapi.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/FI$d/native_win_rc_time_v270.h" `
+            "/I$d" "/Inative/source-port/recomp-v187" `
+            "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$d/native_math_shim_v222.c" `
+            "$d/native_math_guest_bridge_v223.c" `
+            "$d/native_math_import_dispatch_v224.c" `
+            "$d/native_math_rcapi_route_v226.c" `
+            "$d/native_win_clock_v236.c" `
+            "$d/native_clock_rcapi_route_v239.c" `
+            "$d/native_aot_services_bootstrap_v245.c" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/native_aot_route_v382.c" `
+            "$d/native_pinned_stack_v383.c" `
+            "$d/native_boot_chain_v384.c" `
+            "$d/native_multi_region_vm_v386.c" `
+            "$d/native_unified_import_v387.c" `
+            "$d/native_os_vm_v388.c" `
+            "$d/test_native_os_bootstrap_v388.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'V389 inherited Win64 real source RcApi compilation failed' }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'V389 inherited Win64 real source RcApi fixture failed' }
+          'Native V389 inherited real RcApi original-free integration passed; NOT Bloodborne game boot.'
