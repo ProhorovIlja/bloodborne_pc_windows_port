@@ -417,7 +417,7 @@ static int test_all(void){
         UINT64_C(0x400000)));
     ShytNativeFunctionProofV399 bad_functions[7];
     memcpy(bad_functions,proofs,sizeof bad_functions);
-    bad_functions[5].hash=NULL;
+    bad_functions[5].hash=0;
     CHECK(!shyt_native_bind_attested_v399(&rejected,owner,manifest_sites,
         SHYT_V396_SITE_COUNT,SHYT_V396_SITE_COUNT,bad_functions,count,
         UINT64_C(0x400000)));
