@@ -1,0 +1,217 @@
+name: Native V392 scoped generated RcFn and complete AOT shard inventory
+on:
+  push:
+    branches: [feature/native-v392-generated-entry-audit-20261112]
+    paths:
+      - '.github/workflows/native-v392-generated-entry-scope.yml'
+      - 'native/source-port/recomp-v194/generate_lock_simd_v391.py'
+      - 'native/source-port/recomp-v194/native_generated_scope_v392.*'
+      - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
+      - 'native/source-port/recomp-v194/audit_generated_shards_v392.py'
+      - 'native/source-port/recomp-v194/test_audit_generated_shards_v392.py'
+      - 'native/source-port/recomp-v194/test_native_generated_scope_v392.c'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v392-generated-entry-scope.yml'
+      - 'native/source-port/recomp-v194/generate_lock_simd_v391.py'
+      - 'native/source-port/recomp-v194/native_generated_scope_v392.*'
+      - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
+      - 'native/source-port/recomp-v194/audit_generated_shards_v392.py'
+      - 'native/source-port/recomp-v194/test_audit_generated_shards_v392.py'
+      - 'native/source-port/recomp-v194/test_native_generated_scope_v392.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-generator-and-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Compile pinned REAL offline bbrecomp original full-function generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          python3 "$d/patch_upstream_linux_generator_v196.py" --upstream-checkout pinned-upstream
+          python3 "$d/patch_upstream_ret_flags_v199.py" --upstream-checkout pinned-upstream
+          if ! (cd pinned-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v391-compiler.log" 2>&1; then
+            echo '::error title=V391::Source-pinned offline generator failed'
+            grep -m2 -E 'error:|fatal error|undefined reference' "$RUNNER_TEMP/v391-compiler.log" | cut -c1-200 || true
+            exit 1
+          fi
+      - name: Generate actual native whole-function C from five INVENTED x86 instructions
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          mkdir -p "$RUNNER_TEMP/v391"
+          python3 "$d/generate_lock_simd_v391.py" \
+            --upstream-checkout pinned-upstream \
+            --out "$RUNNER_TEMP/v391/recomp.c"
+          python3 "$d/instrument_generated_aot_memory_v390.py" \
+            --upstream-checkout pinned-upstream \
+            --source "$RUNNER_TEMP/v391/recomp_00000.c" \
+            --output "$RUNNER_TEMP/v391/recomp_00000_v390.c"
+          python3 "$d/test_audit_generated_shards_v392.py"
+          python3 "$d/audit_generated_shards_v392.py" \
+            --upstream-checkout pinned-upstream \
+            --table "$RUNNER_TEMP/v391/recomp.c" \
+            --expected-functions 5
+          cp -a pinned-upstream/deps/include "$RUNNER_TEMP/v391/include"
+          test -s "$RUNNER_TEMP/v391/recomp_00000_v390.c"
+          echo NATIVE_V391_REAL_UPSTREAM_LOCK_SIMD_SOURCE_INSTRUMENTED_PASS
+      - name: Linux Clang and GCC run actual generated LOCK CMPXCHG SIMD 128 and 256
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v391"
+          python3 "$d/patch_upstream_win32_clock_v195.py" --upstream-checkout pinned-upstream
+          ulimit -c 0
+          for cc in clang gcc; do
+            "$cc" -std=gnu11 -O2 -Wall -Wextra -pthread \
+              -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+              -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
+              -I"$d" -Ipinned-upstream/src -I"$a/include" \
+              "$d/native_multi_region_vm_v386.c" \
+              "$d/native_os_vm_v388.c" \
+              "$d/native_os_vm_reconfigure_v389.c" \
+              "$d/native_generated_memory_v390.c" \
+              "$d/native_generated_scope_v392.c" \
+              "$d/test_native_generated_scope_v392.c" \
+              "$a/recomp.c" "$a/recomp_00000_v390.c" \
+              -o "$RUNNER_TEMP/v391-actual-$cc"
+            "$RUNNER_TEMP/v391-actual-$cc"
+          done
+      - name: Linux AddressSanitizer UndefinedBehaviorSanitizer original-generated LOCK SIMD
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v391"
+          ulimit -c 0
+          clang -std=gnu11 -O1 -g -Wall -Wextra -pthread \
+            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+            -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -I"$d" -Ipinned-upstream/src -I"$a/include" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/native_generated_memory_v390.c" \
+            "$d/native_generated_scope_v392.c" \
+            "$d/test_native_generated_scope_v392.c" \
+            "$a/recomp.c" "$a/recomp_00000_v390.c" \
+            -o "$RUNNER_TEMP/v391-actual-san"
+          "$RUNNER_TEMP/v391-actual-san"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v391-INVENTED-upstream-C-public-headers
+          path: ${{ runner.temp }}/v391/
+          if-no-files-found: error
+          retention-days: 1
+  windows-amd64-real-generator:
+    needs: real-generator-and-linux
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v391-INVENTED-upstream-C-public-headers
+          path: ${{ runner.temp }}/v391
+      - name: Strict host bridge Win64 and actual pinned generated C native PE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $d='native/source-port/recomp-v194'
+          $a=Join-Path $env:RUNNER_TEMP 'v391'
+          $o=Join-Path $env:RUNNER_TEMP 'v391-objs'
+          New-Item -ItemType Directory -Force -Path $o | Out-Null
+          $incs=@("/I$d",'/Inative/source-port/recomp-v187',
+                  '/Ipinned-upstream/src',"/I$a/include",
+                  "/FI$d/native_win_rc_time_v270.h")
+          foreach($name in @('native_multi_region_vm_v386.c','native_os_vm_v388.c',
+              'native_os_vm_reconfigure_v389.c','native_generated_memory_v390.c','native_generated_scope_v392.c',
+              'test_native_generated_scope_v392.c')) {
+            & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 $incs `
+              /c (Join-Path $d $name) "/Fo:$(Join-Path $o ($name + '.obj'))"
+            if($LASTEXITCODE -ne 0){throw "V391 handwritten strict Windows compile failed"}
+          }
+          foreach($name in @('recomp.c','recomp_00000_v390.c')) {
+            & clang-cl /nologo /TC /std:c11 /W3 /O2 $incs `
+              /c (Join-Path $a $name) "/Fo:$(Join-Path $o ($name + '.obj'))"
+            if($LASTEXITCODE -ne 0){throw 'V391 real upstream generated Win64 compile failed'}
+          }
+          $exe=Join-Path $env:RUNNER_TEMP 'v391-generated-lock-simd.exe'
+          & clang-cl /nologo (Get-ChildItem -Path $o -Filter '*.obj' | ForEach-Object FullName) "/Fe:$exe"
+          if($LASTEXITCODE -ne 0){throw 'V391 PE x64 link failed'}
+          $data=[IO.File]::ReadAllBytes($exe)
+          if($data.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($data,0,2) -ne 'MZ') {
+            throw 'Not a Windows native PE'
+          }
+          & $exe
+          if($LASTEXITCODE -ne 0){throw 'V391 actual generated LOCK SIMD native Win64 test failed'}
+          'NATIVE_V392_SCOPED_GENERATED_WIN64_PE_PASS'
+  macos-arm64-host:
+    needs: real-generator-and-linux
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: pinned-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v391-INVENTED-upstream-C-public-headers
+          path: ${{ runner.temp }}/v391
+      - name: Native Apple Silicon host executes invented x86-origin real generated C
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v391"
+          ulimit -c 0
+          clang -std=gnu11 -O2 -Wall -Wextra -pthread \
+            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+            -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
+            -I"$d" -Ipinned-upstream/src -I"$a/include" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/native_generated_memory_v390.c" \
+            "$d/native_generated_scope_v392.c" \
+            "$d/test_native_generated_scope_v392.c" \
+            "$a/recomp.c" "$a/recomp_00000_v390.c" \
+            -o "$RUNNER_TEMP/native-v391-macos-arm64"
+          "$RUNNER_TEMP/native-v391-macos-arm64"
