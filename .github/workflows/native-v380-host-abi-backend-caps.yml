@@ -1,0 +1,92 @@
+name: Native V380 Windows Linux macOS host ABI and renderer capability contract
+on:
+  push:
+    branches: [feature/native-v380-platform-abi-render-caps-20261112]
+    paths:
+      - '.github/workflows/native-v380-host-abi-backend-caps.yml'
+      - 'native/source-port/recomp-v194/native_platform_caps_v380.*'
+      - 'native/source-port/recomp-v194/test_native_platform_caps_v380.c'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v380-host-abi-backend-caps.yml'
+      - 'native/source-port/recomp-v194/native_platform_caps_v380.*'
+      - 'native/source-port/recomp-v194/test_native_platform_caps_v380.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-x64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC and Clang native ELF64 AMD64 builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+              "$d/native_platform_caps_v380.c" \
+              "$d/test_native_platform_caps_v380.c" \
+              -o "test-native-v380-$cc"
+            "./test-native-v380-$cc"
+          done
+      - name: Linux ASan UBSan capability state-machine test
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          clang -std=c11 -g -O1 -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_platform_caps_v380.c" \
+            "$d/test_native_platform_caps_v380.c" \
+            -o test-native-v380-san
+          ./test-native-v380-san
+  windows-x64:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Win64 clang-cl native PE32+ build (Win32 API is not 32-bit only)
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$d/native_platform_caps_v380.c" `
+            "$d/test_native_platform_caps_v380.c" `
+            /Fe:test-native-v380.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V380 Win64 compilation failed' }
+          & .\test-native-v380.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V380 Win64 test failed' }
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Apple Silicon Mach-O ARM64 host build (not original game recompilation)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          test "$(uname -m)" = arm64
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+            "$d/native_platform_caps_v380.c" \
+            "$d/test_native_platform_caps_v380.c" \
+            -o test-native-v380-macos
+          ./test-native-v380-macos
+          file test-native-v380-macos
+      - name: No retail binaries or graphics SDK redistribution
+        shell: bash
+        run: |
+          test ! -d CUSA03173
+          test ! -d 'Dark Souls III'
