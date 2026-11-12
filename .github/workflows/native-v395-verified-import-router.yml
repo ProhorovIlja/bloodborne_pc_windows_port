@@ -90,7 +90,7 @@ jobs:
           python3 "$d/test_verify_generated_import_v395.py"
           clang -std=gnu11 -O2 -ffp-contract=off -fno-strict-aliasing \
             -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
-            -I"$d" -Ipinned-upstream/src -I"$a/include" \
+            -I"$d" -Inative/source-port/recomp-v187 -Ipinned-upstream/src -I"$a/include" \
             -c "$a/recomp_00000_v390.c" -o "$RUNNER_TEMP/v393-real-generated.o"
           python3 "$d/verify_generated_import_v395.py" \
             --object "$RUNNER_TEMP/v393-real-generated.o" \
@@ -108,7 +108,7 @@ jobs:
             "$cc" -std=gnu11 -O2 -Wall -Wextra -pthread \
               -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
               -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
-              -I"$d" -Ipinned-upstream/src -I"$a/include" \
+              -I"$d" -Inative/source-port/recomp-v187 -Ipinned-upstream/src -I"$a/include" \
               "$d/native_multi_region_vm_v386.c" \
               "$d/native_os_vm_v388.c" \
               "$d/native_os_vm_reconfigure_v389.c" \
@@ -132,7 +132,7 @@ jobs:
             -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
             -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
             -fsanitize=address,undefined -fno-omit-frame-pointer \
-            -I"$d" -Ipinned-upstream/src -I"$a/include" \
+            -I"$d" -Inative/source-port/recomp-v187 -Ipinned-upstream/src -I"$a/include" \
             "$d/native_multi_region_vm_v386.c" \
             "$d/native_os_vm_v388.c" \
             "$d/native_os_vm_reconfigure_v389.c" \
@@ -234,7 +234,7 @@ jobs:
           clang -std=gnu11 -O2 -Wall -Wextra -pthread \
             -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
             -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
-            -I"$d" -Ipinned-upstream/src -I"$a/include" \
+            -I"$d" -Inative/source-port/recomp-v187 -Ipinned-upstream/src -I"$a/include" \
             "$d/native_multi_region_vm_v386.c" \
             "$d/native_os_vm_v388.c" \
             "$d/native_os_vm_reconfigure_v389.c" \
