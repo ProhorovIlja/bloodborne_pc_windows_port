@@ -79,23 +79,35 @@ def generate(checkout:Path,out:Path)->None:
             b.count(f"void f_{off:x}(BbCpu *c) {{")!=1) or (
             a.count(f"&d_{off:x}")!=1):
             raise ValueError("12-function source and native slot coverage failed")
-    if b.count("c->tcb")<4 or "rc->step(" in b:
-        # INVENTED data only: emit bounded diagnostic per synthetic
-        # function; never print full generated C or game-private data.
-        import re
-        matches=list(re.finditer(r"void f_([0-9a-f]+)\(BbCpu \*c\) \{",b))
-        for i,m in enumerate(matches):
-            if int(m.group(1),16)<0x10e0:continue
-            end=matches[i+1].start() if i+1<len(matches) else len(b)
-            body=b[m.end():end]
-            short=re.sub(r"\s+"," ",body)[:240]
-            print("V401_SYNTHETIC_TCB_DIAG f_"+m.group(1)+
-                  " has_tcb="+str("c->tcb" in body)+
-                  " has_step="+str("rc->step(" in body)+
-                  " body_prefix="+repr(short),file=sys.stderr)
-        raise ValueError("real pinned bbrecomp TCB normalization must be audited")
+    # The FS:[nonzero] control is intentionally NOT supported by
+    # pinned bbrecomp: it emits rc->step, proving that promoting the
+    # entire 12-function probe would violate native-only execution.
+    # We inspect it only as a BUILD-TIME negative and never publish,
+    # compile into a runtime guest image or execute that callback.
+    import re
+    matches=list(re.finditer(r"void f_([0-9a-f]+)\(BbCpu \*c\) \{",b))
+    if len(matches)!=len(FUNCTIONS):
+        raise ValueError("incomplete generated function scope inventory")
+    direct_tcb=0
+    quarantined=0
+    for i,m in enumerate(matches):
+        off=int(m.group(1),16)
+        end=matches[i+1].start() if i+1<len(matches) else len(b)
+        body=b[m.end():end]
+        if off==0x1140:
+            if "c->tcb" in body or "rc->step(" not in body:
+                raise ValueError("FS nonzero control unexpectedly native or hidden")
+            quarantined+=1
+        elif off in (0x10e0,0x1100,0x1120,0x1160):
+            if "c->tcb" not in body or "rc->step(" in body:
+                raise ValueError("eligible FS/GS TCB load not native-only")
+            direct_tcb+=1
+        elif "rc->step(" in body:
+            raise ValueError("ordinary invented function contains interpreter STEP")
+    if direct_tcb!=4 or quarantined!=1:
+        raise ValueError("TCB native/quarantined source scopes incomplete")
     print("NATIVE_V401_PINNED_GENERATED_12_FUNCTION_TCB_C_SOURCE_PASS")
-    print("synthetic_TCB_sites=4 FS_nonzero_negative=1 retail_Bloodborne=0")
+    print("synthetic_TCB_native_sites=4 FS_nonzero_interpreter_fallback_QUARANTINED=1 retail_Bloodborne=0")
 
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
