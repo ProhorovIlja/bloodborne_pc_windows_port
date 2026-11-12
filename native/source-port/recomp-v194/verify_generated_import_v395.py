@@ -68,6 +68,6 @@ def main()->None:
 if __name__=="__main__":
     try:main()
     except (ValueError,OSError,UnicodeError,RuntimeError) as e:
-        print("NATIVE_V395_IMPORT_AUDIT_REFUSED: "+type(e).__name__,
+        print("NATIVE_V395_IMPORT_AUDIT_REFUSED: "+type(e).__name__+": "+str(e)[:180],
               file=sys.stderr)
         raise SystemExit(2)
