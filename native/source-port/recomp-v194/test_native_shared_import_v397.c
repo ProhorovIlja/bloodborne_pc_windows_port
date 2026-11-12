@@ -272,10 +272,11 @@ static int test_all(void){
         sum_spec.guest_target,UINT64_C(0x4010e2),
         SHYT_V395_RETURN_VALUE,0,UINT64_C(0x99)
     };
-    CHECK(!shyt_native_shared_add_v397(&import_router_v397,
-                                       &conflicting_spec));
     CHECK(shyt_native_shared_add_v397(&import_router_v397,&failure_spec));
     CHECK(shyt_native_shared_add_v397(&import_router_v397,&sum_spec));
+    /* Reject contradictory service only AFTER a same-target ABI exists. */
+    CHECK(!shyt_native_shared_add_v397(&import_router_v397,
+                                       &conflicting_spec));
     CHECK(shyt_native_shared_add_v397(&import_router_v397,&constant_spec));
     CHECK(shyt_native_shared_add_v397(&import_router_v397,
                                       &second_site_spec));
