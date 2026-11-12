@@ -140,6 +140,19 @@ static void skin(void) {
     assert(shyt_native_flver2_skin_positions_v376(v,2,palette,2,
             (const float (*)[16])inverse,(const float (*)[16])animated,2,out,2));
     assert(near(out[0].xyz[0],3)&&near(out[0].xyz[1],1));
+    /* A model with a separately verified empty local palette may choose
+     * global indices explicitly; no source-driven silent fallback. */
+    v[0].bone_indices[0]=1;v[0].bone_weights[0]=1.0f;
+    v[0].bone_indices[1]=0;v[0].bone_weights[1]=0.0f;
+    assert(shyt_native_flver2_skin_global_positions_v376(
+        v,2,(const float (*)[16])inverse,(const float (*)[16])animated,2,out,2));
+    assert(near(out[0].xyz[0],3) && near(out[0].xyz[1],2));
+    assert(!shyt_native_flver2_skin_global_positions_v376(
+        v,2,(const float (*)[16])inverse,(const float (*)[16])animated,0,out,2));
+    v[0].bone_indices[0]=0;v[0].bone_weights[0]=0.5f;
+    v[0].bone_indices[1]=1;v[0].bone_weights[1]=0.5f;
+    assert(shyt_native_flver2_skin_positions_v376(v,2,palette,2,
+            (const float (*)[16])inverse,(const float (*)[16])animated,2,out,2));
     ShytNativeSkinnedPositionV376 snap[2];memcpy(snap,out,sizeof snap);
     v[1].bone_indices[0]=2;
     assert(!shyt_native_flver2_skin_positions_v376(v,2,palette,2,
