@@ -80,7 +80,20 @@ def generate(checkout:Path,out:Path)->None:
             a.count(f"&d_{off:x}")!=1):
             raise ValueError("12-function source and native slot coverage failed")
     if b.count("c->tcb")<4 or "rc->step(" in b:
-        raise ValueError("real bbrecomp didn't emit normalised TCB direct load")
+        # INVENTED data only: emit bounded diagnostic per synthetic
+        # function; never print full generated C or game-private data.
+        import re
+        matches=list(re.finditer(r"void f_([0-9a-f]+)\\(BbCpu \\*c\\) \\{",b))
+        for i,m in enumerate(matches):
+            if int(m.group(1),16)<0x10e0:continue
+            end=matches[i+1].start() if i+1<len(matches) else len(b)
+            body=b[m.end():end]
+            short=re.sub(r"\\s+"," ",body)[:240]
+            print("V401_SYNTHETIC_TCB_DIAG f_"+m.group(1)+
+                  " has_tcb="+str("c->tcb" in body)+
+                  " has_step="+str("rc->step(" in body)+
+                  " body_prefix="+repr(short),file=sys.stderr)
+        raise ValueError("real pinned bbrecomp TCB normalization must be audited")
     print("NATIVE_V401_PINNED_GENERATED_12_FUNCTION_TCB_C_SOURCE_PASS")
     print("synthetic_TCB_sites=4 FS_nonzero_negative=1 retail_Bloodborne=0")
 
