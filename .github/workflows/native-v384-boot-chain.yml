@@ -74,7 +74,8 @@ jobs:
           $exe=Join-Path $env:RUNNER_TEMP 'native-v384-boot-chain.exe'
           & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
             "/FI$src/native_win_rc_time_v270.h" `
-            "/I$src" "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "/I$src" "/Inative/source-port/recomp-v187" `
+            "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
             "$src/native_math_shim_v222.c" `
             "$src/native_math_guest_bridge_v223.c" `
             "$src/native_math_import_dispatch_v224.c" `
