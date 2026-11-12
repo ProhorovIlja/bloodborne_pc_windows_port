@@ -37,12 +37,11 @@ def module(name:str,file:str):
     return result
 
 def function_body(source:str,after_open:int,limit:int)->str:
-    """Extract exact balanced generated C function only, ignoring comments.
+    """Extract a balanced generated C function, not next-function comments.
 
-    The pinned generator places a different *next function description*
-    comment between bodies when f_1140 is intentionally omitted; that
-    comment is not part of f_1120. A raw next-function slice therefore
-    wrongly rejected identical compiled function bodies.
+    Source-locked generated C may include comments describing the NEXT
+    function, which differ when an unsupported function is excluded.
+    Those comments cannot be compared as part of an approved body.
     """
     if after_open<1 or source[after_open-1]!="{":
         raise ValueError("generated function opening brace absent")
@@ -52,28 +51,31 @@ def function_body(source:str,after_open:int,limit:int)->str:
         c=source[i]
         nxt=source[i+1] if i+1<limit else ""
         if c=="/" and nxt=="/":
-            end=source.find("\\n",i+2,limit)
-            if end<0:return_empty=-1;break
-            i=end+1;continue
+            end=source.find("\n",i+2,limit)
+            if end<0:raise ValueError("unterminated generated line comment")
+            i=end+1
+            continue
         if c=="/" and nxt=="*":
             end=source.find("*/",i+2,limit)
-            if end<0:raise ValueError("unterminated generated comment")
-            i=end+2;continue
+            if end<0:raise ValueError("unterminated generated block comment")
+            i=end+2
+            continue
         if c in ("'",'"'):
             quote=c
             i+=1
             while i<limit:
-                if source[i]=="\\\\":
-                    i+=2;continue
+                if source[i]=="\\":
+                    i+=2
+                    continue
                 if source[i]==quote:break
                 i+=1
             if i>=limit:raise ValueError("unterminated generated C literal")
-            i+=1;continue
+            i+=1
+            continue
         if c=="{":depth+=1
         if c=="}":
             depth-=1
-            if depth==0:
-                return source[after_open:i+1]
+            if depth==0:return source[after_open:i+1]
             if depth<0:raise ValueError("generated function has unmatched close")
         i+=1
     raise ValueError("generated function body incomplete or boundary violated")
