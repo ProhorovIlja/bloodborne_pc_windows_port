@@ -195,8 +195,8 @@ def main()->None:
         "enum { SHYT_V402_APPROVED_FUNCTION_COUNT =",
         " sizeof(shyt_v402_allowed)/sizeof(shyt_v402_allowed[0]) };",
         "#endif"])
-    header.write_text("\\n".join(lines)+"\\n",encoding="utf-8")
-    out.write_text(json.dumps(ledger,sort_keys=True,indent=2)+"\\n",encoding="utf-8")
+    header.write_text("\n".join(lines)+"\n",encoding="utf-8")
+    out.write_text(json.dumps(ledger,sort_keys=True,indent=2)+"\n",encoding="utf-8")
     print("NATIVE_V402_FULL_12_SOURCE_FALLBACK_LEDGER_AND_11_NATIVE_CLOSURE_PASS")
     print(json.dumps(ledger,sort_keys=True))
     print("no_original_Bloodborne_code_or_native_game_boot=TRUE")
