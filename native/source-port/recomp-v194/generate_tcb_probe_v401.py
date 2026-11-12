@@ -116,9 +116,13 @@ def generate(checkout:Path,out:Path,native_only:bool=False)->None:
     if direct_tcb!=4 or quarantined!=(0 if native_only else 1):
         raise ValueError("TCB native/quarantined source scopes incomplete")
     if native_only:
-        if "rc->step(" in b or "rc->bail(" in b or (
-            "void f_1140(BbCpu *c)" in b) or (
-            "f_1140" in a):
+        deny={"step":("rc->step(" in b),
+              "bail":("rc->bail(" in b),
+              "forbidden_body":("void f_1140(BbCpu *c)" in b),
+              "forbidden_table":("f_1140" in a)}
+        if any(deny.values()):
+            print("V402_SYNTHETIC_NATIVE_ONLY_REFUSAL_FLAGS "+
+                  str(deny),file=sys.stderr)
             raise ValueError("unsafe fallback/forbidden function entered native-only source")
         print("NATIVE_V402_REAL_PINNED_GENERATOR_11_NATIVE_ONLY_FUNCTIONS_PASS")
         print("linked_guest_interpreter_fallback=FALSE retail_Bloodborne=FALSE")
