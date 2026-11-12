@@ -38,7 +38,8 @@ int shyt_unified_import_prepare_v385(
         !descs || count!=23 || !s->math.original.call ||
         s->math.original.call==s->math.api.call ||
         !s->clock.api.call || s->clock.api.call==s->math.original.call ||
-        !s->clock.api.tail || s->clock.api.tail==s->math.original.tail ||
+        !s->clock.api.tail || s->clock.api.tail!=s->math.original.tail ||
+        s->clock.api.tail!=s->math.api.tail ||
         s->clock.targets.image_base!=s->math.table.image_base ||
         s->clock.targets.image_base!=s->clock.api.image_base ||
         !s->clock.targets.read_tsc_offset ||
@@ -142,20 +143,26 @@ bad:
     if(!shyt_guest_vm_unpin_v385(&lease))abort();
     return 0;
 }
-static void import_call_v385(BbCpu *cpu,uint64_t target,uint64_t next) {
-    ShytUnifiedImportV385 *r=atomic_load_explicit(
-       &active_v385,memory_order_acquire);
-    if(!r || !r->ready || !r->published)abort();
+int shyt_unified_import_try_v385(ShytUnifiedImportV385 *r,
+    BbCpu *cpu,uint64_t target,uint64_t next) {
     int opcode=-1;
+    if(!r || !r->ready || !r->vm)return -1;
     if(target==r->clock_ticks)opcode=23;
     else if(target==r->clock_frequency)opcode=24;
     else for(size_t i=0;i<23;i++)
         if(target==r->math_targets[i]){opcode=(int)r->math_opcodes[i];break;}
-    if(opcode<0) {
-        r->native_fallback(cpu,target,next);
-        return; /* missing AOT native target ABORTS inside V382 */
-    }
-    if(!handle_import(r,cpu,target,next,opcode))abort();
+    if(opcode<0)return 0;
+    return handle_import(r,cpu,target,next,opcode)?1:-1;
+}
+static void import_call_v385(BbCpu *cpu,uint64_t target,uint64_t next) {
+    ShytUnifiedImportV385 *r=atomic_load_explicit(
+       &active_v385,memory_order_acquire);
+    if(!r || !r->ready || !r->published)abort();
+    const int handled=shyt_unified_import_try_v385(r,cpu,target,next);
+    if(handled==1)return;
+    if(handled<0)abort();
+    r->native_fallback(cpu,target,next);
+    /* Missing AOT native target ABORTS inside V382. */
 }
 int shyt_unified_import_publish_v385(ShytUnifiedImportV385 *r) {
     ShytUnifiedImportV385 *expected=NULL;
