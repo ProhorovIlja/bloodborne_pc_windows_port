@@ -58,31 +58,35 @@ static int proven_tcb(uint64_t offset) {
            offset == UINT64_C(0x1120) || offset == UINT64_C(0x1160);
 }
 
-/* Return address must be backed by an actual mapped readable guest stack.
- * This is a bound check on SYNTHETIC VM only; it does not validate actual
- * retail-game stack layout, full x86 ABI, signal, thread or exception rules.
+/* The guest return word MUST be validated with the SAME V390 lease
+ * that owns the ensuing real generated call. V393 enters the pinned
+ * scope before calling this preflight, and cannot unpin/remap it
+ * between preflight and the native RcFn. This closes a V389 TOCTOU.
  */
-static int guest_return(ShytNativeOsVmV388 *vm,
-    uint64_t rsp, uint64_t *return_address) {
-    ShytNativeVmLeaseV386 lease = {0};
+typedef struct ShytV404ReturnPreflight {
+    ShytNativeOsVmV388 *owner;
+    uint64_t rsp;
+    uint64_t expected_return;
+} ShytV404ReturnPreflight;
+static int guest_return_preflight(const BbCpu *cpu, void *context) {
+    ShytV404ReturnPreflight *p = (ShytV404ReturnPreflight *)context;
     uint64_t ret = 0;
-    int ok;
-    if (!vm || !return_address || rsp > UINT64_MAX - UINT64_C(8) ||
-        !shyt_native_vm_pin_v386(&vm->vm, &lease))
+    if (!cpu || !p || !p->owner || cpu->r[RSP] != p->rsp ||
+        p->rsp > UINT64_MAX - UINT64_C(8) ||
+        !shyt_generated_active_v390() ||
+        shyt_generated_owner_v392() != p->owner ||
+        !shyt_generated_try_load_v390(p->rsp, 8, &ret) ||
+        ret == 0)
         return 0;
-    ok = shyt_native_os_vm_read_v388(vm, &lease, rsp, 8u, &ret);
-    if (!shyt_native_vm_unpin_v386(&lease))
-        abort(); /* never silently leak/ignore a failed lease release */
-    if (!ok || ret == 0)
-        return 0;
-    *return_address = ret;
+    p->expected_return = ret;
     return 1;
 }
 
 int shyt_native_execution_try_v404(ShytNativeExecutionV404 *route,
     uint64_t offset, BbCpu *cpu) {
     size_t i;
-    uint64_t rsp, expected_return = 0;
+    uint64_t rsp;
+    ShytV404ReturnPreflight preflight = {0};
     int recovered = 0, result;
     RcFn selected = NULL;
 
@@ -102,15 +106,18 @@ int shyt_native_execution_try_v404(ShytNativeExecutionV404 *route,
     if (!selected)
         return SHYT_V404_DENIED;
     rsp = cpu->r[RSP];
-    if (!guest_return(route->owner, rsp, &expected_return))
+    if (rsp > UINT64_MAX - UINT64_C(8))
         return SHYT_V404_DENIED;
+    preflight.owner = route->owner;
+    preflight.rsp = rsp;
     result = shyt_generated_call_recoverable_v393(
-        route->owner, selected, cpu, NULL, NULL, &recovered);
+        route->owner, selected, cpu, guest_return_preflight,
+        &preflight, &recovered);
     if (result == SHYT_V393_DENIED)
         return SHYT_V404_DENIED;
     if (result != SHYT_V393_COMPLETED || recovered ||
         cpu->r[RSP] != rsp + UINT64_C(8) ||
-        cpu->rip != expected_return ||
+        cpu->rip != preflight.expected_return ||
         shyt_generated_active_v390() ||
         shyt_generated_recovery_depth_v393())
         abort(); /* executed code broke a mandatory host invariant */
