@@ -1,0 +1,73 @@
+name: Native V376 FLVER mesh palette inverse bind and CPU skin
+on:
+  push:
+    branches: [feature/native-v376-mesh-skin-palette-20261112]
+    paths:
+      - '.github/workflows/native-v376-flver-skin-palette.yml'
+      - 'native/source-port/recomp-v194/native_flver2_skin_palette_v376.*'
+      - 'native/source-port/recomp-v194/test_native_flver2_skin_palette_v376.c'
+      - 'native/source-port/recomp-v194/native_flver2_bind_pose_v375.h'
+      - 'native/source-port/recomp-v194/native_flver2_vertex_decode_v371.h'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-synthetic-gcc-clang-sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Strict C11 GCC and Clang palette/inverse bind/weighted skin
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/native_flver2_skin_palette_v376.c" \
+              "$src/test_native_flver2_skin_palette_v376.c" -lm -o native-v376-test
+            ./native-v376-test
+          done
+      - name: AddressSanitizer and UndefinedBehaviorSanitizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_flver2_geometry_v362.c" \
+            "$src/native_flver2_skin_palette_v376.c" \
+            "$src/test_native_flver2_skin_palette_v376.c" -lm -o native-v376-san
+          ./native-v376-san
+          echo 'NATIVE_V376_PORTABLE_ASAN_UBSAN_PASS'
+  windows-native-clang-cl:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Windows C11 palette math and source validation
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$src/native_flver2_geometry_v362.c" `
+            "$src/native_flver2_skin_palette_v376.c" `
+            "$src/test_native_flver2_skin_palette_v376.c" `
+            /Fe:native-v376-test.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V376 Win64 compile/link failed' }
+          & .\native-v376-test.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V376 Win64 inverse-bind/skin tests failed' }
+      - name: Ensure no proprietary assets shipped
+        shell: pwsh
+        run: |
+          if (Test-Path CUSA03173) { throw 'Original Bloodborne data in public CI' }
+          if (Test-Path 'Dark Souls III') { throw 'Original DS3 data in public CI' }
+          Write-Host 'NATIVE_V376_SYNTHETIC_ONLY_PASS'
