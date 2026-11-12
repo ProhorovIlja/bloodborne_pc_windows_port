@@ -9,6 +9,7 @@
 #include "native_clock_rcapi_route_v239.h"
 #include "native_aot_direct_link_v259.h"
 #include <stddef.h>
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,6 +19,8 @@ typedef struct {
     const RcApi *published_api;
     const RcFunction *functions;
     size_t function_count;
+    /* V384: immutable after native-only CALL/TAIL publication. */
+    uint8_t native_only_finalized_v384;
 } ShytAotServicesV245;
 
 /* Services MUST live until process exit and be installed exactly once,

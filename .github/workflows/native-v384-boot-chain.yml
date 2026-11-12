@@ -1,0 +1,103 @@
+name: Native V384 Windows AOT math clock strict dispatch bootstrap
+on:
+  push:
+    branches: [feature/native-v384-boot-chain-compose-20261112]
+    paths:
+      - '.github/workflows/native-v384-boot-chain.yml'
+      - 'native/source-port/recomp-v194/native_boot_chain_v384.*'
+      - 'native/source-port/recomp-v194/test_native_boot_chain_v384.c'
+      - 'native/source-port/recomp-v194/native_aot_services_bootstrap_v245.*'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v384-boot-chain.yml'
+      - 'native/source-port/recomp-v194/native_boot_chain_v384.*'
+      - 'native/source-port/recomp-v194/test_native_boot_chain_v384.c'
+      - 'native/source-port/recomp-v194/native_aot_services_bootstrap_v245.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare-upstream:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Build only pinned public upstream dependency headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream
+          if ! (cd public-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/native-v384-public-deps.log" 2>&1; then
+            echo '::error title=Native V384::Pinned public dependency build failed'
+            exit 1
+          fi
+          test -s public-upstream/deps/include/Zydis/Zydis.h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v384-public-headers
+          path: public-upstream/deps/include/
+          retention-days: 1
+  win64-integration:
+    needs: prepare-upstream
+    runs-on: windows-2022
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v384-public-headers
+          path: public-upstream/deps/include
+      - name: Real native Win64 V245 math clock plus V382 V383 AOT fixture
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $src='native/source-port/recomp-v194'
+          $exe=Join-Path $env:RUNNER_TEMP 'native-v384-boot-chain.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/FI$src/native_win_rc_time_v270.h" `
+            "/I$src" "/Inative/source-port/recomp-v187" `
+            "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$src/native_math_shim_v222.c" `
+            "$src/native_math_guest_bridge_v223.c" `
+            "$src/native_math_import_dispatch_v224.c" `
+            "$src/native_math_rcapi_route_v226.c" `
+            "$src/native_win_clock_v236.c" `
+            "$src/native_clock_rcapi_route_v239.c" `
+            "$src/native_aot_services_bootstrap_v245.c" `
+            "$src/native_strict_aot_v381.c" `
+            "$src/native_aot_route_v382.c" `
+            "$src/native_pinned_stack_v383.c" `
+            "$src/native_boot_chain_v384.c" `
+            "$src/test_native_boot_chain_v384.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'V384 Win64 strict native bootstrap compile failed' }
+          $raw=[IO.File]::ReadAllBytes($exe)
+          if ($raw.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($raw,0,2) -ne 'MZ') {
+            throw 'V384 artifact is not native Windows PE'
+          }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'V384 Win64 strict native bootstrap test failed' }
+          'Native V384 synthetic Win64 AOT chain passed. NOT original game boot.'
+      - name: Public CI input must not contain commercial original-game files
+        shell: pwsh
+        run: |
+          if (Test-Path CUSA03173) { throw 'Original game dump is forbidden in CI' }
+          if (Test-Path 'Dark Souls III') { throw 'Commercial DS3 contents forbidden in CI' }
