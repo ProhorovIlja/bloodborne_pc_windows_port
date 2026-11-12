@@ -5,7 +5,11 @@
  * separate; DO NOT infer unified VM or original-game memory parity.
  */
 #include "native_boot_chain_v384.h"
-#include "full_cpu_abi_v194.h"
+/* The real pinned upstream V245 public header already defines BbCpu.
+ * V194's standalone mirror cannot be included in that same C TU. */
+#include <stddef.h>
+_Static_assert(sizeof(BbCpu)==840 && offsetof(BbCpu,rip)==128,
+               "pinned upstream BbCpu layout changed");
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
