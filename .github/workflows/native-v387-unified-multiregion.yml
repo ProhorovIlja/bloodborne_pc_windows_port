@@ -1,0 +1,156 @@
+name: Native V387 real Win64 AOT and 25 imports unified multi-region VM
+on:
+  push:
+    branches: [feature/native-v387-multiregion-import-chain-20261112]
+    paths:
+      - '.github/workflows/native-v387-unified-multiregion.yml'
+      - 'native/source-port/recomp-v194/native_unified_import_v387.*'
+      - 'native/source-port/recomp-v194/test_native_unified_import_v387.c'
+      - 'native/source-port/recomp-v194/native_boot_chain_v384.*'
+      - 'native/source-port/recomp-v194/native_multi_region_vm_v386.*'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v387-unified-multiregion.yml'
+      - 'native/source-port/recomp-v194/native_unified_import_v387.*'
+      - 'native/source-port/recomp-v194/test_native_unified_import_v387.c'
+      - 'native/source-port/recomp-v194/native_boot_chain_v384.*'
+      - 'native/source-port/recomp-v194/native_multi_region_vm_v386.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-multi-region-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC/Clang + sanitizers original-free multi-region memory and native AOT
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+              "$d/native_strict_aot_v381.c" \
+              "$d/native_aot_route_v382.c" \
+              "$d/native_multi_region_vm_v386.c" \
+              "$d/test_native_multi_region_vm_v386.c" \
+              -o "test-v387-vm-$cc"
+            "./test-v387-vm-$cc"
+          done
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic \
+            -fsanitize=address,undefined -fno-omit-frame-pointer -pthread -I "$i" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/test_native_multi_region_vm_v386.c" -o test-v387-san
+          ./test-v387-san
+  macos-arm64-vm:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Apple ARM64 host-only C11 multi-region VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/test_native_multi_region_vm_v386.c" -o test-v387-macos
+          ./test-v387-macos
+  prepare-public-dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Pinned public RcApi-v4 headers only, never original game code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream
+          if ! (cd public-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v387-public-deps.log" 2>&1; then
+            echo '::error title=Native V387::Public pinned dependency build failed'
+            exit 1
+          fi
+          test -s public-upstream/deps/include/Zydis/Zydis.h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v387-pinned-headers
+          path: public-upstream/deps/include/
+          retention-days: 1
+  windows-real-rcapi-multiregion-imports:
+    needs: prepare-public-dependencies
+    runs-on: windows-2022
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v387-pinned-headers
+          path: public-upstream/deps/include
+      - name: Win64 original-free V245/V384 real callback plus V386 multi-region stack/25 imports
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $d='native/source-port/recomp-v194'
+          $exe=Join-Path $env:RUNNER_TEMP 'native-v387-real-rcapi.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/FI$d/native_win_rc_time_v270.h" `
+            "/I$d" "/Inative/source-port/recomp-v187" `
+            "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$d/native_math_shim_v222.c" `
+            "$d/native_math_guest_bridge_v223.c" `
+            "$d/native_math_import_dispatch_v224.c" `
+            "$d/native_math_rcapi_route_v226.c" `
+            "$d/native_win_clock_v236.c" `
+            "$d/native_clock_rcapi_route_v239.c" `
+            "$d/native_aot_services_bootstrap_v245.c" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/native_aot_route_v382.c" `
+            "$d/native_pinned_stack_v383.c" `
+            "$d/native_boot_chain_v384.c" `
+            "$d/native_multi_region_vm_v386.c" `
+            "$d/native_unified_import_v387.c" `
+            "$d/test_native_unified_import_v387.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'V387 real Win64 RcApi compile failed' }
+          $raw=[IO.File]::ReadAllBytes($exe)
+          if ($raw.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($raw,0,2) -ne 'MZ') {
+            throw 'V387 executable is not Windows PE'
+          }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'V387 real Win64 unified multi-region import test failed' }
+          'V387 original-free native RcApi source-chain test passed, NOT game boot.'
