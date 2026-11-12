@@ -21,10 +21,11 @@ typedef struct Stack {
 } Stack;
 static int validated_stack_store(void *ctx,uint64_t addr,uint64_t value) {
     Stack *s=(Stack *)ctx;
-    uintptr_t start=(uintptr_t)&s->words[0];
-    uintptr_t end=(uintptr_t)&s->words[8];
-    if (!s || s->allow!=1 || addr<start || addr>end-8 || (addr&7u))
-        return 0;
+    uintptr_t start, end;
+    if (!s || s->allow!=1) return 0;
+    start=(uintptr_t)&s->words[0];
+    end=(uintptr_t)&s->words[8];
+    if (addr<start || addr>end-8 || (addr&7u)) return 0;
     memcpy((void *)(uintptr_t)addr,&value,sizeof(value));
     ++s->writes;
     return 1;
