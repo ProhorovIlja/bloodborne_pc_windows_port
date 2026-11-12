@@ -8,6 +8,7 @@ on:
       - 'native/source-port/recomp-v194/native_vulkan_flver_semantic_draw_v372.*'
       - 'native/source-port/recomp-v194/native_flver2_vertex_decode_v371.*'
       - 'native/source-port/recomp-v194/test_native_vulkan_flver_semantic_draw_v372.cpp'
+      - 'native/source-port/recomp-v194/test_native_vulkan_flver_draw_v370.cpp'
       - 'native/source-port/recomp-v194/native_v370_triangle.*'
       - 'native/source-port/recomp-v194/native_vulkan_flver_stream_v369.*'
   workflow_dispatch:
@@ -73,6 +74,17 @@ jobs:
             VK_ICD_FILENAMES="$LVP_ICD" \
               VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
               ./native-v372-draw v372-vert.spv v372-frag.spv
+            # Regression: the original V370 stride12 public path must still
+            # produce the same visible and clipped pixel results.
+            "$compiler" -std=c++17 -O2 -Wall -Wextra -Werror \
+              "$src/native_fence_upload_ring_v366.cpp" \
+              "$src/native_vulkan_flver_stream_v369.cpp" \
+              "$src/native_vulkan_flver_draw_v370.cpp" \
+              "$src/test_native_vulkan_flver_draw_v370.cpp" \
+              geometry.o plan.o -lvulkan -o native-v370-legacy
+            VK_ICD_FILENAMES="$LVP_ICD" \
+              VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
+              ./native-v370-legacy v372-vert.spv v372-frag.spv
           done
       - name: ASan UBSan and real lavapipe draw readback
         shell: bash
