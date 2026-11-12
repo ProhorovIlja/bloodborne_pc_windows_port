@@ -12,10 +12,13 @@ v=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(v)
 manifest=v.load_manifest(p.with_name("native_import_manifest_fixture_v396.json"),"invented-test-only")
 names=[f"f_{v.number(x):x}" for x in manifest["function_offsets"]]
-table="#include \"recomp/rc.h\"\n"+"\n".join(
-    f"void {n}(BbCpu *c);" for n in names)+"\n"+
-    "const RcFunction *bb_recomp_init(const RcApi *a,size_t *n){\n"+
-    "\n".join(f"  (void)&d_{name[2:]};" for name in names)+"\n return 0;\n}\n"
+table=(
+    '#include "recomp/rc.h"\n'
+    + "\n".join(f"void {n}(BbCpu *c);" for n in names)
+    + "\nconst RcFunction *bb_recomp_init(const RcApi *a,size_t *n){\n"
+    + "\n".join(f"  (void)&d_{name[2:]};" for name in names)
+    + "\n return 0;\n}\n"
+)
 shard='#include "recomp/rc.h"\n'
 for name in names:
     if name=="f_10a0":
