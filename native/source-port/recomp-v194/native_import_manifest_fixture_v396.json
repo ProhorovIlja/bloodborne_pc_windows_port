@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "scope": "invented-test-only",
+  "upstream_revision": "8f31ec7c41f252730c6325d52647046baef7549f",
+  "image_sha256": "a87ec8ea0ede452e068c5d6529a88e0759e3738bec917c6624437e10051505af",
+  "image_base": "0x400000",
+  "function_offsets": [
+    "0x1000",
+    "0x1020",
+    "0x1040",
+    "0x1060",
+    "0x1080",
+    "0x10a0",
+    "0x10c0"
+  ],
+  "calls": [
+    {
+      "function_offset": "0x10a0",
+      "next_offset": "0x10a2",
+      "guest_target": "0x40009100",
+      "service": "add_qwords",
+      "recover_code": 0,
+      "constant": "0x0"
+    },
+    {
+      "function_offset": "0x10c0",
+      "next_offset": "0x10c2",
+      "guest_target": "0x40009400",
+      "service": "return_constant",
+      "recover_code": 0,
+      "constant": "0x13579bdf2468ace0"
+    }
+  ]
+}
