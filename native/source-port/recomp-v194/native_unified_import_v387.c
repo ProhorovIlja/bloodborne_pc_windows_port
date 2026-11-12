@@ -208,7 +208,7 @@ int shyt_unified_import_publish_v387(ShytUnifiedImportV387 *r) {
     ShytNativeVmLeaseV386 lease={0};
     ShytUnifiedImportV387 *expected=NULL;
     if(!r || r->ready!=1 || r->published ||
-       !r->services || !r->vm || !r->native_fallback ||
+       !r->services || !r->chain || !r->vm || !r->native_fallback ||
        !r->services->native_only_finalized_v384 ||
        r->services->published_api!=&r->services->clock.api ||
        r->services->clock.api.call==import_call_v387 ||
