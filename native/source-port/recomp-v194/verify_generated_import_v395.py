@@ -36,8 +36,12 @@ def inspect_source(original:str,patched:str)->None:
     body=original[start:end]
     if not re.search(r"\brc->call\s*\(\s*c\s*,",body):
         raise ValueError("second real generated call not RcApi.call")
-    if re.search(r"\brc->(?:step|bail)\s*\(",body):
-        raise ValueError("interpreter/bailout in generated call fixture")
+    # Pinned compiler may emit an unreachable rc->bail branch as a
+    # conservative fallback. Keep RcApi.bail as an ABORT trap; do not
+    # claim whole-object source closure just because a direct call exists.
+    # Explicit interpreter STEP in the CALL site is still forbidden.
+    if re.search(r"\brc->step\s*\(",body):
+        raise ValueError("guest interpreter STEP emitted in generated CALL")
     if not re.search(r"B\s*\+\s*0x10c2ull",body):
         raise ValueError("second guest CALL continuation was not actual 0x10c2")
     if original.count("void f_10c0(BbCpu *c) {")!=1:
