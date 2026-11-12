@@ -116,8 +116,12 @@ def generate(checkout:Path,out:Path,native_only:bool=False)->None:
     if direct_tcb!=4 or quarantined!=(0 if native_only else 1):
         raise ValueError("TCB native/quarantined source scopes incomplete")
     if native_only:
+        # Pinned bbrecomp adds rc->bail and rc->tail to the
+        # GENERAL computed-branch epilogue in every function. These are
+        # NOT permitted in published native code and MUST be replaced
+        # by the independently audited V402 fail-closed overlay first.
+        # Raw generated C with these callbacks is never compiled.
         deny={"step":("rc->step(" in b),
-              "bail":("rc->bail(" in b),
               "forbidden_body":("void f_1140(BbCpu *c)" in b),
               "forbidden_table":("f_1140" in a)}
         if any(deny.values()):
@@ -125,7 +129,8 @@ def generate(checkout:Path,out:Path,native_only:bool=False)->None:
                   str(deny),file=sys.stderr)
             raise ValueError("unsafe fallback/forbidden function entered native-only source")
         print("NATIVE_V402_REAL_PINNED_GENERATOR_11_NATIVE_ONLY_FUNCTIONS_PASS")
-        print("linked_guest_interpreter_fallback=FALSE retail_Bloodborne=FALSE")
+        print("generated_epilogue_bail_tail_REQUIRE_NATIVE_ABORT_OVERLAY=TRUE")
+        print("source_guest_step=FALSE; unpatched_compilation=FORBIDDEN; retail_Bloodborne=FALSE")
     else:
         print("NATIVE_V401_PINNED_GENERATED_12_FUNCTION_TCB_C_SOURCE_PASS")
         print("synthetic_TCB_native_sites=4 FS_nonzero_interpreter_fallback_QUARANTINED=1 retail_Bloodborne=0")
