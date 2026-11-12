@@ -7,6 +7,7 @@ on:
       - 'native/source-port/recomp-v194/native_pinned_stack_v383.*'
       - 'native/source-port/recomp-v194/test_native_pinned_stack_v383.c'
       - 'native/source-port/recomp-v194/native_aot_route_v382.*'
+      - 'native/source-port/recomp-v194/test_native_aot_route_v382.c'
       - 'native/source-port/recomp-v194/native_strict_aot_v381.*'
   pull_request:
     paths:
@@ -14,6 +15,7 @@ on:
       - 'native/source-port/recomp-v194/native_pinned_stack_v383.*'
       - 'native/source-port/recomp-v194/test_native_pinned_stack_v383.c'
       - 'native/source-port/recomp-v194/native_aot_route_v382.*'
+      - 'native/source-port/recomp-v194/test_native_aot_route_v382.c'
       - 'native/source-port/recomp-v194/native_strict_aot_v381.*'
   workflow_dispatch:
 permissions:
@@ -56,6 +58,20 @@ jobs:
             "$d/test_native_pinned_stack_v383.c" \
             -o native-v383-san
           ./native-v383-san
+      - name: Inherited V382 dispatch leak sanitizer regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic -I "$i" \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/test_native_aot_route_v382.c" \
+            -o native-v382-inherited-san
+          ./native-v382-inherited-san
   windows-amd64:
     runs-on: windows-2022
     timeout-minutes: 12
