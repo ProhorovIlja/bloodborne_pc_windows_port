@@ -76,16 +76,17 @@ int shyt_native_boot_preflight_v384(
     }
     return 1;
 }
-int shyt_native_boot_finalize_v384(
+int shyt_native_boot_finalize_with_writer_v387(
     ShytNativeBootChainV384 *chain,ShytAotServicesV245 *services,
     const RcApi *strict,ShytNativeStackV383 *stack,
+    ShytNativeAotStackWriteV382 writer,void *writer_context,
     ShytStrictAotAttestV381 attester,void *attest_ctx) {
     ShytStrictAotProofV381 proof={0};
     RcApi native={0};
     ShytDirectStatsV259 revoked={0};
     if (!chain || chain->route.entries || chain->route.ready ||
         chain->route.published || chain->published ||
-        !attester ||
+        !attester || !writer || !writer_context ||
         !shyt_native_boot_preflight_v384(services,strict,stack))
         return 0;
     if (!shyt_strict_aot_activate_v381(
@@ -95,7 +96,7 @@ int shyt_native_boot_finalize_v384(
     if (!shyt_native_aot_prepare_v382(
             &chain->route,strict,services->functions,
             services->function_count,&proof,
-            shyt_native_stack_write_v383,stack)) {
+            writer,writer_context)) {
         (void)shyt_aot_revoke_direct_slots_v268(
             services->functions,services->function_count,
             strict->image_base,&revoked);
@@ -120,4 +121,16 @@ int shyt_native_boot_finalize_v384(
     chain->proof=proof;
     chain->published=1;
     return 1;
+}
+
+/* Keep the previous V384 test binary and host-stack fallback behavior
+ * unchanged. V387's fully permissioned multi-region path passes its
+ * V386 callback into the shared irreversible finalizer explicitly. */
+int shyt_native_boot_finalize_v384(
+    ShytNativeBootChainV384 *chain,ShytAotServicesV245 *services,
+    const RcApi *strict,ShytNativeStackV383 *stack,
+    ShytStrictAotAttestV381 attester,void *attest_ctx) {
+    return shyt_native_boot_finalize_with_writer_v387(
+        chain,services,strict,stack,shyt_native_stack_write_v383,stack,
+        attester,attest_ctx);
 }
