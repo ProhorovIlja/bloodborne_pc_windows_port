@@ -13,6 +13,15 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
+/* A published dispatch table intentionally owns its heap snapshot
+ * until process exit. On Clang ASan, suppress ONLY that one allocation
+ * from LSan; all other test allocations remain checked normally. */
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+extern void __lsan_ignore_object(const void *p);
+#  define SHYT_TEST_V382_LSAN 1
+# endif
+#endif
 #define CHECK(expr) do {if(!(expr)){fprintf(stderr,"V382_TEST_LINE_%d\n",__LINE__);return 1;}}while(0)
 typedef struct Stack {
     uint64_t words[8];
@@ -143,6 +152,9 @@ static int test_route(void) {
     CHECK(!shyt_strict_aot_is_base_v381(&published));
     CHECK(!shyt_native_aot_publish_v382(&r,&strict,&saved));
     CHECK(!shyt_native_aot_dispose_v382(&r)); /* no hot unload */
+#if defined(SHYT_TEST_V382_LSAN)
+    __lsan_ignore_object(r.entries); /* process-lifetime immutable snapshot */
+#endif
     cpu.r[4]=(uint64_t)(uintptr_t)&s.words[6];
     cpu.r[0]=2;
     published.call(&cpu,0x400100,0x111111);
