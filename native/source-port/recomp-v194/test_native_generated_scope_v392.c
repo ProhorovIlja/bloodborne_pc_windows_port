@@ -119,7 +119,7 @@ static int nested_preflight_v392(const BbCpu *cpu,void *context) {
     return 1;
 }
 static int test_all(void){
-    ShytNativeOsVmV388 vm={0};
+    ShytNativeOsVmV388 vm={0},other_owner={0};
     RcApi api={0};
     size_t count=0;
     uint64_t out=0;
@@ -135,6 +135,13 @@ static int test_all(void){
     CHECK(shyt_native_os_vm_add_v388(&vm,robase,16,SHYT_V386_READ));
     CHECK(shyt_native_os_vm_seal_v388(&vm));
     owner=&vm;
+    /* Second fully initialized and sealed VM proves nested borrowing
+     * cannot silently switch to an unrelated guest address space. */
+    CHECK(shyt_native_os_vm_init_v388(&other_owner));
+    CHECK(shyt_native_os_vm_add_v388(&other_owner,
+        UINT64_C(0x400000000000),8,
+        SHYT_V386_READ|SHYT_V386_WRITE));
+    CHECK(shyt_native_os_vm_seal_v388(&other_owner));
     api.version=BB_RECOMP_API_VERSION;
     api.image_base=UINT64_C(0x400000);
     api.step=forbidden_step;
@@ -273,6 +280,16 @@ static int test_all(void){
     CHECK(shyt_native_os_vm_resume_v389(&vm));
     CHECK(!shyt_generated_call_v392(owner,fn[0].fn,
         &cpu,reject_preflight_v392,NULL) && !shyt_generated_active_v390());
+    CHECK(shyt_generated_enter_v390(owner));
+    ShytGeneratedScopeV392 alien_scope={0};
+    CHECK(!shyt_generated_scope_begin_v392(&alien_scope,&other_owner));
+    CHECK(!alien_scope.owner && alien_scope.state==0);
+    CHECK(shyt_generated_owner_v392()==owner);
+    CHECK(shyt_generated_leave_v390());
+    CHECK(shyt_native_os_vm_pause_v389(&other_owner));
+    CHECK(shyt_native_os_vm_resume_v389(&other_owner));
+    CHECK(shyt_native_os_vm_close_v388(&other_owner));
+    CHECK(shyt_native_os_vm_release_v388(&other_owner,1));
 
     CHECK(shyt_native_os_vm_close_v388(&vm));
     CHECK(!shyt_generated_enter_v390(&vm));
