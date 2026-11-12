@@ -36,6 +36,48 @@ def module(name:str,file:str):
     spec.loader.exec_module(result)
     return result
 
+def function_body(source:str,after_open:int,limit:int)->str:
+    """Extract exact balanced generated C function only, ignoring comments.
+
+    The pinned generator places a different *next function description*
+    comment between bodies when f_1140 is intentionally omitted; that
+    comment is not part of f_1120. A raw next-function slice therefore
+    wrongly rejected identical compiled function bodies.
+    """
+    if after_open<1 or source[after_open-1]!="{":
+        raise ValueError("generated function opening brace absent")
+    depth=1
+    i=after_open
+    while i<limit:
+        c=source[i]
+        nxt=source[i+1] if i+1<limit else ""
+        if c=="/" and nxt=="/":
+            end=source.find("\\n",i+2,limit)
+            if end<0:return_empty=-1;break
+            i=end+1;continue
+        if c=="/" and nxt=="*":
+            end=source.find("*/",i+2,limit)
+            if end<0:raise ValueError("unterminated generated comment")
+            i=end+2;continue
+        if c in ("'",'"'):
+            quote=c
+            i+=1
+            while i<limit:
+                if source[i]=="\\\\":
+                    i+=2;continue
+                if source[i]==quote:break
+                i+=1
+            if i>=limit:raise ValueError("unterminated generated C literal")
+            i+=1;continue
+        if c=="{":depth+=1
+        if c=="}":
+            depth-=1
+            if depth==0:
+                return source[after_open:i+1]
+            if depth<0:raise ValueError("generated function has unmatched close")
+        i+=1
+    raise ValueError("generated function body incomplete or boundary violated")
+
 def inventory(table:str,shard:str)->dict[int,dict]:
     """Every function body and every RcApi callback, no first-match skipping."""
     v400=module("v400_shape","verify_native_function_identity_v400.py")
@@ -56,7 +98,7 @@ def inventory(table:str,shard:str)->dict[int,dict]:
             offset in out):
             raise ValueError("out of order/duplicated function/direct slot")
         end=matches[i+1].start() if i+1<len(matches) else len(shard)
-        body=shard[m.end():end]
+        body=function_body(shard,m.end(),end)
         if DANGEROUS.search(body):
             raise ValueError("source has uninstrumentable raw host guest pointer")
         seen=API_CALL.findall(body)
