@@ -1,0 +1,95 @@
+name: Native V377 static PE ELF AOT closure preflight and fixed60 clock
+on:
+  push:
+    branches: [feature/native-v377-aot-closure-fixed60-20261112]
+    paths:
+      - '.github/workflows/native-v377-aot-fixed60-timing.yml'
+      - 'native/source-port/recomp-v194/native_frame_clock_v377.*'
+      - 'native/source-port/recomp-v194/test_native_frame_clock_v377.c'
+      - 'native/source-port/recomp-v194/native_binary_closure_gate_v377.py'
+      - 'native/source-port/recomp-v194/test_native_binary_closure_gate_v377.py'
+      - 'native/source-port/recomp-v194/native_synthetic_host_v377.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-static-gate-fixed60:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC Clang and ASan UBSan on independent 60Hz simulation and frame caps
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror \
+              "$src/native_frame_clock_v377.c" \
+              "$src/test_native_frame_clock_v377.c" -o frame-clock
+            ./frame-clock
+          done
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_frame_clock_v377.c" \
+            "$src/test_native_frame_clock_v377.c" -o frame-clock-san
+          ./frame-clock-san
+      - name: Python synthetic PE64 ELF64 corrupted imports and runtime restrictions
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          python3 "$src/test_native_binary_closure_gate_v377.py"
+      - name: Native Linux x64 executable with actual ELF dependency gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O2 -Wall -Wextra -Werror \
+            "$src/native_synthetic_host_v377.c" -o native-v377-host
+          ./native-v377-host
+          python3 "$src/native_binary_closure_gate_v377.py" \
+            --target linux --binary native-v377-host
+          echo 'NATIVE_V377_LINUX_ELF_STATIC_ENTRY_AND_CRT_IMPORT_GATE_PASS'
+  windows-static-gate-fixed60:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Native Windows clang-cl C11 fixed 60Hz tick validation
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$src/native_frame_clock_v377.c" `
+            "$src/test_native_frame_clock_v377.c" /Fe:native-v377-clock.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V377 Win64 clock compile failed' }
+          & .\native-v377-clock.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V377 Win64 60 Hz clock tests failed' }
+      - name: Native Win64 PE32+ executable and actual import gate
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$src/native_synthetic_host_v377.c" /Fe:native-v377-host.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V377 Win64 host compile/link failed' }
+          & .\native-v377-host.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V377 Win64 host execution failed' }
+          python "$src/test_native_binary_closure_gate_v377.py"
+          if ($LASTEXITCODE -ne 0) { throw 'V377 PE ELF synthetic tests failed' }
+          python "$src/native_binary_closure_gate_v377.py" `
+            --target windows --binary native-v377-host.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V377 real Win64 PE/import preflight failed' }
+          Write-Host 'NATIVE_V377_WIN64_PE_STATIC_ENTRY_AND_IMPORT_GATE_PASS'
+      - name: No proprietary game assets in public CI
+        shell: pwsh
+        run: |
+          if (Test-Path CUSA03173) { throw 'Private BB content found' }
+          if (Test-Path 'Dark Souls III') { throw 'Private DS3 content found' }
+          Write-Host 'NATIVE_V377_ONLY_PUBLIC_SYNTHETIC_NATIVE_EXECUTABLES_PASS'
