@@ -64,6 +64,18 @@ int shyt_native_import_seal_v395(ShytNativeImportRouterV395 *router);
 void shyt_native_import_dispatch_v395(ShytNativeImportRouterV395 *router,
     BbCpu *cpu,uint64_t guest_target,uint64_t next);
 
+/* V398 shared-service bridge: preserves V395 exact host-service memory,
+ * CPU and V393 recovery semantics without 8192 copied singleton routers.
+ * Only native host code may invoke this; it requires an active V390
+ * same-owner lease and a V393 cooperative recovery checkpoint. It
+ * rechecks (guest_target, continuation) against the supplied immutable
+ * site spec, then performs the same bounded V395 synthetic service.
+ */
+int shyt_native_import_spec_valid_v398(const ShytNativeImportSpecV395 *spec);
+void shyt_native_import_dispatch_site_v398(ShytNativeOsVmV388 *owner,
+    const ShytNativeImportSpecV395 *spec,BbCpu *cpu,
+    uint64_t guest_target,uint64_t next);
+
 #ifdef __cplusplus
 }
 #endif
