@@ -136,7 +136,8 @@ def scan_generated(table:str,shards:list[str],image_base:int):
         raise ValueError("incomplete callsite scanner")
     return [int(x,16) for x in declarations],observed
 
-def verify(manifest:dict,image_hash:str,table:str,shards:list[str])->dict:
+def verify(manifest:dict,image_hash:str,table:str,shards:list[str],
+           allow_shared_targets:bool=False)->dict:
     if image_hash!=manifest["image_sha256"]:
         raise ValueError("owner image fingerprint differs from declared provenance")
     base=number(manifest["image_base"])
@@ -145,7 +146,7 @@ def verify(manifest:dict,image_hash:str,table:str,shards:list[str])->dict:
     if sorted(functions)!=expected:
         raise ValueError("function manifest does not cover actual generated AOT table")
     sites=[]
-    targets=set()
+    targets={}
     seen_sites=set()
     for c in manifest["calls"]:
         off=number(c["function_offset"])
@@ -153,15 +154,24 @@ def verify(manifest:dict,image_hash:str,table:str,shards:list[str])->dict:
         target=number(c["guest_target"])
         if target==0 or target==base+nxt or base+nxt>U64_MAX:
             raise ValueError("invalid import/continuation target")
-        if off not in expected or (off,nxt) in seen_sites or target in targets:
-            # V395 imported target uniqueness remains an explicit ABI limit.
-            raise ValueError("duplicate/unowned import callsite/target")
-        seen_sites.add((off,nxt));targets.add(target);sites.append((off,nxt))
+        if off not in expected or (off,nxt) in seen_sites:
+            raise ValueError("duplicate or unowned source import callsite")
+        signature=(c["service"],c["recover_code"],number(c["constant"]))
+        if target in targets and (
+            not allow_shared_targets or targets[target]!=signature):
+            # V397 shared target only when ALL host ABI/service fields
+            # agree. Different callers cannot mutate import behavior.
+            raise ValueError("duplicate target without identical approved ABI")
+        seen_sites.add((off,nxt))
+        targets[target]=signature
+        sites.append((off,nxt))
     if sorted(sites)!=sorted(actual):
         raise ValueError("missing/extra imported native callsite in closure manifest")
     if len(actual)!=len(manifest["calls"]):
         raise ValueError("partial generated import coverage")
     return {"functions":len(functions),"import_calls":len(actual),
+        "distinct_import_targets":len(targets),
+        "shared_target_provenance":bool(allow_shared_targets and len(targets)<len(actual)),
         "exact_source_sites_covered":True,"image_fingerprint_verified":True,
         "original_game_boot_proven":False}
 
@@ -195,6 +205,8 @@ def render_header(m:dict)->str:
 def run()->None:
     p=argparse.ArgumentParser()
     p.add_argument("--scope",choices=["invented-test-only","owner-private"],required=True)
+    p.add_argument("--allow-shared-targets",action="store_true",
+        help="V397: same target from different attested sites with identical service ABI")
     p.add_argument("--manifest",type=Path,required=True)
     p.add_argument("--upstream-checkout",type=Path,required=True)
     p.add_argument("--image",type=Path,required=True)
@@ -239,7 +251,8 @@ def run()->None:
         if valid!=companion.read_text(encoding="utf-8"):
             raise ValueError("untrusted generated memory instrumentation")
         shards.append(s)
-    status=verify(m,digest(image),table.read_text(encoding="utf-8"),shards)
+    status=verify(m,digest(image),table.read_text(encoding="utf-8"),shards,
+                  allow_shared_targets=a.allow_shared_targets)
     out.write_text(render_header(m),encoding="utf-8")
     print("NATIVE_V396_SOURCE_PINNED_IMPORT_CLOSURE_MANIFEST_PASS")
     # Only bounded counts + booleans. Never leak private owner source,
