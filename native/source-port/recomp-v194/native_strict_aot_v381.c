@@ -50,13 +50,16 @@ static int sort_ptrs(const void *a, const void *b) {
     return (aa>bb)-(aa<bb);
 }
 int shyt_strict_aot_activate_v381(
+    const RcApi *strict_base,
     const RcFunction *functions, size_t count, uint64_t image_base,
     ShytStrictAotAttestV381 attester, void *ctx,
     ShytStrictAotProofV381 *out) {
     uintptr_t *slots;
     uint64_t previous=0;
     ShytStrictAotProofV381 proof={0};
-    if (!functions || !out || !attester || !image_base ||
+    if (!shyt_strict_aot_is_base_v381(strict_base) ||
+        strict_base->image_base!=image_base ||
+        !functions || !out || !attester || !image_base ||
         !count || count>SHYT_V381_MAX_FUNCTIONS ||
         count>SIZE_MAX/sizeof(uintptr_t)) return 0;
 
@@ -102,7 +105,7 @@ int shyt_strict_aot_activate_v381(
         *functions[i].direct=functions[i].fn;
     }
     proof.functions_attested=count;
-    proof.no_guest_fallback_callbacks=0; /* call shyt_strict_aot_is_base */
+    proof.no_guest_fallback_callbacks=1; /* verified strict_base */
     proof.owner_game_startup_proven=0;
     *out=proof;
     return 1;
