@@ -1,0 +1,216 @@
+name: Native V390 real pinned generated AOT routed into V389 OS guest VM
+on:
+  push:
+    branches: [feature/native-v390-generated-aot-vm-adapter-20261112]
+    paths:
+      - '.github/workflows/native-v390-real-generated-vm.yml'
+      - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
+      - 'native/source-port/recomp-v194/native_generated_memory_calls_v390.h'
+      - 'native/source-port/recomp-v194/instrument_generated_aot_memory_v390.py'
+      - 'native/source-port/recomp-v194/test_*v390.*'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v390-real-generated-vm.yml'
+      - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
+      - 'native/source-port/recomp-v194/native_generated_memory_calls_v390.h'
+      - 'native/source-port/recomp-v194/instrument_generated_aot_memory_v390.py'
+      - 'native/source-port/recomp-v194/test_*v390.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  generate-real-upstream:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - name: Instrumenter rejects raw host-pointer routes and malformed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 native/source-port/recomp-v194/test_instrument_generated_aot_memory_v390.py
+      - name: Build exact pinned upstream FULL original bbrecomp build-time generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream-recomp
+          python3 native/source-port/recomp-v194/patch_upstream_ret_flags_v199.py --upstream-checkout public-upstream-recomp
+          if ! (cd public-upstream-recomp && CC=clang ./build.sh) > "$RUNNER_TEMP/v390-generator.log" 2>&1; then
+            echo '::error title=V390::Pinned original-free bbrecomp generator failed'
+            grep -m2 -E 'error:|fatal error|undefined reference' "$RUNNER_TEMP/v390-generator.log" | cut -c1-200 || true
+            exit 1
+          fi
+      - name: Generate genuine six whole-function C functions from INVENTED build-time ELF and inject V390 VM path
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/v390-synthetic"
+          d=native/source-port/recomp-v194
+          python3 "$d/generate_memory_branches_v199.py" \
+            --upstream-checkout public-upstream-recomp \
+            --out "$RUNNER_TEMP/v390-synthetic/recomp.c"
+          python3 "$d/instrument_generated_aot_memory_v390.py" \
+            --upstream-checkout public-upstream-recomp \
+            --source "$RUNNER_TEMP/v390-synthetic/recomp_00000.c" \
+            --output "$RUNNER_TEMP/v390-synthetic/recomp_00000_v390.c" \
+            --require-scalar
+          cp -a public-upstream-recomp/deps/include "$RUNNER_TEMP/v390-synthetic/include"
+          test -s "$RUNNER_TEMP/v390-synthetic/recomp.c"
+          test -s "$RUNNER_TEMP/v390-synthetic/recomp_00000_v390.c"
+          echo NATIVE_V390_ACTUAL_UPSTREAM_WHOLE_FUNCTION_VM_SOURCE_GENERATED_PASS
+      - name: Linux x86-64 execute TRUE upstream generator C against OS-backed V389 guest-memory map
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v390-synthetic"
+          python3 "$d/patch_upstream_win32_clock_v195.py" --upstream-checkout public-upstream-recomp
+          clang -std=gnu11 -O2 -Wall -Wextra \
+            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+            -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
+            -pthread -I"$d" -Ipublic-upstream-recomp/src -I"$a/include" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/native_generated_memory_v390.c" \
+            "$d/test_native_generated_memory_v390.c" \
+            "$a/recomp.c" "$a/recomp_00000_v390.c" \
+            -o "$RUNNER_TEMP/v390-upstream-real-generated-linux"
+          "$RUNNER_TEMP/v390-upstream-real-generated-linux"
+          if "$RUNNER_TEMP/v390-upstream-real-generated-linux" --eboot ; then
+            echo '::error title=V390::Native AOT unexpectedly accepted runtime EBOOT'
+            exit 1
+          fi
+      - name: Linux AddressSanitizer and UndefinedBehaviorSanitizer actual generated C
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v390-synthetic"
+          clang -std=gnu11 -O1 -g -Wall -Wextra \
+            -Wno-unused-label -Wno-unused-variable -Wno-unused-parameter \
+            -Wno-missing-field-initializers -ffp-contract=off -fno-strict-aliasing \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -pthread -I"$d" -Ipublic-upstream-recomp/src -I"$a/include" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/native_generated_memory_v390.c" \
+            "$d/test_native_generated_memory_v390.c" \
+            "$a/recomp.c" "$a/recomp_00000_v390.c" \
+            -o "$RUNNER_TEMP/v390-real-generated-san"
+          "$RUNNER_TEMP/v390-real-generated-san"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v390-INVENTED-ELF-recompiled-C-only
+          path: ${{ runner.temp }}/v390-synthetic/
+          if-no-files-found: error
+          retention-days: 1
+  windows-amd64-generated:
+    needs: generate-real-upstream
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v390-INVENTED-ELF-recompiled-C-only
+          path: ${{ runner.temp }}/v390-synthetic
+      - name: Compile source with strict warnings, generated upstream C separately
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $d='native/source-port/recomp-v194'
+          $a=Join-Path $env:RUNNER_TEMP 'v390-synthetic'
+          $out=Join-Path $env:RUNNER_TEMP 'v390-obj'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $incs=@("/I$d",'/Inative/source-port/recomp-v187',
+                  '/Ipublic-upstream-recomp/src',"/I$a/include",
+                  "/FI$d/native_win_rc_time_v270.h")
+          $own=@('native_strict_aot_v381.c','native_multi_region_vm_v386.c',
+                 'native_os_vm_v388.c','native_os_vm_reconfigure_v389.c',
+                 'native_generated_memory_v390.c','test_native_generated_memory_v390.c')
+          foreach($name in $own) {
+            $obj=Join-Path $out ($name + '.obj')
+            & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 $incs `
+              /c (Join-Path $d $name) "/Fo:$obj"
+            if($LASTEXITCODE -ne 0) { throw "V390 strict Win64 compile failed" }
+          }
+          foreach($name in @('recomp.c','recomp_00000_v390.c')) {
+            $obj=Join-Path $out ($name + '.obj')
+            & clang-cl /nologo /TC /std:c11 /W3 /O2 $incs `
+              /c (Join-Path $a $name) "/Fo:$obj"
+            if($LASTEXITCODE -ne 0) { throw 'V390 pinned generated C compile failed' }
+          }
+          $exe=Join-Path $env:RUNNER_TEMP 'native-v390-real-upstream.exe'
+          & clang-cl /nologo (Get-ChildItem -Path $out -Filter '*.obj' | ForEach-Object FullName) "/Fe:$exe"
+          if($LASTEXITCODE -ne 0) { throw 'V390 native Win64 linking failed' }
+          $bytes=[IO.File]::ReadAllBytes($exe)
+          if($bytes.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($bytes,0,2) -ne 'MZ'){
+            throw 'V390 not a native Win64 PE'
+          }
+          & $exe
+          if($LASTEXITCODE -ne 0) { throw 'V390 native real generator VM fixture failed' }
+          'V390 genuine upstream generated C Windows executable PASS; NOT original retail game.'
+  macos-arm64-generated:
+    needs: generate-real-upstream
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream-recomp
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v390-INVENTED-ELF-recompiled-C-only
+          path: ${{ runner.temp }}/v390-synthetic
+      - name: Execute pinned recompiler generated whole-functions with C11 host VM on native Apple ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          a="$RUNNER_TEMP/v390-synthetic"
+          clang -std=gnu11 -O2 -Wall \
+            -Wno-unused-label -Wno-unused-variable -Wno-missing-field-initializers \
+            -ffp-contract=off -fno-strict-aliasing -pthread \
+            -I"$d" -Ipublic-upstream-recomp/src -I"$a/include" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/native_os_vm_reconfigure_v389.c" \
+            "$d/native_generated_memory_v390.c" \
+            "$d/test_native_generated_memory_v390.c" \
+            "$a/recomp.c" "$a/recomp_00000_v390.c" \
+            -o "$RUNNER_TEMP/native-v390-macos-arm64"
+          "$RUNNER_TEMP/native-v390-macos-arm64"
