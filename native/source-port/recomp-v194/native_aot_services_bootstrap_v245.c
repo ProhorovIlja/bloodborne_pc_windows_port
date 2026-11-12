@@ -112,7 +112,8 @@ int shyt_aot_services_link_direct_v261(
 {
     if (!services || !services->published_api || !services->functions ||
         !services->function_count || !attester || !stats ||
-        !services->published_api->image_base)
+        !services->published_api->image_base ||
+        services->native_only_finalized_v384)
         return 0;
     return shyt_aot_activate_direct_slots_v259(
         services->functions, services->function_count,
@@ -125,7 +126,8 @@ int shyt_aot_services_revoke_direct_v268(
     ShytAotServicesV245 *services, ShytDirectStatsV259 *stats)
 {
     if (!services || !services->published_api || !services->functions ||
-        !services->function_count || !stats)
+        !services->function_count || !stats ||
+        services->native_only_finalized_v384)
         return 0;
     return shyt_aot_revoke_direct_slots_v268(
         services->functions,services->function_count,
