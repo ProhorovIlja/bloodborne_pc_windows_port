@@ -1,0 +1,102 @@
+name: Native V383 pinned atomic guest stack memory and native CALL TAIL integration
+on:
+  push:
+    branches: [feature/native-v383-pinned-stack-lease-20261112]
+    paths:
+      - '.github/workflows/native-v383-pinned-stack.yml'
+      - 'native/source-port/recomp-v194/native_pinned_stack_v383.*'
+      - 'native/source-port/recomp-v194/test_native_pinned_stack_v383.c'
+      - 'native/source-port/recomp-v194/native_aot_route_v382.*'
+      - 'native/source-port/recomp-v194/native_strict_aot_v381.*'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v383-pinned-stack.yml'
+      - 'native/source-port/recomp-v194/native_pinned_stack_v383.*'
+      - 'native/source-port/recomp-v194/test_native_pinned_stack_v383.c'
+      - 'native/source-port/recomp-v194/native_aot_route_v382.*'
+      - 'native/source-port/recomp-v194/native_strict_aot_v381.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-gcc-clang-sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC and Clang portable C11 original ABI native stack integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I "$i" \
+              "$d/native_strict_aot_v381.c" \
+              "$d/native_aot_route_v382.c" \
+              "$d/native_pinned_stack_v383.c" \
+              "$d/test_native_pinned_stack_v383.c" \
+              -o "native-v383-$cc"
+            "./native-v383-$cc"
+          done
+      - name: Clang ASan UBSan mapped guest stack boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic -I "$i" \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_pinned_stack_v383.c" \
+            "$d/test_native_pinned_stack_v383.c" \
+            -o native-v383-san
+          ./native-v383-san
+  windows-amd64:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Win64 Clang CL C11 atomic stack guest-to-host backing
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          $i='native/source-port/recomp-v187'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$i" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/native_aot_route_v382.c" `
+            "$d/native_pinned_stack_v383.c" `
+            "$d/test_native_pinned_stack_v383.c" `
+            /Fe:native-v383.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V383 Win64 compile failed' }
+          & .\native-v383.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V383 Win64 tests failed' }
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Apple ARM64 host-only atomic memory contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I "$i" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_pinned_stack_v383.c" \
+            "$d/test_native_pinned_stack_v383.c" \
+            -o native-v383-macos-arm64
+          ./native-v383-macos-arm64
