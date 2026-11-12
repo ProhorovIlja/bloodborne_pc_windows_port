@@ -149,6 +149,7 @@ def main()->None:
     p.add_argument("--native-image",required=True,type=Path)
     p.add_argument("--manifest",required=True,type=Path)
     p.add_argument("--out-ledger",required=True,type=Path)
+    p.add_argument("--out-header",required=True,type=Path)
     p.add_argument("--upstream-checkout",required=True,type=Path)
     a=p.parse_args()
     v390=module("v390_generator","instrument_generated_aot_memory_v390.py")
@@ -170,7 +171,32 @@ def main()->None:
         out.parent.is_symlink()) or (
         any((p/".git").exists() for p in (out.parent,*out.parent.parents))):
         raise ValueError("unsafe source ledger output path")
-    out.write_text(json.dumps(ledger,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+    # Independent V401 byte/hash fixture is source-locked. Emit the
+    # separate, fully audited 11 function native-ready identities only
+    # after both real generated corpora pass source-wide fallback checks.
+    header=a.out_header
+    if header.exists() or header.suffix!=".h" or (
+        not header.parent.is_dir()) or header.parent.is_symlink() or (
+        any((p/".git").exists() for p in (header.parent,*header.parent.parents))):
+        raise ValueError("native-only generated header cannot be published to source tree")
+    rows=[x for x in v401.EXPECTED if x[0]!="0x1140"]
+    if len(rows)!=11:
+        raise ValueError("native-only function identity coverage altered")
+    lines=["/* V402: original-free generated only after 12/11 real source closure.",
+           " * No guest interpreter fallback or original Bloodborne game code. */",
+           "#ifndef SHYT_V402_INVENTED_NATIVE_ONLY_FUNCTIONS",
+           "#define SHYT_V402_INVENTED_NATIVE_ONLY_FUNCTIONS",
+           "#include <stdint.h>",
+           "typedef struct { uint64_t offset, size, hash; } ShytV402NativeEntry;",
+           "static const ShytV402NativeEntry shyt_v402_allowed[] = {"]
+    lines.extend("  {UINT64_C(%s), UINT64_C(%d), UINT64_C(%s)},"%
+        (off,len(bytes.fromhex(body)),h) for off,body,mode,h in rows)
+    lines.extend(["};",
+        "enum { SHYT_V402_APPROVED_FUNCTION_COUNT =",
+        " sizeof(shyt_v402_allowed)/sizeof(shyt_v402_allowed[0]) };",
+        "#endif"])
+    header.write_text("\\n".join(lines)+"\\n",encoding="utf-8")
+    out.write_text(json.dumps(ledger,sort_keys=True,indent=2)+"\\n",encoding="utf-8")
     print("NATIVE_V402_FULL_12_SOURCE_FALLBACK_LEDGER_AND_11_NATIVE_CLOSURE_PASS")
     print(json.dumps(ledger,sort_keys=True))
     print("no_original_Bloodborne_code_or_native_game_boot=TRUE")
