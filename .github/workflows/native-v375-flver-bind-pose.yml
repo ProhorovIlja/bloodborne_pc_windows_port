@@ -1,0 +1,71 @@
+name: Native V375 FLVER2 bone graph and bind pose
+on:
+  push:
+    branches: [feature/native-v375-flver-bind-pose-20261112]
+    paths:
+      - '.github/workflows/native-v375-flver-bind-pose.yml'
+      - 'native/source-port/recomp-v194/native_flver2_bind_pose_v375.*'
+      - 'native/source-port/recomp-v194/test_native_flver2_bind_pose_v375.c'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-c11-gcc-clang-sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC and Clang strict synthetic bone graph and transform tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/native_flver2_bind_pose_v375.c" \
+              "$src/test_native_flver2_bind_pose_v375.c" -lm -o native-v375-bones
+            ./native-v375-bones
+          done
+      - name: ASan and UBSan for malformed bones and world transforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_flver2_geometry_v362.c" \
+            "$src/native_flver2_bind_pose_v375.c" \
+            "$src/test_native_flver2_bind_pose_v375.c" -lm -o native-v375-san
+          ./native-v375-san
+          echo 'NATIVE_V375_PORTABLE_ASAN_UBSAN_PASS'
+  windows-clang-cl-c11:
+    runs-on: windows-2022
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Compile and run native bone matrices with Windows clang-cl
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$src/native_flver2_geometry_v362.c" `
+            "$src/native_flver2_bind_pose_v375.c" `
+            "$src/test_native_flver2_bind_pose_v375.c" `
+            /Fe:native-v375-bones.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V375 Windows C11 compile/link failed' }
+          & .\native-v375-bones.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V375 native Win64 matrix tests failed' }
+      - name: Ensure original game assets and private saves are not in CI
+        shell: pwsh
+        run: |
+          if (Test-Path CUSA03173) { throw 'Bloodborne owner assets unexpectedly in public CI' }
+          if (Test-Path 'Dark Souls III') { throw 'DS3 owner assets unexpectedly in public CI' }
+          Write-Host 'NATIVE_V375_PUBLIC_SYNTHETIC_ONLY_PASS'
