@@ -124,6 +124,18 @@ def evaluate(table12:str,shard12:str,image12:bytes,
                 raise ValueError("unattested source-generated guest indirect CALL")
             observed_calls.add((offset,"call"))
         if offset not in full or record["body"]!=full[offset]["body"]:
+            before=full.get(offset,{}).get("body","")
+            after=record["body"]
+            first=next((i for i,(x,y) in enumerate(zip(before,after))
+                if x!=y),min(len(before),len(after)))
+            # Both inputs are original-free invented C only; bounded
+            # diagnostics to audit real pinned generator differences.
+            print("V402_SYNTHETIC_FUNCTION_DIFF offset=0x%x first=%d "%
+                (offset,first)+"full_len=%d native_len=%d "%
+                (len(before),len(after))+
+                "full_prefix="+repr(before[max(0,first-35):first+90])+
+                " native_prefix="+repr(after[max(0,first-35):first+90]),
+                file=sys.stderr)
             raise ValueError("native-only source differs from independently audited full source")
         code=next(bytes.fromhex(x[1]) for x in v401.EXPECTED if int(x[0],16)==offset)
         if image11[offset:offset+len(code)]!=code:
