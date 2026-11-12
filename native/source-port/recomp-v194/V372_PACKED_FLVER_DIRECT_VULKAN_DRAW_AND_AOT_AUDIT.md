@@ -6,7 +6,9 @@ Date: **2026-11-12**. Parent: \`feature/native-v371-flver-real-vertex-semantics-
 
 Bridge the independently verified V371 Bloodborne/Dark Souls III FLVER2 vertex-member layouts to **actual native Linux Vulkan indexed rasterization** without CPU repacking every vertex into an extra float3-only buffer. Preserve the strict target: independently built Windows and Linux executables with **no runtime PS4 EBOOT/SELF/ELF, guest CPU interpreter, PS4 HLE kernel or PS4 graphics-command translation**. Proton/DXVK/VKD3D-Proton remain optional compatibility/research tools, not requirements.
 
-**PASS, final commit:** https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/43174090826
+**PASS packed draw:** https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/43174090826
+
+**PASS final regression including original V370 compatibility:** https://github.com/ProhorovIlja/bloodborne_pc_windows_port/actions/runs/43174630372
 
 On Ubuntu 24.04 with Mesa lavapipe, Vulkan validation layers and native GLSL→SPIR-V, each of GCC, Clang and Clang ASan/UBSan ran:
 - One invented FLVER2 **44-byte-per-vertex** skinned-attribute layout: raw GPU V369 staging→indexed Vulkan pipeline directly binding position as \`VK_FORMAT_R32G32B32_SFLOAT\` at **offset 0, stride 44**. Visible diagnostic triangle generated **1,094 green pixels** in an offscreen 64×64 image.
@@ -59,3 +61,7 @@ Use repeatable targeted scans by subsystem across branches, PRs, forks and linke
 5. Later, once correct offline gameplay is established, honor all user-requested performance, K+M chord remapping, dedicated jump, controllers/HUD glyphs, manual NG+, QoL/mods, online co-op/invasions/LAN/dedicated/server selection, modern DLSS/FSR/XeSS/Reflex/HDR/VRR and shader warmup features as tracked in V366's complete backlog.
 
 **Non-destructive:** Stacked Draft PR from V371. No automatic merges, production Fornex service writes, player-save changes, or private original game uploads.
+
+## Verified post-review regression
+
+The final V372 CI additionally recompiles and executes the **unchanged public V370 stride12 drawing test** under both GCC and Clang (besides the new packed 44/36-byte path), preventing regressions in existing callers. Actual lavapipe pixel readbacks remained 1,094 visible/0 offscreen for V370 as well as V372. Clang ASan/UBSan also passed the V372 packed layout path. No validation errors were observed in the relevant log messages. The V372 branch remains stacked Draft and does not contain or execute copyrighted game data.
