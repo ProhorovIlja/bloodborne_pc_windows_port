@@ -211,3 +211,19 @@ int shyt_native_flver2_skin_positions_v376(
         skin_one_v376(&vertices[v],palette,inverse,animated,&output[v]);
     return 1;
 }
+
+int shyt_native_flver2_skin_global_positions_v376(
+    const ShytNativeFlver2VertexV371 *vertices,size_t count,
+    const float (*inverse)[16],const float (*animated)[16],size_t global_count,
+    ShytNativeSkinnedPositionV376 *output,size_t capacity) {
+    if (global_count>SHYT_NATIVE_V376_MAX_BONES) return 0;
+    if (count && !global_count) return 0;
+    /* The temporary identity palette is selected EXPLICITLY by caller,
+     * never inferred from source metadata. No allocations, no hidden
+     * dependency on the FLVER normal_w/default-bone convention. */
+    uint32_t identity[SHYT_NATIVE_V376_MAX_BONES];
+    for(size_t i=0;i<global_count;++i) identity[i]=(uint32_t)i;
+    return shyt_native_flver2_skin_positions_v376(
+        vertices,count,identity,global_count,inverse,animated,global_count,
+        output,capacity);
+}
