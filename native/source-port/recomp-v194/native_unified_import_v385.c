@@ -76,7 +76,7 @@ int shyt_unified_import_prepare_v385(
     return 1;
 }
 static int handle_import(ShytUnifiedImportV385 *r,BbCpu *cpu,
-                         uint64_t target,uint64_t next,int opcode) {
+                         uint64_t next,int opcode) {
     ShytGuestVmLeaseV385 lease={0};
     uint64_t slot,output_address=0,result_int=0;
     int have_out=0,exp=0;
@@ -152,7 +152,7 @@ int shyt_unified_import_try_v385(ShytUnifiedImportV385 *r,
     else for(size_t i=0;i<23;i++)
         if(target==r->math_targets[i]){opcode=(int)r->math_opcodes[i];break;}
     if(opcode<0)return 0;
-    return handle_import(r,cpu,target,next,opcode)?1:-1;
+    return handle_import(r,cpu,next,opcode)?1:-1;
 }
 static void import_call_v385(BbCpu *cpu,uint64_t target,uint64_t next) {
     ShytUnifiedImportV385 *r=atomic_load_explicit(
