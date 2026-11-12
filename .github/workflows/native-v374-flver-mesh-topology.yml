@@ -1,0 +1,73 @@
+name: Native V374 safe FLVER2 mesh/LOD/triangle topology
+on:
+  push:
+    branches: [feature/native-v374-private-mesh-topology-20261112]
+    paths:
+      - '.github/workflows/native-v374-flver-mesh-topology.yml'
+      - 'native/source-port/recomp-v194/native_flver2_mesh_topology_v374.*'
+      - 'native/source-port/recomp-v194/test_native_flver2_mesh_topology_v374.c'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-clang-gcc-sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Compile and run synthetic FLVER2 face topology on GCC and Clang
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/native_flver2_mesh_topology_v374.c" \
+              "$src/test_native_flver2_mesh_topology_v374.c" \
+              -o native-v374-mesh-test
+            ./native-v374-mesh-test
+          done
+      - name: Run compiler sanitizers with no copyrighted files
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_flver2_geometry_v362.c" \
+            "$src/native_flver2_mesh_topology_v374.c" \
+            "$src/test_native_flver2_mesh_topology_v374.c" \
+            -o native-v374-sanitized
+          ./native-v374-sanitized
+          echo 'NATIVE_V374_LINUX_GCC_CLANG_ASAN_UBSAN_PASS'
+  windows-c11:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Compile and run portable C11 topology on Windows clang-cl
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$src/native_flver2_geometry_v362.c" `
+            "$src/native_flver2_mesh_topology_v374.c" `
+            "$src/test_native_flver2_mesh_topology_v374.c" `
+            /Fe:native-v374-mesh-test.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V374 Windows compile failed' }
+          & .\native-v374-mesh-test.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V374 Windows synthetic topology tests failed' }
+      - name: Exclude original game assets
+        shell: pwsh
+        run: |
+          if (Test-Path 'CUSA03173') { throw 'Copyrighted game input in CI' }
+          if (Test-Path 'Dark Souls III') { throw 'Private DS3 files in CI' }
+          Write-Host 'NATIVE_V374_WINDOWS_SYNTHETIC_ONLY_PASS'
