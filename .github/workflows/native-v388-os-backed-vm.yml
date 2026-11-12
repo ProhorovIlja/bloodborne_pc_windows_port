@@ -1,0 +1,183 @@
+name: Native V388 OS page backed guest VM and cross-word AOT/imports
+on:
+  push:
+    branches: [feature/native-v388-os-backed-crossword-vm-20261112]
+    paths:
+      - '.github/workflows/native-v388-os-backed-vm.yml'
+      - 'native/source-port/recomp-v194/native_os_vm_v388.*'
+      - 'native/source-port/recomp-v194/test_native_*_v388.c'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v388-os-backed-vm.yml'
+      - 'native/source-port/recomp-v194/native_os_vm_v388.*'
+      - 'native/source-port/recomp-v194/test_native_*_v388.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-os-pages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Linux GCC/Clang mmap and cross-word AOT test
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+              "$d/native_strict_aot_v381.c" \
+              "$d/native_aot_route_v382.c" \
+              "$d/native_multi_region_vm_v386.c" \
+              "$d/native_os_vm_v388.c" \
+              "$d/test_native_os_vm_v388.c" -o "native-v388-$cc"
+            "./native-v388-$cc"
+          done
+      - name: Linux ASan UBSan physical permissioned VM memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/test_native_os_vm_v388.c" -o native-v388-asan
+          ./native-v388-asan
+  macos-arm64-os-pages:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Apple ARM64 mmap mprotect and cross-word native VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -pthread -I "$i" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/native_multi_region_vm_v386.c" \
+            "$d/native_os_vm_v388.c" \
+            "$d/test_native_os_vm_v388.c" -o native-v388-macos
+          ./native-v388-macos
+  windows-amd64-os-pages:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Win64 clang-cl VirtualAlloc VirtualProtect guest memory
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          $i='native/source-port/recomp-v187'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$i" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/native_aot_route_v382.c" `
+            "$d/native_multi_region_vm_v386.c" `
+            "$d/native_os_vm_v388.c" `
+            "$d/test_native_os_vm_v388.c" /Fe:native-v388.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Win64 V388 OS VM compile failed' }
+          & .\native-v388.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Win64 V388 OS VM fixture failed' }
+  prepare-public-deps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - name: Compile pinned upstream public header dependencies only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C public-upstream rev-parse HEAD)" = 8f31ec7c41f252730c6325d52647046baef7549f
+          python native/source-port/recomp-v194/patch_upstream_linux_generator_v196.py --upstream-checkout public-upstream
+          if ! (cd public-upstream && CC=clang ./build.sh) > "$RUNNER_TEMP/v388-pinned-public-deps.log" 2>&1; then
+            echo '::error title=Native V388::Pinned public dependency build failed'
+            exit 1
+          fi
+          test -s public-upstream/deps/include/Zydis/Zydis.h
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-v388-public-headers
+          path: public-upstream/deps/include/
+          retention-days: 1
+  win64-real-rcapi-os-backed:
+    needs: prepare-public-deps
+    runs-on: windows-2022
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: public-upstream
+          persist-credentials: false
+          submodules: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-v388-public-headers
+          path: public-upstream/deps/include
+      - name: Real Win64 V245/V384/V387 RcApi original-free two-native-fn 25 imports with OS backings
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $d='native/source-port/recomp-v194'
+          $exe=Join-Path $env:RUNNER_TEMP 'native-v388-os-backed-rcapi.exe'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "/FI$d/native_win_rc_time_v270.h" `
+            "/I$d" "/Inative/source-port/recomp-v187" `
+            "/Ipublic-upstream/src" "/Ipublic-upstream/deps/include" `
+            "$d/native_math_shim_v222.c" `
+            "$d/native_math_guest_bridge_v223.c" `
+            "$d/native_math_import_dispatch_v224.c" `
+            "$d/native_math_rcapi_route_v226.c" `
+            "$d/native_win_clock_v236.c" `
+            "$d/native_clock_rcapi_route_v239.c" `
+            "$d/native_aot_services_bootstrap_v245.c" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/native_aot_route_v382.c" `
+            "$d/native_pinned_stack_v383.c" `
+            "$d/native_boot_chain_v384.c" `
+            "$d/native_multi_region_vm_v386.c" `
+            "$d/native_unified_import_v387.c" `
+            "$d/native_os_vm_v388.c" `
+            "$d/test_native_os_bootstrap_v388.c" "/Fe:$exe"
+          if ($LASTEXITCODE -ne 0) { throw 'V388 Win64 real RcApi OS memory build failed' }
+          $raw=[IO.File]::ReadAllBytes($exe)
+          if ($raw.Length -lt 2048 -or [Text.Encoding]::ASCII.GetString($raw,0,2) -ne 'MZ') {
+            throw 'V388 Win64 generated fixture is not native PE'
+          }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw 'V388 Win64 OS-backed 25-import/AOT fixture failed' }
+          'Native V388 original-free real RcApi OS-page-backed test PASSED; NOT original Bloodborne game.'
