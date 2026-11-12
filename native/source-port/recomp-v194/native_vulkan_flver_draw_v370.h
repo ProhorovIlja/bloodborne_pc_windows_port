@@ -32,5 +32,16 @@ bool draw_offscreen_flver_v370(VkPhysicalDevice physical,VkDevice device,
     const uint32_t* vertex_spirv,size_t vertex_words,
     const uint32_t* fragment_spirv,size_t fragment_words,
     std::vector<uint8_t>* rgba_out);
+/* V372 internal stride-aware draw entrypoint. Only the V372 semantic
+ * wrapper should call this after it verifies the immutable original FLVER
+ * layout and GPU upload metadata. V370's public 12-byte API is unchanged.
+ */
+bool draw_offscreen_flver_strided_v372(VkPhysicalDevice physical,VkDevice device,
+    VkQueue queue,uint32_t graphics_family,
+    const shyt_native_v369::UploadedModelV369& model,
+    uint32_t verified_stride,
+    const uint32_t* vertex_spirv,size_t vertex_words,
+    const uint32_t* fragment_spirv,size_t fragment_words,
+    std::vector<uint8_t>* rgba_out);
 } // namespace shyt_native_v370
 #endif
