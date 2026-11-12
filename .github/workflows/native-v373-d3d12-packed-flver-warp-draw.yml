@@ -1,0 +1,83 @@
+name: Native V373 Windows D3D12 WARP packed FLVER indexed draw
+on:
+  push:
+    branches: [feature/native-v373-d3d12-packed-flver-warp-draw-20261112]
+    paths:
+      - '.github/workflows/native-v373-d3d12-packed-flver-warp-draw.yml'
+      - 'native/source-port/recomp-v194/native_d3d12_flver_draw_v373.*'
+      - 'native/source-port/recomp-v194/test_native_d3d12_flver_draw_v373.cpp'
+      - 'native/source-port/recomp-v194/native_flver2_vertex_decode_v371.*'
+      - 'native/source-port/recomp-v194/native_d3d12_flver_stream_v367.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-real-warp-packed-indexed-draw:
+    runs-on: windows-2022
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Compile strict FLVER2 source contracts as C11
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          foreach ($item in @('native_flver2_geometry_v362','native_flver2_gpu_plan_v364','native_flver2_vertex_decode_v371')) {
+            & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 /c "$src/$item.c" "/Fo:$item.obj"
+            if ($LASTEXITCODE -ne 0) { throw "C11 source compile failed: $item" }
+          }
+      - name: Build actual D3D12 packed FLVER WARP rendering and readback
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TP /std:c++17 /EHsc /W4 /WX /O2 `
+            "$src/native_fence_upload_ring_v366.cpp" `
+            "$src/native_d3d12_flver_stream_v367.cpp" `
+            "$src/native_d3d12_flver_draw_v373.cpp" `
+            "$src/test_native_d3d12_flver_draw_v373.cpp" `
+            native_flver2_geometry_v362.obj native_flver2_gpu_plan_v364.obj `
+            native_flver2_vertex_decode_v371.obj `
+            d3d12.lib dxgi.lib d3dcompiler.lib `
+            /Fe:native-v373-warp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V373 packed D3D12 compilation/link failed' }
+      - name: Rasterize actual indexed triangles and inspect WARP pixels
+        shell: pwsh
+        run: |
+          & .\native-v373-warp.exe
+          if ($LASTEXITCODE -ne 0) { throw 'V373 D3D12 offscreen indexed GPU draw failed' }
+      - name: No original game bytes
+        shell: pwsh
+        run: |
+          if (Test-Path CUSA03173) { throw 'Private Bloodborne assets unexpectedly present' }
+          if (Test-Path 'Dark Souls III') { throw 'Private Dark Souls III assets unexpectedly present' }
+          Write-Host 'NATIVE_V373_D3D12_WARP_OFFSCREEN_DRAW_SYNTHETIC_ONLY_PASS'
+  portable-vertex-layout-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC Clang and ASan UBSan for native FLVER semantic decoding
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/native_flver2_vertex_decode_v371.c" \
+              "$src/test_native_flver2_vertex_decode_v371.c" -lm \
+              -o v373-vertex-test
+            ./v373-vertex-test
+          done
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_flver2_geometry_v362.c" \
+            "$src/native_flver2_vertex_decode_v371.c" \
+            "$src/test_native_flver2_vertex_decode_v371.c" -lm \
+            -o v373-sanitized
+          ./v373-sanitized
