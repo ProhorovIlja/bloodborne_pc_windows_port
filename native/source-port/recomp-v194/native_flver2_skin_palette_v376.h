@@ -59,6 +59,17 @@ int shyt_native_flver2_skin_positions_v376(
     const float (*inverse_bind)[16],
     const float (*animated_world)[16],size_t global_bone_count,
     ShytNativeSkinnedPositionV376 *output,size_t output_capacity);
+/* Explicit global-index alternative for an owner-validated mesh whose
+ * local palette is EMPTY. Do not silently select this for every mesh: the
+ * caller must independently establish the byte-index convention against
+ * the source asset/animation. Every active bone index must be within
+ * global_bone_count. Still a CPU diagnostic, not a shader/animation source.
+ */
+int shyt_native_flver2_skin_global_positions_v376(
+    const ShytNativeFlver2VertexV371 *vertices,size_t vertex_count,
+    const float (*inverse_bind)[16],
+    const float (*animated_world)[16],size_t global_bone_count,
+    ShytNativeSkinnedPositionV376 *output,size_t output_capacity);
 #ifdef __cplusplus
 }
 #endif
