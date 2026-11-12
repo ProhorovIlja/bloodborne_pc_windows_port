@@ -19,6 +19,8 @@ extern "C" {
 int shyt_generated_enter_v390(ShytNativeOsVmV388 *owner);
 int shyt_generated_leave_v390(void);
 int shyt_generated_active_v390(void);
+/* Read-only identity for nested, same-thread scoped wrappers. NULL if no pin. */
+ShytNativeOsVmV388 *shyt_generated_owner_v392(void);
 
 /* Safe diagnostics return 0 (without mutation) on bad/missing mapping.
  * All returned values are 64-bit zero extended; width must be 1/2/4/8.

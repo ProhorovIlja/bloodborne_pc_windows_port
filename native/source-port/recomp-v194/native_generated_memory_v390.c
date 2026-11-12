@@ -29,6 +29,11 @@ int shyt_generated_active_v390(void) {
     return active.owner!=NULL && active.lease.live==1 &&
         active.lease.vm==&active.owner->vm;
 }
+/* V392: caller can borrow an existing pin for same-owner nested generated calls.
+ * The borrowed scope MUST NOT release the underlying outer owner lease. */
+ShytNativeOsVmV388 *shyt_generated_owner_v392(void) {
+    return shyt_generated_active_v390()?active.owner:NULL;
+}
 static int span(uint64_t addr,size_t bytes,unsigned permission) {
     const ShytNativeOsVmV388 *o=active.owner;
     size_t lo=0,hi;
