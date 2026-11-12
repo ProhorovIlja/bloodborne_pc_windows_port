@@ -104,7 +104,7 @@ static int all_tests(void) {
     list[0].device_ready=1;
     CHECK(shyt_native_choose_renderer_v380(&host,list,1,&req,&choice));
     if (secondary) {
-        list[1]=os==SHYT_OS_WINDOWS_V380?p[1]:p[1];
+        list[1]=p[1];
         req.preferred_renderer=primary;
         req.allow_fallback=1;
         list[0].device_ready=0;
@@ -117,7 +117,6 @@ static int all_tests(void) {
     } else {
         CHECK(!shyt_native_choose_renderer_v380(&host,list,2,&req,&choice));
     }
-    CHECK(!memcmp(&host,&host,sizeof(host)));
     return 0;
 }
 int main(void) {
