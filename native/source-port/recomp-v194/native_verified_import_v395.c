@@ -69,16 +69,20 @@ static const ShytNativeImportSpecV395 *lookup(
     return lo<router->count &&
            router->spec[lo].guest_target==target?&router->spec[lo]:NULL;
 }
-void shyt_native_import_dispatch_v395(ShytNativeImportRouterV395 *router,
-    BbCpu *cpu,uint64_t target,uint64_t next) {
+int shyt_native_import_spec_valid_v398(const ShytNativeImportSpecV395 *spec) {
+    return valid_spec(spec);
+}
+void shyt_native_import_dispatch_site_v398(ShytNativeOsVmV388 *owner,
+    const ShytNativeImportSpecV395 *s,BbCpu *cpu,
+    uint64_t target,uint64_t next) {
     uint64_t sum=0,first=0,second=0,value=0;
-    const ShytNativeImportSpecV395 *s;
-    if(!router || !router->sealed || !router->owner || !cpu ||
-       shyt_generated_owner_v392()!=router->owner ||
+    if(!owner || !cpu || !s || !valid_spec(s) ||
+       owner->initialized!=1 || owner->sealed!=1 || owner->released ||
+       shyt_generated_owner_v392()!=owner ||
        !shyt_generated_active_v390() ||
        !shyt_generated_recovery_depth_v393())abort();
-    s=lookup(router,target);
-    if(!s)shyt_generated_raise_v393(SHYT_V395_REC_UNKNOWN);
+    if(s->guest_target!=target)
+        shyt_generated_raise_v393(SHYT_V395_REC_UNKNOWN);
     if(s->expected_next!=next)
         shyt_generated_raise_v393(SHYT_V395_REC_CONTINUATION);
     if(s->service==SHYT_V395_COOPERATIVE_FAILURE) {
@@ -87,10 +91,8 @@ void shyt_native_import_dispatch_v395(ShytNativeImportRouterV395 *router,
     if(s->service==SHYT_V395_RETURN_VALUE){
         value=s->constant;
     } else if(s->service==SHYT_V395_ADD_GUEST_QWORDS){
-        /* Prescan all guest addresses before the first write.
-         * Return data is 64-bit wrapping arithmetic, not x86 flags.
-         * Loaded source words are individually atomic, not a single
-         * concurrent snapshot or a transaction with the destination. */
+        /* Prescan every logical guest address before mutating a word.
+         * Source reads are individually atomic, not a transaction. */
         if(!shyt_generated_try_probe_v390(cpu->r[SHYT_V395_RDI],8,
                                           SHYT_V386_READ) ||
            !shyt_generated_try_probe_v390(cpu->r[SHYT_V395_RSI],8,
@@ -109,8 +111,19 @@ void shyt_native_import_dispatch_v395(ShytNativeImportRouterV395 *router,
             shyt_generated_raise_v393(SHYT_V395_REC_GUEST_PERMISSIONS);
         value=sum;
     } else abort();
-    /* No direct guest stack deref: the caller's genuinely generated
-     * CALL RAX / RET handles the actual guest return through V390. */
+    /* The original generated CALL RAX/RET owns guest stack changes.
+     * No raw host pointer or PS4 guest interpreter is entered. */
     cpu->r[SHYT_V395_RAX]=value;
     cpu->rip=next;
+}
+void shyt_native_import_dispatch_v395(ShytNativeImportRouterV395 *router,
+    BbCpu *cpu,uint64_t target,uint64_t next) {
+    const ShytNativeImportSpecV395 *s;
+    if(!router || !router->sealed || !router->owner || !cpu ||
+       shyt_generated_owner_v392()!=router->owner ||
+       !shyt_generated_active_v390() ||
+       !shyt_generated_recovery_depth_v393())abort();
+    s=lookup(router,target);
+    if(!s)shyt_generated_raise_v393(SHYT_V395_REC_UNKNOWN);
+    shyt_native_import_dispatch_site_v398(router->owner,s,cpu,target,next);
 }
