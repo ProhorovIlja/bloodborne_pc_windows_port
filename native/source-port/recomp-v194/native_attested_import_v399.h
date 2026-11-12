@@ -42,6 +42,7 @@ typedef struct ShytNativeSourceSiteV399 {
 int shyt_native_bind_attested_v399(ShytNativeScaledRouterV398 *router,
     ShytNativeOsVmV388 *owner,
     const ShytNativeSourceSiteV399 *sites,size_t site_count,
+    size_t independently_attested_site_count,
     const ShytNativeFunctionProofV399 *functions,size_t function_count,
     uint64_t image_base);
 #ifdef __cplusplus
