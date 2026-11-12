@@ -57,6 +57,20 @@ int shyt_native_boot_finalize_v384(
     ShytNativeStackV383 *stack,
     ShytStrictAotAttestV381 attester, void *attest_ctx);
 
+/* V387: V384's SAME fail-closed attestation/publication sequence, but
+ * select an owner-validated native-only 8-byte guest return writer BEFORE
+ * the V382 route becomes immutable. Caller must validate memory identity
+ * and permissions in its own VM adapter before invoking this function.
+ * Existing V384 entrypoint remains backward compatible.
+ */
+int shyt_native_boot_finalize_with_writer_v387(
+    ShytNativeBootChainV384 *chain,
+    ShytAotServicesV245 *services,
+    const RcApi *strict_base,
+    ShytNativeStackV383 *legacy_preflight_stack,
+    ShytNativeAotStackWriteV382 stack_write, void *stack_context,
+    ShytStrictAotAttestV381 attester, void *attest_ctx);
+
 /* Once published, chain, services, stack and all callbacks must remain
  * alive and immutable until process exit. No hot reload or unpublish.
  * V245 legacy V261/V268 direct-slot mutation is blocked after commit. */
