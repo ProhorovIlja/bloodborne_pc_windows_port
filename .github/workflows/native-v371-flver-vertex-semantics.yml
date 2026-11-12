@@ -1,0 +1,74 @@
+name: Native V371 Bloodborne FLVER2 packed vertex decoding
+on:
+  push:
+    branches: [feature/native-v371-flver-real-vertex-semantics-20261112]
+    paths:
+      - '.github/workflows/native-v371-flver-vertex-semantics.yml'
+      - 'native/source-port/recomp-v194/native_flver2_vertex_decode_v371.*'
+      - 'native/source-port/recomp-v194/test_native_flver2_vertex_decode_v371.c'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-strict-vertex-decode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC, Clang, ASan, UBSan - invented 44, 36 and 12 byte layouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for compiler in gcc clang; do
+            "$compiler" -std=c11 -O2 -Wall -Wextra -Werror -Wconversion \
+              "$src/native_flver2_geometry_v362.c" \
+              "$src/native_flver2_vertex_decode_v371.c" \
+              "$src/test_native_flver2_vertex_decode_v371.c" \
+              -lm -o native-v371-vertex
+            ./native-v371-vertex
+          done
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -Wconversion \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_flver2_geometry_v362.c" \
+            "$src/native_flver2_vertex_decode_v371.c" \
+            "$src/test_native_flver2_vertex_decode_v371.c" \
+            -lm -o native-v371-sanitized
+          ./native-v371-sanitized
+      - name: No game binaries, no user-owned decoded assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e 'Dark Souls III'
+          echo NATIVE_V371_LINUX_PUBLIC_SYNTHETIC_ONLY_PASS
+  windows-win64-vertex-decode:
+    runs-on: windows-2022
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Windows clang-cl strict C11 binary and synthetic regression
+        shell: pwsh
+        run: |
+          $src='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$src/native_flver2_geometry_v362.c" `
+            "$src/native_flver2_vertex_decode_v371.c" `
+            "$src/test_native_flver2_vertex_decode_v371.c" `
+            /Fe:native-v371-vertex.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native V371 Win64 compilation failed' }
+          & .\native-v371-vertex.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native V371 Win64 synthetic semantic test failed' }
+      - name: Private game assets must not be checked in
+        shell: pwsh
+        run: |
+          if (Test-Path 'CUSA03173') { throw 'Original game found in public CI' }
+          if (Test-Path 'Dark Souls III') { throw 'Original DS3 found in public CI' }
+          Write-Host 'NATIVE_V371_WINDOWS_PUBLIC_SYNTHETIC_ONLY_PASS'
