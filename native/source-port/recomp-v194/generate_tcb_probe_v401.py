@@ -83,12 +83,12 @@ def generate(checkout:Path,out:Path)->None:
         # INVENTED data only: emit bounded diagnostic per synthetic
         # function; never print full generated C or game-private data.
         import re
-        matches=list(re.finditer(r"void f_([0-9a-f]+)\\(BbCpu \\*c\\) \\{",b))
+        matches=list(re.finditer(r"void f_([0-9a-f]+)\(BbCpu \*c\) \{",b))
         for i,m in enumerate(matches):
             if int(m.group(1),16)<0x10e0:continue
             end=matches[i+1].start() if i+1<len(matches) else len(b)
             body=b[m.end():end]
-            short=re.sub(r"\\s+"," ",body)[:240]
+            short=re.sub(r"\s+"," ",body)[:240]
             print("V401_SYNTHETIC_TCB_DIAG f_"+m.group(1)+
                   " has_tcb="+str("c->tcb" in body)+
                   " has_step="+str("rc->step(" in body)+
