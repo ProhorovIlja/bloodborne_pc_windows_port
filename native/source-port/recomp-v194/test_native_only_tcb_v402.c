@@ -10,6 +10,7 @@
 #include "native_generated_scope_v392.h"
 #include "native_host_recovery_v393.h"
 #include "native_generated_memory_calls_v390.h"
+#include "native_route_execution_v404.h"
 #include "native_only_approved_v402_generated.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -68,6 +69,37 @@ int main(void){
         CHECK(fn[i].offset!=UINT64_C(0x1140));
         *fn[i].direct=fn[i].fn;
     }
+    /* V404 rejects mutated source registries before any real generated
+     * function can execute; it never promotes every V403 member. */
+    ShytNativeExecutionV404 route={0}, rejected_route={0};
+    RcFunction forged[SHYT_V404_SYNTHETIC_FUNCTIONS];
+    memcpy(forged,fn,sizeof(forged));
+    forged[0].hash^=UINT64_C(1);
+    CHECK(!shyt_native_execution_bind_v404(&rejected_route,&vm,forged,count));
+    memcpy(forged,fn,sizeof(forged));
+    forged[0].size++;
+    CHECK(!shyt_native_execution_bind_v404(&rejected_route,&vm,forged,count));
+    CHECK(!shyt_native_execution_bind_v404(&route,&vm,fn,count-1u));
+    CHECK(shyt_native_execution_bind_v404(&route,&vm,fn,count));
+    CHECK(!shyt_native_execution_bind_v404(&route,&vm,fn,count));
+    BbCpu denied={0};
+    denied.r[RSP]=stack_base+16u*8u;
+    denied.mxcsr=0x1f80u;
+    CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x1140),&denied)
+          ==SHYT_V404_DENIED);
+    CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x1000),&denied)
+          ==SHYT_V404_DENIED);
+    CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x10a0),&denied)
+          ==SHYT_V404_DENIED);
+    CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x1161),&denied)
+          ==SHYT_V404_DENIED);
+    CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x10e0),&denied)
+          ==SHYT_V404_DENIED); /* mapped return word not written yet */
+    denied.r[RSP]=stack_base+32u*8u;
+    CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x10e0),&denied)
+          ==SHYT_V404_DENIED); /* unmapped guest return stack */
+    CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x10e0),NULL)
+          ==SHYT_V404_DENIED);
     for(size_t j=0;j<4;j++){
         size_t idx=7+j;
         CHECK(fn[idx].offset==native_tcb[j]);
@@ -78,10 +110,9 @@ int main(void){
         cpu.r[RAX]=UINT64_C(0x777788889999AAAA);
         cpu.r[RBX]=UINT64_C(0xBBBBCCCCDDDDEEEE);
         cpu.mxcsr=0x1f80u;
-        int recovered_code=0;
-        CHECK(shyt_generated_call_recoverable_v393(
-              &vm,fn[idx].fn,&cpu,NULL,NULL,&recovered_code)==SHYT_V393_COMPLETED);
-        CHECK(recovered_code==0 && cpu.rip==return_rip &&
+        CHECK(shyt_native_execution_try_v404(&route,native_tcb[j],&cpu)
+              ==SHYT_V404_COMPLETED);
+        CHECK(cpu.rip==return_rip &&
               cpu.r[RSP]==stack_base+17u*8u &&
               !shyt_generated_active_v390() &&
               shyt_generated_recovery_depth_v393()==0);
@@ -96,6 +127,7 @@ int main(void){
     CHECK(guest_step_hits==0);
     CHECK(shyt_native_os_vm_close_v388(&vm));
     CHECK(shyt_native_os_vm_release_v388(&vm,1));
+    puts("NATIVE_V404_FOUR_REAL_GENERATED_TCB_FUNCTIONS_ADMITTED_AND_EXECUTED_PASS");
     puts("NATIVE_V402_FOUR_REAL_GENERATED_NATIVE_TCB_FUNCTIONS_PASS");
     puts("real_pinned_generated_native_functions=11 interpreter_fallbacks_linked=0");
     return 0;
