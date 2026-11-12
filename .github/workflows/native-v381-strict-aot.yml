@@ -1,0 +1,93 @@
+name: Native V381 strict no-guest AOT startup diagnostic
+on:
+  push:
+    branches: [feature/native-v381-strict-no-guest-dispatch-20261112]
+    paths:
+      - '.github/workflows/native-v381-strict-aot.yml'
+      - 'native/source-port/recomp-v194/native_strict_aot_v381.*'
+      - 'native/source-port/recomp-v194/test_native_strict_aot_v381.c'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v381-strict-aot.yml'
+      - 'native/source-port/recomp-v194/native_strict_aot_v381.*'
+      - 'native/source-port/recomp-v194/test_native_strict_aot_v381.c'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Full pinned BbCpu and strict no-guest callback ABI checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I "$i" \
+              "$d/native_strict_aot_v381.c" \
+              "$d/test_native_strict_aot_v381.c" \
+              -o "test-native-v381-$cc"
+            "./test-native-v381-$cc"
+          done
+      - name: Clang address/UB sanitizers, strict callback abort observed
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -I "$i" \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_strict_aot_v381.c" \
+            "$d/test_native_strict_aot_v381.c" \
+            -o test-native-v381-san
+          ./test-native-v381-san
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Windows AMD64 clang-cl pure-native AOT policy tests
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          $i='native/source-port/recomp-v187'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$i" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/test_native_strict_aot_v381.c" `
+            /Fe:test-native-v381.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native strict AOT x64 compile failed' }
+          & .\test-native-v381.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native strict AOT x64 tests failed' }
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Host-only ARM64 strict AOT diagnostic (not game port)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I "$i" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/test_native_strict_aot_v381.c" \
+            -o test-native-v381-arm64
+          ./test-native-v381-arm64
