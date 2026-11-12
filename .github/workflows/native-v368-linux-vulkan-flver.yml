@@ -27,8 +27,16 @@ jobs:
           sudo apt-get update -qq >/dev/null
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
             --no-install-recommends libvulkan-dev mesa-vulkan-drivers >/dev/null
-          test -s /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
           test -s /usr/include/vulkan/vulkan.h
+          echo "Installed Vulkan ICD manifests:"
+          find /usr/share/vulkan/icd.d -maxdepth 1 -name '*.json' -printf '%f\n' || true
+          lvp=$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name 'lvp_icd*.json' -print -quit)
+          if [ -z "$lvp" ] || [ ! -s "$lvp" ]; then
+            echo "::error::Mesa lavapipe manifest not found after apt install"
+            dpkg -L mesa-vulkan-drivers | grep '/icd.d/' | head -n 20 || true
+            exit 1
+          fi
+          echo "LVP_ICD=$lvp" >> "$GITHUB_ENV"
       - name: Compile FLVER geometry contracts with C11
         shell: bash
         run: |
@@ -49,7 +57,7 @@ jobs:
               "$src/test_native_vulkan_flver_upload_v368.cpp" \
               flver_v362.o gpu_v364.o -lvulkan \
               -o native-v368-lavapipe
-            VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
+            VK_ICD_FILENAMES="$LVP_ICD" \
               ./native-v368-lavapipe
           done
       - name: Sanitizer build and real software GPU readback
@@ -68,7 +76,7 @@ jobs:
             "$src/native_vulkan_flver_upload_v368.cpp" \
             "$src/test_native_vulkan_flver_upload_v368.cpp" \
             flver_san.o plan_san.o -lvulkan -o native-v368-sanitized
-          VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
+          VK_ICD_FILENAMES="$LVP_ICD" \
             ./native-v368-sanitized
       - name: Check no proprietary Bloodborne or Dark Souls files in CI
         shell: bash
