@@ -47,9 +47,10 @@ int shyt_strict_aot_is_base_v381(const RcApi *api);
  * Do not use after threads start or with memory that can be modified.
  *
  * Passing this test only means a small, supplied table can dispatch
- * natively; NEVER proof that all original game functions are present.
+ * natively using a fail-closed base API; NEVER proof that all original\n * game functions are present.
  */
 int shyt_strict_aot_activate_v381(
+    const RcApi *strict_base,
     const RcFunction *functions, size_t count, uint64_t image_base,
     ShytStrictAotAttestV381 attester, void *ctx,
     ShytStrictAotProofV381 *out);
