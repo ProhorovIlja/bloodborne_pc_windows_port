@@ -85,6 +85,17 @@ int main(void){
     BbCpu denied={0};
     denied.r[RSP]=stack_base+16u*8u;
     denied.mxcsr=0x1f80u;
+    /* A copied table whose hashes matched at bind time can change
+     * afterwards; runtime must revalidate, never execute a stale route. */
+    ShytNativeExecutionV404 changed_after_bind={0};
+    memcpy(forged,fn,sizeof(forged));
+    CHECK(shyt_native_execution_bind_v404(
+          &changed_after_bind,&vm,forged,count));
+    forged[7].hash^=UINT64_C(1);
+    CHECK(shyt_native_execution_try_v404(
+          &changed_after_bind,UINT64_C(0x10e0),&denied)==SHYT_V404_DENIED);
+    CHECK(!shyt_generated_active_v390());
+
     CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x1140),&denied)
           ==SHYT_V404_DENIED);
     CHECK(shyt_native_execution_try_v404(&route,UINT64_C(0x1000),&denied)
@@ -126,6 +137,8 @@ int main(void){
     }
     CHECK(guest_step_hits==0);
     CHECK(shyt_native_os_vm_close_v388(&vm));
+    CHECK(shyt_native_execution_try_v404(
+          &route,UINT64_C(0x10e0),&denied)==SHYT_V404_DENIED);
     CHECK(shyt_native_os_vm_release_v388(&vm,1));
     puts("NATIVE_V404_FOUR_REAL_GENERATED_TCB_FUNCTIONS_ADMITTED_AND_EXECUTED_PASS");
     puts("NATIVE_V402_FOUR_REAL_GENERATED_NATIVE_TCB_FUNCTIONS_PASS");
