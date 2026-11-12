@@ -1,0 +1,108 @@
+name: Native V372 Linux Vulkan direct packed FLVER2 draw
+on:
+  push:
+    branches: [feature/native-v372-flver-packed-vulkan-draw-20261112]
+    paths:
+      - '.github/workflows/native-v372-flver-packed-vulkan-draw.yml'
+      - 'native/source-port/recomp-v194/native_vulkan_flver_draw_v370.*'
+      - 'native/source-port/recomp-v194/native_vulkan_flver_semantic_draw_v372.*'
+      - 'native/source-port/recomp-v194/native_flver2_vertex_decode_v371.*'
+      - 'native/source-port/recomp-v194/test_native_vulkan_flver_semantic_draw_v372.cpp'
+      - 'native/source-port/recomp-v194/native_v370_triangle.*'
+      - 'native/source-port/recomp-v194/native_vulkan_flver_stream_v369.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-linux-lavapipe-indexed-draw:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Install Vulkan and shader compiler, Mesa CPU GPU, validation layers
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq >/dev/null
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            --no-install-recommends libvulkan-dev mesa-vulkan-drivers \
+            glslang-tools vulkan-validationlayers >/dev/null
+          test -s /usr/include/vulkan/vulkan.h
+          command -v glslangValidator
+          lvp=$(find /usr/share/vulkan/icd.d -maxdepth 1 \
+            -type f -name 'lvp_icd*.json' -print -quit)
+          test -n "$lvp" && test -s "$lvp"
+          echo "LVP_ICD=$lvp" >> "$GITHUB_ENV"
+      - name: Compile independently authored diagnostic GLSL to SPIR-V
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          glslangValidator -V -S vert "$src/native_v370_triangle.vert" \
+            -o v372-vert.spv >/dev/null
+          glslangValidator -V -S frag "$src/native_v370_triangle.frag" \
+            -o v372-frag.spv >/dev/null
+          test -s v372-vert.spv && test -s v372-frag.spv
+      - name: Compile C geometry and staging contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O2 -Wall -Wextra -Werror -c \
+            "$src/native_flver2_geometry_v362.c" -o geometry.o
+          clang -std=c11 -O2 -Wall -Wextra -Werror -c \
+            "$src/native_flver2_gpu_plan_v364.c" -o plan.o
+          clang -std=c11 -O2 -Wall -Wextra -Werror -c \
+            "$src/native_flver2_vertex_decode_v371.c" -o vertex.o
+      - name: Draw real-layout 44/36 byte synthetic FLVER attributes with GCC and Clang
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for compiler in clang++ g++; do
+            "$compiler" -std=c++17 -O2 -Wall -Wextra -Werror \
+              "$src/native_fence_upload_ring_v366.cpp" \
+              "$src/native_vulkan_flver_stream_v369.cpp" \
+              "$src/native_vulkan_flver_draw_v370.cpp" \
+              "$src/native_vulkan_flver_semantic_draw_v372.cpp" \
+              "$src/test_native_vulkan_flver_semantic_draw_v372.cpp" \
+              geometry.o plan.o vertex.o -lvulkan -o native-v372-draw
+            VK_ICD_FILENAMES="$LVP_ICD" \
+              VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
+              ./native-v372-draw v372-vert.spv v372-frag.spv
+          done
+      - name: ASan UBSan and real lavapipe draw readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -c "$src/native_flver2_geometry_v362.c" -o geometry-san.o
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -c "$src/native_flver2_gpu_plan_v364.c" -o plan-san.o
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -c "$src/native_flver2_vertex_decode_v371.c" -o vertex-san.o
+          clang++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_fence_upload_ring_v366.cpp" \
+            "$src/native_vulkan_flver_stream_v369.cpp" \
+            "$src/native_vulkan_flver_draw_v370.cpp" \
+            "$src/native_vulkan_flver_semantic_draw_v372.cpp" \
+            "$src/test_native_vulkan_flver_semantic_draw_v372.cpp" \
+            geometry-san.o plan-san.o vertex-san.o -lvulkan -o native-v372-sanitized
+          VK_ICD_FILENAMES="$LVP_ICD" \
+            VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation \
+            ./native-v372-sanitized v372-vert.spv v372-frag.spv
+      - name: Proprietary game files and guest executable are absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e 'Dark Souls III'
+          echo 'NATIVE_V372_PACKED_44_36_DIRECT_FLVER_VULKAN_DRAW_SYNTHETIC_PASS'
