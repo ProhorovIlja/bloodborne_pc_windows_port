@@ -214,7 +214,7 @@ jobs:
             --table "$a/recomp.c" --expected-functions 11
           python3 "$d/native_failclosed_overlay_v402.py" \
             --upstream-checkout pinned-upstream \
-            --source "$a/recomp_00000_native_v402.c" \
+            --source "$a/recomp_00000_v390.c" \
             --out "$a/recomp_00000_native_v402.c"
           python3 "$d/audit_import_closure_v396.py" \
             --scope invented-test-only --allow-shared-targets \
@@ -230,7 +230,7 @@ jobs:
             --full-image "$full/V401_INVENTED_FS_GS_TCB_NOT_BLOODBORNE.elf" \
             --native-table "$a/recomp.c" \
             --native-shard "$a/recomp_00000.c" \
-            --native-v390-shard "$a/recomp_00000_native_v402.c" \
+            --native-v390-shard "$a/recomp_00000_v390.c" \
             --native-overlay "$a/recomp_00000_native_v402.c" \
             --native-image "$a/V402_INVENTED_11_NATIVE_ONLY_NOT_BLOODBORNE.elf" \
             --manifest "$d/native_11_function_import_manifest_v402.json" \
