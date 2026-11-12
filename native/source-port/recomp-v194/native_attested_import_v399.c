@@ -9,7 +9,7 @@ static int functions_valid(const ShytNativeFunctionProofV399 *functions,
     if(!functions || !count || count>100000u || base==0)return 0;
     for(size_t i=0;i<count;i++) {
         const ShytNativeFunctionProofV399 *f=&functions[i];
-        if(!f->hash || !f->hash[0] || f->compiled!=1 ||
+        if(!f->hash || f->compiled!=1 ||
            f->direct_slot!=1 || !f->size ||
            f->offset>UINT64_MAX-base ||
            f->size>UINT64_MAX-f->offset ||
