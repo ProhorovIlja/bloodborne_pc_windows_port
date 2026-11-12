@@ -77,6 +77,7 @@ struct VulkanFlverStreamV369::Pending {
         if (device && fence) vkDestroyFence(device,fence,nullptr);
     }
 };
+VulkanFlverStreamV369::VulkanFlverStreamV369()=default;
 VulkanFlverStreamV369::~VulkanFlverStreamV369() {
     if (!device_) return;
     if (!pending_.empty()) {
