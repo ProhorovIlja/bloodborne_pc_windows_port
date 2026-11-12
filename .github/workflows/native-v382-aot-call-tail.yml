@@ -1,0 +1,99 @@
+name: Native V382 immutable AOT-only CALL TAIL dispatch
+on:
+  push:
+    branches: [feature/native-v382-aot-only-call-tail-20261112]
+    paths:
+      - '.github/workflows/native-v382-aot-call-tail.yml'
+      - 'native/source-port/recomp-v194/native_aot_route_v382.*'
+      - 'native/source-port/recomp-v194/test_native_aot_route_v382.c'
+      - 'native/source-port/recomp-v194/native_strict_aot_v381.*'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v382-aot-call-tail.yml'
+      - 'native/source-port/recomp-v194/native_aot_route_v382.*'
+      - 'native/source-port/recomp-v194/test_native_aot_route_v382.c'
+      - 'native/source-port/recomp-v194/native_strict_aot_v381.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC and Clang strict native indirect call tail
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I "$i" \
+              "$d/native_strict_aot_v381.c" \
+              "$d/native_aot_route_v382.c" \
+              "$d/test_native_aot_route_v382.c" \
+              -o "test-native-v382-$cc"
+            "./test-native-v382-$cc"
+          done
+      - name: ASan UBSan native-only dispatch boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror -I "$i" \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/test_native_aot_route_v382.c" \
+            -o test-native-v382-san
+          ./test-native-v382-san
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Windows AMD64 clang-cl RcApi-v4 native call/tail
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          $i='native/source-port/recomp-v187'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 "/I$i" `
+            "$d/native_strict_aot_v381.c" `
+            "$d/native_aot_route_v382.c" `
+            "$d/test_native_aot_route_v382.c" `
+            /Fe:test-native-v382.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native V382 Win64 compile failed' }
+          & .\test-native-v382.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native V382 Win64 tests failed' }
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Apple Silicon ARM64 host-only AOT resolver portability
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          d=native/source-port/recomp-v194
+          i=native/source-port/recomp-v187
+          ulimit -c 0
+          clang -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I "$i" \
+            "$d/native_strict_aot_v381.c" \
+            "$d/native_aot_route_v382.c" \
+            "$d/test_native_aot_route_v382.c" \
+            -o test-native-v382-arm64
+          ./test-native-v382-arm64
