@@ -1,7 +1,7 @@
-name: Native V403 source-attested 11-function synthetic route closure (V402 baseline)
+name: Native V404 executable admission of pinned generated synthetic routes
 on:
   push:
-    branches: [feature/native-v402-fallback-closure-20261112, feature/native-v403-source-route-attestation-20261112]
+    branches: [feature/native-v402-fallback-closure-20261112, feature/native-v403-source-route-attestation-20261112, feature/native-v404-execution-admission-20261112]
     paths:
       - '.github/workflows/native-v402-native-only-fallback-closure.yml'
       - 'native/source-port/recomp-v194/generate_verified_imports_v395.py'
@@ -28,6 +28,8 @@ on:
       - 'native/source-port/recomp-v194/test_audit_native_only_v402.py'
       - 'native/source-port/recomp-v194/native_11_function_import_manifest_v402.json'
       - 'native/source-port/recomp-v194/test_native_only_tcb_v402.c'
+      - 'native/source-port/recomp-v194/native_route_execution_v404.c'
+      - 'native/source-port/recomp-v194/native_route_execution_v404.h'
       - 'native/source-port/recomp-v194/native_function_identity_fixture_v400.json'
       - 'native/source-port/recomp-v194/verify_native_function_identity_v400.py'
       - 'native/source-port/recomp-v194/test_verify_native_function_identity_v400.py'
@@ -67,6 +69,8 @@ on:
       - 'native/source-port/recomp-v194/test_audit_native_only_v402.py'
       - 'native/source-port/recomp-v194/native_11_function_import_manifest_v402.json'
       - 'native/source-port/recomp-v194/test_native_only_tcb_v402.c'
+      - 'native/source-port/recomp-v194/native_route_execution_v404.c'
+      - 'native/source-port/recomp-v194/native_route_execution_v404.h'
       - 'native/source-port/recomp-v194/native_function_identity_fixture_v400.json'
       - 'native/source-port/recomp-v194/verify_native_function_identity_v400.py'
       - 'native/source-port/recomp-v194/test_verify_native_function_identity_v400.py'
@@ -284,7 +288,8 @@ jobs:
               "$d/native_generated_memory_v390.c" \
               "$d/native_generated_scope_v392.c" \
               "$d/native_host_recovery_v393.c" \
-              "$d/test_native_only_tcb_v402.c" \
+              "$d/native_route_execution_v404.c" \
+            "$d/test_native_only_tcb_v402.c" \
               "$a/recomp.c" "$a/recomp_00000_native_v402.c" \
               -o "$a/native-only-$cc"
             "$a/native-only-$cc"
@@ -301,6 +306,7 @@ jobs:
             "$d/native_generated_memory_v390.c" \
             "$d/native_generated_scope_v392.c" \
             "$d/native_host_recovery_v393.c" \
+            "$d/native_route_execution_v404.c" \
             "$d/test_native_only_tcb_v402.c" \
             "$a/recomp.c" "$a/recomp_00000_native_v402.c" \
             -o "$a/native-only-sanitized"
@@ -455,7 +461,7 @@ jobs:
           foreach($file in @('native_multi_region_vm_v386.c','native_os_vm_v388.c',
               'native_os_vm_reconfigure_v389.c','native_generated_memory_v390.c',
               'native_generated_scope_v392.c','native_host_recovery_v393.c',
-              'test_native_only_tcb_v402.c')) {
+              'native_route_execution_v404.c','test_native_only_tcb_v402.c')) {
             & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 $nativeincs `
               /c (Join-Path $d $file) "/Fo:$(Join-Path $nobj ($file + '.obj'))"
             if($LASTEXITCODE -ne 0){throw 'V402 native-only strict host compile failed'}
@@ -547,6 +553,7 @@ jobs:
             "$d/native_generated_memory_v390.c" \
             "$d/native_generated_scope_v392.c" \
             "$d/native_host_recovery_v393.c" \
+            "$d/native_route_execution_v404.c" \
             "$d/test_native_only_tcb_v402.c" \
             "$n/recomp.c" "$n/recomp_00000_native_v402.c" \
             -o "$RUNNER_TEMP/native-v402-macos-11-approved"
