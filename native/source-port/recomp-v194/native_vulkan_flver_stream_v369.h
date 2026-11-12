@@ -44,7 +44,7 @@ struct UploadedModelV369 {
  */
 class VulkanFlverStreamV369 final {
 public:
-    VulkanFlverStreamV369()=default;
+    VulkanFlverStreamV369(); /* out-of-line: Pending is intentionally opaque */
     VulkanFlverStreamV369(const VulkanFlverStreamV369&)=delete;
     VulkanFlverStreamV369& operator=(const VulkanFlverStreamV369&)=delete;
     ~VulkanFlverStreamV369();
