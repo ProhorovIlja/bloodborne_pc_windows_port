@@ -1,0 +1,79 @@
+name: Native V379 verified display modes and safe target retirement
+on:
+  push:
+    branches: [feature/native-v379-mode-wsi-retirement-20261112]
+    paths:
+      - '.github/workflows/native-v379-mode-wsi-retirement.yml'
+      - 'native/source-port/recomp-v194/native_present_guard_v379.*'
+      - 'native/source-port/recomp-v194/test_native_present_guard_v379.c'
+      - 'native/source-port/recomp-v194/native_display_contract_v378.*'
+  pull_request:
+    paths:
+      - '.github/workflows/native-v379-mode-wsi-retirement.yml'
+      - 'native/source-port/recomp-v194/native_present_guard_v379.*'
+      - 'native/source-port/recomp-v194/test_native_present_guard_v379.c'
+      - 'native/source-port/recomp-v194/native_display_contract_v378.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-c11-and-sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: GCC and Clang pure native C11 mode/WSI/fence tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          for cc in gcc clang; do
+            "$cc" -std=c11 -O2 -Wall -Wextra -Werror -pedantic \
+              "$d/native_display_contract_v378.c" \
+              "$d/native_present_guard_v379.c" \
+              "$d/test_native_present_guard_v379.c" \
+              -lm -o "test-native-v379-$cc"
+            "./test-native-v379-$cc"
+          done
+      - name: Address/undefined behavior sanitizers
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$d/native_display_contract_v378.c" \
+            "$d/native_present_guard_v379.c" \
+            "$d/test_native_present_guard_v379.c" \
+            -lm -o test-native-v379-sanitize
+          ./test-native-v379-sanitize
+  windows-clang-cl:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Win64 native clang-cl C11 mode and GPU-fence contracts
+        shell: pwsh
+        run: |
+          $d='native/source-port/recomp-v194'
+          & clang-cl /nologo /TC /std:c11 /W4 /WX /O2 `
+            "$d/native_display_contract_v378.c" `
+            "$d/native_present_guard_v379.c" `
+            "$d/test_native_present_guard_v379.c" `
+            /Fe:test-native-v379.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native V379 Win64 compile failed' }
+          & .\test-native-v379.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Native V379 Win64 contract failed' }
+      - name: No privately owned commercial game binaries
+        shell: pwsh
+        run: |
+          if ((Test-Path 'CUSA03173') -or (Test-Path 'Dark Souls III')) {
+            throw 'Private game files forbidden from public GitHub CI'
+          }
+          Write-Host 'NATIVE_V379_NO_GAME_ASSETS_PASS'
