@@ -40,8 +40,9 @@ int shyt_native_vm_add_region_v386(ShytNativeVmV386 *vm,
     unsigned permissions);
 int shyt_native_vm_seal_v386(ShytNativeVmV386 *vm);
 
-/* Thread-safe pins after seal. No register, remove, protect, remap,
- * or free is allowed once sealed. A successful lease must be released.
+/* Thread-safe pins after seal. Mapping remains immutable in normal use;
+ * V389 adds a controller-only, zero-active-pin PAUSE for safe remapping.
+ * A successful lease must be released.
  * Close denies new leases; owner must additionally JOIN every thread
  * which might access these structures before unmapping/backing free.
  */
