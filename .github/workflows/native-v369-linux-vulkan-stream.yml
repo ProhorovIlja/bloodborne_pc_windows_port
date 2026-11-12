@@ -1,0 +1,85 @@
+name: Native V369 Linux persistent Vulkan FLVER ring and lavapipe readback
+on:
+  push:
+    branches: [feature/native-v369-vulkan-persistent-staging-20261112]
+    paths:
+      - '.github/workflows/native-v369-linux-vulkan-stream.yml'
+      - 'native/source-port/recomp-v194/native_vulkan_flver_stream_v369.*'
+      - 'native/source-port/recomp-v194/test_native_vulkan_flver_stream_v369.cpp'
+      - 'native/source-port/recomp-v194/native_fence_upload_ring_v366.*'
+      - 'native/source-port/recomp-v194/native_flver2_geometry_v362.*'
+      - 'native/source-port/recomp-v194/native_flver2_gpu_plan_v364.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-lavapipe-multi-resource:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - name: Install Vulkan loader headers and Mesa software GPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq >/dev/null
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            --no-install-recommends libvulkan-dev mesa-vulkan-drivers >/dev/null
+          test -s /usr/include/vulkan/vulkan.h
+          lvp=$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f \
+            -name 'lvp_icd*.json' -print -quit)
+          if [ -z "$lvp" ] || [ ! -s "$lvp" ]; then
+            echo '::error::No Mesa lavapipe ICD installed'
+            exit 1
+          fi
+          echo "LVP_ICD=$lvp" >> "$GITHUB_ENV"
+      - name: Compile native C11 geometry contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -c "$src/native_flver2_geometry_v362.c" -o geometry.o
+          clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -c "$src/native_flver2_gpu_plan_v364.c" -o plan.o
+      - name: Clang and GCC real Vulkan multi-FLVER GPU transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          for compiler in clang++ g++; do
+            "$compiler" -std=c++17 -O2 -Wall -Wextra -Werror \
+              "$src/native_fence_upload_ring_v366.cpp" \
+              "$src/native_vulkan_flver_stream_v369.cpp" \
+              "$src/test_native_vulkan_flver_stream_v369.cpp" \
+              geometry.o plan.o -lvulkan -o native-v369-stream
+            VK_ICD_FILENAMES="$LVP_ICD" ./native-v369-stream
+          done
+      - name: Clang ASan UBSan real Vulkan multi-FLVER readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=native/source-port/recomp-v194
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -c "$src/native_flver2_geometry_v362.c" -o geometry-san.o
+          clang -std=c11 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -c "$src/native_flver2_gpu_plan_v364.c" -o plan-san.o
+          clang++ -std=c++17 -O1 -g -Wall -Wextra -Werror \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            "$src/native_fence_upload_ring_v366.cpp" \
+            "$src/native_vulkan_flver_stream_v369.cpp" \
+            "$src/test_native_vulkan_flver_stream_v369.cpp" \
+            geometry-san.o plan-san.o -lvulkan -o native-v369-sanitized
+          VK_ICD_FILENAMES="$LVP_ICD" ./native-v369-sanitized
+      - name: No private resources, no Proton requirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e CUSA03173
+          test ! -e 'Dark Souls III'
+          echo 'NATIVE_V369_REAL_NATIVE_LINUX_VULKAN_STREAM_ONLY_SYNTHETIC_PASS'
