@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * Real V245 math/clock route + V381/V382/V383 synthetic native AOT,
- * built against pinned upstream RcApi/BbCpu C types on Windows AMD64.
- * Host pointers for math/clock and logical guest stack are deliberately
- * separate; DO NOT infer unified VM or original-game memory parity.
+ * V387: pinned REAL V245/V384 Windows RcApi import chain, original-free
+ * synthetic AOT targets and final V386 multi-region permissioned VM.
+ * All 25 math/clock imports and indirect AOT use the SAME V386 mapping.
+ * This is not the original game's native virtual memory or game boot.
  */
 #include "native_unified_import_v387.h"
 /* The real pinned upstream V245 public header already defines BbCpu.
@@ -200,8 +200,8 @@ static int main_test(void) {
     registered->tail(&cpu);
     CHECK(cpu.r[0]==33 && cpu.rip==0xABCD);
     CHECK(cpu.r[4]==guest_stack_base+25*8);
-    /* V385 bypasses legacy raw-pointer math/clock callbacks.
-     * Math, clocks and native AOT all use identical logical stack region. */
+    /* V387 bypasses legacy raw host-pointer math/clock wrappers.
+     * AOT, 23 math and 2 clock callbacks share V386 permissioned memory. */
     memset(&cpu,0,sizeof(cpu));
     cpu.r[4]=guest_stack_base+24*8;
     cpu.v[0].fd[0]=2.0;cpu.v[1].fd[0]=5.0;
