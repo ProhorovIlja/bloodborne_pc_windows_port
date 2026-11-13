@@ -1,0 +1,19 @@
+name: Native V417 focused registry audit
+on:
+  push:
+    branches: [feature/native-v417-checked-constructor-calls-20261113]
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/audit_focused_registry_v417.py'
+      - '.github/workflows/native-v417-focused-registry.yml'
+permissions:
+  contents: read
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 native/source-port/recomp-v194/audit_focused_registry_v417.py --self-test
