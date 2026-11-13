@@ -1,0 +1,19 @@
+name: Native V410 private constructor closure
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/audit_private_ctor_closure_v410.py'
+      - '.github/workflows/native-v410-ctor-closure.yml'
+  push:
+    branches: [feature/native-v410-retail-ctor-closure-20261113]
+permissions:
+  contents: read
+jobs:
+  invented-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 native/source-port/recomp-v194/audit_private_ctor_closure_v410.py --self-test
