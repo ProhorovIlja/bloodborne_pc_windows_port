@@ -5,6 +5,7 @@
 #include "native_route_execution_v404.h"
 #include "native_only_approved_v402_generated.h"
 #include "native_route_guard_v403_generated.h"
+#include "native_import_closure_v396_generated.h"
 #include <stdlib.h>
 extern void f_1000(BbCpu *);
 extern void f_1020(BbCpu *);
@@ -68,10 +69,6 @@ int shyt_native_execution_bind_v404(ShytNativeExecutionV404 *out,
     return 1;
 }
 
-static int proven_tcb(uint64_t offset) {
-    return offset == UINT64_C(0x10e0) || offset == UINT64_C(0x1100) ||
-           offset == UINT64_C(0x1120) || offset == UINT64_C(0x1160);
-}
 
 /* The guest return word MUST be validated with the SAME V390 lease
  * that owns the ensuing real generated call. V393 enters the pinned
@@ -83,7 +80,33 @@ typedef struct ShytV404ReturnPreflight {
     uint64_t rsp;
     uint64_t expected_return;
     uint64_t offset;
+    BbCpu *cpu;
+    const ShytNativeImportSpecV395 *import;
+    unsigned imported;
 } ShytV404ReturnPreflight;
+
+static _Thread_local ShytV404ReturnPreflight *active_call;
+
+static int output_safe(uint64_t address, uint64_t rsp) {
+    return shyt_generated_try_probe_v390(address, 8u, SHYT_V386_WRITE) &&
+           !(address < rsp + UINT64_C(8) && rsp < address + UINT64_C(8));
+}
+
+void shyt_native_execution_call_v406(BbCpu *cpu, uint64_t target,
+                                     uint64_t next) {
+    ShytV404ReturnPreflight *p = active_call;
+    if (!p || !p->import || cpu != p->cpu || p->imported ||
+        shyt_generated_owner_v392() != p->owner ||
+        shyt_generated_recovery_depth_v393() != 1u)
+        abort();
+    if (cpu->r[RSP] != p->rsp || !output_safe(cpu->r[RDX], p->rsp))
+        shyt_generated_raise_v393(SHYT_V395_REC_GUEST_PERMISSIONS);
+    /* Pass only the site selected by the active caller. The typed
+     * service independently enforces exact target and continuation. */
+    shyt_native_import_dispatch_site_v398(p->owner, p->import,
+                                         cpu, target, next);
+    p->imported = 1u;
+}
 static int guest_return_preflight(const BbCpu *cpu, void *context) {
     ShytV404ReturnPreflight *p = (ShytV404ReturnPreflight *)context;
     uint64_t ret = 0;
@@ -116,6 +139,12 @@ static int guest_return_preflight(const BbCpu *cpu, void *context) {
             p->rsp < address + (uint64_t)width)
             return 0; /* Do not overwrite our own return slot. */
     }
+    if (p->import &&
+        (cpu->r[RAX] != p->import->guest_target ||
+         !shyt_generated_try_probe_v390(cpu->r[RDI], 8u, SHYT_V386_READ) ||
+         !shyt_generated_try_probe_v390(cpu->r[RSI], 8u, SHYT_V386_READ) ||
+         !output_safe(cpu->r[RDX], p->rsp)))
+        return 0;
     p->expected_return = ret;
     return 1;
 }
@@ -128,13 +157,8 @@ int shyt_native_execution_try_v404(ShytNativeExecutionV404 *route,
     int recovered = 0, result;
     RcFn selected = NULL;
 
-    /* The V403 11-way membership alone is not proof of execution
-     * semantics. Admit only the four TCB probes and five guarded
-     * memory probes; the two CALL RAX sites remain denied. */
-    if (!cpu || shyt_generated_active_v390() ||
+    if (!cpu || active_call || shyt_generated_active_v390() ||
         shyt_generated_recovery_depth_v393() ||
-        (!proven_tcb(offset) && (offset < UINT64_C(0x1000) ||
-                                  offset > UINT64_C(0x1080))) ||
         !shyt_v403_is_synthetic_candidate(offset) ||
         !verified_table(route))
         return SHYT_V404_DENIED;
@@ -152,12 +176,29 @@ int shyt_native_execution_try_v404(ShytNativeExecutionV404 *route,
     preflight.owner = route->owner;
     preflight.rsp = rsp;
     preflight.offset = offset;
+    preflight.cpu = cpu;
+    for (i = 0; i < SHYT_V396_SITE_COUNT; ++i) {
+        if (shyt_v396_sites[i].caller_offset == offset)
+            preflight.import = &shyt_v396_sites[i].import;
+    }
+    if ((offset == UINT64_C(0x10a0) || offset == UINT64_C(0x10c0)) &&
+        !preflight.import)
+        return SHYT_V404_DENIED;
+    active_call = &preflight;
     result = shyt_generated_call_recoverable_v393(
         route->owner, selected, cpu, guest_return_preflight,
         &preflight, &recovered);
-    if (result == SHYT_V393_DENIED)
+    active_call = NULL;
+    if (shyt_generated_active_v390() || shyt_generated_recovery_depth_v393())
+        abort();
+    if (result == SHYT_V393_DENIED ||
+        (result == SHYT_V393_RECOVERED && preflight.import &&
+         (recovered == SHYT_V395_REC_UNKNOWN ||
+          recovered == SHYT_V395_REC_CONTINUATION ||
+          recovered == SHYT_V395_REC_GUEST_PERMISSIONS)))
         return SHYT_V404_DENIED;
     if (result != SHYT_V393_COMPLETED || recovered ||
+        preflight.imported != (preflight.import ? 1u : 0u) ||
         cpu->r[RSP] != rsp + UINT64_C(8) ||
         cpu->rip != preflight.expected_return ||
         shyt_generated_active_v390() ||
