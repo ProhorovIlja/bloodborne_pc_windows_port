@@ -1,0 +1,51 @@
+name: Native V427 prebound startup constructor plan
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v427*'
+      - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
+      - '.github/workflows/native-v427-ctor-plan.yml'
+  push:
+    branches: [feature/native-v427-prebind-ctor-plan-20261113]
+    paths:
+      - 'native/source-port/recomp-v194/**'
+      - '.github/workflows/native-v427-ctor-plan.yml'
+permissions:
+  contents: read
+jobs:
+  ctor-plan:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -eu
+          d=native/source-port/recomp-v194
+          src=("$d/native_multi_region_vm_v386.c" "$d/native_os_vm_v388.c" "$d/native_os_vm_reconfigure_v389.c" "$d/native_generated_memory_v390.c" "$d/native_generated_scope_v392.c" "$d/native_host_recovery_v393.c" "$d/test_native_startup_ctor_plan_v427.c")
+          opts=(-Inative/source-port/recomp-v187 -pthread)
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${opts[@]}" "${src[@]}" -o "$RUNNER_TEMP/ctor-v427"
+          "$RUNNER_TEMP/ctor-v427"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            gcc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${opts[@]}" "${src[@]}" -o "$RUNNER_TEMP/ctor-v427-gcc"
+            "$RUNNER_TEMP/ctor-v427-gcc"
+            clang -std=c11 -g -O1 -fsanitize=address,undefined -fno-sanitize-recover=all "${opts[@]}" "${src[@]}" -o "$RUNNER_TEMP/ctor-v427-sanitized"
+            "$RUNNER_TEMP/ctor-v427-sanitized"
+          fi
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'ctor-v427.exe'
+          $d = 'native/source-port/recomp-v194'
+          $src = @("$d/native_multi_region_vm_v386.c","$d/native_os_vm_v388.c","$d/native_os_vm_reconfigure_v389.c","$d/native_generated_memory_v390.c","$d/native_generated_scope_v392.c","$d/native_host_recovery_v393.c","$d/test_native_startup_ctor_plan_v427.c")
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -Inative/source-port/recomp-v187 @src -o $exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $exe
+          exit $LASTEXITCODE
