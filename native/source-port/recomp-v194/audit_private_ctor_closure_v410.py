@@ -8,10 +8,14 @@ A match tests presence only, not function identity, provenance or execution.
 No constructor address, image bytes, hash or path is printed.
 """
 import argparse
+import hashlib
 import json
 import mmap
 import struct
 import sys
+from pathlib import Path
+
+import verify_generated_coverage_v207 as coverage
 
 EH = struct.Struct("<16sHHIQQQIHHHHHH")
 PH = struct.Struct("<IIQQQQQQ")
@@ -104,6 +108,44 @@ def compare(targets, empty, bindings):
                 binding_presence_only=True, retail_boot_proven=False)
 
 
+def generated_ids(image, work):
+    """V204 source registration, NOT an attested linked native registry."""
+    root=Path(work)
+    paths=[root/"full-original-preparation.json", root/"scan/functions.tsv",
+           root/"generated/recomp.c"]
+    limits=[32*1024*1024,coverage.MAX_INDEX_BYTES,coverage.MAX_TABLE_BYTES]
+    for p,limit in zip(paths,limits):
+        if p.is_symlink() or not p.is_file() or p.stat().st_size>limit:
+            raise ValueError("unsafe V204 input")
+    manifest=json.loads(paths[0].read_bytes())
+    index_bytes=paths[1].read_bytes()
+    table_bytes=paths[2].read_bytes()
+    if (manifest.get("format")!="SHYT_PRIVATE_FULL_IMAGE_V204" or
+        manifest.get("upstream")!="8f31ec7c41f252730c6325d52647046baef7549f" or
+        manifest.get("original_size_bytes")!=len(image) or
+        manifest.get("input_sha256")!=hashlib.sha256(image).hexdigest() or
+        manifest.get("scanner_index_sha256")!=hashlib.sha256(index_bytes).hexdigest() or
+        manifest.get("c_hashes",{}).get("recomp.c")!=hashlib.sha256(table_bytes).hexdigest()):
+        raise ValueError("V204 provenance mismatch")
+    index=coverage.scan_index(paths[1])
+    if hashlib.sha256(paths[1].read_bytes()).digest()!=hashlib.sha256(index_bytes).digest():
+        raise ValueError("scanner index changed")
+    table=table_bytes.decode("utf-8")
+    report=coverage.count_table(table,manifest.get("functions_scanned"),index)
+    if any(manifest.get(k)!=v for k,v in report.items()):
+        raise ValueError("V204 registration report mismatch")
+    ids=set()
+    begun=False
+    for line in table.splitlines():
+        if not begun:
+            begun=bool(coverage.HEADER.fullmatch(line))
+        elif line.strip()=="};":
+            break
+        else:
+            ids.add(int(coverage.ENTRY.fullmatch(line)[1],16))
+    return ids
+
+
 def self_test():
     start, cursor = 0x4000,0x4030
     ident = b"\x7fELF\x02\x01\x01"+bytes(9)
@@ -133,6 +175,31 @@ def self_test():
         except ValueError:
             continue
         raise RuntimeError("malformed input accepted")
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        p=Path(tmp)
+        (p/"generated").mkdir()
+        (p/"scan").mkdir()
+        scan=b"address\tsize\tinstructions\tundecodable\n0x4001\t3\t1\t0\n0x4002\t3\t1\t0\n"
+        table=b"static const RcFunction table[] = {\n{0x4002, 3, 0x9ull, f_4002, &d_4002},\n};\n"
+        (p/"generated/recomp.c").write_bytes(table)
+        (p/"scan/functions.tsv").write_bytes(scan)
+        meta=dict(format="SHYT_PRIVATE_FULL_IMAGE_V204",
+                  upstream="8f31ec7c41f252730c6325d52647046baef7549f",
+                  original_size_bytes=len(data), input_sha256=hashlib.sha256(data).hexdigest(),
+                  scanner_index_sha256=hashlib.sha256(scan).hexdigest(),
+                  c_hashes={"recomp.c":hashlib.sha256(table).hexdigest()},
+                  **coverage.count_table(table.decode(),2))
+        (p/"full-original-preparation.json").write_text(json.dumps(meta))
+        if generated_ids(data,p)!={start+2}:
+            raise RuntimeError("wrong V204 source baseline")
+        (p/"generated/recomp.c").write_bytes(table+b" ")
+        try:
+            generated_ids(data,p)
+        except ValueError:
+            pass
+        else:
+            raise RuntimeError("changed V204 table was accepted")
     print("NATIVE_V410_LEGACY_CTOR_CLOSURE_PASS")
 
 
@@ -140,10 +207,12 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("elf",nargs="?")
     p.add_argument("--cursor",type=lambda v:int(v,0))
-    p.add_argument("--bindings")
+    inputs=p.add_mutually_exclusive_group()
+    inputs.add_argument("--bindings")
+    inputs.add_argument("--v204-work",help="compare hash-matched generated source registrations")
     p.add_argument("--self-test",action="store_true")
     a=p.parse_args()
-    if a.self_test and not a.elf and a.cursor is None and not a.bindings:
+    if a.self_test and not a.elf and a.cursor is None and not a.bindings and not a.v204_work:
         self_test()
         return 0
     if a.self_test or not a.elf or a.cursor is None:
@@ -168,11 +237,15 @@ def main():
     try:
         with open(a.elf,"rb") as f, mmap.mmap(f.fileno(),0,access=mmap.ACCESS_READ) as image:
             targets,empty=legacy_plan(image,a.cursor)
-    except (OSError,ValueError,struct.error):
+            if a.v204_work:
+                bindings=generated_ids(image,a.v204_work)
+    except (OSError,ValueError,TypeError,AttributeError,struct.error):
         print("ELF or constructor plan refused",file=sys.stderr)
         return 2
     report=compare(targets,empty,bindings)
-    report["binding_baseline_supplied"]=bool(a.bindings)
+    report["binding_baseline_supplied"]=bool(a.bindings or a.v204_work)
+    report["baseline_kind"]=("v204_generated_source" if a.v204_work else
+                             "provided_ids" if a.bindings else "none")
     print(json.dumps(report,sort_keys=True))
     return 0
 
