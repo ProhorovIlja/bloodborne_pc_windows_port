@@ -1,0 +1,24 @@
+name: Native V431 guard route evidence
+on:
+  push:
+    branches: [feature/native-v431-guard-evidence-audit-20261113]
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/audit_guard_routes_v431.py'
+      - '.github/workflows/native-v431-guard-evidence.yml'
+permissions:
+  contents: read
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 native/source-port/recomp-v194/audit_guard_routes_v431.py --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-v431-guard-audit
+          path: native/source-port/recomp-v194/audit_guard_routes_v431.py
+          retention-days: 2
