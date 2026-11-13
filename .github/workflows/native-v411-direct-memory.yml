@@ -1,0 +1,46 @@
+name: Native V411 direct memory host core
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*direct_memory*v411*'
+      - '.github/workflows/native-v411-direct-memory.yml'
+  push:
+    branches: [feature/native-v411-direct-memory-core-20261113]
+    paths:
+      - 'native/source-port/recomp-v194/*direct_memory*v411*'
+      - '.github/workflows/native-v411-direct-memory.yml'
+permissions:
+  contents: read
+jobs:
+  direct-memory:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -eu
+          src=native/source-port/recomp-v194/test_native_direct_memory_v411.c
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "$src" -o "$RUNNER_TEMP/dm-v411"
+          "$RUNNER_TEMP/dm-v411"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            gcc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "$src" -o "$RUNNER_TEMP/dm-v411-gcc"
+            "$RUNNER_TEMP/dm-v411-gcc"
+            clang -std=c11 -g -O1 -fsanitize=address,undefined -fno-sanitize-recover=all "$src" -o "$RUNNER_TEMP/dm-v411-sanitized"
+            "$RUNNER_TEMP/dm-v411-sanitized"
+          fi
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'dm-v411.exe'
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror native/source-port/recomp-v194/test_native_direct_memory_v411.c -o $exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $exe
+          exit $LASTEXITCODE
