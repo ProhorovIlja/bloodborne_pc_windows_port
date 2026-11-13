@@ -1,0 +1,24 @@
+name: Native V422 replay prefix audit
+on:
+  push:
+    branches: [feature/native-v422-replay-prefix-audit-20261113]
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/audit_startup_prefix_v422.py'
+      - '.github/workflows/native-v422-prefix.yml'
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 native/source-port/recomp-v194/audit_startup_prefix_v422.py --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-v422-prefix-audit
+          path: native/source-port/recomp-v194/audit_startup_prefix_v422.py
+          retention-days: 2
