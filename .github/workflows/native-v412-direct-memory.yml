@@ -2,7 +2,8 @@ name: Native V412 direct memory import sequence
 on:
   pull_request:
     paths:
-      - 'native/source-port/recomp-v194/**'
+      - 'native/source-port/recomp-v194/*v412*'
+      - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
       - '.github/workflows/native-v412-direct-memory.yml'
   push:
     branches: [feature/native-v412-direct-memory-imports-20261113]
@@ -28,7 +29,7 @@ jobs:
         run: |
           set -eu
           d=native/source-port/recomp-v194
-          src=("$d/native_multi_region_vm_v386.c" "$d/native_os_vm_v388.c" "$d/native_os_vm_reconfigure_v389.c" "$d/native_generated_memory_v390.c" "$d/native_generated_scope_v392.c" "$d/native_host_recovery_v393.c" "$d/test_native_direct_memory_import_v412.c")
+          src=("$d/native_multi_region_vm_v386.c" "$d/native_os_vm_v388.c" "$d/native_os_vm_reconfigure_v389.c" "$d/native_generated_memory_v390.c" "$d/native_generated_scope_v392.c" "$d/native_host_recovery_v393.c" "$d/native_direct_memory_rcapi_v412.c" "$d/test_native_direct_memory_import_v412.c")
           opts=(-Inative/source-port/recomp-v187 -pthread)
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${opts[@]}" "${src[@]}" -o "$RUNNER_TEMP/dm-v412"
           "$RUNNER_TEMP/dm-v412"
@@ -43,7 +44,7 @@ jobs:
         run: |
           $exe = Join-Path $env:RUNNER_TEMP 'dm-v412.exe'
           $d = 'native/source-port/recomp-v194'
-          $src = @("$d/native_multi_region_vm_v386.c","$d/native_os_vm_v388.c","$d/native_os_vm_reconfigure_v389.c","$d/native_generated_memory_v390.c","$d/native_generated_scope_v392.c","$d/native_host_recovery_v393.c","$d/test_native_direct_memory_import_v412.c")
+          $src = @("$d/native_multi_region_vm_v386.c","$d/native_os_vm_v388.c","$d/native_os_vm_reconfigure_v389.c","$d/native_generated_memory_v390.c","$d/native_generated_scope_v392.c","$d/native_host_recovery_v393.c","$d/native_direct_memory_rcapi_v412.c","$d/test_native_direct_memory_import_v412.c")
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -Inative/source-port/recomp-v187 @src -o $exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & $exe
