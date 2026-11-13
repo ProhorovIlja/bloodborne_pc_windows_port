@@ -1,11 +1,11 @@
-name: Native V407 owner-local startup audit
+name: Native V408 startup relocation correlation
 on:
   pull_request:
     paths:
       - 'native/source-port/recomp-v194/owner_local_entry_audit_v407.py'
       - '.github/workflows/native-v407-owner-local-entry-audit.yml'
   push:
-    branches: [feature/native-v407-owner-local-entry-audit-20261113]
+    branches: [feature/native-v407-owner-local-entry-audit-20261113, feature/native-v408-startup-import-blockers-20261113]
     paths:
       - 'native/source-port/recomp-v194/owner_local_entry_audit_v407.py'
       - '.github/workflows/native-v407-owner-local-entry-audit.yml'
