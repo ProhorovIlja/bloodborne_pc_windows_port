@@ -32,7 +32,7 @@ static inline int shyt_dm_gate_v412(void *v,uint64_t addr,size_t bytes,unsigned 
            addr-s->mapped<s->length && bytes<=s->length-(addr-s->mapped);
 }
 
-static inline int shyt_dm_begin_v412(ShytDmImport *s,BbCpu *cpu,const ShytDmSite *sites,size_t count) {
+static inline int shyt_dm_begin_pinned_v412(ShytDmImport *s,BbCpu *cpu,const ShytDmSite *sites,size_t count) {
     if(!sites || !count || count>32)return 0;
     for(size_t i=0;i<count;++i) {
         if(!sites[i].target || !sites[i].next || sites[i].target==sites[i].next ||
@@ -50,7 +50,32 @@ static inline int shyt_dm_begin_v412(ShytDmImport *s,BbCpu *cpu,const ShytDmSite
            (s->cpu=cpu,s->sites=sites,s->count=count,1);
 }
 /* Called only after the V393 wrapper returns (including cooperative escape). */
-static inline void shyt_dm_end_v412(ShytDmImport *s) { s->cpu=NULL; s->sites=NULL; s->count=0; }
+typedef struct {
+    ShytDmImport *state;
+    BbCpu *cpu;
+    const ShytDmSite *sites;
+    size_t count;
+} ShytDmStartV412;
+static inline int shyt_dm_preflight_v412(const BbCpu *cpu,void *ctx) {
+    ShytDmStartV412 *start=ctx;
+    return start->cpu==cpu &&
+           shyt_dm_begin_pinned_v412(start->state,start->cpu,start->sites,start->count);
+}
+/* Only public entry for this aperture. Owns a fresh pin; borrowed pins
+ * would otherwise retain the filter on return. No generic V390 entry
+ * into this owner is permitted while startup aperture policy is needed. */
+static inline int shyt_dm_run_v412(ShytDmImport *s,ShytGeneratedFnV392 fn,
+    BbCpu *cpu,const ShytDmSite *sites,size_t count,int *code) {
+    if(!s || !s->owner || s->cpu || !fn || !cpu || shyt_generated_active_v390() ||
+       shyt_generated_recovery_depth_v393())return SHYT_V393_DENIED;
+    ShytDmStartV412 start={s,cpu,sites,count};
+    const int result=shyt_generated_call_recoverable_v393(s->owner,fn,cpu,
+        shyt_dm_preflight_v412,&start,code);
+    s->cpu=NULL;
+    s->sites=NULL;
+    s->count=0;
+    return result;
+}
 static inline uint64_t shyt_dm_error_v412(enum ShytDmResult result) {
     switch(result) {
     case SHYT_DM_OK:return 0;
