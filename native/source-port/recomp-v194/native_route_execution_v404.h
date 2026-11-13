@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
- * V404: real pinned-compiler GENERATED synthetic TCB execution admission.
+ * V405: real pinned-compiler GENERATED synthetic TCB and memory admission.
  * NOT a Bloodborne runtime, not a PS4 EBOOT loader, not game call coverage.
  * The producer and all registry pointers must stay alive while bound.
  * Single-controller bind; execute requires sealed pinned V388 VM.
@@ -23,19 +23,20 @@ typedef struct ShytNativeExecutionV404 {
 } ShytNativeExecutionV404;
 
 /* Full 11-function SHA-derived offset/size/hash + direct slot match
- * is required before ANY dispatch. Only four independently tested
- * FS/GS synthetic TCB MOV/RET functions are admitted for execution.
+ * is required before ANY dispatch. The four TCB and five CAS/SIMD synthetic probes are admitted.
  * A successful bind never permits adding entries or changing owner.
  */
 int shyt_native_execution_bind_v404(ShytNativeExecutionV404 *out,
     ShytNativeOsVmV388 *owner, const RcFunction *compiled, size_t count);
 
-/* Deny unknown offsets, the unsupported STEP 0x1140, the seven
- * other untested synthetic candidates, malformed guest stack and
- * changed registry. On denial no generated C is called. On success
+/* Deny unknown offsets, the unsupported STEP 0x1140, the two
+ * synthetic CALL RAX candidates, malformed guest stack, invalid memory
+ * operands, nested execution and changed registry. On denial no generated C is called. On success
  * the real pinned-generated RcFn ran through V393 and returned with
  * validated guest RSP/RIP. Abnormal host exits and abort() are NOT
- * recoverable; release/join remains caller responsibility.
+ * recoverable; release/join remains caller responsibility. The caller
+ * must exclusively own the CPU and return slot during the call, and
+ * keep the registry and direct slots stable while executing.
  */
 int shyt_native_execution_try_v404(ShytNativeExecutionV404 *route,
     uint64_t function_offset, BbCpu *cpu);
