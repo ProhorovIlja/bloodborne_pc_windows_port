@@ -1,0 +1,46 @@
+name: Native V409 host CRT lifecycle
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*crt*v409*'
+      - '.github/workflows/native-v409-crt.yml'
+  push:
+    branches: [feature/native-v409-retail-crt-contract-20261113]
+    paths:
+      - 'native/source-port/recomp-v194/*crt*v409*'
+      - '.github/workflows/native-v409-crt.yml'
+permissions:
+  contents: read
+jobs:
+  lifecycle:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -eu
+          src=native/source-port/recomp-v194/test_native_crt_lifecycle_v409.c
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "$src" -o "$RUNNER_TEMP/crt-v409"
+          "$RUNNER_TEMP/crt-v409"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            gcc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "$src" -o "$RUNNER_TEMP/crt-v409-gcc"
+            "$RUNNER_TEMP/crt-v409-gcc"
+            clang -std=c11 -g -O1 -fsanitize=address,undefined -fno-sanitize-recover=all "$src" -o "$RUNNER_TEMP/crt-v409-sanitized"
+            "$RUNNER_TEMP/crt-v409-sanitized"
+          fi
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'crt-v409.exe'
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror native/source-port/recomp-v194/test_native_crt_lifecycle_v409.c -o $exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $exe
+          exit $LASTEXITCODE
