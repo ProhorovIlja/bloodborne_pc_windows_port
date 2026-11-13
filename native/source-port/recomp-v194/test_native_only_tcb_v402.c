@@ -23,9 +23,6 @@ static unsigned guest_step_hits;
 static uint64_t forbidden_step(BbCpu *cpu) {
     (void)cpu;guest_step_hits++;abort();
 }
-static void forbidden_call(BbCpu *cpu,uint64_t target,uint64_t next){
-    (void)cpu;(void)target;(void)next;abort();
-}
 static void forbidden_tail(BbCpu *cpu){(void)cpu;abort();}
 static void forbidden_bail(BbCpu *cpu,uint64_t entry_rsp){
     (void)cpu;(void)entry_rsp;abort();
@@ -118,6 +115,56 @@ static int test_memory(ShytNativeExecutionV404 *route,uint64_t data,uint64_t ro)
     return 0;
 }
 
+static int test_imports(ShytNativeExecutionV404 *route, uint64_t data,
+                        uint64_t ro, RcApi *api) {
+    const uint64_t stack=stack_base+16u*8u;
+    ShytNativeOsVmV388 *vm=route->owner;
+    const uint64_t callers[]={0x10a0u,0x10c0u};
+    uint64_t word=0;
+    CHECK(guest_write(vm,stack,return_rip));
+    CHECK(guest_write(vm,data,UINT64_MAX));
+    CHECK(guest_write(vm,data+8u,42u));
+    for(size_t i=0;i<sizeof(callers)/sizeof(callers[0]);++i){
+        BbCpu cpu={0};
+        cpu.r[RSP]=stack;
+        cpu.r[RAX]=UINT64_C(0x40009100);
+        cpu.r[RDI]=data;
+        cpu.r[RSI]=data+8u;
+        cpu.r[RDX]=data+16u;
+        CHECK(guest_write(vm,data+16u,99u));
+        CHECK(shyt_native_execution_try_v404(route,callers[i],&cpu)==SHYT_V404_COMPLETED);
+        CHECK(cpu.r[RAX]==41u && cpu.r[RSP]==stack+8u && cpu.rip==return_rip);
+        CHECK(guest_read(vm,data+16u,&word) && word==41u);
+        CHECK(guest_write(vm,data+16u,99u));
+        cpu.r[RSP]=stack;
+        cpu.r[RAX]=UINT64_C(0x40009101);
+        CHECK(shyt_native_execution_try_v404(route,callers[i],&cpu)==SHYT_V404_DENIED);
+        cpu.r[RAX]=UINT64_C(0x40009100);
+        cpu.r[RDX]=ro;
+        CHECK(shyt_native_execution_try_v404(route,callers[i],&cpu)==SHYT_V404_DENIED);
+        cpu.r[RDX]=stack+1u;
+        CHECK(shyt_native_execution_try_v404(route,callers[i],&cpu)==SHYT_V404_DENIED);
+        cpu.r[RDX]=data+16u;
+        cpu.r[RSI]=data+125u;
+        CHECK(shyt_native_execution_try_v404(route,callers[i],&cpu)==SHYT_V404_DENIED);
+        cpu.r[RSI]=data+8u;
+        /* Fault injection only: shift continuation to the sibling's exact
+         * address. A target-only or any-known-site check would accept it. */
+        api->image_base=i?UINT64_C(0x3fffe0):UINT64_C(0x400020);
+        int wrong=shyt_native_execution_try_v404(route,callers[i],&cpu);
+        api->image_base=UINT64_C(0x400000);
+        CHECK(wrong==SHYT_V404_DENIED);
+        CHECK(!shyt_generated_active_v390() && !shyt_generated_recovery_depth_v393());
+        CHECK(guest_read(vm,data+16u,&word) && word==99u);
+        CHECK(guest_read(vm,stack,&word) && word==return_rip);
+        cpu.r[RSP]=stack;
+        cpu.r[RAX]=UINT64_C(0x40009100);
+        CHECK(shyt_native_execution_try_v404(route,callers[i],&cpu)==SHYT_V404_COMPLETED);
+    }
+    puts("NATIVE_V406_TWO_GENERATED_TYPED_IMPORT_ROUTES_PASS");
+    return 0;
+}
+
 int main(void){
     static const uint64_t native_tcb[4]={UINT64_C(0x10e0),
         UINT64_C(0x1100),UINT64_C(0x1120),UINT64_C(0x1160)};
@@ -137,7 +184,7 @@ int main(void){
     api.version=BB_RECOMP_API_VERSION;
     api.image_base=UINT64_C(0x400000);
     api.step=forbidden_step;
-    api.call=forbidden_call;
+    api.call=shyt_native_execution_call_v406;
     api.tail=forbidden_tail;
     api.bail=forbidden_bail;
     const RcFunction *fn=bb_recomp_init(&api,&count);
@@ -222,6 +269,7 @@ int main(void){
         }
     }
     CHECK(test_memory(&route,data,ro)==0);
+    CHECK(test_imports(&route,data,ro,&api)==0);
     CHECK(guest_step_hits==0);
     CHECK(shyt_native_os_vm_close_v388(&vm));
     CHECK(shyt_native_execution_try_v404(
