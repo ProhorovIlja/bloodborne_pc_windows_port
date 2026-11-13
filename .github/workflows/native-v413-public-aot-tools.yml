@@ -39,6 +39,9 @@ jobs:
           cp pinned-upstream/deps/build/zydis/LICENSE "$o/upstream/LICENSE-Zydis"
           cp pinned-upstream/deps/build/zydis/dependencies/zycore/LICENSE "$o/upstream/LICENSE-Zycore"
           cp -r native/source-port/recomp-v194 native/source-port/recomp-v187 "$o/project/"
+          # Keep upstream build scripts and required decoder headers for a reproducible private compile.
+          cp pinned-upstream/build.sh "$o/upstream/"
+          cp -r pinned-upstream/deps/include "$o/upstream/decoder-include"
           printf '%s\n' 8f31ec7c41f252730c6325d52647046baef7549f "$GITHUB_SHA" > "$o/SOURCE_REVISIONS"
           (cd "$o" && sha256sum bin/* > SHA256SUMS && tar -czf "$RUNNER_TEMP/public-aot-tools-v413.tgz" bin upstream project SOURCE_REVISIONS SHA256SUMS)
       - uses: actions/upload-artifact@v4
