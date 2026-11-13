@@ -15,10 +15,6 @@ static void invoke(BbCpu *cpu,size_t i,uint64_t expected) {
     CHECK(shyt_dm_call_v412(&state,cpu,sites[i].target,sites[i].next));
     CHECK(cpu->r[A]==expected && cpu->rip==sites[i].next);
 }
-static int preflight(const BbCpu *cpu,void *ctx) {
-    CHECK(cpu==ctx);
-    return shyt_dm_begin_v412(&state,ctx,sites,sizeof sites/sizeof sites[0]);
-}
 static void body(BbCpu *cpu) {
     uint64_t word=0;
     if(mode) {
@@ -81,12 +77,14 @@ int main(void) {
     CHECK(shyt_native_os_vm_add_v388(&vm,mem,(size_t)(len/8),SHYT_V386_READ|SHYT_V386_WRITE));
     CHECK(shyt_native_os_vm_seal_v388(&vm));
     CHECK(!shyt_dm_call_v412(&state,&cpu,sites[0].target,sites[0].next));
-    CHECK(shyt_generated_call_recoverable_v393(&vm,body,&cpu,preflight,&cpu,&code)==SHYT_V393_COMPLETED);
-    shyt_dm_end_v412(&state);
-    CHECK(!code && !shyt_generated_active_v390());
+    CHECK(shyt_dm_run_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_COMPLETED);
+    CHECK(!code && !shyt_generated_active_v390() && !state.cpu && !state.sites);
+    CHECK(shyt_generated_enter_v390(&vm));
+    CHECK(shyt_dm_run_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_DENIED);
+    CHECK(shyt_generated_active_v390() && shyt_generated_leave_v390());
     mode=1;
-    CHECK(shyt_generated_call_recoverable_v393(&vm,body,&cpu,preflight,&cpu,&code)==SHYT_V393_RECOVERED);
-    shyt_dm_end_v412(&state);
+    CHECK(shyt_dm_run_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_RECOVERED);
+    CHECK(!state.cpu && !state.sites);
     CHECK(code==700 && !shyt_generated_active_v390() && !shyt_generated_recovery_depth_v393());
     CHECK(shyt_native_os_vm_close_v388(&vm) && shyt_native_os_vm_release_v388(&vm,1));
     puts("NATIVE_V412_DIRECT_MEMORY_IMPORT_SEQUENCE_PASS");
