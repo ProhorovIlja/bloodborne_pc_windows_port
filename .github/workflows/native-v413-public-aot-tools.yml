@@ -1,0 +1,52 @@
+name: Native V413 public AOT build tools
+on:
+  push:
+    branches: [feature/native-v413-first-retail-ctor-aot-prefix-20261113]
+    paths:
+      - '.github/workflows/native-v413-public-aot-tools.yml'
+permissions:
+  contents: read
+jobs:
+  public-tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bloodborne-native/bloodborne-recomp
+          ref: 8f31ec7c41f252730c6325d52647046baef7549f
+          path: pinned-upstream
+          persist-credentials: false
+      - name: Build public-only scanner and emitter
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=native/source-port/recomp-v194
+          for f in linux_generator_v196 ret_flags_v199 indirect_call_v200 indirect_jump_v201 fallthrough_v203; do
+            python3 "$d/patch_upstream_$f.py" --upstream-checkout pinned-upstream
+          done
+          bash pinned-upstream/build.sh
+          o="$RUNNER_TEMP/public-aot-tools"
+          mkdir -p "$o/bin" "$o/upstream" "$o/project"
+          cp pinned-upstream/out/recomp/{scan,bbrecomp} "$o/bin/"
+          cp pinned-upstream/tools/recomp/{ps4elf.py,pointers.py,imports.py,import_names.inc} "$o/bin/"
+          cp -r pinned-upstream/src "$o/upstream/"
+          cp pinned-upstream/annotations/functions.tsv "$o/upstream/annotations.tsv"
+          cp pinned-upstream/LICENSE* "$o/upstream/"
+          cp pinned-upstream/deps/build/zydis/LICENSE "$o/upstream/LICENSE-Zydis"
+          cp pinned-upstream/deps/build/zydis/dependencies/zycore/LICENSE "$o/upstream/LICENSE-Zycore"
+          cp -r native/source-port/recomp-v194 native/source-port/recomp-v187 "$o/project/"
+          # Keep upstream build scripts and required decoder headers for a reproducible private compile.
+          cp pinned-upstream/build.sh "$o/upstream/"
+          cp -r pinned-upstream/deps/include "$o/upstream/decoder-include"
+          printf '%s\n' 8f31ec7c41f252730c6325d52647046baef7549f "$GITHUB_SHA" > "$o/SOURCE_REVISIONS"
+          (cd "$o" && sha256sum bin/* > SHA256SUMS && tar -czf "$RUNNER_TEMP/public-aot-tools-v413.tgz" bin upstream project SOURCE_REVISIONS SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-aot-tools-v413-no-game-data
+          path: ${{ runner.temp }}/public-aot-tools-v413.tgz
+          if-no-files-found: error
+          retention-days: 2
