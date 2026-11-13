@@ -1,0 +1,32 @@
+name: Native V433 indirect CALL gap
+on:
+  push:
+    branches: [feature/native-v433-indirect-call-gap-20261113]
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/audit_indirect_gap_v433.py'
+      - 'native/source-port/recomp-v194/audit_focused_registry_v417.py'
+      - 'native/source-port/recomp-v194/audit_observed_calls_v421.py'
+      - '.github/workflows/native-v433-indirect-gap.yml'
+permissions:
+  contents: read
+jobs:
+  evidence:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - working-directory: native/source-port/recomp-v194
+        run: |
+          python audit_focused_registry_v417.py --self-test
+          python audit_observed_calls_v421.py --self-test
+          python audit_indirect_gap_v433.py --self-test
