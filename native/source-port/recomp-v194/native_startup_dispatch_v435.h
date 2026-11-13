@@ -14,6 +14,8 @@ typedef struct {
     BbCpu *cpu;
     uint64_t stack_lo, stack_hi;
     int terminal;
+    const RcFunction *registry;
+    size_t registry_count;
 } ShytStartupDispatchV435;
 
 static inline const RcFunction *shyt_lookup_call_row_v435(
@@ -39,7 +41,7 @@ static inline int shyt_startup_dispatch_init_v435(ShytStartupDispatchV435 *state
     const ShytScopedCallV435 *routes,size_t count,const RcFunction *table,size_t table_count,
     ShytBoundCallV435 *bindings,size_t capacity) {
     if(!state || state->routes || state->bindings || state->count || state->owner ||
-       state->cpu || state->terminal || !owner || !cpu || stack_hi<=stack_lo ||
+       state->cpu || state->registry || state->registry_count || state->terminal || !owner || !cpu || stack_hi<=stack_lo ||
        stack_hi-stack_lo<8 || !routes || !bindings || !count || count>capacity ||
        count>SHYT_STARTUP_EDGES_MAX_V426 || !table || !table_count ||
        table_count>SHYT_CTOR_REG_LIMIT_V427)return 0;
@@ -54,7 +56,7 @@ static inline int shyt_startup_dispatch_init_v435(ShytStartupDispatchV435 *state
     }
     for(size_t i=0;i<count;++i)
         bindings[i].row=shyt_lookup_call_row_v435(table,table_count,routes[i].edge.target);
-    *state=(ShytStartupDispatchV435){routes,bindings,count,owner,cpu,stack_lo,stack_hi,0};
+    *state=(ShytStartupDispatchV435){routes,bindings,count,owner,cpu,stack_lo,stack_hi,0,table,table_count};
     return 1;
 }
 
