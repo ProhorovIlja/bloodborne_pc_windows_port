@@ -1,0 +1,30 @@
+name: Native V424 constructor identity audit
+on:
+  push:
+    branches: [feature/native-v424-retail-order-attestation-20261113]
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/audit_retail_order_v424.py'
+      - '.github/workflows/native-v424-retail-order.yml'
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          python3 native/source-port/recomp-v194/audit_private_ctor_closure_v410.py --self-test
+          python3 native/source-port/recomp-v194/audit_retail_order_v424.py --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-v424-audit-tools
+          path: |
+            native/source-port/recomp-v194/audit_retail_order_v424.py
+            native/source-port/recomp-v194/audit_private_ctor_closure_v410.py
+            native/source-port/recomp-v194/audit_startup_prefix_v422.py
+            native/source-port/recomp-v194/verify_generated_coverage_v207.py
+          retention-days: 2
