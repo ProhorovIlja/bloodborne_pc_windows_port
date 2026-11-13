@@ -147,4 +147,8 @@ static inline int shyt_dm_call_v412(ShytDmImport *s,BbCpu *cpu,uint64_t target,u
     cpu->rip=next;
     return 1;
 }
+enum { SHYT_DM_CALL_DENIED_V412=712 };
+void shyt_dm_rcapi_call_v412(BbCpu *cpu,uint64_t target,uint64_t next);
+int shyt_dm_run_rcapi_v412(ShytDmImport *s,ShytGeneratedFnV392 fn,
+    BbCpu *cpu,const ShytDmSite *sites,size_t count,int *code);
 #endif
