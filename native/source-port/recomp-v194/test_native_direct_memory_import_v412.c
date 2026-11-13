@@ -11,15 +11,17 @@ static const ShytDmSite sites[]={{0x11,0x101,SHYT_DM_SIZE},
     {0x12,0x102,SHYT_DM_ALLOC},{0x13,0x103,SHYT_DM_MAP},{0x14,0x104,SHYT_DM_FREE}};
 static ShytDmImport state;
 static int mode;
+static const RcApi api={.call=shyt_dm_rcapi_call_v412};
 static void invoke(BbCpu *cpu,size_t i,uint64_t expected) {
-    CHECK(shyt_dm_call_v412(&state,cpu,sites[i].target,sites[i].next));
+    api.call(cpu,sites[i].target,sites[i].next);
     CHECK(cpu->r[A]==expected && cpu->rip==sites[i].next);
 }
 static void body(BbCpu *cpu) {
     uint64_t word=0;
     if(mode) {
         CHECK(!shyt_generated_try_probe_v390(mem,8,SHYT_V386_READ));
-        shyt_generated_raise_v393(700);
+        api.call(cpu,sites[0].target,sites[1].next);
+        abort();
     }
     BbCpu other={0};
     CHECK(!shyt_dm_call_v412(&state,&other,sites[0].target,sites[0].next));
@@ -77,15 +79,18 @@ int main(void) {
     CHECK(shyt_native_os_vm_add_v388(&vm,mem,(size_t)(len/8),SHYT_V386_READ|SHYT_V386_WRITE));
     CHECK(shyt_native_os_vm_seal_v388(&vm));
     CHECK(!shyt_dm_call_v412(&state,&cpu,sites[0].target,sites[0].next));
-    CHECK(shyt_dm_run_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_COMPLETED);
+    CHECK(shyt_dm_run_rcapi_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_COMPLETED);
     CHECK(!code && !shyt_generated_active_v390() && !state.cpu && !state.sites);
     CHECK(shyt_generated_enter_v390(&vm));
-    CHECK(shyt_dm_run_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_DENIED);
+    CHECK(shyt_dm_run_rcapi_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_DENIED);
     CHECK(shyt_generated_active_v390() && shyt_generated_leave_v390());
     mode=1;
-    CHECK(shyt_dm_run_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_RECOVERED);
+    CHECK(shyt_dm_run_rcapi_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_RECOVERED);
     CHECK(!state.cpu && !state.sites);
-    CHECK(code==700 && !shyt_generated_active_v390() && !shyt_generated_recovery_depth_v393());
+    CHECK(code==SHYT_DM_CALL_DENIED_V412 && !shyt_generated_active_v390() && !shyt_generated_recovery_depth_v393());
+    mode=0;
+    CHECK(shyt_dm_run_rcapi_v412(&state,body,&cpu,sites,4,&code)==SHYT_V393_COMPLETED);
+    CHECK(!code && !state.cpu);
     CHECK(shyt_native_os_vm_close_v388(&vm) && shyt_native_os_vm_release_v388(&vm,1));
     puts("NATIVE_V412_DIRECT_MEMORY_IMPORT_SEQUENCE_PASS");
     return 0;
