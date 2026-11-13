@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#include "native_crt_lifecycle_v409.h"
+#include "native_crt_init_plan_v409.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,7 +54,32 @@ static void returned(void *v,int status) {
     CHECK(status==-123 && t->crt->phase==SHYT_CRT_NOTIFY_V409);
     mark(t,'R');
 }
+static int first(void *v,ShytCrtV409 *crt) {
+    CHECK(crt->phase==SHYT_CRT_INIT_V409);
+    mark(v,'1');
+    return 1;
+}
+static int second(void *v,ShytCrtV409 *crt) {
+    CHECK(crt->phase==SHYT_CRT_INIT_V409);
+    mark(v,'2');
+    return 1;
+}
+static void plans(void) {
+    ShytCrtV409 crt={0};
+    Test t={0};
+    const ShytInitBindingV409 b[]={{10,first},{20,second}};
+    const ShytInitBindingV409 bad[]={{10,first},{10,second}};
+    const uint64_t f[]={10,20}, l[]={10,20}, unknown[]={10,99};
+    CHECK(!shyt_init_run_v409(&crt,&t,b,2,f,2,l,2));
+    crt.phase=SHYT_CRT_INIT_V409;
+    CHECK(!shyt_init_run_v409(&crt,&t,b,2,f,2,unknown,2));
+    CHECK(!shyt_init_run_v409(&crt,&t,bad,2,f,2,l,2));
+    CHECK(t.n==0);
+    CHECK(shyt_init_run_v409(&crt,&t,b,2,f,2,l,2));
+    CHECK(!strcmp(t.log,"1221"));
+}
 int main(void) {
+    plans();
     char arg[]="test", env[]="A=B";
     char *argv[]={arg,NULL}, *envp[]={env,NULL};
     for (int mode=0; mode<5; ++mode) {
