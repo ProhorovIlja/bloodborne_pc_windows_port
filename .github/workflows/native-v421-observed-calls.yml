@@ -1,0 +1,26 @@
+name: Native V421 observed CALL evidence
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/audit_observed_calls_v421.py'
+      - '.github/workflows/native-v421-observed-calls.yml'
+  push:
+    branches: [feature/native-v421-observed-call-audit-20261113]
+permissions:
+  contents: read
+jobs:
+  original-free:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 native/source-port/recomp-v194/audit_observed_calls_v421.py --self-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-v421-audit-tools
+          path: |
+            native/source-port/recomp-v194/audit_observed_calls_v421.py
+            native/source-port/recomp-v194/audit_focused_registry_v417.py
+          retention-days: 2
