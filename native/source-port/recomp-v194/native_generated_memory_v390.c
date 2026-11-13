@@ -7,6 +7,8 @@
 typedef struct ShytGeneratedTlsV390 {
     ShytNativeOsVmV388 *owner;
     ShytNativeVmLeaseV386 lease;
+    ShytGeneratedFilterV412 filter;
+    void *context;
 } ShytGeneratedTlsV390;
 static _Thread_local ShytGeneratedTlsV390 active;
 static int valid_size(int size) {
@@ -23,6 +25,8 @@ int shyt_generated_leave_v390(void) {
     if(!active.owner || !active.lease.live ||
        !shyt_native_vm_unpin_v386(&active.lease))return 0;
     active.owner=NULL;
+    active.filter=NULL;
+    active.context=NULL;
     return 1;
 }
 int shyt_generated_active_v390(void) {
@@ -34,10 +38,10 @@ int shyt_generated_active_v390(void) {
 ShytNativeOsVmV388 *shyt_generated_owner_v392(void) {
     return shyt_generated_active_v390()?active.owner:NULL;
 }
-static int span(uint64_t addr,size_t bytes,unsigned permission) {
+static const ShytNativeRegionV386 *region(uint64_t addr,size_t bytes,unsigned permission) {
     const ShytNativeOsVmV388 *o=active.owner;
     size_t lo=0,hi;
-    if(!shyt_generated_active_v390() || !bytes || bytes>32 ||
+    if(!shyt_generated_active_v390() || !bytes ||
        addr>UINT64_MAX-bytes || !permission || (permission&~7u))return 0;
     hi=o->vm.region_count;
     while(lo<hi) {
@@ -51,6 +55,29 @@ static int span(uint64_t addr,size_t bytes,unsigned permission) {
     if((r->permissions&permission)!=permission ||
        relative/8u>=r->word_count ||
        (uint64_t)bytes>(uint64_t)r->word_count*8u-relative)return 0;
+    if(active.filter && !active.filter(active.context,addr,bytes,permission))return NULL;
+    return r;
+}
+static int span(uint64_t addr,size_t bytes,unsigned permission) {
+    return bytes<=32u && region(addr,bytes,permission)!=NULL;
+}
+int shyt_generated_filter_v412(ShytGeneratedFilterV412 filter,void *context) {
+    if(!shyt_generated_active_v390() || !filter || active.filter)return 0;
+    active.filter=filter;
+    active.context=context;
+    return 1;
+}
+int shyt_generated_probe_range_v412(uint64_t address,size_t bytes,unsigned permission) {
+    return region(address,bytes,permission)!=NULL;
+}
+int shyt_generated_zero_v412(uint64_t address,size_t bytes) {
+    if((address&7u) || (bytes&7u))return 0;
+    const ShytNativeRegionV386 *r=region(address,bytes,SHYT_V386_WRITE);
+    if(!r)return 0;
+    const size_t first=(size_t)((address-r->guest_base)/8u);
+    if((address-r->guest_base)&7u)return 0;
+    for(size_t i=0;i<bytes/8u;++i)
+        atomic_store_explicit(&r->words[first+i],0,memory_order_relaxed);
     return 1;
 }
 int shyt_generated_try_probe_v390(uint64_t addr,size_t bytes,
