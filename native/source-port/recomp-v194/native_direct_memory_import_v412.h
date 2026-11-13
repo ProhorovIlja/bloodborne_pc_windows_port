@@ -1,0 +1,117 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Single-controller startup-only direct-memory aperture. Every execution
+ * pin that can access it MUST install the same guard before generated code.
+ * Not a general PS4 MMU: direct V388 calls and other threads bypass the guard.
+ */
+#ifndef SHYT_DM_IMPORT_V412_H
+#define SHYT_DM_IMPORT_V412_H
+#include "full_cpu_abi_v194.h"
+#include "native_direct_memory_v411.h"
+#include "native_host_recovery_v393.h"
+
+typedef enum { SHYT_DM_SIZE,SHYT_DM_ALLOC,SHYT_DM_MAP,SHYT_DM_FREE } ShytDmService;
+typedef struct { uint64_t target,next; ShytDmService service; } ShytDmSite;
+typedef struct {
+    ShytNativeOsVmV388 *owner;
+    ShytDmPool pool;
+    uint64_t base, mapped, length;
+    BbCpu *cpu;
+    const ShytDmSite *site;
+} ShytDmImport;
+/* Low 32-bit Orbis status values, with x86 EAX zero extension. */
+#define SHYT_DM_EAGAIN UINT64_C(0x80020023)
+#define SHYT_DM_EFAULT UINT64_C(0x8002000e)
+#define SHYT_DM_EINVAL UINT64_C(0x80020016)
+#define SHYT_DM_ENOTSUP UINT64_C(0x8002002d)
+
+static inline int shyt_dm_gate_v412(void *v,uint64_t addr,size_t bytes,unsigned perm) {
+    ShytDmImport *s=v;
+    if(addr>=s->base+s->pool.limit || addr+bytes<=s->base)return 1;
+    return !(perm&SHYT_V386_EXEC) && s->length && addr>=s->mapped &&
+           addr-s->mapped<s->length && bytes<=s->length-(addr-s->mapped);
+}
+
+static inline int shyt_dm_begin_v412(ShytDmImport *s,BbCpu *cpu,const ShytDmSite *site) {
+    return s && cpu && site && site->target && site->next && site->target!=site->next &&
+           (unsigned)site->service<=SHYT_DM_FREE && !s->cpu && s->owner &&
+           shyt_generated_owner_v392()==s->owner &&
+           shyt_generated_recovery_depth_v393()==1u &&
+           s->base && !(s->base%SHYT_DM_PAGE) && s->pool.limit &&
+           s->pool.limit<=SIZE_MAX && s->base<=UINT64_MAX-s->pool.limit &&
+           shyt_generated_probe_range_v412(s->base,(size_t)s->pool.limit,
+                                           SHYT_V386_READ|SHYT_V386_WRITE) &&
+           shyt_generated_filter_v412(shyt_dm_gate_v412,s) &&
+           (s->cpu=cpu,s->site=site,1);
+}
+/* Called only after the V393 wrapper returns (including cooperative escape). */
+static inline void shyt_dm_end_v412(ShytDmImport *s) { s->cpu=NULL; s->site=NULL; }
+static inline uint64_t shyt_dm_error_v412(enum ShytDmResult result) {
+    switch(result) {
+    case SHYT_DM_OK:return 0;
+    case SHYT_DM_INVALID:return SHYT_DM_EINVAL;
+    case SHYT_DM_NO_SPACE:return SHYT_DM_EAGAIN;
+    default:return SHYT_DM_ENOTSUP;
+    }
+}
+static inline int shyt_dm_output_v412(ShytDmImport *s,uint64_t addr,uint64_t rsp,unsigned perm) {
+    return !(addr&7u) && addr<=UINT64_MAX-8u && rsp<=UINT64_MAX-8u &&
+           (addr>=rsp+8u || addr+8u<=rsp) &&
+           (addr>=s->base+s->pool.limit || addr+8u<=s->base) &&
+           shyt_generated_try_probe_v390(addr,8,perm);
+}
+/* Caller supplies an immutable attested site selected by the enclosing
+ * route. Wrong target/next/CPU returns 0 with no effects, not a fallback. */
+static inline int shyt_dm_call_v412(ShytDmImport *s,BbCpu *cpu,uint64_t target,uint64_t next) {
+    if(!s || !cpu || s->cpu!=cpu || !s->site ||
+       s->site->target!=target || s->site->next!=next ||
+       shyt_generated_owner_v392()!=s->owner ||
+       shyt_generated_recovery_depth_v393()!=1u)return 0;
+    enum { A=0,C=1,D=2,SP=4,SI=6,DI=7,R8_=8,R9_=9 };
+    uint64_t result=SHYT_DM_EINVAL, off=0, hint=0;
+    const uint64_t *r=cpu->r;
+    switch(s->site->service) {
+    case SHYT_DM_SIZE: result=s->pool.limit; break;
+    case SHYT_DM_ALLOC:
+        if(!shyt_dm_output_v412(s,r[R9_],r[SP],SHYT_V386_WRITE)) {
+            result=SHYT_DM_EFAULT;
+        } else if(r[DI]<=INT64_MAX && r[SI]<=INT64_MAX && (uint32_t)r[R8_]<=10) {
+            result=shyt_dm_error_v412(shyt_dm_allocate(&s->pool,(int64_t)r[DI],
+                (int64_t)r[SI],r[D],r[C],(int)(uint32_t)r[R8_],&off));
+            if(!result && !shyt_generated_try_store_v390(r[R9_],8,off)) {
+                if(shyt_dm_release(&s->pool,off,r[D])!=SHYT_DM_OK)return 0;
+                result=SHYT_DM_EFAULT;
+            }
+        }
+        break;
+    case SHYT_DM_MAP: {
+        const uint64_t align=r[R9_]?r[R9_]:SHYT_DM_PAGE;
+        off=r[R8_];
+        if(!shyt_dm_output_v412(s,r[DI],r[SP],SHYT_V386_READ|SHYT_V386_WRITE) ||
+           !shyt_generated_try_load_v390(r[DI],8,&hint)) {
+            result=SHYT_DM_EFAULT; break;
+        }
+        if((uint32_t)r[D]!=3 || (uint32_t)r[C] || hint || s->length ||
+           align%SHYT_DM_PAGE || !r[SI] ||
+           shyt_dm_find(&s->pool,off,r[SI])==s->pool.count ||
+           (s->base+off)%align) {
+            result=SHYT_DM_ENOTSUP; break;
+        }
+        s->mapped=s->base+off;
+        s->length=r[SI];
+        if(!shyt_generated_zero_v412(s->mapped,(size_t)s->length) ||
+           !shyt_generated_try_store_v390(r[DI],8,s->mapped)) {
+            s->length=0; s->mapped=0; result=SHYT_DM_EFAULT;
+        } else result=0;
+        break;
+    }
+    case SHYT_DM_FREE:
+        result=shyt_dm_error_v412(shyt_dm_release(&s->pool,r[DI],r[SI]));
+        if(!result && s->length && r[DI]==s->mapped-s->base && r[SI]==s->length)
+            s->length=s->mapped=0;
+        break;
+    }
+    cpu->r[A]=result;
+    cpu->rip=next;
+    return 1;
+}
+#endif
