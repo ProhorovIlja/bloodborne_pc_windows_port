@@ -19,8 +19,8 @@ from audit_startup_prefix_v422 import lines
 OPS = {b"__cxa_guard_acquire": b"ACQUIRE", b"__cxa_guard_release": b"RELEASE",
        b"__cxa_guard_abort": b"ABORT"}
 HEX = rb"[0-9a-fA-F]{1,16}"
-ROW = re.compile(rb"\{\s*0x("+HEX+rb")ull,\s*0x("+HEX+rb")ull,\s*0x("+HEX+
-                 rb")ull,\s*SHYT_GUARD_(ACQUIRE|RELEASE|ABORT)\s*\},")
+ROW = re.compile(rb"\{\s*0x("+HEX+rb")(?:ull)?,\s*0x("+HEX+rb")(?:ull)?,\s*0x("+HEX+
+                 rb")(?:ull)?,\s*SHYT_GUARD_(ACQUIRE|RELEASE|ABORT)\s*\},")
 MAX = 65536
 
 
@@ -65,7 +65,7 @@ def self_test():
     a = b"{0x10ull,0x20ull,0x4000ull,SHYT_GUARD_ACQUIRE},"
     b = a.replace(b"4000", b"4008")
     svc = imports([b"0x10\t__cxa_guard_acquire", b"0x30\t__cxa_guard_release"])
-    assert audit([a,b], svc, {0x20:0x10})["direct_continuations"] == 1
+    assert audit([a,b.replace(b"ull", b"")], svc, {0x20:0x10})["direct_continuations"] == 1
     for rows, site in (([a,a],{0x20:0x10}), ([b,a],{0x20:0x10}),
                        ([a],{0x20:None}), ([a],{0x20:0x30}),
                        ([a.replace(b"ACQUIRE",b"RELEASE")],{0x20:0x10}),
