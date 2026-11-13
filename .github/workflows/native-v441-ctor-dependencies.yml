@@ -1,0 +1,34 @@
+name: Native V441 constructor dependencies
+on:
+  push:
+    branches: [feature/native-v441-first-ctor-dependencies-20261113]
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/audit_private_ctor_closure_v410.py'
+      - 'native/source-port/recomp-v194/audit_retail_order_v424.py'
+      - 'native/source-port/recomp-v194/audit_first_load_v440.py'
+      - 'native/source-port/recomp-v194/audit_ctor_dependencies_v441.py'
+      - '.github/workflows/native-v441-ctor-dependencies.yml'
+permissions:
+  contents: read
+jobs:
+  order:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - working-directory: native/source-port/recomp-v194
+        run: |
+          python audit_private_ctor_closure_v410.py --self-test
+          python audit_retail_order_v424.py --self-test
+          python audit_first_load_v440.py --self-test
+          python audit_ctor_dependencies_v441.py --self-test
