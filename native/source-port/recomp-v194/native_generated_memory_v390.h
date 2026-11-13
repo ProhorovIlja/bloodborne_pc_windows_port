@@ -32,6 +32,14 @@ int shyt_generated_try_store_v390(uint64_t address,int size,uint64_t value);
 int shyt_generated_try_probe_v390(uint64_t address,size_t bytes,
                                  unsigned permission);
 
+/* Trusted same-thread startup controller hooks. Install at most once per
+ * pin, and keep context alive until leave. All generated accesses (including
+ * CAS) honor the filter; direct V388 access is not mediated by this hook. */
+typedef int (*ShytGeneratedFilterV412)(void *,uint64_t,size_t,unsigned);
+int shyt_generated_filter_v412(ShytGeneratedFilterV412 filter,void *context);
+int shyt_generated_probe_range_v412(uint64_t address,size_t bytes,unsigned permission);
+int shyt_generated_zero_v412(uint64_t address,size_t bytes);
+
 /* Wrappers emitted into actual pinned bbrecomp generated C shards by
  * instrument_generated_aot_memory_v390.py. These never interpret
  * uint64_t guest address as an arbitrary native host pointer.
