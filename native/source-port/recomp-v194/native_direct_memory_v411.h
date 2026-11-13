@@ -15,6 +15,8 @@ typedef struct {
     uint64_t offset, length;
     int type;
     void *mapping;
+    void *backend_context;
+    int (*unmap)(void *,void *,uint64_t);
 } ShytDmBlock;
 typedef struct {
     uint64_t limit;
@@ -59,7 +61,7 @@ static inline enum ShytDmResult shyt_dm_allocate(ShytDmPool *p,int64_t lo,
         if(at<=stop && length<=stop-at) {
             memmove(&p->blocks[i+1],&p->blocks[i],
                     (p->count-i)*sizeof(p->blocks[0]));
-            p->blocks[i]=(ShytDmBlock){at,length,type,NULL};
+            p->blocks[i]=(ShytDmBlock){at,length,type,NULL,NULL,NULL};
             ++p->count;
             *out=at;
             return SHYT_DM_OK;
@@ -88,10 +90,12 @@ static inline enum ShytDmResult shyt_dm_map(ShytDmPool *p,const ShytDmBackend *b
     void *ptr=b->map(b->context,off,len,align,p->blocks[i].type,protection);
     if(!ptr)return SHYT_DM_BACKEND_FAILED;
     p->blocks[i].mapping=ptr;
+    p->blocks[i].backend_context=b->context;
+    p->blocks[i].unmap=b->unmap;
     *out=ptr;
     return SHYT_DM_OK;
 }
-static inline enum ShytDmResult shyt_dm_release(ShytDmPool *p,const ShytDmBackend *b,
+static inline enum ShytDmResult shyt_dm_release(ShytDmPool *p,
     uint64_t off,uint64_t len) {
     if(!p || !p->limit || off%SHYT_DM_PAGE || len%SHYT_DM_PAGE)
         return SHYT_DM_INVALID;
@@ -99,7 +103,7 @@ static inline enum ShytDmResult shyt_dm_release(ShytDmPool *p,const ShytDmBacken
     const size_t i=shyt_dm_find(p,off,len);
     if(i==p->count)return SHYT_DM_UNSUPPORTED;
     void *ptr=p->blocks[i].mapping;
-    if(ptr && (!b || !b->unmap || !b->unmap(b->context,ptr,len)))
+    if(ptr && !p->blocks[i].unmap(p->blocks[i].backend_context,ptr,len))
         return SHYT_DM_BACKEND_FAILED;
     --p->count;
     memmove(&p->blocks[i],&p->blocks[i+1],
