@@ -1,7 +1,7 @@
-name: Native V404 executable admission of pinned generated synthetic routes
+name: Native V405 guarded generated CAS and SIMD execution
 on:
   push:
-    branches: [feature/native-v402-fallback-closure-20261112, feature/native-v403-source-route-attestation-20261112, feature/native-v404-execution-admission-20261112]
+    branches: [feature/native-v402-fallback-closure-20261112, feature/native-v403-source-route-attestation-20261112, feature/native-v404-execution-admission-20261112, feature/native-v405-guarded-memory-routes-20261113]
     paths:
       - '.github/workflows/native-v402-native-only-fallback-closure.yml'
       - 'native/source-port/recomp-v194/generate_verified_imports_v395.py'
