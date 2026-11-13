@@ -1,0 +1,9 @@
+# V442: corrected retail constructor 1 returns on Linux x86-64
+
+An owner-local reproducer read the exact private CUSA03173 ELF, checked the corrected first slot and virtual-method relocation, and reassembled three reviewed bodies as host-native code. It rebound 18 RIP-relative references and 26 direct control transfers and preserved the one indirect CALL using a native vtable entry. The Linux program was linked as a host PIE and run from a directory containing only the probe. No original ELF/EBOOT was needed at runtime; no game loader, JIT or interpreter was used.
+
+The original first constructor reached its normal return and returned a second time with state retained. The probe checked the six guard/mutex calls in order, recursive host pthread behavior, object publication, initialization bytes, and no second initialization. Clang and GCC optimized builds passed; a Clang ASan/UBSan build also passed (instrumented host shim only, not the reassembled functions). The Clang build passed 100 separate process runs. This is a new isolated milestone for the corrected first slot, not a verified continuation of the historical 1,088-return run.
+
+The probe is deliberately narrow. It models relevant zero-initialized globals, one vtable slot and a host-side stack canary; it does not initialize the full retail address space or implement PS4 TLS. Deferred callback, diagnostic and stack-failure paths trap if reached, not execute their original implementations. No whole-game boot, constructor 2 return, Windows/macOS retail run or launch-performance claim.
+
+Next blocker: translate the second constructor's tail destination and its transitive startup dependencies, then run constructors 1 and 2 in the same private process with their actual shared-state requirements. Do not publish original inputs, derived assembly or executable, private addresses or raw disassembly.
