@@ -6,7 +6,22 @@
 #include "native_only_approved_v402_generated.h"
 #include "native_route_guard_v403_generated.h"
 #include <stdlib.h>
-#include <string.h>
+extern void f_1000(BbCpu *);
+extern void f_1020(BbCpu *);
+extern void f_1040(BbCpu *);
+extern void f_1060(BbCpu *);
+extern void f_1080(BbCpu *);
+extern void f_10a0(BbCpu *);
+extern void f_10c0(BbCpu *);
+extern void f_10e0(BbCpu *);
+extern void f_1100(BbCpu *);
+extern void f_1120(BbCpu *);
+extern void f_1160(BbCpu *);
+
+/* Linker-resolved symbols, not pointers vouched for by table metadata. */
+static const RcFn linked_functions[] = {
+    f_1000, f_1020, f_1040, f_1060, f_1080, f_10a0, f_10c0, f_10e0, f_1100, f_1120, f_1160
+};
 
 static int verified_table(const ShytNativeExecutionV404 *route) {
     const RcFunction *f;
@@ -22,7 +37,7 @@ static int verified_table(const ShytNativeExecutionV404 *route) {
             f[i].size != shyt_v402_allowed[i].size ||
             f[i].hash != shyt_v402_allowed[i].hash ||
             !shyt_v403_is_synthetic_candidate(f[i].offset) ||
-            !f[i].fn || !f[i].direct ||
+            f[i].fn != linked_functions[i] || !f[i].direct ||
             f[i].fn != route->approved[i] ||
             f[i].direct != route->direct[i] ||
             *f[i].direct != f[i].fn)
@@ -67,6 +82,7 @@ typedef struct ShytV404ReturnPreflight {
     ShytNativeOsVmV388 *owner;
     uint64_t rsp;
     uint64_t expected_return;
+    uint64_t offset;
 } ShytV404ReturnPreflight;
 static int guest_return_preflight(const BbCpu *cpu, void *context) {
     ShytV404ReturnPreflight *p = (ShytV404ReturnPreflight *)context;
@@ -78,6 +94,28 @@ static int guest_return_preflight(const BbCpu *cpu, void *context) {
         !shyt_generated_try_load_v390(p->rsp, 8, &ret) ||
         ret == 0)
         return 0;
+    /* All five memory probes address [RDI]. Check the entire operand
+     * before entering generated C. The VM pin protects mapping and
+     * permissions, not contents; the caller owns CPU and return slot. */
+    if (p->offset <= UINT64_C(0x1080)) {
+        const uint64_t address = cpu->r[RDI];
+        size_t width = 8u;
+        unsigned access = SHYT_V386_READ | SHYT_V386_WRITE;
+        if (p->offset != UINT64_C(0x1000)) {
+            width = p->offset <= UINT64_C(0x1040) ? 16u : 32u;
+            access = (p->offset == UINT64_C(0x1020) ||
+                      p->offset == UINT64_C(0x1060)) ?
+                     SHYT_V386_READ : SHYT_V386_WRITE;
+        } else if (address & UINT64_C(7)) {
+            return 0; /* V390 cannot implement a cross-word LOCK CAS. */
+        }
+        if (!shyt_generated_try_probe_v390(address, width, access))
+            return 0;
+        if ((access & SHYT_V386_WRITE) &&
+            address < p->rsp + UINT64_C(8) &&
+            p->rsp < address + (uint64_t)width)
+            return 0; /* Do not overwrite our own return slot. */
+    }
     p->expected_return = ret;
     return 1;
 }
@@ -91,9 +129,12 @@ int shyt_native_execution_try_v404(ShytNativeExecutionV404 *route,
     RcFn selected = NULL;
 
     /* The V403 11-way membership alone is not proof of execution
-     * semantics. Only the four already executed native TCB functions
-     * have independent V404 runtime entry permission. */
-    if (!cpu || !proven_tcb(offset) ||
+     * semantics. Admit only the four TCB probes and five guarded
+     * memory probes; the two CALL RAX sites remain denied. */
+    if (!cpu || shyt_generated_active_v390() ||
+        shyt_generated_recovery_depth_v393() ||
+        (!proven_tcb(offset) && (offset < UINT64_C(0x1000) ||
+                                  offset > UINT64_C(0x1080))) ||
         !shyt_v403_is_synthetic_candidate(offset) ||
         !verified_table(route))
         return SHYT_V404_DENIED;
@@ -110,6 +151,7 @@ int shyt_native_execution_try_v404(ShytNativeExecutionV404 *route,
         return SHYT_V404_DENIED;
     preflight.owner = route->owner;
     preflight.rsp = rsp;
+    preflight.offset = offset;
     result = shyt_generated_call_recoverable_v393(
         route->owner, selected, cpu, guest_return_preflight,
         &preflight, &recovered);
