@@ -10,7 +10,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-enum { SHYT_V386_MAX_REGIONS=32, SHYT_V386_MAX_WORDS=1048576 };
+/* 128 MiB per region: the observed startup allocation alone is 116 MiB.
+ * This is a validation ceiling, not an eager reservation. */
+enum { SHYT_V386_MAX_REGIONS=32, SHYT_V386_MAX_WORDS=16777216 };
 enum { SHYT_V386_READ=1, SHYT_V386_WRITE=2, SHYT_V386_EXECUTE=4 };
 typedef struct ShytNativeRegionV386 {
     uint64_t guest_base;
