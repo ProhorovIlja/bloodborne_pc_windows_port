@@ -16,7 +16,8 @@ typedef struct {
     ShytDmPool pool;
     uint64_t base, mapped, length;
     BbCpu *cpu;
-    const ShytDmSite *site;
+    const ShytDmSite *sites;
+    size_t count;
 } ShytDmImport;
 /* Low 32-bit Orbis status values, with x86 EAX zero extension. */
 #define SHYT_DM_EAGAIN UINT64_C(0x80020023)
@@ -27,13 +28,18 @@ typedef struct {
 static inline int shyt_dm_gate_v412(void *v,uint64_t addr,size_t bytes,unsigned perm) {
     ShytDmImport *s=v;
     if(addr>=s->base+s->pool.limit || addr+bytes<=s->base)return 1;
-    return !(perm&SHYT_V386_EXEC) && s->length && addr>=s->mapped &&
+    return !(perm&SHYT_V386_EXECUTE) && s->length && addr>=s->mapped &&
            addr-s->mapped<s->length && bytes<=s->length-(addr-s->mapped);
 }
 
-static inline int shyt_dm_begin_v412(ShytDmImport *s,BbCpu *cpu,const ShytDmSite *site) {
-    return s && cpu && site && site->target && site->next && site->target!=site->next &&
-           (unsigned)site->service<=SHYT_DM_FREE && !s->cpu && s->owner &&
+static inline int shyt_dm_begin_v412(ShytDmImport *s,BbCpu *cpu,const ShytDmSite *sites,size_t count) {
+    if(!sites || !count || count>32)return 0;
+    for(size_t i=0;i<count;++i) {
+        if(!sites[i].target || !sites[i].next || sites[i].target==sites[i].next ||
+           (unsigned)sites[i].service>SHYT_DM_FREE)return 0;
+        for(size_t j=0;j<i;++j)if(sites[j].next==sites[i].next)return 0;
+    }
+    return s && cpu && !s->cpu && s->owner &&
            shyt_generated_owner_v392()==s->owner &&
            shyt_generated_recovery_depth_v393()==1u &&
            s->base && !(s->base%SHYT_DM_PAGE) && s->pool.limit &&
@@ -41,10 +47,10 @@ static inline int shyt_dm_begin_v412(ShytDmImport *s,BbCpu *cpu,const ShytDmSite
            shyt_generated_probe_range_v412(s->base,(size_t)s->pool.limit,
                                            SHYT_V386_READ|SHYT_V386_WRITE) &&
            shyt_generated_filter_v412(shyt_dm_gate_v412,s) &&
-           (s->cpu=cpu,s->site=site,1);
+           (s->cpu=cpu,s->sites=sites,s->count=count,1);
 }
 /* Called only after the V393 wrapper returns (including cooperative escape). */
-static inline void shyt_dm_end_v412(ShytDmImport *s) { s->cpu=NULL; s->site=NULL; }
+static inline void shyt_dm_end_v412(ShytDmImport *s) { s->cpu=NULL; s->sites=NULL; s->count=0; }
 static inline uint64_t shyt_dm_error_v412(enum ShytDmResult result) {
     switch(result) {
     case SHYT_DM_OK:return 0;
@@ -62,14 +68,16 @@ static inline int shyt_dm_output_v412(ShytDmImport *s,uint64_t addr,uint64_t rsp
 /* Caller supplies an immutable attested site selected by the enclosing
  * route. Wrong target/next/CPU returns 0 with no effects, not a fallback. */
 static inline int shyt_dm_call_v412(ShytDmImport *s,BbCpu *cpu,uint64_t target,uint64_t next) {
-    if(!s || !cpu || s->cpu!=cpu || !s->site ||
-       s->site->target!=target || s->site->next!=next ||
+    if(!s || !cpu || s->cpu!=cpu || !s->sites ||
        shyt_generated_owner_v392()!=s->owner ||
        shyt_generated_recovery_depth_v393()!=1u)return 0;
     enum { A=0,C=1,D=2,SP=4,SI=6,DI=7,R8_=8,R9_=9 };
     uint64_t result=SHYT_DM_EINVAL, off=0, hint=0;
     const uint64_t *r=cpu->r;
-    switch(s->site->service) {
+    size_t i=0;
+    while(i<s->count && (s->sites[i].target!=target || s->sites[i].next!=next))++i;
+    if(i==s->count)return 0;
+    switch(s->sites[i].service) {
     case SHYT_DM_SIZE: result=s->pool.limit; break;
     case SHYT_DM_ALLOC:
         if(!shyt_dm_output_v412(s,r[R9_],r[SP],SHYT_V386_WRITE)) {
