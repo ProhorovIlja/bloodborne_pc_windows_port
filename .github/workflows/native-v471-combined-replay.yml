@@ -1,0 +1,56 @@
+name: Native V471 combined startup replay
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v471.*'
+      - 'native/source-port/recomp-v194/native_guarded_leaf_v463.c'
+      - 'native/source-port/recomp-v194/native_startup_copy_v470.c'
+      - '.github/workflows/native-v471-combined-replay.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v471.*'
+      - 'native/source-port/recomp-v194/native_guarded_leaf_v463.c'
+      - 'native/source-port/recomp-v194/native_startup_copy_v470.c'
+      - '.github/workflows/native-v471-combined-replay.yml'
+permissions:
+  contents: read
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          build() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror "$@" replay_startup_v471.c native_guarded_leaf_v463.c native_startup_copy_v470.c -o replay.exe
+          }
+          build -O2
+          ./replay.exe --projection | tr -d '\r' > result
+          test "$(cut -d' ' -f1 result | paste -sd, -)" = '1,2,4'
+          grep -Fx '4 0 80000000000000000100000000000000' result
+          status=0
+          ./replay.exe --strict > strict 2> stop || status=$?
+          test "$status" = 3
+          tr -d '\r' < stop | grep -Fx 'MISSING 3'
+          test "$(cut -d' ' -f1 strict | paste -sd, -)" = '1,2'
+          for bad in BAD_SPAN BAD_COLLISION; do
+            build -O2 "-DV471_$bad"
+            status=0
+            ./replay.exe --projection > rejected || status=$?
+            test "$status" = 2
+            test ! -s rejected
+          done
+          if [ "$RUNNER_OS" = Linux ]; then
+            build -O1 -fsanitize=address,undefined -fno-sanitize-recover=all
+            ./replay.exe --projection > /dev/null
+          fi
