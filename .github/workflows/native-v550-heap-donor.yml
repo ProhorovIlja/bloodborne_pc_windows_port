@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'native/source-port/recomp-v194/*v54*'
+      - 'native/source-port/recomp-v194/*v55*'
       - 'native/source-port/recomp-v194/startup_memory_v478.h'
       - '.github/workflows/native-v550-heap-donor.yml'
   workflow_dispatch:
