@@ -1,0 +1,35 @@
+name: Native V483 register leaf emission
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v483*', 'native/source-port/recomp-v194/census_v480.py', '.github/workflows/native-v483-leaf.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v483*', 'native/source-port/recomp-v194/census_v480.py', '.github/workflows/native-v483-leaf.yml']
+permissions:
+  contents: read
+jobs:
+  emit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python test_leaf_v483.py
+          clang -O2 -std=c11 -Wall -Wextra -Werror v483_fixture.c -o fixture.exe
+          ./fixture.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -g -fsanitize=address,undefined -fno-sanitize-recover=all v483_fixture.c -o fixture-san
+            ./fixture-san
+          fi
