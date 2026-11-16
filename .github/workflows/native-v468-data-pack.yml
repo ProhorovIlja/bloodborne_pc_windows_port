@@ -33,9 +33,11 @@ jobs:
         run: |
           set -eu
           python startup_data_v468.py
-          clang -shared -O2 -Wall -Wextra -Werror -Wl,--export-all-symbols native_guarded_leaf_v463.c -o leaf.dll 2>build.err || {
-            if [ "$RUNNER_OS" = Windows ]; then cat build.err; exit 1; fi
+          if [ "$RUNNER_OS" = Windows ]; then
+            printf '%s\n' '#include <stddef.h>' '#include <stdint.h>' '__declspec(dllexport) int native_guarded_leaf_v463(unsigned char *, size_t, size_t, uint64_t);' '#include "native_guarded_leaf_v463.c"' > leaf_export.c
+            clang -shared -O2 -Wall -Wextra -Werror leaf_export.c -o leaf.dll
+          else
             clang -shared -fPIC -O2 -Wall -Wextra -Werror native_guarded_leaf_v463.c -o leaf.dll
-          }
+          fi
           python -c 'import hashlib,pathlib,startup_data_v468 as p; b=p.pack([(1,32,128,bytes(16)),(2,32,128,bytes(16)),(3,48,128,bytes(16))]); pathlib.Path("fixture.dat").write_bytes(b); pathlib.Path("fixture.sha").write_text(hashlib.sha256(b).hexdigest())'
           python replay_startup_v468.py fixture.dat fixture.sha leaf.dll | grep -Fx 'NATIVE_V468_REPLAY_PASS 3 2 2 6'
