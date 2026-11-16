@@ -2,6 +2,7 @@
 #include "class_sort_v556.h"
 
 #include "class_secondary_v557.h"
+#include "class_table_v554.h"
 struct fixture557 {
     unsigned char buf[2][768*16];
     unsigned active, calls, allocs, frees, fail_key, fail_alloc, fail_release;
@@ -85,7 +86,38 @@ static int secondary557(void) {
     return 0;
 }
 
+/* Synthetic seam: run both table helpers on the same class IDs.
+ * This does not assert retail call order or atomicity between tables. */
+static int tables557(void) {
+    struct fixture557 f={0};
+    unsigned char primary[40]={0}, secondary[40]={0}, rows[64]={0};
+    const uint64_t hp=UINT64_C(0x100010000), hs=hp+64, vp=hp+128;
+    const struct bb_vector_block_v541 pb={rows,sizeof rows,vp};
+    bb_arena_store_v527(primary+8,vp); bb_arena_store_v527(primary+16,vp+32);
+    bb_arena_store_v527(primary+24,vp+64); bb_arena_store_v527(primary+32,5);
+    bb_arena_store_v527(secondary+32,9);
+    bb_arena_store_v527(rows,1); bb_arena_store_v527(rows+24,7);
+    const uint64_t row[4]={2,3,4,7};
+    if (bb_class_insert_v554(primary,sizeof primary,hp,&pb,row,&f,
+            alloc557,release557)!=BB_CLASS_OK || f.allocs || f.frees ||
+            bb_vector_word_v541(rows)!=1 || bb_vector_word_v541(rows+32)!=2 ||
+            bb_vector_word_v541(primary+16)!=vp+64) return 1;
+    const struct bb_vector_block_v541 old={f.buf[0],sizeof f.buf[0],va557(0)};
+    for (uint64_t cls=1;cls<=2;++cls)
+        if (bb_secondary_insert_v557(secondary,sizeof secondary,hs,&old,cls,&f,key557,
+                grow557,alloc557,release557)!=BB_SEC_OK) return 2;
+    static const uint64_t keys[]={UINT64_MAX,UINT64_MAX,0,0,7,7,7,7};
+    static const uint64_t classes[]={1,2,1,2,1,1,2,2};
+    for (size_t i=0;i<8;++i)
+        if (bb_vector_word_v541(f.buf[0]+16*i)!=keys[i] ||
+            bb_vector_word_v541(f.buf[0]+16*i+8)!=classes[i]) return 3;
+    return f.calls!=8 || f.allocs!=1 || f.frees ||
+        bb_vector_word_v541(primary+16)!=vp+64 || bb_vector_word_v541(rows+32)!=2;
+}
+
 int main(void) {
+    const int both=tables557();
+    if (both) return 20+both;
     const int sec=secondary557();
     if (sec) return 10+sec;
     static const size_t ns[]={32,33,41,42,513};
