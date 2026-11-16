@@ -36,6 +36,8 @@ jobs:
             clang -std=c11 -g -fsanitize=address,undefined -fno-sanitize-recover=all test_tls_resolve_v513.c -o tls513-san
             ./tls513-san
           fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_jump_record_v514.c -o jump514.exe
+          ./jump514.exe
           python test_v497.py
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
           ./load-route.exe
