@@ -119,6 +119,42 @@ static void test_boot(BbCpu *cpu) {
         }
     }
 }
+static void aot_notify(void *opaque,int status) {
+    BootFixture *f=opaque;
+    CHECK(f->events==3 && status==-3 && !shyt_generated_owner_v392());
+    f->events=5;
+}
+static void test_aot_boot(BbCpu *cpu) {
+    const ShytCtorRowV427 rows[]={{1,11},{2,11}};
+    char arg[]="b";
+    char *argv[]={arg,NULL};
+    for(unsigned kind=0;kind<4;++kind) {
+        BootFixture f={0,kind==2 ? 2u : kind==1 ? 99u : 0u};
+        ShytCrtV409 crt={0};
+        const ShytCrtHooksV409 host={boot_env,{boot_loader,&f},{boot_image,&f},
+            NULL,NULL,aot_notify};
+        ShytCheckedBootV448 p={.state=&state,.rows=rows,.count=2,.expected_count=2,
+            .sentinel=44,.post=boot_post,.post_context=&f};
+        ShytBootMainV450 m={.entry=kind==3 ? 999u : 31u,.argv_address=0x5000,
+            .argv_capacity=kind==1 ? 17u : 18u};
+        int status=99;
+        reset(cpu);
+        const unsigned before=calls;
+        CHECK(shyt_aot_boot_v450(&crt,&p,&m,&host,&f,1,argv,NULL,&status)==(kind==0));
+        CHECK(!crt.count && !shyt_generated_owner_v392() && !shyt_generated_recovery_depth_v393());
+        CHECK(m.attempted==(kind<=1) && f.events==(kind==3 ? 0u : 7u));
+        CHECK(calls==before+(kind==3 ? 0u : 2u));
+        if(kind==0) {
+            CHECK(status==-3 && crt.phase==SHYT_CRT_DONE_V409 &&
+                  m.result==SHYT_V393_COMPLETED && p.report.returned==2);
+        } else {
+            CHECK(status==99 && crt.phase==(kind==3 ? SHYT_CRT_NEW_V409 : SHYT_CRT_FAILED_V409));
+            if(kind==1)CHECK(m.result==SHYT_V393_RECOVERED && m.reason==SHYT_V449_BAD_MAIN_ARGS &&
+                             p.report.returned==2 && state.terminal);
+            if(kind==2)CHECK(p.report.stopped_at==2 && p.report.returned==1 && state.terminal);
+        }
+    }
+}
 int main(void) {
     BbCpu cpu;
     int why=-1;
@@ -162,6 +198,7 @@ int main(void) {
     CHECK(calls==7 && seen==2 && !report.returned && report.reason==SHYT_V439_POSTCONDITION);
     CHECK(state.terminal && !shyt_generated_owner_v392() && !shyt_generated_recovery_depth_v393());
     test_boot(&cpu);
+    test_aot_boot(&cpu);
     char arg[]="b";
     char *argv[]={arg,NULL};
     int32_t status=99;
