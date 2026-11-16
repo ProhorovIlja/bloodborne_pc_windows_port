@@ -14,23 +14,34 @@ struct fixture {
     uint64_t owner;
     unsigned char *body;
     pthread_mutex_t mutex;
+    uint64_t live[3];
 };
 static enum bb_alloc_v548 get(void *x,uint64_t owner,size_t n,struct bb_vector_block_v541 *out) {
     struct fixture *f=x;
     if (owner!=f->owner || !n || pthread_mutex_lock(&f->mutex)) return BB_ALLOC_ERROR;
+    size_t slot=0;
+    while (slot<3 && f->live[slot]) ++slot;
+    if (slot==3) { (void)pthread_mutex_unlock(&f->mutex); return BB_ALLOC_ERROR; }
     void *p=bb_engine_regular_heap_allocate_aligned_02485a60(f->body,n,8);
-    if (pthread_mutex_unlock(&f->mutex)) return BB_ALLOC_ERROR;
-    if (!p) return BB_ALLOC_NO_SPACE;
+    if (!p) return pthread_mutex_unlock(&f->mutex)?BB_ALLOC_ERROR:BB_ALLOC_NO_SPACE;
     const uintptr_t addr=(uintptr_t)p, base=(uintptr_t)f->span.data;
-    if (addr<base || n>f->span.size || addr-base>f->span.size-n) return BB_ALLOC_ERROR;
+    if (addr<base || n>f->span.size || addr-base>f->span.size-n) {
+        (void)pthread_mutex_unlock(&f->mutex);
+        return BB_ALLOC_ERROR;
+    }
     *out=(struct bb_vector_block_v541){p,n,f->span.base+(addr-base)};
-    return BB_ALLOC_OK;
+    f->live[slot]=out->va;
+    return pthread_mutex_unlock(&f->mutex)?BB_ALLOC_ERROR:BB_ALLOC_OK;
 }
 static int put(void *x,uint64_t owner,uint64_t va) {
     struct fixture *f=x;
     unsigned char *p=bb_memory_at_v478(&f->span,va,1);
     if (owner!=f->owner || !p || (va&15) || pthread_mutex_lock(&f->mutex)) return 0;
+    size_t slot=0;
+    while (slot<3 && f->live[slot]!=va) ++slot;
+    if (slot==3) { (void)pthread_mutex_unlock(&f->mutex); return 0; }
     bb_engine_regular_heap_free_024858a0(f->body,p);
+    f->live[slot]=0;
     return !pthread_mutex_unlock(&f->mutex);
 }
 static int header(void *x,uint64_t self,size_t n,size_t align,struct bb_registry_block_v540 *out) {
@@ -46,7 +57,7 @@ static int warn(void *x) { (void)x; return 0; }
 static int run(uint64_t base,int preallocate) {
     _Alignas(16) unsigned char body[0x490]={0}; unsigned char once=0,tls[80]={0};
     struct bb_owner_v539 owner={0};
-    struct fixture f={{base,sizeof arena,arena},base+0x200000,body,PTHREAD_MUTEX_INITIALIZER};
+    struct fixture f={{base,sizeof arena,arena},base+0x200000,body,PTHREAD_MUTEX_INITIALIZER,{0}};
     const struct bb_registry_tls_v548 t={tls,sizeof tls,48,base+0x300000,0x9999,-24,-8,-48};
     const struct bb_registry_driver_v548 d={&f,get,put};
     if (!bb_owner_seed_v539(&owner,body,sizeof body,f.owner,1,2,3) ||
@@ -72,7 +83,9 @@ static int run(uint64_t base,int preallocate) {
         if (bb_vector_word_v541(p)!=1+i || bb_vector_word_v541(p+8)!=0x2000+32*i ||
             bb_vector_word_v541(p+16)!=0x2010+32*i) return 6;
     }
-    if (!put(&f,f.owner,lo) || !put(&f,f.owner,hva) || bb_vector_word_v541(body+32) ||
+    if (put(&f,f.owner,lo+16) || put(&f,f.owner+16,lo)) return 8;
+    if (!put(&f,f.owner,lo) || !put(&f,f.owner,hva) ||
+        put(&f,f.owner,lo) || put(&f,f.owner,hva) || bb_vector_word_v541(body+32) ||
         bb_vector_word_v541(body+24)!=bb_vector_word_v541(body+0x438) ||
         pthread_mutex_destroy(&f.mutex) || !shyt_rw_destroy_v414(&owner.lock)) return 7;
     return 0;

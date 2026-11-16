@@ -1,0 +1,36 @@
+name: Native V550 pinned heap donor
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v54*'
+      - 'native/source-port/recomp-v194/startup_memory_v478.h'
+      - '.github/workflows/native-v550-heap-donor.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  heap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Yharnam-Hunters/Paleblood
+          ref: a8730c4956c1bfdc1b71de467c2841f5fe1cba0e
+          path: pinned-paleblood
+          persist-credentials: false
+          sparse-checkout: game/engine
+      - shell: bash
+        env:
+          TOOLCHAIN: ${{ matrix.compiler }}
+        run: |
+          set -euo pipefail
+          if [ "$TOOLCHAIN" = gcc ]; then export CC=gcc CXX=g++; else export CC=clang CXX=clang++; fi
+          sh native/source-port/recomp-v194/test_heap_donor_v545.sh "$GITHUB_WORKSPACE/pinned-paleblood"
