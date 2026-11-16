@@ -2,6 +2,7 @@
 """Offline RX pointer triage; emits counts, not a code/data classification."""
 import argparse
 from collections import Counter
+from bisect import bisect_right
 import json
 from pathlib import Path
 import struct
@@ -73,6 +74,39 @@ def guarded_counts(b, unknown, plt_end, offset, writable):
     return dict(guard_prefix_targets=sites, guard_prefix_slots=slots,
                 guard_branch_ret_targets=ret_sites, guard_set_then_ret_targets=set_then_ret,
                 distinct_guard_bytes=len(guards), shared_guard_bytes=sum(n>1 for n in guards.values()))
+
+
+def copy_plan(code, va, readonly, writable):
+    """Return ordered (source RVA, destination RVA) pairs, or None.
+
+    Caller bounds the input by the next known entry. Accept only full
+    aligned RIP-relative AVX copy pairs followed by a near RET.
+    """
+    plan = []
+    for pos in range(0, len(code), 16):
+        if code[pos] == 0xc3:
+            return tuple(plan) if plan else None
+        if (len(code)-pos < 16 or code[pos:pos+4] != b'\xc5\xf8\x28\x05'
+                or code[pos+8:pos+12] != b'\xc5\xf8\x29\x05'):
+            return None
+        src = va+pos+8+struct.unpack_from('<i',code,pos+4)[0]
+        dst = va+pos+16+struct.unpack_from('<i',code,pos+12)[0]
+        if (src|dst)&15 or not readonly(src,16) or not writable(dst,16):
+            return None
+        plan.append((src,dst))
+    return None
+
+
+def replay_copy_plan(data, data_rva, writes):
+    """Apply pre-extracted 16-byte constants to a writable data-only buffer."""
+    offsets = []
+    for dst, raw in writes:
+        off = dst-data_rva
+        if dst&15 or len(raw)!=16 or off<0 or off>len(data)-16:
+            raise ValueError('invalid constant write')
+        offsets.append((off,bytes(raw)))
+    for off, raw in offsets:
+        data[off:off+16] = raw
 
 
 def triage(b):
@@ -162,6 +196,20 @@ def triage(b):
             if -0x100000 <= top <= 0 and top%8==0 and rtti==0:
                 null_header_runs += 1
                 strong.update(nonanchors)
+    entries = sorted(anchors | set(rx.values()) | {plt_end})
+    plans = {}
+    for a in unknown:
+        if a>=plt_end:
+            continue
+        limit = min(entries[bisect_right(entries,a)], a+4096)
+        p = offset(a,limit-a,1)
+        if p is None:
+            continue
+        plan = copy_plan(b[p:p+limit-a],a,
+            lambda x,n: x>=plt_end and offset(x,n,1) is not None,
+            lambda x,n: any(lo<=x<=hi-n for lo,hi in rw))
+        if plan:
+            plans[a] = plan
     thunks = set()
     for a in unknown:
         p = offset(a,9,1)
@@ -170,6 +218,9 @@ def triage(b):
     return dict(**guarded_counts(b,unknown,plt_end,offset,lambda a: any(lo<=a<hi for lo,hi in rw)),
                 rx_nonanchor_slots=sum(unknown.values()), rx_nonanchor_targets=len(unknown),
                 verified_plt_stubs=len(jmp),
+                copy_init_targets=len(plans),
+                copy_init_writes=sum(map(len,plans.values())),
+                copy_init_destinations=len({dst for p in plans.values() for _,dst in p}),
                 pre_plt_end_nonanchor_slots=sum(n for a,n in unknown.items() if a<plt_end),
                 pre_plt_end_nonanchor_targets=sum(a<plt_end for a in unknown),
                 post_plt_nonanchor_slots=sum(n for a,n in unknown.items() if a>=plt_end),
