@@ -2,9 +2,9 @@ name: Native V493 indexed dispatch
 on:
   push:
     branches: [feature/native-v462-startup-closure-20261116]
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
   pull_request:
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
@@ -64,6 +64,8 @@ jobs:
           ./arena527.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_singleton_arena_v528.c -o arena528.exe
           ./arena528.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_unlock_v531.c -o unlock531.exe
+          ./unlock531.exe
           if [ "$RUNNER_OS" != Windows ]; then
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
             ./join529
