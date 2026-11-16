@@ -1,0 +1,35 @@
+name: Native V476 readonly operands
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v476*', '.github/workflows/native-v476-readonly.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v476*', '.github/workflows/native-v476-readonly.yml']
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python test_ro_v476.py
+          clang -std=c11 -Wall -Wextra -Werror -O2 test_ro_v476.c -o ro.exe
+          ./ro.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -fsanitize=address,undefined -fno-sanitize-recover=all -g test_ro_v476.c -o ro-san
+            ./ro-san
+          fi
