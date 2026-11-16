@@ -110,6 +110,47 @@ static int tables557(void) {
         bb_vector_word_v541(primary+16)!=vp+64 || bb_vector_word_v541(rows+32)!=2;
 }
 
+/* The original grows on the first append past capacity, not before the
+ * batch. The allocator sees two new rows when starting at 510 / 512. */
+struct boundary559 {
+    struct fixture557 f;
+    unsigned char *header;
+    unsigned alloc_after, key_before_reserve;
+};
+static int key559(void *v,uint64_t cls,unsigned slot,uint64_t *word) {
+    struct boundary559 *b=v;
+    if (!b->f.allocs) ++b->key_before_reserve;
+    return key557(&b->f,cls,slot,word);
+}
+static int alloc559(void *v,uint64_t owner,size_t bytes,struct bb_vector_block_v541 *out) {
+    struct boundary559 *b=v;
+    b->alloc_after=(unsigned)((bb_vector_word_v541(b->header+16)-
+        bb_vector_word_v541(b->header+8))/16);
+    return alloc557(&b->f,owner,bytes,out);
+}
+static int release559(void *v,uint64_t owner,uint64_t va) {
+    struct boundary559 *b=v;
+    return release557(&b->f,owner,va);
+}
+static int boundary559(void) {
+    unsigned char h[40]={0};
+    struct boundary559 b={0};
+    b.header=h;
+    const uint64_t hva=UINT64_C(0x100010000), va=va557(0);
+    bb_arena_store_v527(h+32,9);
+    if (bb_secondary_insert_v557(h,sizeof h,hva,NULL,1,&b,key559,alloc559,release559)!=BB_SEC_OK ||
+            b.key_before_reserve || b.alloc_after || b.f.allocs!=1) return 1;
+    const struct bb_vector_block_v541 old={b.f.buf[0],sizeof b.f.buf[0],va};
+    bb_arena_store_v527(h+16,va+510*16);
+    b.f.fail_alloc=1;
+    if (bb_secondary_insert_v557(h,sizeof h,hva,&old,2,&b,key559,alloc559,release559)!=BB_SEC_STOP ||
+            b.alloc_after!=512 || b.f.calls!=8 || b.f.active!=1 || b.f.frees ||
+            bb_vector_word_v541(h+16)!=va+512*16 ||
+            bb_vector_word_v541(b.f.buf[0]+510*16+8)!=2 ||
+            bb_vector_word_v541(b.f.buf[0]+511*16+8)!=2) return 2;
+    return 0;
+}
+
 int main(void) {
     if (bb_secondary_slots_v559(0)!=1 || bb_secondary_slots_v559(1)!=2 ||
             bb_secondary_slots_v559(511)!=766 || bb_secondary_slots_v559(512)!=768 ||
@@ -118,6 +159,8 @@ int main(void) {
     if (both) return 20+both;
     const int sec=secondary557();
     if (sec) return 10+sec;
+    const int edge=boundary559();
+    if (edge) return 30+edge;
     static const size_t ns[]={32,33,41,42,513};
     static const uint64_t sums[][2]={
         {UINT64_C(0xd603853c438d7e52),UINT64_C(0xd603853c438d7e52)},
