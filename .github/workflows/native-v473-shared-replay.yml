@@ -1,0 +1,52 @@
+name: Native V473 shared replay
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v473*'
+      - 'native/source-port/recomp-v194/native_guarded_leaf_v463.c'
+      - 'native/source-port/recomp-v194/native_startup_copy_v470.c'
+      - 'native/source-port/recomp-v194/native_stores_v472.c'
+      - '.github/workflows/native-v473-shared-replay.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v473*'
+      - 'native/source-port/recomp-v194/native_guarded_leaf_v463.c'
+      - 'native/source-port/recomp-v194/native_startup_copy_v470.c'
+      - 'native/source-port/recomp-v194/native_stores_v472.c'
+      - '.github/workflows/native-v473-shared-replay.yml'
+permissions:
+  contents: read
+jobs:
+  fixture:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          build() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror "$@" replay_v473.c native_guarded_leaf_v463.c native_startup_copy_v470.c native_stores_v472.c -o replay.exe
+          }
+          build -O2
+          ./replay.exe | tr -d '\r' > trace.txt
+          grep -Fx '4 1 177 80000000000000000100000000000000' trace.txt
+          grep -Fx 'FINAL e8303cb9e09c3ac4' trace.txt
+          test "$(wc -l < trace.txt)" -eq 5
+          build -O2 -DV473_BAD
+          status=0
+          ./replay.exe > rejected.txt || status=$?
+          test "$status" -eq 2
+          test ! -s rejected.txt
+          if [ "$RUNNER_OS" = Linux ]; then
+            build -O1 -fsanitize=address,undefined -fno-sanitize-recover=all
+            ./replay.exe > /dev/null
+          fi
