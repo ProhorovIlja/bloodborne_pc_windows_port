@@ -1,0 +1,39 @@
+name: Native V472 mixed startup stores
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v472.*'
+      - '.github/workflows/native-v472-startup-stores.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v472.*'
+      - '.github/workflows/native-v472-startup-stores.yml'
+permissions:
+  contents: read
+jobs:
+  stores:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python startup_stores_v472.py
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -DTEST_V472 native_stores_v472.c -o stores.exe
+          ./stores.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -DTEST_V472 native_stores_v472.c -o stores-san
+            ./stores-san
+          fi
