@@ -68,7 +68,7 @@ def edge(raw,m):
     return 'unknown',None
 
 
-def walk(image,off,base,size,roots,pointers,decode):
+def walk(image,off,base,size,roots,pointers,decode,observe=None):
     if not 0<size<=128<<20 or not 0<=off<=len(image)-size or not 0<=base<=2**64-size:
         raise ValueError('invalid RX extent')
     if not roots or any(not base<=a<base+size for a in roots):
@@ -107,6 +107,8 @@ def walk(image,off,base,size,roots,pointers,decode):
             if m.startswith((b'j',b'ljmp',b'call',b'lcall',b'loop',b'xbegin',b'ret',b'iret',b'lret')):
                 kind,disp=edge(raw[:width],m)
                 n[kind]+=1
+                if observe is not None:
+                    observe(base+p,raw[:width],kind,None if disp is None else base+nxt+disp)
                 if disp is not None:
                     target=nxt+disp
                     if 0<=target<size:

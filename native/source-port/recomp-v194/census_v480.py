@@ -20,7 +20,7 @@ def require(ok, message):
         raise ValueError(message)
 
 
-def census(im, first_slot):
+def census(im, first_slot, *, evidence=None):
     h = EH.unpack_from(im)
     require(h[0][:7] == b'\x7fELF\x02\x01\x01' and h[1] in (0xfe00,0xfe01,0xfe04,0xfe10,0xfe18)
             and h[2:4] == (62,1) and h[8:10] == (EH.size, PH.size) and 0 < h[10] <= 256
@@ -64,6 +64,9 @@ def census(im, first_slot):
     require(0<dyn[5]<=262144 and not dyn[5]%16, 'invalid dynamic size')
     tags = {}
     keys = {12,13,0x61000029,0x6100002d,0x6100002f,0x61000031}
+    if evidence is not None:
+        keys.update((0x61000035,0x61000037,0x61000039,0x6100003f))
+    plt_order = {}
     for pos in range(dyn[2],dyn[2]+dyn[5],16):
         k,v = struct.unpack_from('<QQ',im,pos)
         if not k:
@@ -86,6 +89,8 @@ def census(im, first_slot):
             slot,info,value=struct.unpack_from('<QQq',im,pos)
             require(slot not in relocs, 'duplicate RELA slot')
             relocs[slot]=info,value
+            if a == 0x61000029:
+                plt_order[slot]=(pos-sce[2]-off)//24
     entry = {h[4], *(tags[t] for t in (12,13) if t in tags)}
     require(all(map(in_x,entry)), 'invalid entry points')
     # Check first-load provenance, not merely the presence of a sentinel.
@@ -110,6 +115,8 @@ def census(im, first_slot):
         raise ValueError('missing constructor sentinel')
     require(ctors, 'empty constructor list')
     pointers={v for info,v in relocs.values() if info==8 and in_x(v)}
+    if evidence is not None:
+        evidence.update(rx=x,rw=w,relocs=relocs,plt_order=plt_order,tags=tags,dynlib=sce)
     return dict(unwind=unwind, rx_relative=pointers, constructors=set(ctors), entry=entry), len(ctors)
 
 
