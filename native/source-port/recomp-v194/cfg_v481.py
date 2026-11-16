@@ -68,7 +68,8 @@ def edge(raw,m):
     return 'unknown',None
 
 
-def walk(image,off,base,size,roots,pointers,decode,observe=None):
+def walk(image,off,base,size,roots,pointers,decode,observe=None,*,noreturn_call=None):
+    """Only an independently verified direct call may suppress fallthrough."""
     if not 0<size<=128<<20 or not 0<=off<=len(image)-size or not 0<=base<=2**64-size:
         raise ValueError('invalid RX extent')
     if not roots or any(not base<=a<base+size for a in roots):
@@ -117,7 +118,9 @@ def walk(image,off,base,size,roots,pointers,decode,observe=None):
                             targets.add(base+target)
                     else:
                         n['out_of_rx']+=1
-                if kind in ('jump','indirect_jump','unknown'):
+                if (kind in ('jump','indirect_jump','unknown') or
+                        (kind == 'call' and noreturn_call is not None and
+                         noreturn_call(base+p,base+nxt+disp))):
                     break
             p=nxt
     observed=lambda a:base<=a<base+size and marks[a-base]==1

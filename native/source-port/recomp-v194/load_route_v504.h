@@ -3,7 +3,7 @@
 #define BB_LOAD_ROUTE_V504_H
 #include <stddef.h>
 #include <stdint.h>
-#include "routes_v487.inc"
+/* Requires the generated memory_routes table, already included by loads.c. */
 static inline int bb_load_matches_v504(uint64_t id,uint64_t body) {
     if(id==body)return 1;
     const size_t n=sizeof memory_routes/sizeof *memory_routes;

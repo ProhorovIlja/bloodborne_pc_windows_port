@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#include <stdint.h>
+#include "routes_v487.inc"
 #include "load_route_v504.h"
 int main(void) {
     return !bb_load_matches_v504(108,108) ||
