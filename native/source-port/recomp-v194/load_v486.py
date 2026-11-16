@@ -40,16 +40,19 @@ def emit(rows,out):
     for a,_,d,w,b,s in rows:
         p(f'{{UINT64_C({a}),UINT64_C({d % 2**64}),{w},{b},{int(s)}}},')
     p('};')
-    p('int bb_load_v486(uint64_t id,uint64_t rdi,const struct bb_region_v478 *r,uint64_t *out) {')
-    p(' size_t lo=0,hi=sizeof rows/sizeof rows[0]; if(!out||!r||r->size>UINT64_MAX-r->base)return 0;')
-    p(' while(lo<hi){size_t m=lo+(hi-lo)/2;if(rows[m].id<id)lo=m+1;else hi=m;}')
-    p(' if(lo==sizeof rows/sizeof rows[0]||rows[lo].id!=id)return 0;')
+    p('static int load_row_v486(size_t lo,uint64_t rdi,const struct bb_region_v478 *r,uint64_t *out) {')
+    p(' if(lo>=sizeof rows/sizeof rows[0]||!out||!r||r->size>UINT64_MAX-r->base)return 0;')
     p(' unsigned n=rows[lo].width; const unsigned char *b=bb_memory_at_v478(r,rdi+rows[lo].disp,n);')
     p(' if(!b)return 0;')
     p(' uint64_t x=0;')
     p(' for(unsigned i=0;i<n;++i)x|=(uint64_t)b[i]<<(8*i);')
     p(' if(rows[lo].sign){uint64_t s=UINT64_C(1)<<(n*8-1);x=(x^s)-s;}')
     p(' *out=rows[lo].bits==32?(uint32_t)x:x;return 1;}')
+    p('int bb_load_v486(uint64_t id,uint64_t rdi,const struct bb_region_v478 *r,uint64_t *out) {')
+    p(' size_t lo=0,hi=sizeof rows/sizeof rows[0];')
+    p(' while(lo<hi){size_t m=lo+(hi-lo)/2;if(rows[m].id<id)lo=m+1;else hi=m;}')
+    p(' if(lo==sizeof rows/sizeof rows[0]||rows[lo].id!=id)return 0;')
+    p(' return load_row_v486(lo,rdi,r,out);}')
 
 
 def main():

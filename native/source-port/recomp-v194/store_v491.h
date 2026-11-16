@@ -6,13 +6,8 @@
 struct bb_store_input_v491 { uint64_t rdi,rsi,rdx,rcx; };
 struct store_v491 { uint64_t id,disp,value; unsigned width,source; };
 enum { BB_STORE_MISS_V491, BB_STORE_OK_V491, BB_STORE_DENIED_V491 };
-static inline int store_dispatch_v491(const struct store_v491 *rows,size_t count,
-        uint64_t id,const struct bb_store_input_v491 *in,unsigned char *mem,uint64_t base,size_t size) {
-    if(!in) return BB_STORE_MISS_V491;
-    size_t lo=0,hi=count;
-    while(lo<hi) { size_t m=lo+(hi-lo)/2; if(rows[m].id<id) lo=m+1; else hi=m; }
-    if(lo==count||rows[lo].id!=id) return BB_STORE_MISS_V491;
-    const struct store_v491 *r=rows+lo;
+static inline int store_row_v491(const struct store_v491 *r,
+        const struct bb_store_input_v491 *in,unsigned char *mem,uint64_t base,size_t size) {
     uint64_t addr=in->rdi+r->disp;
     if(!mem||size>UINT64_MAX-base||addr<base||r->width>size||addr-base>size-r->width||
        (r->width!=1&&r->width!=2&&r->width!=4&&r->width!=8)) return BB_STORE_DENIED_V491;
@@ -27,6 +22,14 @@ static inline int store_dispatch_v491(const struct store_v491 *rows,size_t count
     }
     for(unsigned i=0;i<r->width;++i) mem[addr-base+i]=(unsigned char)(v>>(8*i));
     return BB_STORE_OK_V491;
+}
+static inline int store_dispatch_v491(const struct store_v491 *rows,size_t count,
+        uint64_t id,const struct bb_store_input_v491 *in,unsigned char *mem,uint64_t base,size_t size) {
+    if(!in) return BB_STORE_MISS_V491;
+    size_t lo=0,hi=count;
+    while(lo<hi) { size_t m=lo+(hi-lo)/2; if(rows[m].id<id) lo=m+1; else hi=m; }
+    if(lo==count||rows[lo].id!=id) return BB_STORE_MISS_V491;
+    return store_row_v491(rows+lo,in,mem,base,size);
 }
 int bb_store_v491(uint64_t,const struct bb_store_input_v491 *,unsigned char *,uint64_t,size_t);
 #endif

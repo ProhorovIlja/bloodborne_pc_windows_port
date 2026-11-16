@@ -1,0 +1,41 @@
+name: Native V493 indexed dispatch
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python test_v493.py
+          build() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture "$@" test_v493.c dispatch_v493.c -o indexed.exe
+          }
+          build -O2
+          ./indexed.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            build -g -fsanitize=address,undefined -fno-sanitize-recover=all
+            ./indexed.exe
+          fi
