@@ -38,11 +38,6 @@ static int key557(void *v,uint64_t cls,unsigned slot,uint64_t *word) {
     *word=words[slot];
     return 1;
 }
-static size_t grow557(void *v,size_t cap,size_t need) {
-    (void)v;
-    const size_t next=cap+cap/2;
-    return next<need?need:next;
-}
 static int secondary557(void) {
     struct fixture557 f={0};
     unsigned char h[40]={0},before[40],snapshot[512*16];
@@ -50,7 +45,7 @@ static int secondary557(void) {
     const uint64_t hva=UINT64_C(0x100010000);
     for (uint64_t cls=1;cls<=128;++cls) {
         const struct bb_vector_block_v541 old={f.buf[0],sizeof f.buf[0],va557(0)};
-        if (bb_secondary_insert_v557(h,sizeof h,hva,&old,cls,&f,key557,grow557,
+        if (bb_secondary_insert_v557(h,sizeof h,hva,&old,cls,&f,key557,
                 alloc557,release557)!=BB_SEC_OK) return 1;
     }
     if (f.allocs!=1 || f.frees || f.active!=1 || f.calls!=512 ||
@@ -60,12 +55,12 @@ static int secondary557(void) {
     for (unsigned mode=0;mode<3;++mode) {
         f.calls=0; f.fail_key=mode==0?3u:0u;
         f.fail_alloc=(mode==1); f.fail_release=(mode==2);
-        if (bb_secondary_insert_v557(h,sizeof h,hva,&old,129,&f,key557,grow557,
+        if (bb_secondary_insert_v557(h,sizeof h,hva,&old,129,&f,key557,
                 alloc557,release557)!=BB_SEC_STOP || memcmp(before,h,sizeof h) ||
                 memcmp(snapshot,f.buf[0],sizeof snapshot) || f.active!=1) return 3;
     }
     f.calls=0; f.fail_release=0;
-    if (bb_secondary_insert_v557(h,sizeof h,hva,&old,129,&f,key557,grow557,
+    if (bb_secondary_insert_v557(h,sizeof h,hva,&old,129,&f,key557,
             alloc557,release557)!=BB_SEC_OK || f.active!=2 || f.calls!=4 ||
             bb_vector_word_v541(h+8)!=va557(1) ||
             bb_vector_word_v541(h+16)!=va557(1)+516*16 ||
@@ -81,7 +76,7 @@ static int secondary557(void) {
     for (unsigned cls=1;cls<=129;++cls)
         if (counts[cls][0]!=1 || counts[cls][1]!=1 || counts[cls][2]!=2) return 6;
     h[16]|=1u; f.calls=0;
-    if (bb_secondary_insert_v557(h,sizeof h,hva,NULL,130,&f,key557,grow557,
+    if (bb_secondary_insert_v557(h,sizeof h,hva,NULL,130,&f,key557,
             alloc557,release557)!=BB_SEC_INVALID || f.calls) return 7;
     return 0;
 }
@@ -105,7 +100,7 @@ static int tables557(void) {
     const struct bb_vector_block_v541 old={f.buf[0],sizeof f.buf[0],va557(0)};
     for (uint64_t cls=1;cls<=2;++cls)
         if (bb_secondary_insert_v557(secondary,sizeof secondary,hs,&old,cls,&f,key557,
-                grow557,alloc557,release557)!=BB_SEC_OK) return 2;
+                alloc557,release557)!=BB_SEC_OK) return 2;
     static const uint64_t keys[]={UINT64_MAX,UINT64_MAX,0,0,7,7,7,7};
     static const uint64_t classes[]={1,2,1,2,1,1,2,2};
     for (size_t i=0;i<8;++i)
@@ -116,6 +111,9 @@ static int tables557(void) {
 }
 
 int main(void) {
+    if (bb_secondary_slots_v559(0)!=1 || bb_secondary_slots_v559(1)!=2 ||
+            bb_secondary_slots_v559(511)!=766 || bb_secondary_slots_v559(512)!=768 ||
+            bb_secondary_slots_v559(768)!=1152 || bb_secondary_slots_v559(SIZE_MAX/16)) return 29;
     const int both=tables557();
     if (both) return 20+both;
     const int sec=secondary557();
