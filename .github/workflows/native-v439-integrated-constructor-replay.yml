@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'native/source-port/recomp-v194/*v43[56789]*'
+      - 'native/source-port/recomp-v194/native_crt_checked_boot_v448.h'
+      - 'native/source-port/recomp-v194/native_crt_lifecycle_v409.h'
       - 'native/source-port/recomp-v194/native_generated_memory_v390.*'
       - '.github/workflows/native-v439-integrated-constructor-replay.yml'
   push:
