@@ -5,6 +5,7 @@
 #include "native_direct_memory_host_v411.h"
 #include "mutex_host_v523.h"
 #include "init_walk_v520.h"
+#include "unlock_v531.h"
 #include <stdio.h>
 
 enum { OBJ=128, BITMAP=40, MAP_FIELDS=1128 };
@@ -21,6 +22,7 @@ struct fixture {
     struct bb_singleton_memory_v526 map;
     enum bb_arena_status_v528 status;
     unsigned locked, unlocked, inits, rejected;
+    int deny_unlock;
 };
 static int make_mutex(struct bb_mutex_slot_v523 *s,uint64_t addr) {
     struct bb_mutex_result_v522 r=bb_mutex_host_v523(s,addr);
@@ -38,13 +40,27 @@ static int guard(void *x,enum bb_hook_v521 op,uint64_t addr,uint32_t *r) {
     }
     return 0;
 }
+static int unlock_pred(void *x,uint64_t addr,uint32_t *rc) {
+    struct fixture *s=x;
+    if (addr+8!=s->outer.key) return 0;
+    *rc=s->rw[48]; return 1;
+}
+static int unlock_call(void *x,uint64_t addr,uint32_t *rc) {
+    struct fixture *s=x;
+    if (addr!=s->outer.key) return 0;
+    if (s->deny_unlock) { *rc=UINT32_C(0x80020001); return 1; }
+    if (pthread_mutex_unlock(&s->outer.mutex)) return 0;
+    *rc=0; return 1;
+}
 static int sync_mutex(void *x,uint64_t id,uint64_t addr,uint32_t timeout) {
     struct fixture *s=x;
     if (addr+8!=s->outer.key) return 0;
     if (id==11 && timeout==UINT32_MAX && !pthread_mutex_lock(&s->outer.mutex)) {
         ++s->locked; return 1;
     }
-    if (id==12 && !timeout && !pthread_mutex_unlock(&s->outer.mutex)) {
+    if (id==12 && !timeout) {
+        struct bb_unlock_verified_v532 r=bb_unlock_verify_v532(addr,unlock_pred,unlock_call,s);
+        if (r.retail.status!=BB_UNLOCK_RETURN || !r.released) return 0;
         ++s->unlocked; return 1;
     }
     return 0;
@@ -132,6 +148,20 @@ int main(void) {
         const int result=check(mode);
         if (result) return (int)(10*mode)+result;
     }
-    puts("V529_STARTUP_JOIN_PASS");
+    /* Inject Orbis EPERM without unlocking: prove the bridge cannot report
+     * success just because the retail wrapper returns normally. */
+    struct fixture s={0};
+    if (!make_mutex(&s.outer,base+40)) return 31;
+    s.rw[48]=1; s.deny_unlock=1;
+    if (!sync_mutex(&s,11,base+32,UINT32_MAX) || sync_mutex(&s,12,base+32,0) ||
+        s.unlocked) return 32;
+    pthread_t t;
+    void *result=NULL;
+    if (pthread_create(&t,NULL,check_unlocked,&s) || pthread_join(t,&result) || result) return 33;
+    s.deny_unlock=0;
+    if (!sync_mutex(&s,12,base+32,0) || s.unlocked!=1 ||
+        pthread_create(&t,NULL,check_unlocked,&s) || pthread_join(t,&result) ||
+        result!=&s || pthread_mutex_destroy(&s.outer.mutex)) return 34;
+    puts("V532_STARTUP_JOIN_PASS");
     return 0;
 }
