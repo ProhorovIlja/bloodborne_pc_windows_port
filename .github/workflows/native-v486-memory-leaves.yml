@@ -1,0 +1,35 @@
+name: Native V486 memory leaves
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v486*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v486-memory-leaves.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v486*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v486-memory-leaves.yml']
+permissions:
+  contents: read
+jobs:
+  fixture:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python test_load_v486.py
+          clang -O2 -std=c11 -Wall -Wextra -Werror fixture_v486.c -o fixture.exe
+          ./fixture.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -g -fsanitize=address,undefined -fno-sanitize-recover=all fixture_v486.c -o fixture-san
+            ./fixture-san
+          fi
