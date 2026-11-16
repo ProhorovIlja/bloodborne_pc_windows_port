@@ -45,6 +45,16 @@ jobs:
             ./parity.exe
           }
           parity -O2
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture probe_dispatch_v495.c dispatch_v492.c -o all-routes.exe
+          ./all-routes.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            printf '{"metadata_start_generation":{"done":14}}\n' > v487-fixture/progress.json
+            # Copy the fixture out of Git to exercise the same owner-local gate.
+            private_fixture="$(mktemp -d)"
+            trap 'rm -rf -- "$private_fixture"' EXIT
+            cp v487-fixture/{native.c,loads.c,alu.c,stores.c,routes_v487.inc,index_v493.inc,progress.json} "$private_fixture/"
+            python probe_private_dispatch_v495.py "$private_fixture"
+          fi
           if [ "$RUNNER_OS" = Linux ]; then
             parity -g -fsanitize=address,undefined -fno-sanitize-recover=all
           fi
