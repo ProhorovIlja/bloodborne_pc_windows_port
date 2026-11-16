@@ -4,7 +4,7 @@
 struct state { unsigned char *rw; unsigned seen; int fail; };
 static int hook(void *p, enum bb_hook_v521 k, uint64_t a, uint32_t *r) {
     struct state *s=p;
-    if (k!=s->seen++ || (k<2 ? a!=103 : a!=(k==2?112:120))) return 0;
+    if ((unsigned)k!=s->seen++ || (k<2 ? a!=103 : a!=(k==2?112:120))) return 0;
     if ((int)k==s->fail) return 0;
     if (k==BB_RELEASE_V521) s->rw[2]=1;
     *r=k==BB_ACQUIRE_V521 ? 256u : k==BB_TEST_V521 ? 256u : 0;
