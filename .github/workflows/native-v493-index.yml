@@ -50,6 +50,10 @@ jobs:
           ./guard521.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_mutex_init_v522.c -o mutex522.exe
           ./mutex522.exe
+          if [ "$RUNNER_OS" != Windows ]; then
+            clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_mutex_host_v523.c -o mutex523
+            ./mutex523
+          fi
           python test_v497.py
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
           ./load-route.exe
