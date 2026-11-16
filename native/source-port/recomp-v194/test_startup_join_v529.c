@@ -5,6 +5,7 @@
 #include "native_direct_memory_host_v411.h"
 #include "mutex_host_v523.h"
 #include "init_walk_v520.h"
+#include "prefix_v534.h"
 #include "unlock_v531.h"
 #include <stdio.h>
 
@@ -15,7 +16,8 @@ static const struct bb_ctor_route_v524 route={
 };
 static const struct bb_singleton_v525 singleton={0,OBJ,8,16,11,12};
 struct fixture {
-    unsigned char rw[OBJ+1200];
+    unsigned char rw[OBJ+1200], leaf_rw[64];
+    unsigned leaves;
     struct bb_mutex_slot_v523 outer, inner;
     ShytDmPool pool;
     ShytDmBackend backend;
@@ -83,13 +85,9 @@ static int init_arena(void *x,uint64_t obj) {
 }
 static int read_slot(void *x,size_t off,uint64_t *v) {
     (void)x;
-    switch (off) {
-    case 32: *v=0; break;
-    case 24: *v=1; break;
-    case 16: *v=2; break;
-    case 8: *v=3; break;
-    default: return 0;
-    }
+    if (off==728) *v=0;
+    else if (off>=8 && off<=720 && off%8==0) *v=(720-off)/8+1;
+    else return 0;
     return 1;
 }
 static int invoke(void *x,uint64_t target) {
@@ -98,6 +96,14 @@ static int invoke(void *x,uint64_t target) {
         if (!make_mutex(&s->outer,base+40)) return 0;
         s->rw[24]=s->rw[25]=s->rw[48]=1;
         bb_arena_store_v527(s->rw+32,19);
+        return 1;
+    }
+    if (target>=3 && target<=89) {
+        const size_t i=(size_t)((target-3)%3);
+        const struct bb_leaf_v534 leaf={8+16*i,16+16*i,64+16*i};
+        if (s->leaves!=target-3 || s->unlocked!=1 ||
+            bb_leaves_v534(s->leaf_rw,sizeof s->leaf_rw,base,&leaf,1)!=1) return 0;
+        ++s->leaves;
         return 1;
     }
     if (target!=2) return 0;
@@ -122,12 +128,16 @@ static int check(unsigned mode) {
     bb_arena_store_v527(s.rw+16,12);
     s.backend=(ShytDmBackend){&s,mode==1?reject:shyt_dm_cpu_map,shyt_dm_cpu_unmap};
     if (!shyt_dm_init(&s.pool,mode==2?align:bytes+align)) return 1;
-    struct bb_init_result_v520 r=bb_init_walk_v520(&s,read_slot,invoke,0,0,32,24,8);
-    if (r.status!=BB_INIT_MISS_V520 || r.calls!=(mode?1u:2u) ||
-        r.slot!=(mode?16u:8u) || s.locked!=1 || s.unlocked!=1 || s.inits!=1 || s.rw[57]!=2) return 2;
+    struct bb_init_result_v520 r=bb_init_walk_v520(&s,read_slot,invoke,0,0,728,720,8);
+    if (r.status!=BB_INIT_MISS_V520 || r.calls!=(mode?1u:89u) || s.leaves!=(mode?0u:87u) ||
+        r.slot!=(mode?712u:8u) || s.locked!=1 || s.unlocked!=1 || s.inits!=1 || s.rw[57]!=2) return 2;
     pthread_t t;
     void *result=NULL;
     if (pthread_create(&t,NULL,check_unlocked,&s) || pthread_join(t,&result) || result!=&s) return 3;
+    for (size_t i=0;i<3;++i) {
+        if (bb_read64_v524(s.leaf_rw+8+16*i)!=(mode?0u:1u) ||
+            bb_read64_v524(s.leaf_rw+16+16*i)!=(mode?0:base+64+16*i)) return 7;
+    }
     if (mode) {
         if (s.pool.count || s.map.storage || bb_read64_v524(s.rw) ||
             s.rejected!=(mode==1?1u:0u) ||
@@ -183,6 +193,11 @@ int main(void) {
     if (pthread_mutex_unlock(&f.outer.mutex) ||
         shyt_dm_release(&f.pool,f.map.offset,bytes)!=SHYT_DM_OK ||
         pthread_mutex_destroy(&f.inner.mutex) || pthread_mutex_destroy(&f.outer.mutex)) return 38;
-    puts("V533_STARTUP_JOIN_PASS");
+    unsigned char data[64]={0};
+    const struct bb_leaf_v534 cases[]={{8,16,32},{24,26,48},{40,48,64}};
+    if (bb_leaves_v534(data,sizeof data,base,cases,3)!=1 ||
+        bb_read64_v524(data+8)!=1 || bb_read64_v524(data+16)!=base+32 ||
+        bb_read64_v524(data+24) || bb_read64_v524(data+40)) return 39;
+    puts("V534_STARTUP_PREFIX_PASS");
     return 0;
 }
