@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Offline build of the unified register/load dispatch, including exact tail aliases."""
 from alu_v488 import find as find_alu, emit as emit_alu, with_tail_aliases
+from progress_v490 import inventory, shared_bodies
 from graph_v485 import graph, emit as emit_graph
 from load_v486 import find, emit as emit_loads
 
@@ -46,6 +47,7 @@ def emit_routes(routes, out):
 def main():
     import argparse
     import hashlib
+    import json
     import mmap
     from pathlib import Path
     import struct
@@ -76,12 +78,17 @@ def main():
             excluded=regs.keys()|routes.keys()
             leaves=list(find_alu(im,x,roots,excluded))
             alu=with_tail_aliases(im,x,roots,leaves,excluded)
+        report=inventory(roots, {'register':regs,'memory':routes,'alu':(a for a,*_ in alu)},
+                         e['constructor_sequence'])
+        report['alu_native_bodies']=len(shared_bodies(alu)[0])
         if not alu:
             raise ValueError('no ALU functions')
         dst.mkdir(mode=0o700)
         for name,emit,rows in (('native.c',emit_graph,regs),('loads.c',emit_loads,loads),('routes_v487.inc',emit_routes,routes),('alu.c',emit_alu,alu)):
             with (dst/name).open('x',encoding='ascii') as f:
                 emit(rows,f)
+        (dst/'progress.json').write_text(json.dumps(report,sort_keys=True,indent=2)+'\n',encoding='ascii')
+        print(json.dumps(report,sort_keys=True))
         print(f'alu_leaves={len(leaves)} alu_aliases={len(alu)-len(leaves)} register_ids={len(regs)} memory_ids={len(loads)} memory_aliases={len(routes)-len(loads)}')
     except (OSError,ValueError,struct.error,KeyError):
         print('V488 refused: input, output or provenance error',file=sys.stderr)

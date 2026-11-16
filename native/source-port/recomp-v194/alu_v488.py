@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Offline lowering of bounded, straight-line RAX/flags functions."""
+from progress_v490 import shared_bodies
+
 REG = {0:'a',1:'c',2:'d',6:'s',7:'i'}
 OPS = {0:'ADD',1:'OR',4:'AND',5:'SUB',6:'XOR',7:'CMP'}
 
@@ -134,12 +136,13 @@ def emit(rows,out):
     p=lambda s:print(s,file=out)
     p('#include "alu_v488.h"')
     sig='uint64_t a,uint64_t c,uint64_t d,uint64_t s,uint64_t i,uint64_t flags'
-    for j,(_,_,lines) in enumerate(rows):
+    bodies,ids=shared_bodies(rows)
+    for lines,j in bodies.items():
         p(f'static struct bb_result_v484 f{j}({sig}){{')
         p('uint64_t mask=0x8d5; (void)c;(void)d;(void)s;(void)i;')
         p(''.join(lines)+'return (struct bb_result_v484){a,flags,mask};}')
     p('static const struct {uint64_t id; struct bb_result_v484 (*fn)('+sig+');} rows[]={')
-    for j,(a,*_) in enumerate(rows):
+    for a,j in ids.items():
         p(f'{{UINT64_C({a}),f{j}}},')
     p('};')
     p('int bb_alu_call_v488(uint64_t id,'+sig+',struct bb_result_v484 *out){')

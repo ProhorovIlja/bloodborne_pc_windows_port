@@ -116,7 +116,7 @@ def census(im, first_slot, *, evidence=None):
     require(ctors, 'empty constructor list')
     pointers={v for info,v in relocs.values() if info==8 and in_x(v)}
     if evidence is not None:
-        evidence.update(rx=x,rw=w,relocs=relocs,plt_order=plt_order,tags=tags,dynlib=sce)
+        evidence.update(rx=x,rw=w,relocs=relocs,plt_order=plt_order,tags=tags,dynlib=sce,constructor_sequence=tuple(ctors))
     return dict(unwind=unwind, rx_relative=pointers, constructors=set(ctors), entry=entry), len(ctors)
 
 

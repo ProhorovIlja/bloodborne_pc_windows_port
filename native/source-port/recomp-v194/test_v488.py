@@ -2,6 +2,7 @@
 from pathlib import Path
 from alu_v488 import decode, emit, find, with_tail_aliases
 from prepare_v488 import prepare
+from progress_v490 import shared_bodies
 from test_v487 import p
 
 ops=['4883c001c3','83e8ffc3','4821f8c3','4839f8c3','8d4477ffc3',
@@ -27,6 +28,8 @@ for addr,branch in ((144,'e98bffffff'),(160,'ebee'),(176,'ebfe'),(192,'e95cfffff
 all_ids=ids+[144,160,176,192]
 rows=with_tail_aliases(image,x,all_ids,rows,g.keys()|t.keys())
 assert [a for a,*_ in rows]==ids[2:]+[144,160]
+bodies,body_ids=shared_bodies(rows)
+assert len(bodies)==7 and body_ids[144]==body_ids[160]==body_ids[32]
 chain=bytes.fromhex('eb00')*10+bytes.fromhex('4883c001c3')
 chain_x=(1,5,0,0,0,len(chain),len(chain),1)
 base=list(find(chain,chain_x,range(0,21,2),set()))

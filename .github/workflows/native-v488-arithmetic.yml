@@ -1,10 +1,13 @@
 name: Native V488 straight-line AOT
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/progress_v490.py', 'native/source-port/recomp-v194/test_progress_v490.py', 'native/source-port/recomp-v194/census_v480.py', '.github/workflows/native-v488-arithmetic.yml']
   pull_request:
-    paths: ['native/source-port/recomp-v194/census_v480.py', 'native/source-port/recomp-v194/startup_memory_v478.h', 'native/source-port/recomp-v194/*v48*', '.github/workflows/native-v488-arithmetic.yml']
+    paths: ['native/source-port/recomp-v194/*v490.py', 'native/source-port/recomp-v194/census_v480.py', 'native/source-port/recomp-v194/startup_memory_v478.h', 'native/source-port/recomp-v194/*v48*', '.github/workflows/native-v488-arithmetic.yml']
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 permissions:
   contents: read
@@ -29,6 +32,7 @@ jobs:
         working-directory: native/source-port/recomp-v194
         run: |
           set -euo pipefail
+          python -m unittest -v test_progress_v490 test_census_v480
           python test_v488.py
           build() {
             clang -std=c11 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture -DBB_ENABLE_V488 "$@" dispatch_v487.c v487-fixture/native.c v487-fixture/loads.c v487-fixture/alu.c -o fixture.exe
