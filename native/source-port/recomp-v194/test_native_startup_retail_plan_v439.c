@@ -5,7 +5,7 @@
 #define CHECK(x) do { if(!(x)){fprintf(stderr,"V438_FAIL %d\n",__LINE__);abort();} }while(0)
 static ShytNativeOsVmV388 vm;
 static ShytStartupDispatchV435 state;
-static ShytBoundCallV435 bound[4];
+static ShytBoundCallV435 bound[5];
 static unsigned calls,mode;
 static void leaf(BbCpu *cpu) {
     uint64_t ret=0;
@@ -21,16 +21,31 @@ static void ctor(BbCpu *cpu) {
     if(mode==1)CHECK(shyt_generated_try_store_v390(0x4018,8,99));
     if(mode==2)cpu->r[4]-=8;
 }
-static const RcFunction registry[]={{.offset=11,.fn=ctor},{.offset=21,.fn=leaf}};
-static const ShytScopedCallV435 routes[]={{1,{21,12}},{2,{21,12}},{7,{21,12}},{9,{21,12}}};
+static void generated_main(BbCpu *cpu) {
+    uint64_t str=0,value=99;
+    CHECK(cpu->rip==31 && cpu->r[4]==0x4018);
+    CHECK(cpu->r[7]==1 && cpu->r[6]==0x5000 && !cpu->r[2]);
+    CHECK(shyt_generated_try_load_v390(0x5000,8,&str) && str==0x5010);
+    CHECK(shyt_generated_try_load_v390(0x5008,8,&value) && !value);
+    CHECK(shyt_generated_try_load_v390(str,1,&value) && value=='b');
+    CHECK(shyt_generated_try_load_v390(str+1,1,&value) && !value);
+    shyt_startup_rcapi_call_v436(cpu,21,32);
+    CHECK(cpu->rip==32);
+    cpu->r[0]=UINT64_C(0x12345678fffffffd);
+    leaf(cpu);
+}
+static const RcFunction registry[]={{.offset=11,.fn=ctor},{.offset=21,.fn=leaf},
+    {.offset=31,.fn=generated_main}};
+static const ShytScopedCallV435 routes[]={{1,{21,12}},{2,{21,12}},{7,{21,12}},
+    {9,{21,12}},{SHYT_STARTUP_MAIN_SCOPE_V449,{21,32}}};
 static void reset(BbCpu *cpu) {
     *cpu=(BbCpu){0}; cpu->r[4]=0x4020;
     state=(ShytStartupDispatchV435){0};
     CHECK(shyt_startup_dispatch_init_v435(&state,&vm,cpu,0x4000,0x4020,
-        routes,4,registry,2,bound,4));
+        routes,5,registry,3,bound,5));
 }
 static int run(unsigned ordinal,uint64_t sentinel,int *why) {
-    return shyt_startup_entry_v438(&state,ordinal,registry,2,11,sentinel,why);
+    return shyt_startup_entry_v438(&state,ordinal,registry,3,11,sentinel,why);
 }
 static int post(BbCpu *cpu,uint32_t ordinal,uint64_t id,void *context) {
     unsigned *seen=context;
@@ -109,6 +124,7 @@ int main(void) {
     int why=-1;
     CHECK(shyt_native_os_vm_init_v388(&vm));
     CHECK(shyt_native_os_vm_add_v388(&vm,0x4000,4,SHYT_V386_READ|SHYT_V386_WRITE));
+    CHECK(shyt_native_os_vm_add_v388(&vm,0x5000,32,SHYT_V386_READ|SHYT_V386_WRITE));
     CHECK(shyt_native_os_vm_seal_v388(&vm));
     reset(&cpu);
     CHECK(run(7,21,&why)==SHYT_V393_DENIED && !why && !calls && !cpu.rip);
@@ -146,6 +162,18 @@ int main(void) {
     CHECK(calls==7 && seen==2 && !report.returned && report.reason==SHYT_V439_POSTCONDITION);
     CHECK(state.terminal && !shyt_generated_owner_v392() && !shyt_generated_recovery_depth_v393());
     test_boot(&cpu);
+    char arg[]="b";
+    char *argv[]={arg,NULL};
+    int32_t status=99;
+    reset(&cpu);
+    CHECK(shyt_startup_main_v449(&state,31,44,1,argv,0x5000,17,&status,&why)==SHYT_V393_RECOVERED);
+    CHECK(status==99 && why==SHYT_V449_BAD_MAIN_ARGS && state.terminal && !cpu.rip);
+    reset(&cpu);
+    CHECK(shyt_startup_main_v449(&state,31,44,1,argv,0x4000,18,&status,&why)==SHYT_V393_RECOVERED);
+    CHECK(status==99 && why==SHYT_V449_BAD_MAIN_ARGS && state.terminal && !cpu.rip);
+    reset(&cpu);
+    CHECK(shyt_startup_main_v449(&state,31,44,1,argv,0x5000,18,&status,&why)==SHYT_V393_COMPLETED);
+    CHECK(status==-3 && cpu.rip==44 && cpu.r[4]==0x4020 && !why);
     CHECK(shyt_native_os_vm_close_v388(&vm) && shyt_native_os_vm_release_v388(&vm,1));
     puts("NATIVE_V439_INTEGRATED_CONSTRUCTOR_REPLAY_PASS");
     return 0;
