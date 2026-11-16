@@ -1,0 +1,39 @@
+name: Native V470 startup copies
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v470.*'
+      - '.github/workflows/native-v470-startup-copy.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v470.*'
+      - '.github/workflows/native-v470-startup-copy.yml'
+permissions:
+  contents: read
+jobs:
+  copy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python scan_startup_copy_v470.py
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -DSTARTUP_COPY_V470_TEST native_startup_copy_v470.c -o copy.exe
+          ./copy.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -DSTARTUP_COPY_V470_TEST native_startup_copy_v470.c -o copy-san
+            ./copy-san
+          fi
