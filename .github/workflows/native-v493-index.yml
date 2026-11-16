@@ -2,9 +2,9 @@ name: Native V493 indexed dispatch
 on:
   push:
     branches: [feature/native-v462-startup-closure-20261116]
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v57*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
   pull_request:
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v57*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
@@ -103,6 +103,8 @@ jobs:
           ./copy565.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_guarded_publish_v569.c -o publish569.exe
           ./publish569.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_error_category_v570.c -o error570.exe
+          ./error570.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
