@@ -26,9 +26,17 @@ static int make_mutex(struct bb_mutex_slot_v523 *s,uint64_t addr) {
     struct bb_mutex_result_v522 r=bb_mutex_host_v523(s,addr);
     return r.status==BB_MUTEX_RETURN_V522 && !r.value;
 }
+static const size_t inner_guard=56;
 static int guard(void *x,enum bb_hook_v521 op,uint64_t addr,uint32_t *r) {
-    (void)x; (void)op; (void)addr; (void)r;
-    return 0; /* the first fixture constructor must have initialized the guard */
+    struct fixture *s=x;
+    if (addr!=base+inner_guard || s->locked!=1 || s->unlocked || s->inits) return 0;
+    if (op==BB_ACQUIRE_V521 && !s->rw[57]) {
+        s->rw[57]=1; *r=1; return 1;
+    }
+    if (op==BB_RELEASE_V521 && s->rw[57]==1) {
+        s->rw[57]=2; s->rw[inner_guard]=1; return 1;
+    }
+    return 0;
 }
 static int sync_mutex(void *x,uint64_t id,uint64_t addr,uint32_t timeout) {
     struct fixture *s=x;
@@ -77,8 +85,8 @@ static int invoke(void *x,uint64_t target) {
     }
     if (target!=2) return 0;
     uint64_t out=0;
-    return bb_singleton_get_v525(s->rw,sizeof s->rw,&route,&singleton,guard,
-        sync_mutex,init_arena,s,&out)==BB_SINGLETON_OK && out==base+OBJ;
+    return bb_singleton_guarded_v530(s->rw,sizeof s->rw,&route,&singleton,guard,
+        sync_mutex,init_arena,s,&out,&inner_guard)==BB_SINGLETON_OK && out==base+OBJ;
 }
 static void *reject(void *x,uint64_t off,uint64_t n,uint64_t a,int t,unsigned p) {
     struct fixture *s=x;
@@ -99,7 +107,7 @@ static int check(unsigned mode) {
     if (!shyt_dm_init(&s.pool,mode==2?align:bytes+align)) return 1;
     struct bb_init_result_v520 r=bb_init_walk_v520(&s,read_slot,invoke,0,0,32,24,8);
     if (r.status!=BB_INIT_MISS_V520 || r.calls!=(mode?1u:2u) ||
-        r.slot!=(mode?16u:8u) || s.locked!=1 || s.unlocked!=1 || s.inits!=1) return 2;
+        r.slot!=(mode?16u:8u) || s.locked!=1 || s.unlocked!=1 || s.inits!=1 || s.rw[57]!=2) return 2;
     pthread_t t;
     void *result=NULL;
     if (pthread_create(&t,NULL,check_unlocked,&s) || pthread_join(t,&result) || result!=&s) return 3;
@@ -112,8 +120,8 @@ static int check(unsigned mode) {
         if (s.status!=BB_ARENA_READY || s.pool.count!=1 || !s.map.storage ||
             s.map.offset || bb_read64_v524(s.rw+OBJ+MAP_FIELDS)!=arena ||
             bb_read64_v524(s.rw)!=base+OBJ ||
-            bb_singleton_get_v525(s.rw,sizeof s.rw,&route,&singleton,guard,
-                sync_mutex,init_arena,&s,&out)!=BB_SINGLETON_OK ||
+            bb_singleton_guarded_v530(s.rw,sizeof s.rw,&route,&singleton,guard,
+                sync_mutex,init_arena,&s,&out,&inner_guard)!=BB_SINGLETON_OK ||
             out!=base+OBJ || s.locked!=1 || s.inits!=1) return 5;
         if (shyt_dm_release(&s.pool,s.map.offset,bytes)!=SHYT_DM_OK || s.pool.count) return 6;
     }
