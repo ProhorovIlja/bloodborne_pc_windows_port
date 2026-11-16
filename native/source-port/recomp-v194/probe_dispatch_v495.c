@@ -49,7 +49,11 @@ static int compare(uint64_t id,uint64_t disp,unsigned tag,struct stats *st) {
             tag==1&&(!read||i>=12)?BB_READ_DENIED_V492:
             tag==3&&(!write||i>=12)?BB_WRITE_DENIED_V492:BB_OK_V492;
         if(s!=expected||t!=expected||x.rax!=y.rax||x.flags!=y.flags||
-           x.flags_valid!=y.flags_valid||memcmp(a,b,sizeof a)) return 0;
+           x.flags_valid!=y.flags_valid||memcmp(a,b,sizeof a)) {
+            fprintf(stderr,"V495 mismatch family=%u case=%u legacy=%d indexed=%d expected=%d\n",
+                    tag,i,(int)s,(int)t,(int)expected);
+            return 0;
+        }
         if(t!=BB_OK_V492&&(y.rax!=1||y.flags!=2||y.flags_valid!=3))return 0;
         /* Verify that neither dispatcher modified memory on a miss or a
          * non-store. Reproduce the initial bytes independently of both. */
@@ -71,7 +75,10 @@ static int compare(uint64_t id,uint64_t disp,unsigned tag,struct stats *st) {
 int main(void) {
     struct stats st={0,UINT64_C(14695981039346656037)};
     const size_t entries=COUNT(table)+COUNT(memory_routes)+COUNT(alu_rows_v493)+COUNT(stores);
-    if(entries!=COUNT(bb_ids_v493)||entries!=COUNT(bb_routes_v493))goto fail;
+    if(entries!=COUNT(bb_ids_v493)||entries!=COUNT(bb_routes_v493)) {
+        fputs("V495 family and index counts disagree\n",stderr);
+        goto fail;
+    }
     /* Walk independently emitted family tables, not the index under test.
      * Resolve memory alias targets using the legacy exact-ID relation. */
     for(size_t j=0;j<COUNT(table);++j)
@@ -80,8 +87,11 @@ int main(void) {
         size_t lo=0,hi=COUNT(load_rows_v493);
         const uint64_t t=memory_routes[j].target;
         while(lo<hi){size_t m=lo+(hi-lo)/2;if(load_rows_v493[m].id<t)lo=m+1;else hi=m;}
-        if(lo==COUNT(load_rows_v493)||load_rows_v493[lo].id!=t||
-           !compare(memory_routes[j].id,load_rows_v493[lo].disp,1,&st))goto fail;
+        if(lo==COUNT(load_rows_v493)||load_rows_v493[lo].id!=t) {
+            fputs("V495 memory route has no terminal row\n",stderr);
+            goto fail;
+        }
+        if(!compare(memory_routes[j].id,load_rows_v493[lo].disp,1,&st))goto fail;
     }
     for(size_t j=0;j<COUNT(alu_rows_v493);++j)
         if(!compare(alu_rows_v493[j].id,0,2,&st))goto fail;
