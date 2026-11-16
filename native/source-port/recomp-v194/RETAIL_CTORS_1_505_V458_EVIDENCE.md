@@ -1,0 +1,7 @@
+# V458 — consecutive native startup returns 1–505
+
+On hash-pinned CUSA03173 1.09, the private Linux x86-64 probe verified consecutive returns 1–505 in one process. The delta is eight original configuration constructors (264, 268, 278, 282, 289, 293, 297, 304) and 234 exact-pattern native registrations. The offline extractor checks the slots, instruction shapes, aligned source and destination spans and the vtable relocation for 297. The native runner seeds all configuration destinations with nonzero bytes and verifies all eight 48-byte copies against the original source data. The 297 vtable method remains a trap; only identity publication is checked. The ordered run still exercises the registry, allocator reuse and bounded empty-vector cleanup.
+
+Passed 100 fresh ordered runs each with optimized Clang and GCC, plus 10 with Clang ASan/UBSan on the C harness, not the assembly. A separate isolated batch verifies 12,045 exact-pattern registrations twice without asserting an ordered prefix. Wrong image rejected offline. The owner image is read only during the build; the run directory contains only a host executable, with no PS4 executable, loader, interpreter or JIT. No original bytes, offsets or binaries are published here.
+
+506 is the next unsupported constructor. Static inspection found a new singleton publication path and calls into registration and initialization routines; no 506 return claimed. No game main, title screen, gameplay or retail execution on Windows/macOS established.
