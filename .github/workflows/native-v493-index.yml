@@ -2,9 +2,9 @@ name: Native V493 indexed dispatch
 on:
   push:
     branches: [feature/native-v462-startup-closure-20261116]
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
   pull_request:
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
@@ -78,6 +78,8 @@ jobs:
           if [ "$RUNNER_OS" != Windows ]; then rwflags+=(-pthread); fi
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_factory_owner_v539.c -o factory539.exe
           ./factory539.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_owner_registry_v540.c -o registry540.exe
+          ./registry540.exe
           if [ "$RUNNER_OS" != Windows ]; then
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
             ./join529
