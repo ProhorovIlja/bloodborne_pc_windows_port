@@ -27,15 +27,64 @@ def thunk_target(buf, va):
     return None
 
 
+def guard_prefix(buf, va):
+    # lea guard(%rip), %rax; cmpb $0,(%rax); jne rel8/rel32
+    if len(buf)<12 or buf[:3]!=b'\x48\x8d\x05' or buf[7:10]!=b'\x80\x38\x00':
+        return None
+    if buf[10]==0x75:
+        end, start = 12,11
+    elif len(buf)>=16 and buf[10:12]==b'\x0f\x85':
+        end, start = 16,12
+    else:
+        return None
+    return (va+7+int.from_bytes(buf[3:7],'little',signed=True),
+            va+end+int.from_bytes(buf[start:end],'little',signed=True),end)
+
+
+def guarded_counts(b, unknown, plt_end, offset, writable):
+    guards = Counter()
+    sites = slots = ret_sites = set_then_ret = 0
+    for a,n in unknown.items():
+        if a>=plt_end:
+            continue
+        p = offset(a,16,1)
+        if p is None:
+            continue
+        result = guard_prefix(b[p:p+16],a)
+        if result is None:
+            continue
+        flag, branch, size = result
+        q = offset(flag,1,2)
+        r = offset(branch,1,1)
+        # BSS is initially zero even when the byte has no file offset.
+        if (not writable(flag) or (q is not None and b[q]!=0) or not a+size<branch<=a+256
+                or branch>=plt_end or r is None):
+            continue
+        guards[flag] += 1
+        if b[r]==0xc3:
+            ret_sites += 1
+            for suffix in (b'\xc6\x00\x01', b'\x48\xc7\x00\x01\x00\x00\x00'):
+                start = offset(branch-len(suffix),len(suffix)+1,1)
+                if branch-len(suffix)>=a+size and start is not None and b[start:r]==suffix:
+                    set_then_ret += 1
+                    break
+        sites += 1
+        slots += n
+    return dict(guard_prefix_targets=sites, guard_prefix_slots=slots,
+                guard_branch_ret_targets=ret_sites, guard_set_then_ret_targets=set_then_ret,
+                distinct_guard_bytes=len(guards), shared_guard_bytes=sum(n>1 for n in guards.values()))
+
+
 def triage(b):
     inventory = audit(b)
     phoff = struct.unpack_from('<Q', b, 32)[0]
     count = struct.unpack_from('<H', b, 56)[0]
-    loads, segments = [], {}
+    loads, segments, rw = [], {}, []
     for i in range(count):
-        t, f, o, v, _, n, _, _ = struct.unpack_from('<II6Q', b, phoff+56*i)
+        t, f, o, v, _, n, mem, _ = struct.unpack_from('<II6Q', b, phoff+56*i)
         segments[t] = o, v, n
         if t == 1:
+            if f&2: rw.append((v,v+mem))
             loads.append((v, v+n, o, f))
 
     def offset(va, size, flags=0):
@@ -118,7 +167,8 @@ def triage(b):
         p = offset(a,9,1)
         if p is not None and thunk_target(b[p:p+9],a) in anchors:
             thunks.add(a)
-    return dict(rx_nonanchor_slots=sum(unknown.values()), rx_nonanchor_targets=len(unknown),
+    return dict(**guarded_counts(b,unknown,plt_end,offset,lambda a: any(lo<=a<hi for lo,hi in rw)),
+                rx_nonanchor_slots=sum(unknown.values()), rx_nonanchor_targets=len(unknown),
                 verified_plt_stubs=len(jmp),
                 pre_plt_end_nonanchor_slots=sum(n for a,n in unknown.items() if a<plt_end),
                 pre_plt_end_nonanchor_targets=sum(a<plt_end for a in unknown),
