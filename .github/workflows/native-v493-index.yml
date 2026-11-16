@@ -31,6 +31,8 @@ jobs:
           set -euo pipefail
           python -m unittest -v test_index_v494 test_progress_v490 test_census_v480 test_import_closure_v499 test_bundle_v501
           python test_v497.py
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
+          ./load-route.exe
           build497() {
             clang -std=c11 -Wall -Wextra -Wpedantic -Werror -DBB_WITH_RIP_V497 -I. -Iv497-fixture "$@" test_v497.c dispatch_v493.c -o five.exe
             ./five.exe

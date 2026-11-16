@@ -19,6 +19,9 @@
 #include "rip.c"
 #endif
 #include "index_v493.inc"
+#include "load_route_v504.h"
+_Static_assert(sizeof bb_ids_v493/sizeof *bb_ids_v493 == sizeof bb_routes_v493/sizeof *bb_routes_v493,
+    "dispatch ID and route counts must agree");
 #ifdef BB_WITH_RIP_V497
 _Static_assert(BB_ROUTE_BITS_V493==3,"V497 requires a five-family generated index");
 enum bb_status_v492 bb_dispatch_v497(uint64_t id,const struct bb_input_v487 *in,
@@ -43,6 +46,8 @@ enum bb_status_v492 bb_dispatch_v493(uint64_t id,const struct bb_input_v487 *in,
         *out=table[k].fn(in->rax,in->rcx,in->rdx,in->rsi,in->rdi,in->flags);
         return BB_OK_V492;
     case 1: {
+        if(k>=sizeof load_rows_v493/sizeof *load_rows_v493 ||
+           !bb_load_matches_v504(id,load_rows_v493[k].id))return BB_MISS_V492;
         uint64_t value;
         if(!load_row_v486(k,in->rdi,read,&value))return BB_READ_DENIED_V492;
         *out=(struct bb_result_v484){value,in->flags,0x8d5};
