@@ -12,11 +12,11 @@
 struct bb_copy_entry_v565 { uint64_t rva; size_t first, count; };
 struct bb_copy_write_v565 { uint64_t dst; size_t constant; };
 enum bb_copy_result_v565 { BB_COPY_INVALID, BB_COPY_MISS, BB_COPY_OK };
-static inline enum bb_copy_result_v565 bb_copy_dispatch_v565(
+static inline enum bb_copy_result_v565 bb_copy_step_v568(
     const struct bb_copy_entry_v565 *entries, size_t ne,
     const struct bb_copy_write_v565 *writes, size_t nw,
     const unsigned char *constants, size_t nc,
-    uint64_t rva, unsigned char *data, uint64_t base, size_t size) {
+    uint64_t rva, unsigned char *data, uint64_t base, size_t size, int apply) {
     if (ne && !entries) return BB_COPY_INVALID;
     size_t lo=0, hi=ne;
     while (lo<hi) {
@@ -32,10 +32,39 @@ static inline enum bb_copy_result_v565 bb_copy_dispatch_v565(
         if ((w.dst&15) || w.dst<base || w.dst-base>size-16 || w.constant>=nc)
             return BB_COPY_INVALID;
     }
-    for (size_t i=0; i<n; ++i) {
+    if (apply) for (size_t i=0; i<n; ++i) {
         const struct bb_copy_write_v565 w=writes[first+i];
         memcpy(data+(size_t)(w.dst-base),constants+16*w.constant,16);
     }
+    return BB_COPY_OK;
+}
+static inline enum bb_copy_result_v565 bb_copy_dispatch_v565(
+    const struct bb_copy_entry_v565 *entries, size_t ne,
+    const struct bb_copy_write_v565 *writes, size_t nw,
+    const unsigned char *constants, size_t nc,
+    uint64_t rva, unsigned char *data, uint64_t base, size_t size) {
+    return bb_copy_step_v568(entries,ne,writes,nw,constants,nc,rva,data,base,size,1);
+}
+/* Strict ordered subchain. Caller attests omitted dependencies and owns all
+ * state exclusively. An invalid or missing row leaves the buffer untouched.
+ * stopped is a zero-based sequence offset, or n on success. */
+static inline enum bb_copy_result_v565 bb_copy_sequence_v568(
+    const struct bb_copy_entry_v565 *entries, size_t ne,
+    const struct bb_copy_write_v565 *writes, size_t nw,
+    const unsigned char *constants, size_t nc,
+    const uint64_t *order, size_t n, unsigned char *data, uint64_t base,
+    size_t size, size_t *stopped) {
+    if (!stopped) return BB_COPY_INVALID;
+    *stopped=0;
+    if (!order || !n) return BB_COPY_INVALID;
+    for (size_t i=0;i<n;++i) {
+        const enum bb_copy_result_v565 r=bb_copy_step_v568(entries,ne,writes,nw,
+            constants,nc,order[i],data,base,size,0);
+        if (r!=BB_COPY_OK) { *stopped=i; return r; }
+    }
+    for (size_t i=0;i<n;++i)
+        (void)bb_copy_step_v568(entries,ne,writes,nw,constants,nc,order[i],data,base,size,1);
+    *stopped=n;
     return BB_COPY_OK;
 }
 #endif
