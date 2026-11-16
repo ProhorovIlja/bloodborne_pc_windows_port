@@ -96,6 +96,38 @@ def find(im,x,roots,existing):
                 yield a,*r
 
 
+
+def with_tail_aliases(im, x, roots, leaves, excluded):
+    """Close only exact JMP edges; keep each alias linked to its terminal body."""
+    _,_,off,base,_,size,_,_=x
+    starts=sorted(set(roots))
+    routes={a:a for a,*_ in leaves}
+    if routes.keys() & excluded:
+        raise ValueError('overlapping dispatch families')
+    bodies={a:(raw,lines) for a,raw,lines in leaves}
+    pending={}
+    for a,b in zip(starts,starts[1:]+[base+size]):
+        if a in routes or a in excluded:
+            continue
+        p=off+a-base
+        raw=im[p:p+min(9,b-a)]
+        skip=4 if raw.startswith(b'\xf3\x0f\x1e\xfa') else 0
+        c=raw[skip:]
+        n={0xe9:5,0xeb:2}.get(c[0],0) if c else 0
+        if n and len(c)>=n:
+            pending[a]=(a+skip+n+int.from_bytes(c[1:n],'little',signed=True),raw[:skip+n])
+    aliases=[]
+    for _ in range(8):
+        wave=[(a,routes[t],raw) for a,(t,raw) in pending.items() if t in routes]
+        if not wave:
+            break
+        for a,terminal,raw in wave:
+            routes[a]=terminal
+            aliases.append((a,raw,bodies[terminal][1]))
+            del pending[a]
+    return sorted([*leaves,*aliases])
+
+
 def emit(rows,out):
     if not rows or any(a[0]>=b[0] for a,b in zip(rows,rows[1:])):
         raise ValueError('empty or unsorted output')

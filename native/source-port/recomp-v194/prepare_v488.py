@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Offline build of the unified register/load dispatch, including exact tail aliases."""
-from alu_v488 import find as find_alu, emit as emit_alu
+from alu_v488 import find as find_alu, emit as emit_alu, with_tail_aliases
 from graph_v485 import graph, emit as emit_graph
 from load_v486 import find, emit as emit_loads
 
@@ -73,14 +73,16 @@ def main():
                 raise ValueError
             roots=g['entry']|g['unwind']|g['constructors']
             regs,loads,routes=prepare(im,x,roots)
-            alu=list(find_alu(im,x,roots,regs.keys()|routes.keys()))
+            excluded=regs.keys()|routes.keys()
+            leaves=list(find_alu(im,x,roots,excluded))
+            alu=with_tail_aliases(im,x,roots,leaves,excluded)
         if not alu:
             raise ValueError('no ALU functions')
         dst.mkdir(mode=0o700)
         for name,emit,rows in (('native.c',emit_graph,regs),('loads.c',emit_loads,loads),('routes_v487.inc',emit_routes,routes),('alu.c',emit_alu,alu)):
             with (dst/name).open('x',encoding='ascii') as f:
                 emit(rows,f)
-        print(f'alu_ids={len(alu)} register_ids={len(regs)} memory_ids={len(loads)} memory_aliases={len(routes)-len(loads)}')
+        print(f'alu_leaves={len(leaves)} alu_aliases={len(alu)-len(leaves)} register_ids={len(regs)} memory_ids={len(loads)} memory_aliases={len(routes)-len(loads)}')
     except (OSError,ValueError,struct.error,KeyError):
         print('V488 refused: input, output or provenance error',file=sys.stderr)
         return 2

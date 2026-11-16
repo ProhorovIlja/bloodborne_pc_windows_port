@@ -18,6 +18,10 @@ int main(void) {
     if(bb_dispatch_v487(112,&in,0,&r)!=BB_OK_V487 || r.rax!=1 || r.flags_valid!=0x8d5) return 6;
     in.rax=1;
     if(bb_dispatch_v487(128,&in,0,&r)!=BB_OK_V487 || r.rax || (r.flags&r.flags_valid)!=0x55) return 7;
+    for(uint64_t id=144;id<=160;id+=16)
+        if(bb_dispatch_v487(id,&in,0,&r)!=BB_OK_V487 || r.rax!=2 || r.flags_valid!=0x8d5) return 9;
+    if(bb_dispatch_v487(176,&in,0,&r)!=BB_MISS_V487 ||
+       bb_dispatch_v487(192,&in,0,&r)!=BB_MISS_V487) return 10;
     r=(struct bb_result_v484){1,2,3};
     if(bb_dispatch_v487(33,&in,0,&r)!=BB_MISS_V487 || r.rax!=1 || r.flags!=2 || r.flags_valid!=3) return 8;
     return 0;

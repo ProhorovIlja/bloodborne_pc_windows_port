@@ -1,10 +1,11 @@
 name: Native V487 unified AOT dispatch
 on:
-  push:
-    branches: [feature/native-v462-startup-closure-20261116]
-    paths: ['native/source-port/recomp-v194/*v487*', 'native/source-port/recomp-v194/*v485*', 'native/source-port/recomp-v194/*v486*', 'native/source-port/recomp-v194/leaf_v48*', '.github/workflows/native-v487-unified-aot.yml']
+  workflow_dispatch:
   pull_request:
-    paths: ['native/source-port/recomp-v194/*v487*', 'native/source-port/recomp-v194/*v485*', 'native/source-port/recomp-v194/*v486*', 'native/source-port/recomp-v194/leaf_v48*', '.github/workflows/native-v487-unified-aot.yml']
+    paths: ['native/source-port/recomp-v194/census_v480.py', 'native/source-port/recomp-v194/startup_memory_v478.h', 'native/source-port/recomp-v194/*v487*', 'native/source-port/recomp-v194/*v485*', 'native/source-port/recomp-v194/*v486*', 'native/source-port/recomp-v194/leaf_v48*', '.github/workflows/native-v487-unified-aot.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -17,6 +18,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5

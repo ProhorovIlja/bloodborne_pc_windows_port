@@ -1,10 +1,11 @@
 name: Native V488 straight-line AOT
 on:
-  push:
-    branches: [feature/native-v462-startup-closure-20261116]
-    paths: ['native/source-port/recomp-v194/*v48*', '.github/workflows/native-v488-arithmetic.yml']
+  workflow_dispatch:
   pull_request:
-    paths: ['native/source-port/recomp-v194/*v48*', '.github/workflows/native-v488-arithmetic.yml']
+    paths: ['native/source-port/recomp-v194/census_v480.py', 'native/source-port/recomp-v194/startup_memory_v478.h', 'native/source-port/recomp-v194/*v48*', '.github/workflows/native-v488-arithmetic.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -17,6 +18,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -38,3 +41,7 @@ jobs:
               ./fixture.exe
             fi
           done
+          if [ "$RUNNER_OS" != macOS ]; then
+            clang -mno-red-zone -O2 -std=c11 -Wall -Wextra -Wpedantic -Werror test_alu_reference_v489.c -o arithmetic.exe
+            ./arithmetic.exe
+          fi
