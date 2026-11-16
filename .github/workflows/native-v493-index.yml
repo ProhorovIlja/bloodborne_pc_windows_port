@@ -54,6 +54,8 @@ jobs:
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_mutex_host_v523.c -o mutex523
             ./mutex523
           fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_ctor_route_v524.c -o ctor524.exe
+          ./ctor524.exe
           python test_v497.py
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
           ./load-route.exe
