@@ -31,13 +31,15 @@ def emit(rows,out):
             raise ValueError('out-of-range ID or target')
         p(f'{{UINT64_C({a}),UINT64_C({t})}},')
     p('};')
+    p('static enum bb_rip_status_v496 rip_row_v496(size_t k,uint64_t slide,uint64_t flags,struct bb_result_v484 *out) {')
+    p(' const uint64_t t=rip_rows_v496[k].target;')
+    p(' if(!out||slide>UINT64_MAX-t)return BB_RIP_DENIED_V496;')
+    p(' *out=(struct bb_result_v484){t+slide,flags,0x8d5};return BB_RIP_OK_V496;}')
     p('enum bb_rip_status_v496 bb_rip_v496(uint64_t id,uint64_t slide,uint64_t flags,struct bb_result_v484 *out) {')
     p(' size_t lo=0,n=sizeof rip_rows_v496/sizeof *rip_rows_v496,hi=n;')
     p(' while(lo<hi){size_t m=lo+(hi-lo)/2;if(rip_rows_v496[m].id<id)lo=m+1;else hi=m;}')
     p(' if(lo==n||rip_rows_v496[lo].id!=id)return BB_RIP_MISS_V496;')
-    p(' const uint64_t t=rip_rows_v496[lo].target;')
-    p(' if(!out||slide>UINT64_MAX-t)return BB_RIP_DENIED_V496;')
-    p(' *out=(struct bb_result_v484){t+slide,flags,0x8d5};return BB_RIP_OK_V496;}')
+    p(' return rip_row_v496(lo,slide,flags,out);}')
 
 
 def main():

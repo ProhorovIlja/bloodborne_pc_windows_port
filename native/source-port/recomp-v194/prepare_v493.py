@@ -2,6 +2,7 @@
 """Offline, owner-local build input for unified V492 dispatch."""
 from alu_v488 import find as find_alu, emit as emit_original_alu, with_tail_aliases
 from index_v493 import emit_index
+from rip_v496 import find as find_rip, emit as emit_rip
 from io import StringIO
 import re
 
@@ -68,6 +69,7 @@ def main():
     p.add_argument('--sha256',required=True)
     p.add_argument('--first-load-slot',type=lambda s:int(s,0),required=True)
     p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--with-rip',action='store_true',help='emit the V497 five-family index')
     a=p.parse_args()
     try:
         dst=a.output.absolute()
@@ -89,8 +91,13 @@ def main():
             leaves=list(find_alu(im,x,roots,excluded))
             alu=with_tail_aliases(im,x,roots,leaves,excluded)
             stores=list(find_stores(im,x,roots))
-        report=inventory(roots, {'register':regs,'memory':routes,'alu':(a for a,*_ in alu),'store':(a for a,*_ in stores)},
-                         e['constructor_sequence'])
+            rip=list(find_rip(im,x,e['rw'],roots)) if a.with_rip else None
+        families={'register':regs,'memory':routes,'alu':(a for a,*_ in alu),'store':(a for a,*_ in stores)}
+        if a.with_rip:
+            if not rip:
+                raise ValueError('missing RIP family')
+            families['rip']=[a for a,*_ in rip]
+        report=inventory(roots,families,e['constructor_sequence'])
         report['alu_native_bodies']=len(shared_bodies(alu)[0])
         if not alu or not stores:
             raise ValueError('missing ALU or store family')
@@ -98,9 +105,13 @@ def main():
         for name,emit,rows in (('native.c',emit_graph,regs),('loads.c',emit_loads,loads),('routes_v487.inc',emit_routes,routes),('alu.c',emit_alu,alu),('stores.c',emit_stores,stores)):
             with (dst/name).open('x',encoding='ascii') as f:
                 emit(rows,f)
+        if rip is not None:
+            with (dst/'rip.c').open('x',encoding='ascii') as f:
+                emit_rip(rip,f)
         with (dst/'index_v493.inc').open('x',encoding='ascii') as out:
             n=emit_index(list(regs),[a for a,*_ in loads],routes,
-                         [a for a,*_ in alu],[a for a,*_ in stores],out)
+                         [a for a,*_ in alu],[a for a,*_ in stores],out,
+                         rip=[a for a,*_ in rip] if rip is not None else None)
         if n!=report['metadata_start_generation']['done']:
             raise ValueError('index and inventory disagree')
         (dst/'progress.json').write_text(json.dumps(report,sort_keys=True,indent=2)+'\n',encoding='ascii')
