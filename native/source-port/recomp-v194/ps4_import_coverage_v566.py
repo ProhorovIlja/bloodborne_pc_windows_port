@@ -40,7 +40,29 @@ def inventory(image, registered):
                 identities=sum(x['identities'] for x in modules.values()))
 
 
+def self_test():
+    ident = ('example', ('libTest', 1), ('modTest', 257))
+    image = dict(symbols=[{}, dict(section=0, identity=ident),
+                         dict(section=1, identity=None)],
+                 relocs=[(16,7,1,0),(24,1,1,0),(32,8,0,0),(40,1,2,0)])
+    expected = dict(modules={'modTest':dict(identities=1,slots=2,source_registrations=1)},
+                    relocation_types={7:1,1:1},identities=1)
+    assert inventory(image, {('example','libTest',1,'modTest')}) == expected
+    for wrong in (('example','libTest',2,'modTest'), ('example','libTest',1,'other')):
+        assert inventory(image,{wrong})['modules']['modTest']['source_registrations'] == 0
+    for index in (-1,3):
+        try:
+            inventory(dict(image,relocs=[(16,7,index,0)]),set())
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('accepted invalid symbol index')
+
+
 def main():
+    if sys.argv[1:] == ['--self-test']:
+        self_test()
+        return
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('dump', type=Path)
     p.add_argument('--recomp', type=Path, required=True, help='trusted bloodborne-recomp checkout')
