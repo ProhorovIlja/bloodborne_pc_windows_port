@@ -1,5 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "dispatch_v487.h"
+#ifdef BB_ENABLE_V488
+#include "alu_v488.h"
+#endif
 #ifndef V487_ROUTES
 #define V487_ROUTES "routes_v487.inc"
 #endif
@@ -20,6 +23,10 @@ enum bb_status_v487 bb_dispatch_v487(uint64_t id, const struct bb_input_v487 *in
         *out=(struct bb_result_v484){value,in->flags,0x8d5};
         return BB_OK_V487;
     }
+#ifdef BB_ENABLE_V488
+    if (bb_alu_call_v488(id,in->rax,in->rcx,in->rdx,in->rsi,in->rdi,in->flags,out))
+        return BB_OK_V487;
+#endif
     return bb_call_v485(id,in->rax,in->rcx,in->rdx,in->rsi,in->rdi,in->flags,out) ?
         BB_OK_V487 : BB_MISS_V487;
 }
