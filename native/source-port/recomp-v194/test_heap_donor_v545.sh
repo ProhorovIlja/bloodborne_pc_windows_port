@@ -30,3 +30,7 @@ END
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I"$tmp" -pthread ${V545_LDFLAGS:-} "$tmp/test.o" "$tmp"/regular_heap*.cpp -o "$tmp/test"
 "$tmp/test"
 echo V545_HEAP_DONOR_PASS
+"${CC:-cc}" -std=c11 -Wall -Wextra -Wpedantic -Werror -O2 -pthread -c "$src/test_heap_aperture_v549.c" -o "$tmp/test.o"
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -O2 -I"$tmp" -pthread ${V545_LDFLAGS:-} "$tmp/test.o" "$tmp"/regular_heap*.cpp -o "$tmp/test"
+"$tmp/test"
+echo V549_HEAP_APERTURE_PASS
