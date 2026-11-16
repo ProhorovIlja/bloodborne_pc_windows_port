@@ -1,0 +1,56 @@
+name: Native V475 prepared startup replay
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/replay_v473.c'
+      - 'native/source-port/recomp-v194/fixture_v475.h'
+      - 'native/source-port/recomp-v194/native_*v*.c'
+      - '.github/workflows/native-v475-prepared-replay.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/replay_v473.c'
+      - 'native/source-port/recomp-v194/fixture_v475.h'
+      - 'native/source-port/recomp-v194/native_*v*.c'
+      - '.github/workflows/native-v475-prepared-replay.yml'
+permissions:
+  contents: read
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          build() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror -DV475_PREPARED '-DV473_PLAN="fixture_v475.h"' "$@" replay_v473.c native_guarded_leaf_v463.c native_startup_copy_v470.c native_stores_v472.c native_data_v474.c -o replay.exe
+          }
+          build -O2
+          ./replay.exe | tr -d '\r' > trace.txt
+          grep -Fx '1 0 177 00000000000000000100000000000000' trace.txt
+          grep -Fx '4 1 177 80000000000000000100000000000000' trace.txt
+          grep -Fx 'FINAL 4d5c9cb14de551ee' trace.txt
+          test "$(wc -l < trace.txt)" -eq 5
+          build -O2 -DV475_BAD_PATCH
+          status=0
+          ./replay.exe > rejected.txt || status=$?
+          test "$status" -eq 5
+          test ! -s rejected.txt
+          if [ "$RUNNER_OS" = Linux ]; then
+            build -O1 -fsanitize=address,undefined -fno-sanitize-recover=all
+            ./replay.exe > /dev/null
+            build -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -DV475_BAD_PATCH
+            status=0
+            ./replay.exe > rejected.txt || status=$?
+            test "$status" -eq 5
+            test ! -s rejected.txt
+          fi
