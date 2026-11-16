@@ -1,0 +1,26 @@
+name: Native V462 startup closure fixture
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+  pull_request:
+    paths:
+      - native/source-port/recomp-v194/startup_closure_v462.py
+      - .github/workflows/native-v462-startup-closure.yml
+permissions:
+  contents: read
+jobs:
+  closure-fixture:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python native/source-port/recomp-v194/startup_closure_v462.py --self-test
