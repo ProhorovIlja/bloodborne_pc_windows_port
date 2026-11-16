@@ -14,7 +14,7 @@ static inline enum bb_insert_v542 bb_registry_grow_v543(unsigned char *h,
         size_t size,uint64_t hva,const struct bb_vector_block_v541 *old,
         uint64_t key,uint64_t first,uint64_t extent,int (*warn)(void *),
         void *warn_ctx,const struct bb_growth_v543 *g) {
-    if (!h || size<40 || !hva || hva>UINT64_MAX-40 || !old || !g ||
+    if (!h || size<40 || !hva || hva>UINT64_MAX-40 || !g ||
         !g->allocate || !g->release) return BB_INSERT_INVALID;
     const uint64_t lo=bb_vector_word_v541(h+8), hi=bb_vector_word_v541(h+16),
         cap=bb_vector_word_v541(h+24), owner=bb_vector_word_v541(h+32);
@@ -32,12 +32,12 @@ static inline enum bb_insert_v542 bb_registry_grow_v543(unsigned char *h,
         !b.va || (b.va&7) || b.va>UINT64_MAX-bytes || b.va==lo ||
         (b.va<cap && lo<b.va+bytes) || (b.va<hva+40 && hva<b.va+bytes))
         return BB_INSERT_STOP;
-    memcpy(b.data,old->data,pos);
+    if (pos) memcpy(b.data,old->data,pos);
     bb_arena_store_v527(b.data+pos,key);
     bb_arena_store_v527(b.data+pos+8,first);
     bb_arena_store_v527(b.data+pos+16,first+extent);
-    memcpy(b.data+pos+24,old->data+pos,used-pos);
-    if (!g->release(g->ctx,owner,lo)) return BB_INSERT_STOP;
+    if (used>pos) memcpy(b.data+pos+24,old->data+pos,used-pos);
+    if (lo && !g->release(g->ctx,owner,lo)) return BB_INSERT_STOP;
     bb_arena_store_v527(h+24,b.va+bytes);
     bb_arena_store_v527(h+16,b.va+used+24);
     bb_arena_store_v527(h+8,b.va);

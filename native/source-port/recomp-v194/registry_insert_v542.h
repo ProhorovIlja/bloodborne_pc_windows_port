@@ -11,11 +11,16 @@ static inline enum bb_insert_v542 bb_registry_insert_route_v543(unsigned char *h
         size_t size,const struct bb_vector_block_v541 *b,uint64_t key,
         uint64_t first,uint64_t extent,int (*warn)(void *),void *ctx,
         size_t *full_position) {
-    if (!h || size<40 || !b || !b->data || !warn || !key || !extent ||
+    if (!h || size<40 || !warn || !key || !extent ||
         extent>UINT64_MAX-first) return BB_INSERT_INVALID;
     const uint64_t lo=bb_vector_word_v541(h+8), hi=bb_vector_word_v541(h+16),
         cap=bb_vector_word_v541(h+24), last=first+extent;
-    if (!lo || (lo&7) || lo!=b->va || lo>hi || hi>cap || cap-lo>b->size ||
+    if (!lo) {
+        if (hi || cap) return BB_INSERT_INVALID;
+        if (full_position) *full_position=0;
+        return BB_INSERT_FULL;
+    }
+    if (!b || !b->data || (lo&7) || lo!=b->va || lo>hi || hi>cap || cap-lo>b->size ||
         (hi-lo)%24 || (cap-lo)%24) return BB_INSERT_INVALID;
     size_t pos=(size_t)(hi-lo);
     int candidate=0;
