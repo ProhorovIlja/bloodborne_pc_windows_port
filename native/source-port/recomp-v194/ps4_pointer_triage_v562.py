@@ -60,8 +60,40 @@ def triage(b):
     if len(rel) != inventory['relocation_types'].get(8,0):
         raise ValueError('inconsistent relative relocation inventory')
     eh, ev, _ = segments[0x6474e550]
-    anchors = {ev+struct.unpack_from('<i',b,eh+12+8*i)[0]
-               for i in range(inventory['unwind_entries'])}
+    anchors = set()
+    end = 0
+    for i in range(inventory['unwind_entries']):
+        loc, fde = struct.unpack_from('<ii',b,eh+12+8*i)
+        start = ev+loc
+        p = offset(ev+fde,16)
+        if p is None:
+            raise ValueError('FDE outside file-backed loads')
+        enc_start, length = struct.unpack_from('<iI',b,p+8)
+        if ev+fde+8+enc_start != start or not length or offset(start,length,1) is None:
+            raise ValueError('invalid FDE code range')
+        anchors.add(start)
+        end = max(end,start+length)
+    # Follow the donor scanner's PLT-boundary idea, but verify that every
+    # RIP-relative stub addresses its corresponding JMPREL slot in order.
+    o,n = tags[0x61000029], tags[0x6100002d]
+    jmp = list(struct.iter_unpack('<QQq',b[base+o:base+o+n]))
+    if not jmp or any(k&0xffffffff != 7 for _,k,_ in jmp):
+        raise ValueError('expected nonempty x86-64 JUMP_SLOT table')
+    boundaries = []
+    span = 16*(len(jmp)+1)
+    for va in range(end,end+0x10000):
+        p = offset(va,span,1)
+        if p is None or b[p:p+2]!=b'\xff\x35' or b[p+6:p+8]!=b'\xff\x25':
+            continue
+        for i,(slot,_,_) in enumerate(jmp,1):
+            q = p+16*i
+            if b[q:q+2]!=b'\xff\x25' or va+16*i+6+struct.unpack_from('<i',b,q+2)[0]!=slot:
+                break
+        else:
+            boundaries.append(va+span)
+    if len(boundaries)!=1:
+        raise ValueError('could not verify unique PLT boundary')
+    plt_end = boundaries[0]
     rx = {s:a for s,a in rel.items() if offset(a,1,1) is not None}
     unknown = Counter(a for a in rx.values() if a not in anchors)
     mixed, strong = Counter(), Counter()
@@ -87,6 +119,11 @@ def triage(b):
         if p is not None and thunk_target(b[p:p+9],a) in anchors:
             thunks.add(a)
     return dict(rx_nonanchor_slots=sum(unknown.values()), rx_nonanchor_targets=len(unknown),
+                verified_plt_stubs=len(jmp),
+                pre_plt_end_nonanchor_slots=sum(n for a,n in unknown.items() if a<plt_end),
+                pre_plt_end_nonanchor_targets=sum(a<plt_end for a in unknown),
+                post_plt_nonanchor_slots=sum(n for a,n in unknown.items() if a>=plt_end),
+                post_plt_nonanchor_targets=sum(a>=plt_end for a in unknown),
                 mixed_runs=mixed_runs, mixed_slots=sum(mixed.values()), mixed_targets=len(mixed),
                 null_header_runs=null_header_runs, null_header_slots=sum(strong.values()),
                 null_header_targets=len(strong), strict_adjustor_targets=len(thunks),
