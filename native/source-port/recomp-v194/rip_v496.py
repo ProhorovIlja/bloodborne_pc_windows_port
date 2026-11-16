@@ -1,7 +1,35 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Lower exact LEA RAX,[RIP+rel32]; RET to a slid guest data address."""
 
-def find(image, rx, rw, starts):
+from collections import defaultdict, deque
+
+
+def expand_tail_aliases(image, rx, ids, leaves):
+    """Walk backwards only from a proven LEA/RET; cycles cannot become roots."""
+    _,_,off,base,_,size,_,_=rx
+    incoming=defaultdict(list)
+    for a,b in zip(ids,ids[1:]+[base+size]):
+        if a in leaves:
+            continue
+        p=off+a-base
+        raw=image[p:p+min(9,b-a)]
+        skip=4 if raw.startswith(b'\xf3\x0f\x1e\xfa') else 0
+        op=raw[skip] if len(raw)>skip else 0
+        n={0xe9:5,0xeb:2}.get(op,0)
+        if n and len(raw)>=skip+n:
+            target=a+skip+n+int.from_bytes(raw[skip+1:skip+n],'little',signed=True)
+            incoming[target].append((a,raw[:skip+n]))
+    rows=dict(leaves)
+    pending=deque(leaves)
+    while pending:
+        target=pending.popleft()
+        for a,raw in incoming.pop(target,()):
+            rows[a]=(raw,rows[target][1])
+            pending.append(a)
+    return rows
+
+
+def find(image, rx, rw, starts, *, tail_aliases=False):
     _,_,off,base,_,size,_,_=rx
     _,_,_,data,_,_,span,_=rw
     ids=sorted(set(starts))
@@ -9,6 +37,7 @@ def find(image, rx, rw, starts):
             off<0 or not 0<=base<=ids[0]<=ids[-1]<base+size<=data or
             not 0<span or data+span>2**64):
         raise ValueError('invalid RX/RW source layout')
+    leaves={}
     for a,b in zip(ids,ids[1:]+[base+size]):
         p=off+a-base
         raw=image[p:p+min(12,b-a)]
@@ -17,7 +46,10 @@ def find(image, rx, rw, starts):
         if len(r)>=8 and r[:3]==b'\x48\x8d\x05' and r[7]==0xc3:
             t=a+skip+7+int.from_bytes(r[3:7],'little',signed=True)
             if data<=t<data+span:
-                yield a,raw[:skip+8],t
+                leaves[a]=(raw[:skip+8],t)
+    rows=expand_tail_aliases(image,rx,ids,leaves) if tail_aliases else leaves
+    for a in sorted(rows):
+        yield a,*rows[a]
 
 
 def emit(rows,out):

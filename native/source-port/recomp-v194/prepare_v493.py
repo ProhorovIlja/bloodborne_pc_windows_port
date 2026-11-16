@@ -91,7 +91,7 @@ def main():
             leaves=list(find_alu(im,x,roots,excluded))
             alu=with_tail_aliases(im,x,roots,leaves,excluded)
             stores=list(find_stores(im,x,roots))
-            rip=list(find_rip(im,x,e['rw'],roots)) if a.with_rip else None
+            rip=list(find_rip(im,x,e['rw'],roots,tail_aliases=True)) if a.with_rip else None
         families={'register':regs,'memory':routes,'alu':(a for a,*_ in alu),'store':(a for a,*_ in stores)}
         if a.with_rip:
             if not rip:

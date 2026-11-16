@@ -41,3 +41,25 @@ int main(void) {
     return 0;
 }
 ''')
+
+
+alias_image=bytearray(b'\x90'*128)
+alias_rx=(1,5,0,256,0,128,128,1)
+alias_rw=(1,6,128,400,0,0,8,1)
+def jmp(a,t,prefix=b'',short=False):
+    n=1 if short else 4
+    raw=prefix+(b'\xeb' if short else b'\xe9')+(t-a-len(prefix)-1-n).to_bytes(n,'little',signed=True)
+    alias_image[a-256:a-256+len(raw)]=raw
+jmp(256,272)
+jmp(272,320,b'\xf3\x0f\x1e\xfa',short=True)
+jmp(288,304)
+jmp(304,288)
+jmp(336,321)
+jmp(352,320)
+jmp(368,320,short=True)
+alias_image[64:72]=b'\x48\x8d\x05'+(400-327).to_bytes(4,'little',signed=True)+b'\xc3'
+starts=[256,272,288,304,320,336,352,354,368]
+assert [(a,t) for a,_,t in find(alias_image,alias_rx,alias_rw,starts)]==[(320,400)]
+alias_rows=list(find(alias_image,alias_rx,alias_rw,starts,tail_aliases=True))
+assert [(a,t) for a,_,t in alias_rows]==[(256,400),(272,400),(320,400),(368,400)]
+assert not list(find(alias_image,alias_rx,alias_rw,[a for a in starts if a!=320],tail_aliases=True))
