@@ -94,6 +94,8 @@ jobs:
           ./startup548.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_owner_factory_v552.c -o factory552.exe
           ./factory552.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_class_table_v554.c -o class554.exe
+          ./class554.exe
           if [ "$RUNNER_OS" != Windows ]; then
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
             ./join529
