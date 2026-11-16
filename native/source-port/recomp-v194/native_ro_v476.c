@@ -3,12 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 
-struct bb_ro_row_v476 { uint64_t address; size_t offset, length; };
-struct bb_ro_v476 {
-    const struct bb_ro_row_v476 *rows;
-    const unsigned char *pool;
-    size_t count;
-};
+#include "ro_v477.h"
 
 /* Caller retains immutable and disjoint buffers, and zeroes the view before
  * binding. Guest addresses are lookup keys, not native pointers. */
@@ -60,4 +55,24 @@ int bb_ro_strlen_v476(const struct bb_ro_v476 *v, uint64_t address, size_t *leng
     if (!end) return 0;
     *length=(size_t)(end-p);
     return 1;
+}
+
+int bb_ro_offset_v477(const struct bb_ro_v476 *v, uint64_t address, size_t n, size_t *offset) {
+    const struct bb_ro_row_v476 *r=find(v,address);
+    if (!r || !offset || !n) return 0;
+    size_t delta=(size_t)(address-r->address);
+    if (n>r->length-delta) return 0;
+    *offset=r->offset+delta;
+    return 1;
+}
+
+/* Bytewise UTF-16LE terminator scan. Length in code units, not code points. */
+int bb_ro_u16len_v477(const struct bb_ro_v476 *v, uint64_t address, size_t *length) {
+    const struct bb_ro_row_v476 *r=find(v,address);
+    if (!r || !length || address%2) return 0;
+    size_t delta=(size_t)(address-r->address);
+    const unsigned char *p=v->pool+r->offset+delta;
+    for (size_t i=0;i<(r->length-delta)/2;++i)
+        if (!p[2*i] && !p[2*i+1]) { *length=i; return 1; }
+    return 0;
 }
