@@ -1,7 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
+import hashlib
+import json
+from pathlib import Path
 import struct
+import tempfile
 import unittest
-from census_v480 import EH, PH, LIMIT, census, summarize
+from census_v480 import EH, PH, LIMIT, census, compare_v204, summarize
 
 
 def fixture():
@@ -39,8 +43,41 @@ class TestCensus(unittest.TestCase):
     def test_corruption(self):
         with self.assertRaises(ValueError):
             census(fixture(),0x2020)
-        for pos in (896, 394, 640, 552, 1032, 1080):
+        for pos in (896, 394, 640, 552, 1032):
             im=fixture()
             im[pos]^=255
             with self.assertRaises(ValueError, msg=str(pos)):
                 census(im,0x2018)
+
+        im=fixture()
+        struct.pack_into('<Q',im,1072,0x2018)
+        with self.assertRaises(ValueError):
+            census(im,0x2018)
+
+    def test_v204_attested_inputs(self):
+        image=fixture()
+        index=b'address\tsize\tinstructions\tundecodable\n0x1010\t3\t1\t0\n0x1100\t3\t1\t0\n'
+        generated=b'static const RcFunction table[] = {\n{0x1100, 3, 0x9ull, f_1100, &d_1100},\n};\n'
+        sha=lambda b:hashlib.sha256(b).hexdigest()
+        with tempfile.TemporaryDirectory() as p:
+            root=Path(p)
+            (root/'scan').mkdir()
+            (root/'generated').mkdir()
+            scan=root/'scan/functions.tsv'
+            table=root/'generated/recomp.c'
+            scan.write_bytes(index)
+            table.write_bytes(generated)
+            meta=dict(format='SHYT_PRIVATE_FULL_IMAGE_V204', upstream='8f31ec7c41f252730c6325d52647046baef7549f',
+                original_size_bytes=len(image), input_sha256=sha(image), scanner_index_sha256=sha(index),
+                c_hashes={'recomp.c':sha(generated)}, functions_scanned=2, aot_functions_registered=1,
+                functions_not_in_aot_table=1, complete_scanner_to_aot_registration=False)
+            (root/'full-original-preparation.json').write_text(json.dumps(meta),encoding='utf-8')
+            self.assertEqual(compare_v204(image,root),({0x1010,0x1100},{0x1100}))
+            for file, data in ((scan,index),(table,generated)):
+                file.write_bytes(data+b' ')
+                with self.assertRaises(ValueError):
+                    compare_v204(image,root)
+                file.write_bytes(data)
+            image[-1]^=1
+            with self.assertRaises(ValueError):
+                compare_v204(image,root)
