@@ -1,0 +1,41 @@
+name: Native V478 relocated startup routes
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v478*'
+      - 'native/source-port/recomp-v194/native_startup_sret_v464.c'
+      - 'native/source-port/recomp-v194/native_startup_getter_v465.c'
+      - 'native/source-port/recomp-v194/native_data_v474.c'
+      - '.github/workflows/native-v478-startup-memory.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v478*'
+      - 'native/source-port/recomp-v194/native_startup_sret_v464.c'
+      - 'native/source-port/recomp-v194/native_startup_getter_v465.c'
+      - 'native/source-port/recomp-v194/native_data_v474.c'
+      - '.github/workflows/native-v478-startup-memory.yml'
+permissions:
+  contents: read
+jobs:
+  routes:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_startup_memory_v478.c -o startup.exe
+          ./startup.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -g -fsanitize=address,undefined -fno-sanitize-recover=all test_startup_memory_v478.c -o startup-san
+            ./startup-san
+          fi
