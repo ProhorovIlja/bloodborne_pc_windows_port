@@ -46,6 +46,8 @@ jobs:
           ./ctor519.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_init_walk_v520.c -o init520.exe
           ./init520.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_guard_prefix_v521.c -o guard521.exe
+          ./guard521.exe
           python test_v497.py
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
           ./load-route.exe
