@@ -1,0 +1,38 @@
+name: Native V487 unified AOT dispatch
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v487*', 'native/source-port/recomp-v194/*v485*', 'native/source-port/recomp-v194/*v486*', 'native/source-port/recomp-v194/leaf_v48*', '.github/workflows/native-v487-unified-aot.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v487*', 'native/source-port/recomp-v194/*v485*', 'native/source-port/recomp-v194/*v486*', 'native/source-port/recomp-v194/leaf_v48*', '.github/workflows/native-v487-unified-aot.yml']
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python test_v487.py
+          build() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture "$@" test_v487.c dispatch_v487.c v487-fixture/native.c v487-fixture/loads.c -o fixture.exe
+          }
+          build -O2
+          ./fixture.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            build -g -fsanitize=address,undefined -fno-sanitize-recover=all
+            ./fixture.exe
+          fi
