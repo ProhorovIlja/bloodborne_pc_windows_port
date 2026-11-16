@@ -11,7 +11,7 @@ HEADER = "class_secondary_v557.h"
 MUTANTS = [
     ("missing fourth virtual result", "batch=4", "batch=3", 22),
     ("unsigned key order", "^UINT64_C(0x8000000000000000)", "^UINT64_C(0)", 23),
-    ("undersized cold table", "initial=512", "initial=511", 11),
+    ("undersized cold table", "initial=512", "initial=511", 12),
     ("store key in place of class pointer", "row+8,cls", "row+8,keys[i]", 23),
     ("leak replacement on release failure", "(void)release(ctx,owner,b.va);",
      "(void)0;", 13),
