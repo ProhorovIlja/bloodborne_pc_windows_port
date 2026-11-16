@@ -12,7 +12,12 @@ def numeric_ids(text):
 
 
 def emit_index(regs, loads, memory, alu, stores, out):
+    for ids in (regs,loads,alu,stores):
+        if not ids or any(not 0<=a<2**64 for a in ids) or any(a>=b for a,b in zip(ids,ids[1:])):
+            raise ValueError('expected nonempty sorted unique family')
     maps={a:i for i,a in enumerate(loads)}
+    if not set(memory.values())<=maps.keys() or any(memory.get(a)!=a for a in loads):
+        raise ValueError('invalid memory routes')
     rows={}
     for tag, pairs in enumerate((enumerate(regs),((maps[t],a) for a,t in memory.items()),
                                 enumerate(alu),enumerate(stores))):
@@ -23,9 +28,10 @@ def emit_index(regs, loads, memory, alu, stores, out):
     if not rows:
         raise ValueError('empty route index')
     p=lambda s:print(s,file=out)
-    p('static const uint64_t bb_ids_v493[]={')
+    bits=32 if max(rows)<2**32 else 64
+    p(f'static const uint{bits}_t bb_ids_v493[]={{')
     for a in sorted(rows):
-        p(f'UINT64_C({a}),')
+        p(f'UINT{bits}_C({a}),')
     p('};')
     p('static const uint32_t bb_routes_v493[]={')
     for a in sorted(rows):

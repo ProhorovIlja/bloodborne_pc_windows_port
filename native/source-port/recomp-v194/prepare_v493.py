@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Offline, owner-local build input for unified V492 dispatch."""
 from alu_v488 import find as find_alu, emit as emit_original_alu, with_tail_aliases
-from index_v493 import write_index
+from index_v493 import emit_index
 from io import StringIO
 import re
 
@@ -98,7 +98,10 @@ def main():
         for name,emit,rows in (('native.c',emit_graph,regs),('loads.c',emit_loads,loads),('routes_v487.inc',emit_routes,routes),('alu.c',emit_alu,alu),('stores.c',emit_stores,stores)):
             with (dst/name).open('x',encoding='ascii') as f:
                 emit(rows,f)
-        if write_index(dst)!=report['metadata_start_generation']['done']:
+        with (dst/'index_v493.inc').open('x',encoding='ascii') as out:
+            n=emit_index(list(regs),[a for a,*_ in loads],routes,
+                         [a for a,*_ in alu],[a for a,*_ in stores],out)
+        if n!=report['metadata_start_generation']['done']:
             raise ValueError('index and inventory disagree')
         (dst/'progress.json').write_text(json.dumps(report,sort_keys=True,indent=2)+'\n',encoding='ascii')
         print(json.dumps(report,sort_keys=True))

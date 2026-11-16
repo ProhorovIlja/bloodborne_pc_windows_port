@@ -29,6 +29,7 @@ jobs:
         working-directory: native/source-port/recomp-v194
         run: |
           set -euo pipefail
+          python -m unittest -v test_index_v494 test_progress_v490 test_census_v480
           python test_v493.py
           build() {
             clang -std=c11 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture "$@" test_v493.c dispatch_v493.c -o indexed.exe
@@ -38,4 +39,12 @@ jobs:
           if [ "$RUNNER_OS" = Linux ]; then
             build -g -fsanitize=address,undefined -fno-sanitize-recover=all
             ./indexed.exe
+          fi
+          parity() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror -DBB_ENABLE_V488 -I. -Iv487-fixture "$@" test_parity_v494.c dispatch_v492.c dispatch_v487.c dispatch_v493.c -o parity.exe
+            ./parity.exe
+          }
+          parity -O2
+          if [ "$RUNNER_OS" = Linux ]; then
+            parity -g -fsanitize=address,undefined -fno-sanitize-recover=all
           fi
