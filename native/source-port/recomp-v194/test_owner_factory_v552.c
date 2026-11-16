@@ -66,7 +66,7 @@ int main(void) {
         const unsigned phase=i==1?3:i==2?4:6;
         for (unsigned pass=0;pass<2;++pass) {
             uint64_t out=99;
-            if (bb_owner_factory_v552(&f,&t.o,t.rw,sizeof t.rw,&p,&s,2,guard,sync,seed,mutex,&t,
+            if (bb_owner_factory_v552(&f,&t.o,t.rw,sizeof t.rw,&p,&s,2,guard,sync_call,seed,mutex,&t,
                  &a,0x1040,0x200000,&l,&d,head,warn,&out)!=(i==0) ||
                 out!=(i?99u:0x1040u) || t.phase!=phase) return 1;
         }
