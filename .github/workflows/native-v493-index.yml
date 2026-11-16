@@ -62,6 +62,12 @@ jobs:
           ./singleton526.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_seed_v527.c -o arena527.exe
           ./arena527.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_singleton_arena_v528.c -o arena528.exe
+          ./arena528.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -g -fsanitize=address,undefined -fno-sanitize-recover=all test_singleton_arena_v528.c -o arena528-san
+            ./arena528-san
+          fi
           python test_v497.py
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
           ./load-route.exe
