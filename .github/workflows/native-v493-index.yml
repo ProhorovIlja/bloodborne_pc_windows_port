@@ -70,6 +70,8 @@ jobs:
           ./link535.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_ctor_publish_v536.c -o publish536.exe
           ./publish536.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_ctor_register_v537.c -o register537.exe
+          ./register537.exe
           if [ "$RUNNER_OS" != Windows ]; then
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
             ./join529
