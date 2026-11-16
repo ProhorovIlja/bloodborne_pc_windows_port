@@ -1,0 +1,9 @@
+# V502 — actually remove the dump from a Linux test process
+
+Use an isolated, stable tree with the host binary, its generated native code and game assets outside the original dump directory. First run the normal baseline. Then run `bash mask_dump_v502.sh /absolute/original-dump -- /absolute/prepared/host-program [args...]` with any translator fallback explicitly disabled by that program. The script covers the canonical dump path with an empty read-only bind mount in a private Linux mount namespace. If setup fails, the host program is not started. The original is not moved, edited or unmounted on the host. Requires util-linux and working unprivileged user/mount namespaces.
+
+This is a negative test for the dump path, not a sandbox, a trace, or proof of zero original code: other copies, preopened descriptors, embedded data and ABI emulation are outside its scope. Combine with the V500/V501 tree audit and a file/module trace. A runtime which requires `eboot.bin` must fail with this setup, not silently get its old file. An assets-only smoke test must still read assets from the separate tree.
+
+Reuse notes: LoreanXavier/pt-pc documents a PS4 game rewrite whose runtime uses selected original assets, not the eboot or modules. It is an installer/data split reference, not a Bloodborne engine donor. HayatoG/tlou_pc has shared PS4 host runtime implementations across several game ports; it still links original libc and Fios2, so treat it as a donor for individual host services only. OverkillLabs3/driveclub-recomp requires the original update eboot; don't infer standalone AOT from directory labels.
+
+Local synthetic run checked canonical path and alias hiding, read-only replacement, separate asset read, preserved original, propagated host exit code and refused cwd inside dump. No retail or non-Linux boot claimed.
