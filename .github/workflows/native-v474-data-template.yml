@@ -32,7 +32,7 @@ jobs:
           set -euo pipefail
           flags=()
           if [ "$RUNNER_OS" = Windows ]; then
-            printf '%s\n' '#include "native_data_v474.c"' '__declspec(dllexport) int bb_data_init_v474(unsigned char *,size_t,const unsigned char *,size_t,const struct bb_patch_v474 *,size_t);' > export.c
+            printf '%s\n' '#include <stddef.h>' '#include <stdint.h>' 'struct bb_patch_v474;' '__declspec(dllexport) int bb_data_init_v474(unsigned char *,size_t,const unsigned char *,size_t,const struct bb_patch_v474 *,size_t);' '#include "native_data_v474.c"' > export.c
             src=export.c
           else
             flags+=(-fPIC)
