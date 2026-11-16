@@ -38,6 +38,8 @@ jobs:
           fi
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_jump_record_v514.c -o jump514.exe
           ./jump514.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_continuation_v515.c -o resume515.exe
+          ./resume515.exe
           python test_v497.py
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
           ./load-route.exe
