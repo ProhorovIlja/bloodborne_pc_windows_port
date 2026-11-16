@@ -24,3 +24,17 @@ def emit(destinations):
             f' static const uint64_t ids[]={{{rows}}};\n'
             ' if(!out || i>=sizeof ids/sizeof *ids)return 0;\n'
             ' *out=ids[i];return 1;\n}\n')
+
+
+def emit_u32(destinations, default):
+    """Emit a route selector for an already verified unsigned 32-bit guard.
+
+    Route IDs describe local block destinations; this does not lift CPU state.
+    """
+    if type(default) is not int or not 0 <= default < LIMIT:
+        raise ValueError('invalid default route ID')
+    return emit(destinations) + (
+        'uint64_t bb_switch_u32(uint32_t index) {\n'
+        ' uint64_t id;\n'
+        f' return switch_route(index,&id)?id:UINT64_C({default});\n'
+        '}\n')
