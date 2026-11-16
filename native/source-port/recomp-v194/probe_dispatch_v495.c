@@ -5,7 +5,9 @@
 #include <string.h>
 #define BB_ENABLE_V488 1
 #include "dispatch_v493.c"
+#define BB_REUSE_MEMORY_ROUTES_V517
 #include "dispatch_v487.c"
+#undef BB_REUSE_MEMORY_ROUTES_V517
 
 #define COUNT(a) (sizeof(a)/sizeof((a)[0]))
 

@@ -6,7 +6,9 @@
 #ifndef V487_ROUTES
 #define V487_ROUTES "routes_v487.inc"
 #endif
+#ifndef BB_REUSE_MEMORY_ROUTES_V517
 #include V487_ROUTES
+#endif
 
 enum bb_status_v487 bb_dispatch_v487(uint64_t id, const struct bb_input_v487 *in,
     const struct bb_region_v478 *mem, struct bb_result_v484 *out) {

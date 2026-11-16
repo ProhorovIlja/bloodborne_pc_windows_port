@@ -5,9 +5,12 @@ import json
 import os
 from pathlib import Path
 import stat
+import struct
+
+from guest_payload_v517 import anchors, contains
 
 
-def audit(root):
+def audit(root, signatures=()):
     root = Path(root)
     root_info = root.lstat()
     if not stat.S_ISDIR(root_info.st_mode) or getattr(root_info, 'st_file_attributes', 0) & 0x400:
@@ -33,7 +36,12 @@ def audit(root):
                 files += 1
                 with p.open('rb') as stream:
                     h = stream.read(20)
-                if h.startswith((b'BBPROBE2', b'BBPROBE3', b'BBPROBE4', b'BBPROBE5')):
+                    embedded = contains(stream, signatures)
+                if lower == 'guest_image.bin':
+                    reason = 'known-guest-image-name'
+                elif embedded:
+                    reason = 'reference-guest-rx-window'
+                elif h.startswith((b'BBPROBE2', b'BBPROBE3', b'BBPROBE4', b'BBPROBE5')):
                     reason = 'bbport-guest-image'
                 elif h.startswith(b'\x4f\x15\x3d\x1d'):
                     reason = 'self-magic'
@@ -53,9 +61,11 @@ def audit(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('root', type=Path)
+    parser.add_argument('--reference-elf', type=Path, help='private PS4 ELF for unmodified RX-window checks')
+    args = parser.parse_args()
     try:
-        report = audit(parser.parse_args().root)
-    except (OSError, ValueError) as error:
+        report = audit(args.root, anchors(args.reference_elf) if args.reference_elf else ())
+    except (OSError, ValueError, struct.error) as error:
         parser.exit(2, f'{error}\n')
     print(json.dumps(report, sort_keys=True))
     return 3 if report['findings'] else 0

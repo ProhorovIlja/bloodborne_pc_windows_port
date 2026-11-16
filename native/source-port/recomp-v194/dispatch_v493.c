@@ -19,6 +19,7 @@
 #include "rip.c"
 #endif
 #include "index_v493.inc"
+#include "routes_v487.inc"
 #include "load_route_v504.h"
 _Static_assert(sizeof bb_ids_v493/sizeof *bb_ids_v493 == sizeof bb_routes_v493/sizeof *bb_routes_v493,
     "dispatch ID and route counts must agree");
