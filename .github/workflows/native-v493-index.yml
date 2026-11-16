@@ -80,6 +80,8 @@ jobs:
           ./factory539.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_owner_registry_v540.c -o registry540.exe
           ./registry540.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_registry_reserve_v541.c -o registry541.exe
+          ./registry541.exe
           if [ "$RUNNER_OS" != Windows ]; then
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
             ./join529
