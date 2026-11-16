@@ -30,7 +30,6 @@ static inline enum bb_class_v554 bb_class_insert_v554(unsigned char *h,size_t n,
         bb_arena_store_v527(h+16,hi);
         bb_arena_store_v527(h+8,lo);
     }
-    if (hi==cap) return BB_CLASS_FULL;
     const size_t used=(size_t)(hi-lo);
     size_t first=0,last=used/32;
     while (first<last) {
@@ -39,6 +38,25 @@ static inline enum bb_class_v554 bb_class_insert_v554(unsigned char *h,size_t n,
         else first=mid+1;
     }
     const size_t at=32*first;
+    if (hi==cap) {
+        const size_t count=used/32, max=SIZE_MAX/32;
+        if (count>=max) return BB_CLASS_STOP;
+        size_t grown=count/2>max-count?count+1:count+count/2;
+        if (grown==count) ++grown;
+        const size_t bytes=grown*32;
+        struct bb_vector_block_v541 b={0};
+        if (!alloc(ctx,owner,bytes,&b) || !b.data || b.size<bytes || !b.va || (b.va&7) ||
+            b.va>UINT64_MAX-bytes || (b.va<cap && lo<b.va+bytes) ||
+            (b.va<hva+40 && hva<b.va+bytes)) return BB_CLASS_STOP;
+        if (at) memcpy(b.data,data,at);
+        for (unsigned i=0;i<4;++i) bb_arena_store_v527(b.data+at+8*i,item[i]);
+        if (used>at) memcpy(b.data+at+32,data+at,used-at);
+        if (!release(ctx,owner,lo)) return BB_CLASS_STOP;
+        bb_arena_store_v527(h+24,b.va+bytes);
+        bb_arena_store_v527(h+16,b.va+used+32);
+        bb_arena_store_v527(h+8,b.va);
+        return BB_CLASS_OK;
+    }
     memmove(data+at+32,data+at,used-at);
     for (unsigned i=0;i<4;++i) bb_arena_store_v527(data+at+8*i,item[i]);
     bb_arena_store_v527(h+16,hi+32);
