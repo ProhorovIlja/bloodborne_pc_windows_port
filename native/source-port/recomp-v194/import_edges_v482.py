@@ -37,6 +37,7 @@ class Edges:
     def __init__(self, image, evidence, imports):
         self.image=image
         self.rx=evidence['rx']
+        self.rw=evidence['rw']
         self.rel=evidence['relocs']
         self.order=evidence['plt_order']
         self.imports=imports
@@ -50,6 +51,11 @@ class Edges:
         _,_,off,base,_,size,_,_=self.rx
         return self.image[off+a-base:off+a-base+n] if base<=a<=base+size-n else b''
 
+    def got_backlink(self, slot, pc):
+        _,_,off,base,_,size,_,_=self.rw
+        return (base<=slot<=base+size-8 and
+                struct.unpack_from('<Q',self.image,off+slot-base)[0]==pc+6)
+
     def thunk(self, pc):
         if pc in self.cache:
             return self.cache[pc]
@@ -58,7 +64,7 @@ class Edges:
         row=self.imports.get(s)
         key=None
         if (len(c)==16 and row and row[0]==7 and row[2][3]==2 and s in self.order
-                and c[6]==0x68 and c[11]==0xe9 and struct.unpack_from('<I',c,7)[0]==self.order[s]):
+                and self.got_backlink(s,pc) and c[6]==0x68 and c[11]==0xe9 and struct.unpack_from('<I',c,7)[0]==self.order[s]):
             resolver=pc+16+struct.unpack_from('<i',c,12)[0]
             head=self.span(resolver,16)
             if head[:2]==b'\xff\x35' and head[6:8]==b'\xff\x25' and head[12:]==b'\x90'*4:
