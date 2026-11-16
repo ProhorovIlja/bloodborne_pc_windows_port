@@ -109,6 +109,23 @@ def replay_copy_plan(data, data_rva, writes):
         data[off:off+16] = raw
 
 
+def pack_copy_plans(plans, read_block, occupied):
+    """Produce immutable dispatch rows; omit plans with relocatable sources."""
+    slots = sorted(occupied)
+    entries, writes, pool = [], [], {}
+    for rva, plan in sorted(plans.items()):
+        if any((i := bisect_right(slots, src-8)) < len(slots) and
+               slots[i] < src+16 for src, _ in plan):
+            continue
+        entries.append((rva,len(writes),len(plan)))
+        for src,dst in plan:
+            block = bytes(read_block(src))
+            if len(block)!=16:
+                raise ValueError('truncated constant')
+            writes.append((dst,pool.setdefault(block,len(pool))))
+    return entries,writes,b''.join(pool)
+
+
 def triage(b):
     inventory = audit(b)
     phoff = struct.unpack_from('<Q', b, 32)[0]
@@ -210,6 +227,8 @@ def triage(b):
             lambda x,n: any(lo<=x<=hi-n for lo,hi in rw))
         if plan:
             plans[a] = plan
+    copy_entries, copy_writes, constants = pack_copy_plans(
+        plans, lambda src: b[(o := offset(src,16,1)):o+16], occupied)
     thunks = set()
     for a in unknown:
         p = offset(a,9,1)
@@ -219,6 +238,9 @@ def triage(b):
                 rx_nonanchor_slots=sum(unknown.values()), rx_nonanchor_targets=len(unknown),
                 verified_plt_stubs=len(jmp),
                 copy_init_targets=len(plans),
+                copy_dispatch_targets=len(copy_entries),
+                copy_dispatch_writes=len(copy_writes),
+                copy_dispatch_constant_bytes=len(constants),
                 copy_init_writes=sum(map(len,plans.values())),
                 copy_init_destinations=len({dst for p in plans.values() for _,dst in p}),
                 pre_plt_end_nonanchor_slots=sum(n for a,n in unknown.items() if a<plt_end),
