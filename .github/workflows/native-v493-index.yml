@@ -90,6 +90,8 @@ jobs:
           ./registry544.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_startup_transaction_v547.c -o transaction547.exe
           ./transaction547.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_registry_startup_v548.c -o startup548.exe
+          ./startup548.exe
           if [ "$RUNNER_OS" != Windows ]; then
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
             ./join529
