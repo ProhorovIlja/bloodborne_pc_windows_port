@@ -1,0 +1,45 @@
+name: Native V469 linked leaf replay
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v469.*'
+      - 'native/source-port/recomp-v194/native_guarded_leaf_v463.c'
+      - '.github/workflows/native-v469-linked-replay.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v469.*'
+      - 'native/source-port/recomp-v194/native_guarded_leaf_v463.c'
+      - '.github/workflows/native-v469-linked-replay.yml'
+permissions:
+  contents: read
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          build() {
+            clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "$@" replay_startup_v469.c native_guarded_leaf_v463.c -o replay.exe
+          }
+          build
+          ./replay.exe | tr -d '\r' > actual.txt
+          printf '%s\n' '1 1 80000000000000000100000000000000' '2 0 80000000000000000100000000000000' '3 1 88000000000000000100000000000000' > expected.txt
+          diff -u expected.txt actual.txt
+          for bad in BAD_INDEX BAD_ORDER; do
+            build "-DV469_$bad"
+            status=0
+            ./replay.exe > bad.txt || status=$?
+            test "$status" = 3
+            test ! -s bad.txt
+          done
