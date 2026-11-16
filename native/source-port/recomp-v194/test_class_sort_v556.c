@@ -151,6 +151,47 @@ static int boundary559(void) {
     return 0;
 }
 
+/* End-to-end secondary table oracle for synthetic input, taken after the
+ * original append/grow/sort returned. Only output checksums are stored.
+ * The test normalizes the appended class pointer to the synthetic ID 129. */
+static int oracle560(void) {
+    static const struct { size_t cap, used; uint64_t sum; } cases[] = {
+        {0,0,UINT64_C(0xfffff6d7701591fb)}, {32,28,UINT64_C(0xd0755aaf7d25a5b7)},
+        {33,29,UINT64_C(0xfc13bc9514bef616)}, {38,37,UINT64_C(0xabeeae725fbf9d96)},
+        {41,38,UINT64_C(0xdfa7c6bee448a871)}, {512,508,UINT64_C(0x5b4921fc4d7dd747)},
+        {512,509,UINT64_C(0xa648ec3cfcdb2186)}, {512,510,UINT64_C(0xca78986d2a683531)},
+        {512,511,UINT64_C(0xe06b0fa88cbf4308)}, {512,512,UINT64_C(0xb62864c8f66b951b)},
+    };
+    for (size_t c=0;c<sizeof cases/sizeof *cases;++c) {
+        const size_t cap=cases[c].cap, n=cases[c].used;
+        struct fixture557 f={0};
+        unsigned char h[40]={0};
+        const uint64_t va=va557(0);
+        const struct bb_vector_block_v541 old={f.buf[0],sizeof f.buf[0],va};
+        bb_arena_store_v527(h+32,9);
+        if (cap) {
+            f.active=1;
+            bb_arena_store_v527(h+8,va);
+            bb_arena_store_v527(h+16,va+16*n);
+            bb_arena_store_v527(h+24,va+16*cap);
+        }
+        for (size_t i=0;i<n;++i) {
+            bb_arena_store_v527(f.buf[0]+16*i,(uint64_t)((int)((i*97)%24)-3));
+            bb_arena_store_v527(f.buf[0]+16*i+8,0x4200+i);
+        }
+        if (bb_secondary_insert_v557(h,sizeof h,UINT64_C(0x100010000),cap?&old:NULL,
+                129,&f,key557,alloc557,release557)!=BB_SEC_OK ||
+                (f.active!=1 && f.active!=2) || f.calls!=4) return 1;
+        const unsigned slot=f.active==2;
+        if (bb_vector_word_v541(h+8)!=va557(slot) ||
+                bb_vector_word_v541(h+16)!=va557(slot)+16*(n+4)) return 2;
+        uint64_t sum=0;
+        for (size_t i=0;i<2*(n+4);++i) sum=sum*131+bb_vector_word_v541(f.buf[slot]+8*i);
+        if (sum!=cases[c].sum) return 3;
+    }
+    return 0;
+}
+
 int main(void) {
     if (bb_secondary_slots_v559(0)!=1 || bb_secondary_slots_v559(1)!=2 ||
             bb_secondary_slots_v559(511)!=766 || bb_secondary_slots_v559(512)!=768 ||
@@ -161,6 +202,8 @@ int main(void) {
     if (sec) return 10+sec;
     const int edge=boundary559();
     if (edge) return 30+edge;
+    const int oracle=oracle560();
+    if (oracle) return 40+oracle;
     static const size_t ns[]={32,33,41,42,513};
     static const uint64_t sums[][2]={
         {UINT64_C(0xd603853c438d7e52),UINT64_C(0xd603853c438d7e52)},
