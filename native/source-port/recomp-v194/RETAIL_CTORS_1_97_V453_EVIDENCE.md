@@ -1,0 +1,9 @@
+# V453 — consecutive native returns 1–97
+
+A private, hash-matched Bloodborne 1.09 Linux x86-64 probe returned from corrected retail constructors 1–97 in order, in one process. Both 90 and 94 execute from their original entries to their original returns; 91–93 and 95–97 use verified native equivalents of the exact registration instruction pattern. No constructor was skipped in this prefix.
+
+The integration connects the original pool publication, both registry getters, allocator, both insertion paths, sorting, virtual getters, list parent creation/linking and the original release wrapper. Registry arrays use the native arena, not host malloc. The host still provides bounded storage, relocated address equivalents, mutex/RW lock/guard/libc adapters and one scoped diagnostic TLS binding; unsupported paths trap. Checks cover one and two registrations, explicit/computed key lookup, missing keys, both list links, eight final sorted value/object pairs, vector capacities, original pool metadata and balanced locks. After freeing registry arrays, 512 allocate/free cycles and a 960 KiB reuse check pass.
+
+Verified in 100 fresh ordered processes each under optimized Clang and GCC, and 10 under Clang ASan/UBSan on the C harness. The assembly is not sanitizer instrumented. Separately reran the 12,045 exact-pattern registration fixtures twice; that is not an ordered prefix. The original input was needed offline only. Run directory contained the host executable only, with no console executable/loader, interpreter or JIT. No original bytes, addresses or generated executable are published here.
+
+The next unexecuted constructor is 98. Static inspection shows additional initialization after the first registration and a different list-parent getter; no 98 return is claimed. Game main, title screen and gameplay remain unverified. This does not establish retail execution on Windows or macOS.
