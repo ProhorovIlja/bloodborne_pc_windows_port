@@ -74,6 +74,10 @@ jobs:
           ./register537.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_factory_seed_v538.c -o factory538.exe
           ./factory538.exe
+          rwflags=()
+          if [ "$RUNNER_OS" != Windows ]; then rwflags+=(-pthread); fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_factory_owner_v539.c -o factory539.exe
+          ./factory539.exe
           if [ "$RUNNER_OS" != Windows ]; then
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
             ./join529
