@@ -3,7 +3,7 @@ from pathlib import Path
 from store_v491 import decode,emit,find
 
 codes=['c607ffc3','66c74701ff80c3','48c74702ffffffffc3','884fffffc3',
-       '8857ffc3','48897701c3','4889bfffffffffc3','48893fc3']
+       '8857ffc3','48897701c3','4889b7ffffffffc3','48893fc3']
 rows=[]
 for a,code in enumerate(codes):
     raw=bytes.fromhex(code)
@@ -14,6 +14,8 @@ for a,code in enumerate(codes):
     x=(1,5,0,a,0,len(raw),len(raw),1)
     got=list(find(raw,x,[a]))
     assert len(got)==1 and got[0][1]==raw
+    if a==6:
+        assert got[0][2:5]==(-1,8,6)
     rows+=got
 for code in ('884707c3','408837c3','8827c3','678937c3','488937c20800','c70f01000000c3'):
     assert decode(bytes.fromhex(code)) is None

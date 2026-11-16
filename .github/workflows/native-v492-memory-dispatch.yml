@@ -1,0 +1,45 @@
+name: Native V492 writable AOT dispatch
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v492-memory-dispatch.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v492-memory-dispatch.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python -m unittest -v test_progress_v490 test_census_v480
+          python test_store_v491.py
+          python test_v492.py
+          clang -std=c11 -Wall -Wextra -Werror fixture_store_v491.c -o store.exe
+          ./store.exe
+          build() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror -DBB_ENABLE_V488 -I. -Iv487-fixture "$@" test_v492.c dispatch_v492.c dispatch_v487.c v487-fixture/{native,loads,alu,stores}.c -o integration.exe
+          }
+          build -O2
+          ./integration.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            build -g -fsanitize=address,undefined -fno-sanitize-recover=all
+            ./integration.exe
+          fi
