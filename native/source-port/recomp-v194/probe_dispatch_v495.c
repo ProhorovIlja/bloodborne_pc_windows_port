@@ -34,10 +34,13 @@ static int compare(uint64_t id,uint64_t disp,unsigned tag,struct stats *st) {
         memcpy(b,a,sizeof a);
         const struct bb_region_v478 ra={base,sizeof a,a},rb={base,sizeof b,b};
         const struct bb_write_region_v492 wa={base,sizeof a,a},wb={base,sizeof b,b};
-        const struct bb_input_v487 in={
-            draw(&seed),draw(&seed),draw(&seed),draw(&seed),
-            (i<12?base+i:base+sizeof a)-disp,draw(&seed)
-        };
+        struct bb_input_v487 in;
+        in.rax=draw(&seed);
+        in.rcx=draw(&seed);
+        in.rdx=draw(&seed);
+        in.rsi=draw(&seed);
+        in.rdi=(i<12?base+i:base+sizeof a)-disp;
+        in.flags=draw(&seed);
         struct bb_result_v484 x={1,2,3},y=x;
         const int read=(i&3)!=1,write=(i&3)!=2;
         const enum bb_status_v492 s=bb_dispatch_v492(id,&in,read?&ra:NULL,write?&wa:NULL,&x);
@@ -94,7 +97,8 @@ int main(void) {
         if(!compare(0,0,4,&st))goto fail;
         ++misses;
     }
-    if(bb_ids_v493[entries-1]<UINT64_MAX) {
+    const uint64_t final_id=bb_ids_v493[entries-1];
+    if(final_id<UINT64_MAX) {
         if(!compare(UINT64_MAX,0,4,&st))goto fail;
         ++misses;
     }
