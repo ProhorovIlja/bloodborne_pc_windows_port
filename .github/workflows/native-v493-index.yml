@@ -2,9 +2,9 @@ name: Native V493 indexed dispatch
 on:
   push:
     branches: [feature/native-v462-startup-closure-20261116]
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
   pull_request:
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
@@ -29,7 +29,7 @@ jobs:
         working-directory: native/source-port/recomp-v194
         run: |
           set -euo pipefail
-          python -m unittest -v test_index_v494 test_progress_v490 test_census_v480 test_import_closure_v499
+          python -m unittest -v test_index_v494 test_progress_v490 test_census_v480 test_import_closure_v499 test_bundle_v501
           python test_v497.py
           build497() {
             clang -std=c11 -Wall -Wextra -Wpedantic -Werror -DBB_WITH_RIP_V497 -I. -Iv497-fixture "$@" test_v497.c dispatch_v493.c -o five.exe

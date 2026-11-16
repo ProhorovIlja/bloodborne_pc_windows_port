@@ -9,7 +9,8 @@ import stat
 
 def audit(root):
     root = Path(root)
-    if root.is_symlink() or not root.is_dir():
+    root_info = root.lstat()
+    if not stat.S_ISDIR(root_info.st_mode) or getattr(root_info, 'st_file_attributes', 0) & 0x400:
         raise ValueError('expected a real directory')
     hits = []
     files = 0
@@ -18,10 +19,13 @@ def audit(root):
     for base, dirs, names in os.walk(root, onerror=fail, followlinks=False):
         for name in dirs + names:
             p = Path(base) / name
-            mode = p.lstat().st_mode
+            info = p.lstat()
+            mode = info.st_mode
             lower = name.casefold()
             reason = None
-            if stat.S_ISLNK(mode) or getattr(p.lstat(), 'st_file_attributes', 0) & 0x400:
+            if stat.S_ISLNK(mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
+                if name in dirs:
+                    dirs.remove(name)
                 reason = 'link-or-reparse-point'
             elif lower in ('eboot.bin', 'eboot.bin-decrypted') or lower.endswith(('.prx', '.sprx')):
                 reason = 'original-executable-name'
@@ -29,7 +33,9 @@ def audit(root):
                 files += 1
                 with p.open('rb') as stream:
                     h = stream.read(20)
-                if h.startswith(b'\x4f\x15\x3d\x1d'):
+                if h.startswith((b'BBPROBE2', b'BBPROBE3', b'BBPROBE4', b'BBPROBE5')):
+                    reason = 'bbport-guest-image'
+                elif h.startswith(b'\x4f\x15\x3d\x1d'):
                     reason = 'self-magic'
                 elif (len(h) == 20 and h[:6] == b'\x7fELF\x02\x01'
                       and int.from_bytes(h[16:18], 'little') in (0xfe00, 0xfe01, 0xfe04, 0xfe10, 0xfe18)
