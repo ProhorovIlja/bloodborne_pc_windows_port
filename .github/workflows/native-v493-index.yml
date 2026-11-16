@@ -29,7 +29,7 @@ jobs:
         working-directory: native/source-port/recomp-v194
         run: |
           set -euo pipefail
-          python -m unittest -v test_index_v494 test_progress_v490 test_census_v480
+          python -m unittest -v test_index_v494 test_progress_v490 test_census_v480 test_import_closure_v499
           python test_v497.py
           build497() {
             clang -std=c11 -Wall -Wextra -Wpedantic -Werror -DBB_WITH_RIP_V497 -I. -Iv497-fixture "$@" test_v497.c dispatch_v493.c -o five.exe
