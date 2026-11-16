@@ -107,6 +107,8 @@ jobs:
           ./error570.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_error_message_v571.c -o message571.exe
           ./message571.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_error_destructor_v572.c -o dtor572.exe
+          ./dtor572.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
