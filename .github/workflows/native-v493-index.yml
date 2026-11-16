@@ -82,6 +82,8 @@ jobs:
           ./registry540.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_registry_reserve_v541.c -o registry541.exe
           ./registry541.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_registry_insert_v542.c -o registry542.exe
+          ./registry542.exe
           if [ "$RUNNER_OS" != Windows ]; then
             clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
             ./join529
