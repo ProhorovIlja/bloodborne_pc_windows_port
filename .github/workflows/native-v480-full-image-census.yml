@@ -1,0 +1,26 @@
+name: Native V480 full-image census
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v480*', '.github/workflows/native-v480-full-image-census.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v480*', '.github/workflows/native-v480-full-image-census.yml']
+permissions:
+  contents: read
+jobs:
+  census:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - working-directory: native/source-port/recomp-v194
+        run: python -m unittest -v test_census_v480
