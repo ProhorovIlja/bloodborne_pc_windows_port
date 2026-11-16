@@ -23,6 +23,7 @@ struct fixture {
     enum bb_arena_status_v528 status;
     unsigned locked, unlocked, inits, rejected;
     int deny_unlock;
+    struct bb_singleton_session_v533 session;
 };
 static int make_mutex(struct bb_mutex_slot_v523 *s,uint64_t addr) {
     struct bb_mutex_result_v522 r=bb_mutex_host_v523(s,addr);
@@ -101,7 +102,7 @@ static int invoke(void *x,uint64_t target) {
     }
     if (target!=2) return 0;
     uint64_t out=0;
-    return bb_singleton_guarded_v530(s->rw,sizeof s->rw,&route,&singleton,guard,
+    return bb_singleton_once_v533(&s->session,s->rw,sizeof s->rw,&route,&singleton,guard,
         sync_mutex,init_arena,s,&out,&inner_guard)==BB_SINGLETON_OK && out==base+OBJ;
 }
 static void *reject(void *x,uint64_t off,uint64_t n,uint64_t a,int t,unsigned p) {
@@ -136,7 +137,7 @@ static int check(unsigned mode) {
         if (s.status!=BB_ARENA_READY || s.pool.count!=1 || !s.map.storage ||
             s.map.offset || bb_read64_v524(s.rw+OBJ+MAP_FIELDS)!=arena ||
             bb_read64_v524(s.rw)!=base+OBJ ||
-            bb_singleton_guarded_v530(s.rw,sizeof s.rw,&route,&singleton,guard,
+            bb_singleton_once_v533(&s.session,s.rw,sizeof s.rw,&route,&singleton,guard,
                 sync_mutex,init_arena,&s,&out,&inner_guard)!=BB_SINGLETON_OK ||
             out!=base+OBJ || s.locked!=1 || s.inits!=1) return 5;
         if (shyt_dm_release(&s.pool,s.map.offset,bytes)!=SHYT_DM_OK || s.pool.count) return 6;
@@ -162,6 +163,26 @@ int main(void) {
     if (!sync_mutex(&s,12,base+32,0) || s.unlocked!=1 ||
         pthread_create(&t,NULL,check_unlocked,&s) || pthread_join(t,&result) ||
         result!=&s || pthread_mutex_destroy(&s.outer.mutex)) return 34;
-    puts("V532_STARTUP_JOIN_PASS");
+    /* Real publication before the denied unlock; a second entry must not
+     * return the already published address or reacquire the held mutex. */
+    struct fixture f={0};
+    bb_arena_store_v527(f.rw+8,11);
+    bb_arena_store_v527(f.rw+16,12);
+    f.backend=(ShytDmBackend){&f,shyt_dm_cpu_map,shyt_dm_cpu_unmap};
+    f.deny_unlock=1;
+    if (!shyt_dm_init(&f.pool,bytes+align) || !invoke(&f,1) || invoke(&f,2) ||
+        f.session.failure!=BB_SINGLETON_UNLOCK_FAILED || !f.session.stopped ||
+        bb_read64_v524(f.rw)!=base+OBJ || f.status!=BB_ARENA_READY ||
+        !f.map.storage || f.locked!=1 || f.unlocked || f.inits!=1) return 35;
+    uint64_t out=99;
+    if (bb_singleton_once_v533(&f.session,f.rw,sizeof f.rw,&route,&singleton,guard,
+        sync_mutex,init_arena,&f,&out,&inner_guard)!=BB_SINGLETON_UNLOCK_FAILED ||
+        out!=99 || f.locked!=1 || f.unlocked || f.inits!=1) return 36;
+    if (pthread_create(&t,NULL,check_unlocked,&f) || pthread_join(t,&result) || result) return 37;
+    /* Test teardown, not automatic recovery of production startup. */
+    if (pthread_mutex_unlock(&f.outer.mutex) ||
+        shyt_dm_release(&f.pool,f.map.offset,bytes)!=SHYT_DM_OK ||
+        pthread_mutex_destroy(&f.inner.mutex) || pthread_mutex_destroy(&f.outer.mutex)) return 38;
+    puts("V533_STARTUP_JOIN_PASS");
     return 0;
 }

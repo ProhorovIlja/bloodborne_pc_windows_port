@@ -63,4 +63,26 @@ static inline enum bb_singleton_status_v525 bb_singleton_get_v525(
         int (*init)(void *, uint64_t), void *ctx, uint64_t *out) {
     return bb_singleton_guarded_v530(rw,n,p,s,guard,sync,init,ctx,out,NULL);
 }
+/* Caller-owned, zero-initialized state for one serialized startup session.
+ * A failed startup is terminal: publication can precede a failed unlock,
+ * so the warm path must not turn the failure into a successful retry.
+ * This neither rolls back the game object nor repairs a held mutex. */
+struct bb_singleton_session_v533 { enum bb_singleton_status_v525 failure; int stopped; };
+static inline enum bb_singleton_status_v525 bb_singleton_once_v533(
+        struct bb_singleton_session_v533 *session,
+        unsigned char *rw,size_t n,const struct bb_ctor_route_v524 *p,
+        const struct bb_singleton_v525 *s,bb_call_v521 guard,
+        int (*sync)(void *,uint64_t,uint64_t,uint32_t),
+        int (*init)(void *,uint64_t),void *ctx,uint64_t *out,
+        const size_t *inner_guard) {
+    if (!session) return BB_SINGLETON_MISS;
+    if (session->stopped) return session->failure;
+    const enum bb_singleton_status_v525 r=
+        bb_singleton_guarded_v530(rw,n,p,s,guard,sync,init,ctx,out,inner_guard);
+    if (r!=BB_SINGLETON_OK) {
+        session->failure=r;
+        session->stopped=1;
+    }
+    return r;
+}
 #endif
