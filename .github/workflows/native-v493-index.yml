@@ -101,6 +101,8 @@ jobs:
           python test_class_registry_mutations_v558.py
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_copy_dispatch_v565.c -o copy565.exe
           ./copy565.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_guarded_publish_v569.c -o publish569.exe
+          ./publish569.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
