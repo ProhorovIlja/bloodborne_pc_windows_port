@@ -25,6 +25,7 @@ def checked(report,count):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('generated',type=Path,help='existing trusted owner-local prepare_v493 output')
+    p.add_argument('--with-rip',action='store_true',help='check the V497 five-family build')
     a=p.parse_args()
     if sys.platform!='linux':
         p.error('the dual static compiler driver requires Linux; the C probe is portable')
@@ -33,7 +34,8 @@ def main():
     try:
         if any(q.is_symlink() or (q/'.git').exists() for q in (g,*g.parents)):
             raise ValueError('unsafe input directory')
-        for n in (*UNITS,'progress.json'):
+        units=(*UNITS,'rip.c') if a.with_rip else UNITS
+        for n in (*units,'progress.json'):
             q=g/n
             if q.is_symlink() or not q.is_file() or not 0<q.stat().st_size<=64<<20:
                 raise ValueError('missing or unsafe generated unit')
@@ -54,7 +56,8 @@ def main():
                 if not compiler:
                     raise ValueError('missing compiler')
                 exe=work/cc
-                subprocess.run([compiler,'-std=c11','-O2','-static','-Wall','-Wextra','-Werror',
+                mode=['-DBB_WITH_RIP_V497'] if a.with_rip else []
+                subprocess.run([compiler,*mode,'-std=c11','-O2','-static','-Wall','-Wextra','-Werror',
                                 '-I',str(src),'-I',str(g),str(src/'probe_dispatch_v495.c'),
                                 str(src/'dispatch_v492.c'),'-o',str(exe)],
                                cwd=work,check=True,timeout=240)

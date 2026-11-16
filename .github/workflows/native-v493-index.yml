@@ -72,4 +72,7 @@ jobs:
             trap 'rm -rf -- "$private_fixture"' EXIT
             cp v487-fixture/{native.c,loads.c,alu.c,stores.c,routes_v487.inc,index_v493.inc,progress.json} "$private_fixture/"
             python probe_private_dispatch_v495.py "$private_fixture"
+            printf '{"metadata_start_generation":{"done":15}}\n' > "$private_fixture/progress.json"
+            cp v497-fixture/{rip.c,index_v493.inc} "$private_fixture/"
+            python probe_private_dispatch_v495.py --with-rip "$private_fixture"
           fi

@@ -52,7 +52,11 @@ static int compare(uint64_t id,uint64_t disp,unsigned tag,unsigned width,
         struct bb_result_v484 x={1,2,3},y=x;
         const int read=(i&3)!=1,write=(i&3)!=2;
         const enum bb_status_v492 s=bb_dispatch_v492(id,&in,read?&ra:NULL,write?&wa:NULL,&x);
+#ifdef BB_WITH_RIP_V497
+        const enum bb_status_v492 t=bb_dispatch_v497(id,&in,read?&rb:NULL,write?&wb:NULL,base,&y);
+#else
         const enum bb_status_v492 t=bb_dispatch_v493(id,&in,read?&rb:NULL,write?&wb:NULL,&y);
+#endif
         const enum bb_status_v492 expected=tag==4?BB_MISS_V492:
             tag==1&&(!read||offset>sizeof a-width)?BB_READ_DENIED_V492:
             tag==3&&(!write||offset>sizeof a-width)?BB_WRITE_DENIED_V492:BB_OK_V492;
@@ -94,7 +98,10 @@ static int compare(uint64_t id,uint64_t disp,unsigned tag,unsigned width,
 
 int main(void) {
     struct stats st={0,UINT64_C(14695981039346656037)};
-    const size_t entries=COUNT(table)+COUNT(memory_routes)+COUNT(alu_rows_v493)+COUNT(stores);
+    size_t entries=COUNT(table)+COUNT(memory_routes)+COUNT(alu_rows_v493)+COUNT(stores);
+#ifdef BB_WITH_RIP_V497
+    entries+=COUNT(rip_rows_v496);
+#endif
     if(entries!=COUNT(bb_ids_v493)||entries!=COUNT(bb_routes_v493)) {
         fputs("V495 family and index counts disagree\n",stderr);
         goto fail;
@@ -117,6 +124,30 @@ int main(void) {
         if(!compare(alu_rows_v493[j].id,0,2,1,NULL,&st))goto fail;
     for(size_t j=0;j<COUNT(stores);++j)
         if(!compare(stores[j].id,stores[j].disp,3,stores[j].width,stores+j,&st))goto fail;
+#ifdef BB_WITH_RIP_V497
+    for(size_t j=0;j<COUNT(rip_rows_v496);++j) {
+        const uint64_t target=rip_rows_v496[j].target,id=rip_rows_v496[j].id;
+        uint64_t seed=id;
+        for(unsigned i=0;i<16;++i) {
+            const uint64_t flags=draw(&seed);
+            const uint64_t slide=i==0?0:i==1?UINT64_MAX-target:i==2?UINT64_MAX:draw(&seed);
+            const int overflow=slide>UINT64_MAX-target;
+            const struct bb_input_v487 in={.flags=flags};
+            struct bb_result_v484 out={1,2,3};
+            const enum bb_status_v492 status=bb_dispatch_v497(id,&in,NULL,NULL,slide,&out);
+            if(overflow ? (status!=BB_ADDRESS_DENIED_V497||out.rax!=1||out.flags!=2||out.flags_valid!=3)
+                        : (status!=BB_OK_V492||out.rax!=target+slide||out.flags!=flags||out.flags_valid!=0x8d5)) {
+                fprintf(stderr,"V497 RIP mismatch case=%u\n",i);
+                goto fail;
+            }
+            ++st.calls;
+            hash_word(&st.hash,(uint64_t)status);
+            hash_word(&st.hash,out.rax);
+            hash_word(&st.hash,out.flags&out.flags_valid);
+            hash_word(&st.hash,out.flags_valid);
+        }
+    }
+#endif
     uint64_t misses=0;
     for(size_t j=1;j<entries&&misses<256;++j)
         if((uint64_t)bb_ids_v493[j]-bb_ids_v493[j-1]>1) {
