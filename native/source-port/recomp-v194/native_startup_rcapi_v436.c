@@ -26,7 +26,7 @@ int shyt_startup_rcapi_run_v436(ShytStartupDispatchV435 *dispatch,
        !dispatch || !dispatch->owner || !dispatch->cpu || !dispatch->routes ||
        !dispatch->bindings || !dispatch->count ||
        dispatch->count>SHYT_STARTUP_EDGES_MAX_V426 || dispatch->terminal ||
-       !driver || !ordinal || ordinal>SHYT_CTOR_LIMIT_V427)
+       !driver || !ordinal || ordinal>SHYT_STARTUP_MAIN_SCOPE_V449)
         return SHYT_V393_DENIED;
     const ShytActiveCallV436 active={dispatch,ordinal};
     active_v436=&active;

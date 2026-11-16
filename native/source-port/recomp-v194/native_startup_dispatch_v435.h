@@ -4,6 +4,8 @@
 #include "native_startup_ctor_plan_v427.h"
 #include "native_startup_edges_v426.h"
 
+/* Main has a separate route namespace, not a constructor ordinal. */
+enum { SHYT_STARTUP_MAIN_SCOPE_V449=SHYT_CTOR_LIMIT_V427+1 };
 typedef struct { uint32_t scope; ShytStartupEdgeV418 edge; } ShytScopedCallV435;
 typedef struct { const RcFunction *row; } ShytBoundCallV435;
 typedef struct {
@@ -49,7 +51,7 @@ static inline int shyt_startup_dispatch_init_v435(ShytStartupDispatchV435 *state
         if(!table[i].fn || (i && table[i-1].offset>=table[i].offset))return 0;
     for(size_t i=0;i<count;++i) {
         ShytScopedCallV435 r=routes[i];
-        if(!r.scope || r.scope>SHYT_CTOR_LIMIT_V427 || !r.edge.target ||
+        if(!r.scope || r.scope>SHYT_STARTUP_MAIN_SCOPE_V449 || !r.edge.target ||
            !r.edge.next || r.edge.target==r.edge.next ||
            (i && !shyt_call_route_less_v435(routes[i-1],r)) ||
            !shyt_lookup_call_row_v435(table,table_count,r.edge.target))return 0;
