@@ -58,14 +58,15 @@ static inline void shyt_crt_drain_v409(ShytCrtV409 *crt) {
  * pre-main failure no main/status notification occurs; after initializer
  * failure registered cleanup runs, and status_out stays untouched. A
  * failing environment adapter must clean up its own partial setup. */
-static inline int shyt_crt_run_v409(ShytCrtV409 *crt,
+typedef int (*ShytCrtCheckedMainV450)(void *,ShytCrtV409 *,int,char *const *,int *);
+static inline int shyt_crt_run_checked_v450(ShytCrtV409 *crt,
     const ShytCrtHooksV409 *hooks, void *context, int argc,
-    char *const *argv, char *const *envp, int *status_out) {
+    char *const *argv, char *const *envp, int *status_out,ShytCrtCheckedMainV450 checked) {
     int status;
     if (!crt || crt->phase != SHYT_CRT_NEW_V409 || crt->count ||
         !hooks || !hooks->setup_environment || !hooks->loader_shutdown.fn ||
         !hooks->image_shutdown.fn || !hooks->run_initializers ||
-        !hooks->main_entry || !hooks->main_returned ||
+        (!checked && !hooks->main_entry) || !hooks->main_returned ||
         !status_out || argc < 0 || argc > 4096 || !argv || argv[argc])
         return 0;
     for (int i = 0; i < argc; ++i)
@@ -86,12 +87,23 @@ static inline int shyt_crt_run_v409(ShytCrtV409 *crt,
     crt->phase = SHYT_CRT_MAIN_V409;
     /* The audited retail wrapper supplies zero as main's third argument.
      * Environment setup is separate; do not pass host envp to main. */
-    status = hooks->main_entry(context, crt, argc, argv, NULL);
+    if(checked) {
+        if(!checked(context,crt,argc,argv,&status)) {
+            shyt_crt_drain_v409(crt);
+            crt->phase=SHYT_CRT_FAILED_V409;
+            return 0;
+        }
+    } else status=hooks->main_entry(context,crt,argc,argv,NULL);
     crt->phase = SHYT_CRT_NOTIFY_V409;
     hooks->main_returned(context, status);
     shyt_crt_drain_v409(crt);
     *status_out = status;
     crt->phase = SHYT_CRT_DONE_V409;
     return 1;
+}
+static inline int shyt_crt_run_v409(ShytCrtV409 *crt,
+    const ShytCrtHooksV409 *hooks, void *context, int argc,
+    char *const *argv, char *const *envp, int *status_out) {
+    return shyt_crt_run_checked_v450(crt,hooks,context,argc,argv,envp,status_out,NULL);
 }
 #endif
