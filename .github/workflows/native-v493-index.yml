@@ -30,6 +30,12 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest -v test_index_v494 test_progress_v490 test_census_v480 test_import_closure_v499 test_bundle_v501 test_switch_v505 test_switch_scan_v506 test_switch_audit_v507 test_switch_guard_v508 test_switch_default_v509 test_data_reloc_v510 test_module_closure_v511 test_tls_layout_v512
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_tls_resolve_v513.c -o tls513.exe
+          ./tls513.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -g -fsanitize=address,undefined -fno-sanitize-recover=all test_tls_resolve_v513.c -o tls513-san
+            ./tls513-san
+          fi
           python test_v497.py
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
           ./load-route.exe

@@ -1,0 +1,5 @@
+# V513 — descriptor resolution on prepared TLS data
+
+PS4Recomp uses static Variant II blocks; bloodborne-runtime provides a separate per-thread module lookup and reads the descriptor offset already stored next to DTPMOD64. V513 is a bounded C resolver for the V512 static layout, not a replacement for host thread setup, TCB/DTV or the complete guest ABI.
+
+On the private CUSA03173 1.09 image and its two bundled modules, all 17 adjacent descriptor offsets were within their respective TLS blocks and had no relocation on the offset word. Four simultaneous Linux pthreads resolved all 17 descriptors, checked initial bytes and wrote independent sentinels. Clang, GCC and Clang ASan/UBSan passed with the three original paths masked by a private read-only bind mount; only prepared templates and descriptors were read. The replay tests byte access, not the widths of game instructions. No game execution, fallback audit or first-frame result is implied. Only synthetic fixture data is in this repository.
