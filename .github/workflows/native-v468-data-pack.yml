@@ -1,0 +1,41 @@
+name: Native V468 data-only leaf replay
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v468.py'
+      - 'native/source-port/recomp-v194/native_guarded_leaf_v463.c'
+      - '.github/workflows/native-v468-data-pack.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v468.py'
+      - 'native/source-port/recomp-v194/native_guarded_leaf_v463.c'
+      - '.github/workflows/native-v468-data-pack.yml'
+permissions:
+  contents: read
+jobs:
+  fixture:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -eu
+          python startup_data_v468.py
+          clang -shared -O2 -Wall -Wextra -Werror -Wl,--export-all-symbols native_guarded_leaf_v463.c -o leaf.dll 2>build.err || {
+            if [ "$RUNNER_OS" = Windows ]; then cat build.err; exit 1; fi
+            clang -shared -fPIC -O2 -Wall -Wextra -Werror native_guarded_leaf_v463.c -o leaf.dll
+          }
+          python -c 'import hashlib,pathlib,startup_data_v468 as p; b=p.pack([(1,32,128,bytes(16)),(2,32,128,bytes(16)),(3,48,128,bytes(16))]); pathlib.Path("fixture.dat").write_bytes(b); pathlib.Path("fixture.sha").write_text(hashlib.sha256(b).hexdigest())'
+          python replay_startup_v468.py fixture.dat fixture.sha leaf.dll | grep -Fx 'NATIVE_V468_REPLAY_PASS 3 2 2 6'
