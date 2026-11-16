@@ -46,8 +46,11 @@ def main():
     sys.addaudithook(audit)
     with pathlib.Path(name).open('rb') as f:
         data = f.read(p.HEADER.size+p.MAX_ROWS*p.ROW.size+1)
-    with pathlib.Path(digest).open('r', encoding='ascii') as f:
-        pin = f.read(66).strip()
+    with pathlib.Path(digest).open('rb') as f:
+        raw_pin = f.read(67).strip()
+    if len(raw_pin) != 64 or any(b not in b'0123456789abcdef' for b in raw_pin):
+        raise ValueError('invalid pinned digest')
+    pin = ''.join(map(chr, raw_pin))
     print('NATIVE_V468_REPLAY_PASS', *replay(p.unpack(data, pin), lib))
 
 
