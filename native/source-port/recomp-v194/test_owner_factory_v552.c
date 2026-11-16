@@ -54,7 +54,7 @@ static int release(void *x,uint64_t owner,uint64_t va) { (void)x; (void)owner; (
 static int warn(void *x) { (void)x; return 0; }
 int main(void) {
     const struct bb_ctor_route_v524 p={.base=0x1000,.guard=0,.done=1,.storage=16,.vtable=6};
-    const struct bb_singleton_v525 s={48,64,32,40,4,5};
+    const struct bb_singleton_v525 s={48,64,96,104,4,5};
     const struct bb_region_v478 a={0x200000,sizeof arena,arena};
     for (unsigned i=0;i<4;++i) {
         struct state t={.mode=i};
@@ -62,7 +62,7 @@ int main(void) {
         unsigned char tls[80]={0};
         const struct bb_registry_tls_v548 l={tls,sizeof tls,48,0x400000,7,-24,-8,-48};
         const struct bb_registry_driver_v548 d={&t,alloc,release};
-        bb_arena_store_v527(t.rw+32,4); bb_arena_store_v527(t.rw+40,5);
+        bb_arena_store_v527(t.rw+96,4); bb_arena_store_v527(t.rw+104,5);
         const unsigned phase=i==1?3:i==2?4:6;
         for (unsigned pass=0;pass<2;++pass) {
             uint64_t out=99;

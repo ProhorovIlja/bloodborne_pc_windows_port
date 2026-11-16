@@ -137,8 +137,8 @@ static int run(uint64_t base,int mode) {
         struct cold_fixture c={.heap=&f,.owner=&owner,.base=f.owner-64};
         struct bb_owner_factory_v552 factory={0};
         const struct bb_ctor_route_v524 p={.base=c.base,.guard=0,.done=1,.storage=16,.vtable=6};
-        const struct bb_singleton_v525 k={48,64,32,40,4,5};
-        bb_arena_store_v527(c.rw+32,4); bb_arena_store_v527(c.rw+40,5);
+        const struct bb_singleton_v525 k={48,64,96,104,4,5};
+        bb_arena_store_v527(c.rw+96,4); bb_arena_store_v527(c.rw+104,5);
         uint64_t out=99;
         if (bb_owner_factory_v552(&factory,&owner,c.rw,sizeof c.rw,&p,&k,2,guard,sync_owner,seed_owner,
                 heap_after_publication,&c,&f.span,(uintptr_t)body,(uintptr_t)arena,&t,&d,header,warn,&out)!=(mode==1) ||
