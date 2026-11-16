@@ -31,6 +31,13 @@ jobs:
           set -euo pipefail
           python -m unittest -v test_index_v494 test_progress_v490 test_census_v480
           python test_v493.py
+          python test_rip_v496.py
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror fixture_rip_v496.c -o rip.exe
+          ./rip.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -g -fsanitize=address,undefined -fno-sanitize-recover=all fixture_rip_v496.c -o rip-san
+            ./rip-san
+          fi
           build() {
             clang -std=c11 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture "$@" test_v493.c dispatch_v493.c -o indexed.exe
           }

@@ -55,7 +55,7 @@ def main():
                     raise ValueError('missing compiler')
                 exe=work/cc
                 subprocess.run([compiler,'-std=c11','-O2','-static','-Wall','-Wextra','-Werror',
-                                '-I',str(g),str(src/'probe_dispatch_v495.c'),
+                                '-I',str(src),'-I',str(g),str(src/'probe_dispatch_v495.c'),
                                 str(src/'dispatch_v492.c'),'-o',str(exe)],
                                cwd=work,check=True,timeout=240)
                 result=subprocess.run([str(exe)],cwd=run,env={'LC_ALL':'C'},stdout=subprocess.PIPE,
