@@ -1,0 +1,28 @@
+name: Native V598 class base getter
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v59[78].c'
+      - '.github/workflows/native-v598-class-base.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  class90:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test without retail files
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_class_base_v598.c -o "$RUNNER_TEMP/class90"
+          "$RUNNER_TEMP/class90"
