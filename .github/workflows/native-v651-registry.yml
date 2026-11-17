@@ -11,6 +11,7 @@ on:
       - 'native/source-port/recomp-v194/*v659*'
       - 'native/source-port/recomp-v194/*v660*'
       - 'native/source-port/recomp-v194/*v661*'
+      - 'native/source-port/recomp-v194/*v662*'
       - '.github/workflows/native-v651-registry.yml'
   workflow_dispatch:
 permissions:
@@ -47,3 +48,5 @@ jobs:
           "$RUNNER_TEMP/regular-heap"
           "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_regular_heap_allocate_v661.c -o "$RUNNER_TEMP/heap-allocate"
           "$RUNNER_TEMP/heap-allocate"
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_regular_heap_free_v662.c -o "$RUNNER_TEMP/heap-free"
+          "$RUNNER_TEMP/heap-free"
