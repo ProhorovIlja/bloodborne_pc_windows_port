@@ -5,11 +5,17 @@
 
 enum class BbArenaStatusV582 { complete, invalid, lock_failed, unlock_failed, unsupported };
 struct BbArenaResultV582 { BbArenaStatusV582 status; void *payload; };
+// Caller may query its native mapping registry. A mapped pointer still needs
+// the external allocation record; querying alone never authorizes a release.
+enum class BbForeignV583 { unmapped, mapped, unavailable };
+using BbForeignQueryV583=BbForeignV583 (*)(void *,uintptr_t);
 /* Offsets label retail call sites, not the layout of a host vtable.
  * Only live payloads from this arena (or null) may be freed. Foreign
- * pointers are reported, not dispatched to the unported external path. */
+ * pointers may query a mapping registry under the same lock; only a
+ * definite miss is a successful no-op. */
 static inline BbArenaResultV582 bb_arena_route_v582(BbArenaV581 a,unsigned slot,
-    void *payload,uint64_t n,uint64_t align) {
+    void *payload,uint64_t n,uint64_t align,
+    BbForeignQueryV583 query=nullptr,void *query_ctx=nullptr) {
     using S=BbArenaStatusV582;
     if (!a.heap || !a.mutex || !a.lock || !a.unlock) return {S::invalid,nullptr};
     const bool freeing=slot==0x70 || slot==0xa0;
@@ -25,8 +31,10 @@ static inline BbArenaResultV582 bb_arena_route_v582(BbArenaV581 a,unsigned slot,
             const uintptr_t p=reinterpret_cast<uintptr_t>(payload);
             if (p) {
                 const uintptr_t first=reinterpret_cast<uintptr_t>(a.heap->first_block);
-                if (!first || p<first || p-first>=a.heap->capacity ||
-                    p<a.heap->lowest_payload || p>=a.heap->highest_payload || (p&15))
+                if (!first || p<first || p-first>=a.heap->capacity) {
+                    if (!query || query(query_ctx,p)!=BbForeignV583::unmapped)
+                        status=S::unsupported;
+                } else if (p<a.heap->lowest_payload || p>=a.heap->highest_payload || (p&15))
                     status=S::unsupported;
                 else bb_engine_regular_heap_free_024858a0(a.heap,payload);
             }
