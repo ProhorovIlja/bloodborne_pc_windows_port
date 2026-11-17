@@ -7,11 +7,11 @@ enum bb_class_v554 { BB_CLASS_INVALID, BB_CLASS_STOP, BB_CLASS_FULL, BB_CLASS_OK
 /* Primary DLRuntimeClass table only. Input records are sorted by word 3.
  * Caller serializes access, owns nonoverlapping host buffers, and handles
  * terminal allocation failure and the separate secondary table. */
-static inline enum bb_class_v554 bb_class_insert_v554(unsigned char *h,size_t n,uint64_t hva,
-        const struct bb_vector_block_v541 *old,const uint64_t row[4],void *ctx,
+static inline enum bb_class_v554 bb_class_insert_floor_v609(unsigned char *h,size_t n,uint64_t hva,
+        const struct bb_vector_block_v541 *old,const uint64_t row[4],size_t floor,void *ctx,
         int (*alloc)(void *,uint64_t,size_t,struct bb_vector_block_v541 *),
         int (*release)(void *,uint64_t,uint64_t)) {
-    if (!h || n<40 || !hva || hva>UINT64_MAX-40 || !row || !row[0] || !alloc || !release)
+    if (!h || n<40 || !hva || hva>UINT64_MAX-40 || !row || !row[0] || (floor&31) || !alloc || !release)
         return BB_CLASS_INVALID;
     uint64_t lo=bb_vector_word_v541(h+8),hi=bb_vector_word_v541(h+16),cap=bb_vector_word_v541(h+24);
     const uint64_t owner=bb_vector_word_v541(h+32);
@@ -20,12 +20,12 @@ static inline enum bb_class_v554 bb_class_insert_v554(unsigned char *h,size_t n,
         (!lo && cap) || (lo<hva+40 && hva<cap) ||
         (lo && (!old || !old->data || old->va!=lo || cap-lo>old->size))) return BB_CLASS_INVALID;
     unsigned char *data=lo?old->data:NULL;
-    if (lo==hi && cap-lo<0x4000) {
+    if (lo==hi && cap-lo<floor) {
         struct bb_vector_block_v541 b={0};
-        if (!alloc(ctx,owner,0x4000,&b) || !b.data || b.size<0x4000 || !b.va || (b.va&7) ||
-            b.va>UINT64_MAX-0x4000 || b.va==lo || (b.va<cap && lo<b.va+0x4000) ||
-            (b.va<hva+40 && hva<b.va+0x4000) || (lo && !release(ctx,owner,lo))) return BB_CLASS_STOP;
-        data=b.data; lo=hi=b.va; cap=lo+0x4000;
+        if (!alloc(ctx,owner,floor,&b) || !b.data || b.size<floor || !b.va || (b.va&7) ||
+            b.va>UINT64_MAX-floor || b.va==lo || (b.va<cap && lo<b.va+floor) ||
+            (b.va<hva+40 && hva<b.va+floor) || (lo && !release(ctx,owner,lo))) return BB_CLASS_STOP;
+        data=b.data; lo=hi=b.va; cap=lo+floor;
         bb_arena_store_v527(h+24,cap);
         bb_arena_store_v527(h+16,hi);
         bb_arena_store_v527(h+8,lo);
@@ -61,5 +61,11 @@ static inline enum bb_class_v554 bb_class_insert_v554(unsigned char *h,size_t n,
     for (unsigned i=0;i<4;++i) bb_arena_store_v527(data+at+8*i,item[i]);
     bb_arena_store_v527(h+16,hi+32);
     return BB_CLASS_OK;
+}
+static inline enum bb_class_v554 bb_class_insert_v554(unsigned char *h,size_t n,uint64_t hva,
+        const struct bb_vector_block_v541 *old,const uint64_t row[4],void *ctx,
+        int (*alloc)(void *,uint64_t,size_t,struct bb_vector_block_v541 *),
+        int (*release)(void *,uint64_t,uint64_t)) {
+    return bb_class_insert_floor_v609(h,n,hva,old,row,0x4000,ctx,alloc,release);
 }
 #endif
