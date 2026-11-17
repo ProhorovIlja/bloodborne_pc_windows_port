@@ -143,6 +143,8 @@ jobs:
           ./meta587.exe
           clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_control_v588.cpp -o control588.exe
           ./control588.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_check_v589.cpp paleblood_v579/regular_heap_allocate.cpp -o check589.exe
+          ./check589.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
