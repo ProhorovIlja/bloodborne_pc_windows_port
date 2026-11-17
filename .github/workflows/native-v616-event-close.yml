@@ -1,0 +1,29 @@
+name: Native V616 event close
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v61[56].c'
+      - 'native/source-port/recomp-v194/member_lookup_v608.c'
+      - '.github/workflows/native-v616-event-close.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test under ASan and UBSan
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          "$CC" -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_event_close_v616.c -o "$RUNNER_TEMP/member-lookup"
+          "$RUNNER_TEMP/member-lookup"
