@@ -115,6 +115,8 @@ jobs:
           ./gate574.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_wakeup_ctor_v575.c -o wakeup575.exe
           ./wakeup575.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_singleton_ctor_v576.c -o singleton576.exe
+          ./singleton576.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
