@@ -135,6 +135,8 @@ jobs:
           ./query583.exe
           clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_external_v584.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o external584.exe
           ./external584.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_inspect_v585.cpp paleblood_v579/regular_heap_allocate.cpp -o inspect585.exe
+          ./inspect585.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
