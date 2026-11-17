@@ -3,7 +3,8 @@
 #include <stdint.h>
 #include <string.h>
 
-typedef struct { void *self; const void *event; void *payload; } BbQueuePacket617;
+#include "event_packet_v619.h"
+typedef BbEventPacket619 BbQueuePacket617;
 typedef struct {
     uint64_t tag;
     BbQueuePacket617 **begin, **end, **limit;
