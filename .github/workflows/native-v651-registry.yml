@@ -15,6 +15,7 @@ on:
       - 'native/source-port/recomp-v194/*v663*'
       - 'native/source-port/recomp-v194/*v664*'
       - 'native/source-port/recomp-v194/*v665*'
+      - 'native/source-port/recomp-v194/*v668*'
       - '.github/workflows/native-v651-registry.yml'
   workflow_dispatch:
 permissions:
@@ -55,7 +56,9 @@ jobs:
           "$RUNNER_TEMP/heap-free"
           "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -pthread -DBB_V663_REPOSITORY_HEAP -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_locked_heap_v663.c -o "$RUNNER_TEMP/locked-heap"
           timeout 30s "$RUNNER_TEMP/locked-heap"
-          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_heap_registry_boot_v664.c -o "$RUNNER_TEMP/heap-registry-boot"
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_heap_registry_boot_v664.c heap_site_v668.c -o "$RUNNER_TEMP/heap-registry-boot"
           timeout 30s "$RUNNER_TEMP/heap-registry-boot"
           "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_heap_range_v665.c -o "$RUNNER_TEMP/heap-range"
           timeout 30s "$RUNNER_TEMP/heap-range"
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -pthread -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie heap_site_v668.c test_heap_site_v668.c -o "$RUNNER_TEMP/heap-site"
+          timeout 30s "$RUNNER_TEMP/heap-site"

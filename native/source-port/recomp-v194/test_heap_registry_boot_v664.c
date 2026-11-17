@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "heap_registry_boot_v664.h"
 #include "heap_range_v665.h"
+#include "heap_site_v668.h"
 #include "heap_view_query_v667.h"
 #include "provider_publish_v658.h"
 #include <stddef.h>
@@ -23,7 +24,11 @@ static int release(void *ctx, void *p) {
     struct fixture *f=ctx;
     return bb_locked_heap_free_v663(&f->lock,p);
 }
-static int range_enter(void *ctx) { return !pthread_mutex_lock(ctx); }
+static const char heap_source[]="DLHeapManager.cpp";
+static int range_enter(void *ctx) {
+    assert(bb_heap_site_v668.file==heap_source && bb_heap_site_v668.line==251);
+    return !pthread_mutex_lock(ctx);
+}
 static void range_leave(void *ctx) { assert(!pthread_mutex_unlock(ctx)); }
 
 /* A scoped native table for the tested slot, not a full game vtable. */
@@ -85,6 +90,7 @@ int main(void) {
     /* Use the actual V664 registry, not a second header or stand-in buffer. */
     pthread_mutex_t range_lock=PTHREAD_MUTEX_INITIALIZER;
     const struct bb_heap_range_lock_v665 lock={&range_lock,range_enter,range_leave};
+    bb_heap_site_note_v668(heap_source,251);
     assert(bb_heap_range_insert_v665((unsigned char *)p,lock,h,
                                      (uintptr_t)backing,sizeof backing));
     assert(bb_load_v661(start)==h && bb_load_v661(start+8)==(uintptr_t)backing);
