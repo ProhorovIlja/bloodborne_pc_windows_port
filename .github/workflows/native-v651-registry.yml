@@ -6,6 +6,7 @@ on:
       - 'native/source-port/recomp-v194/*v651*'
       - 'native/source-port/recomp-v194/*v652*'
       - 'native/source-port/recomp-v194/*v653*'
+      - 'native/source-port/recomp-v194/*v656*'
       - '.github/workflows/native-v651-registry.yml'
   workflow_dispatch:
 permissions:
@@ -32,3 +33,5 @@ jobs:
           "$RUNNER_TEMP/pending"
           "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_pending_sort_v653.c -o "$RUNNER_TEMP/pending-large"
           "$RUNNER_TEMP/pending-large"
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_registry_storage_v656.c -o "$RUNNER_TEMP/registry-storage"
+          "$RUNNER_TEMP/registry-storage"
