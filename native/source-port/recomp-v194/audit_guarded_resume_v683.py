@@ -33,12 +33,12 @@ def guarded(code, pc):
     saved = unpack_from('<b', code, i+3)[0]
     fail = i+6+unpack_from('<b', code, i+5)[0]
     i += 6
-    for op, src in MOV:
+    src = None
+    for op, candidate in MOV:
         if code.startswith(op, i):
+            src = candidate
             i += len(op)
             break
-    else:
-        return None
     if code.startswith(b'\x48\x83\xc4', i):
         skip = unpack_from('<b', code, i+3)[0]
         i += 4

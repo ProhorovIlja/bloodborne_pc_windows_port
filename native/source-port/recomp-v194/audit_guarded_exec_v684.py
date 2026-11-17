@@ -25,6 +25,7 @@ def emit(rows):
         if clear:
             lines.append('        *tls=0;')
         lines += [f'        if (frame[bp-{n}] != guard) {{ *rax=guard; *next=0x{fail:x}; return 2; }}',
+                  '        *rax=guard;' if src is None else
                   f'        *rax=(guard & ~UINT64_C(255)) | (uint8_t)nv[{src}];']
         lines += [f'        nv[{reg}]=frame[{i}];' for i, reg in enumerate(pops, skip)]
         lines += [f'        *next=frame[{end}]; return 1;']
