@@ -12,6 +12,10 @@ static void *alloc(void *ctx, size_t bytes, size_t alignment) {
 static void release(void *ctx, void *ptr) { (void)ctx; free(ptr); }
 
 int main(void) {
+    /* Fingerprints of the original order on these synthetic rows, offline.
+     * Sortedness alone misses changes in the permutation of equal keys. */
+    uint64_t order[3] = {UINT64_C(14695981039346656037),
+                         UINT64_C(14695981039346656037), UINT64_C(14695981039346656037)};
     for (size_t n = 0; n <= 257; ++n) {
         for (size_t mode = 0; mode < 3; ++mode) {
             struct bb_pending_v651 rows[259];
@@ -23,6 +27,7 @@ int main(void) {
             assert(bb_pending_sort_budget_v653(rows+1,n,budget));
             for (size_t i = 1; i <= n; ++i) {
                 const size_t id = rows[i].object;
+                order[mode] = (order[mode] ^ id) * UINT64_C(1099511628211);
                 assert(id < n && !seen[id]++ && rows[i].target == (uint64_t)(id*67%11)-5);
                 assert(i == 1 || !bb_pending_less_v652(rows[i].target,rows[i-1].target));
             }
@@ -30,6 +35,9 @@ int main(void) {
                    rows[n+1].target == 17 && rows[n+1].object == 29);
         }
     }
+    assert(order[0] == UINT64_C(0x9deb53ff0e29cbd1));
+    assert(order[1] == UINT64_C(0x1bfa5a92e46ed4e7));
+    assert(order[2] == UINT64_C(0xc524ab4a50b8148d));
     struct bb_registry_v651 registry = {0};
     const struct bb_registry_allocator_v651 allocator = {NULL,alloc,release};
     const uint64_t targets[] = {3,UINT64_MAX,0,UINT64_C(1)<<63};
