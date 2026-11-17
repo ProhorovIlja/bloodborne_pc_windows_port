@@ -9,13 +9,15 @@ struct BbArenaResultV582 { BbArenaStatusV582 status; void *payload; };
 // the external allocation record; querying alone never authorizes a release.
 enum class BbForeignV583 { unmapped, mapped, unavailable };
 using BbForeignQueryV583=BbForeignV583 (*)(void *,uintptr_t);
+using BbMappedFreeV584=bool (*)(void *,uintptr_t);
 /* Offsets label retail call sites, not the layout of a host vtable.
  * Only live payloads from this arena (or null) may be freed. Foreign
  * pointers may query a mapping registry under the same lock; only a
  * definite miss is a successful no-op. */
 static inline BbArenaResultV582 bb_arena_route_v582(BbArenaV581 a,unsigned slot,
     void *payload,uint64_t n,uint64_t align,
-    BbForeignQueryV583 query=nullptr,void *query_ctx=nullptr) {
+    BbForeignQueryV583 query=nullptr,void *query_ctx=nullptr,
+    BbMappedFreeV584 mapped_free=nullptr) {
     using S=BbArenaStatusV582;
     if (!a.heap || !a.mutex || !a.lock || !a.unlock) return {S::invalid,nullptr};
     const bool freeing=slot==0x70 || slot==0xa0;
@@ -32,7 +34,9 @@ static inline BbArenaResultV582 bb_arena_route_v582(BbArenaV581 a,unsigned slot,
             if (p) {
                 const uintptr_t first=reinterpret_cast<uintptr_t>(a.heap->first_block);
                 if (!first || p<first || p-first>=a.heap->capacity) {
-                    if (!query || query(query_ctx,p)!=BbForeignV583::unmapped)
+                    const auto found=query ? query(query_ctx,p) : BbForeignV583::unavailable;
+                    if (found!=BbForeignV583::unmapped &&
+                        (found!=BbForeignV583::mapped || !mapped_free || !mapped_free(query_ctx,p)))
                         status=S::unsupported;
                 } else if (p<a.heap->lowest_payload || p>=a.heap->highest_payload || (p&15))
                     status=S::unsupported;
