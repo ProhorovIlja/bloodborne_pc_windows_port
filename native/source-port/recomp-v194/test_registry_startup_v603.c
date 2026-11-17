@@ -145,4 +145,5 @@ static void run(unsigned fault) {
 int main(void) {
     for (unsigned fault=0;fault<4;++fault) run(fault);
     puts("V603: one native factory, 140 descriptors, both registries, growth, 3 failure cases");
+    return 0;
 }
