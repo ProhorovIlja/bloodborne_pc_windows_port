@@ -21,7 +21,14 @@ int main(void) {
         Descriptor parent={.allocator=(uintptr_t)&heap};
         Descriptor child={.cls={.parent=&parent.cls},.allocator=(uintptr_t)&heap};
         const BbMemberHost612 host={&heap,&heap,1,{alloc612,free612},init612,drop612};
-        const uintptr_t callback=(uintptr_t)&bb_yaw_pitch_v607;
+        /* The retail constructor passes a record address, not a code address.
+         * The table tag stands in for the host-owned callback type table. */
+        const struct {
+            uintptr_t table;
+            int (*invoke)(unsigned char *,void (*)(void *));
+            uintptr_t adjustment;
+        } binding={1,bb_yaw_pitch_v607,0};
+        const uintptr_t callback=(uintptr_t)&binding;
         int rc=bb_member_register_v612(&parent,"OnValueChanged",NULL,callback,&host);
         assert(rc==(f==3?-2:f?0:1));
         assert(heap.count==(f?f:3));
@@ -40,8 +47,8 @@ int main(void) {
                 assert(m->handlers.end-m->handlers.begin==7);
                 unsigned char disabled[0x38]={[0xc]=1};
                 for (unsigned j=0;j<7;++j) {
-                    int (*call)(unsigned char *,void (*)(void *))=(void *)m->handlers.begin[j];
-                    assert(call(disabled,NULL)==0);
+                    assert(m->handlers.begin[j]==(uintptr_t)&binding);
+                    assert(binding.invoke(disabled,NULL)==0);
                 }
             } else assert(!m->handlers.begin);
             free(m->handlers.begin); free(m);
