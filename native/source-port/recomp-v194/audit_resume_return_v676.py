@@ -43,8 +43,8 @@ def decode(code, pc):
     return None
 
 
-def scan(path):
-    _, previous = blocks(path)
+def scan(path, *, resumes=None):
+    _, previous = blocks(path, resumes=resumes)
     blob = path.read_bytes()
     off, = unpack_from('<Q', blob, 32)
     num, = unpack_from('<H', blob, 56)

@@ -7,9 +7,10 @@ from struct import iter_unpack, unpack_from
 from audit_resume_branch_v674 import audit, decode as decode_branch
 
 
-def blocks(path):
-    resumes = []
-    audit(path, resumes=resumes)
+def blocks(path, *, resumes=None):
+    if resumes is None:
+        resumes = []
+        audit(path, resumes=resumes)
     blob = path.read_bytes()
     off, = unpack_from('<Q', blob, 32)
     count, = unpack_from('<H', blob, 56)

@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 from struct import iter_unpack, unpack_from
 import subprocess
+from tempfile import TemporaryDirectory
 
 from ps4_ctor_order_v567 import inspect
 
@@ -65,11 +66,14 @@ def audit(path, objdump='objdump', *, resumes=None):
             checks[va] = (None,False,False,False)
             continue
         start=starts[j]
-        out=subprocess.check_output([objdump,'-D','-b','binary','-m','i386:x86-64',
-             f'--start-address={start-base+offset}',f'--stop-address={i+offset+n}',
-             str(path.resolve())],text=True)
-        op='call' if code[i]!=0xe9 else 'jmp'
-        matched=bool(re.search(rf'^\s*{i+offset:x}:\s+(?:[0-9a-f]{{2}}\s+){{{n}}}{op}\b',out,re.M))
+        # Disassemble only the bounded slice, not the complete ELF on each call.
+        with TemporaryDirectory(prefix='bb-setjmp-') as tmp:
+            sample = Path(tmp) / 'code.bin'
+            sample.write_bytes(code[start-base:i+n])
+            out = subprocess.check_output([objdump, '-D', '-b', 'binary', '-m',
+                     'i386:x86-64', '--insn-width=16', str(sample)], text=True)
+        op = 'call' if code[i] != 0xe9 else 'jmp'
+        matched = bool(re.search(rf'^\s*{va-start:x}:\s+(?:[0-9a-f]{{2}}\s+){{{n}}}{op}\b', out, re.M))
         checks[va]=(start,matched,start in roots,op=="call")
         if resumes is not None and matched and op == 'call':
             resumes.append((va+n, i+offset+n))
