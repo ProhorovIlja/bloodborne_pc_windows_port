@@ -119,6 +119,10 @@ jobs:
           ./singleton576.exe
           clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_seed_v577.c -o arena577.exe
           ./arena577.exe
+          arenaflags=()
+          if [ "$RUNNER_OS" != Windows ]; then arenaflags+=(-D_POSIX_C_SOURCE=200809L -pthread); fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_ctor_v578.c -o arena578.exe
+          ./arena578.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
