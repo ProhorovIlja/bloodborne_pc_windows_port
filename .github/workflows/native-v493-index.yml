@@ -129,6 +129,8 @@ jobs:
           ./lifecycle580.exe
           clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_slots_v581.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o slots581.exe
           ./slots581.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_routes_v582.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o routes582.exe
+          ./routes582.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
