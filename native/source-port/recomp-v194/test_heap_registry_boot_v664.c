@@ -27,9 +27,9 @@ static int release(void *ctx, void *p) {
 static const char heap_source[]="DLHeapManager.cpp";
 static int range_enter(void *ctx) {
     assert(bb_heap_site_v668.file==heap_source && bb_heap_site_v668.line==251);
-    return !pthread_mutex_lock(ctx);
+    return !pthread_rwlock_wrlock(ctx);
 }
-static void range_leave(void *ctx) { assert(!pthread_mutex_unlock(ctx)); }
+static void range_leave(void *ctx) { assert(!pthread_rwlock_unlock(ctx)); }
 
 /* A scoped native table for the tested slot, not a full game vtable. */
 struct fixture_view_table {
@@ -38,13 +38,26 @@ struct fixture_view_table {
 };
 _Static_assert(offsetof(struct fixture_view_table,flags)==0x20,"query slot");
 static const struct fixture_view_table view_table={.flags=bb_heap_view_flags_v667};
+struct fixture_dependency {
+    uintptr_t owner, begin, end;
+};
 static uintptr_t get_dependency(void *ctx) {
-    const uintptr_t owner=(uintptr_t)ctx;
-    return bb_load_v661(owner+0x468) ? owner+BB_DEPENDENCY_VIEW_V659 : 0;
+    /* This fixture is single-threaded through publication. Require the
+     * actual first registry entry, not just an allocated registry header. */
+    const struct fixture_dependency *d=ctx;
+    const uintptr_t header=bb_load_v661(d->owner+0x468);
+    const uintptr_t view=d->owner+BB_DEPENDENCY_VIEW_V659;
+    if (!header || bb_load_v661(header+32)!=d->owner) return 0;
+    const uintptr_t first=bb_load_v661(header+8);
+    if (!first || bb_load_v661(header+16)!=first+sizeof(struct bb_heap_range_v665) ||
+        bb_load_v661(first)!=view || bb_load_v661(first+8)!=d->begin ||
+        bb_load_v661(first+16)!=d->end) return 0;
+    return view;
 }
 static int query(void *ctx, uintptr_t dependency, uint32_t *flags) {
-    if (dependency!=(uintptr_t)ctx+BB_DEPENDENCY_VIEW_V659 ||
-        bb_load_v661(dependency+8)!=(uintptr_t)ctx ||
+    const struct fixture_dependency *d=ctx;
+    if (dependency!=d->owner+BB_DEPENDENCY_VIEW_V659 ||
+        bb_load_v661(dependency+8)!=d->owner ||
         bb_load_v661(dependency)!=(uintptr_t)&view_table) return 0;
     const struct fixture_view_table *table=(const void *)bb_load_v661(dependency);
     return table->flags(flags,(const void *)dependency,0)==flags;
@@ -71,7 +84,8 @@ int main(void) {
     memset(object,0x5a,sizeof object);
     memcpy(untouched,object,sizeof object);
     struct bb_provider_cache_v658 cell={0};
-    const struct bb_provider_calls_v658 calls={heap,get_dependency,query};
+    struct fixture_dependency dependency={h,(uintptr_t)backing,(uintptr_t)backing+sizeof backing};
+    const struct bb_provider_calls_v658 calls={&dependency,get_dependency,query};
     assert(!bb_provider_publish_v658(&cell,object,sizeof object,1,&calls));
     assert(!cell.published && !memcmp(untouched,object,sizeof object));
     memset(backing,0xa5,sizeof backing);
@@ -88,12 +102,17 @@ int main(void) {
     memcpy(&granularity,heap+0x488,4);
     assert(granularity==0x1000 && !bb_boot_registry_v664(heap,sizeof heap,&ops) && f.calls==2);
     /* Use the actual V664 registry, not a second header or stand-in buffer. */
-    pthread_mutex_t range_lock=PTHREAD_MUTEX_INITIALIZER;
+    assert(!bb_provider_publish_v658(&cell,object,sizeof object,1,&calls));
+    assert(!cell.published && !memcmp(untouched,object,sizeof object));
+    pthread_rwlock_t range_lock;
+    assert(!pthread_rwlock_init(&range_lock,NULL));
     const struct bb_heap_range_lock_v665 lock={&range_lock,range_enter,range_leave};
     bb_heap_site_note_v668(heap_source,251);
-    assert(bb_heap_range_insert_v665((unsigned char *)p,lock,h,
+    /* Retail passes its embedded interface, not the heap base, as row owner. */
+    const uintptr_t view=h+BB_DEPENDENCY_VIEW_V659;
+    assert(bb_heap_range_insert_v665((unsigned char *)p,lock,view,
                                      (uintptr_t)backing,sizeof backing));
-    assert(bb_load_v661(start)==h && bb_load_v661(start+8)==(uintptr_t)backing);
+    assert(bb_load_v661(start)==view && bb_load_v661(start+8)==(uintptr_t)backing);
     assert(bb_load_v661(start+16)==(uintptr_t)backing+sizeof backing);
     assert(bb_load_v661(p+16)==start+24 && bb_load_v661(p+24)==start+768);
     assert(f.calls==2 && bb_load_v661(h+32)==2);
@@ -103,9 +122,9 @@ int main(void) {
     assert(bb_provider_publish_v658(&cell,NULL,0,0,NULL)==(uintptr_t)object);
     /* End the fixture lifetime before tearing down the backing registry. */
     cell.published=0;
-    assert(!pthread_mutex_destroy(&range_lock));
+    assert(!pthread_rwlock_destroy(&range_lock));
     assert(release(&f,(void *)start) && release(&f,(void *)p));
     assert(bb_load_v661(h+24)==capacity && !bb_load_v661(h+32));
     assert(!pthread_mutex_destroy(&f.lock.mutex));
-    puts("V667: cold registry and real heap view connected to V658 publication");
+    puts("V669: cold registry stores the interface owner under a write lock before publication");
 }
