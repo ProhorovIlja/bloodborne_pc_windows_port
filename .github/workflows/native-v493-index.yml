@@ -141,6 +141,8 @@ jobs:
           ./resize586.exe
           clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_meta_v587.cpp -o meta587.exe
           ./meta587.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_control_v588.cpp -o control588.exe
+          ./control588.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
