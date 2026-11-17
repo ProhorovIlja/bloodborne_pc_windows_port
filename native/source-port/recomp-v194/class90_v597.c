@@ -25,9 +25,10 @@ static void write597(void *p,uintptr_t v) { memcpy(p,&v,8); }
 static unsigned char *parent597(const unsigned char *p) {
     uintptr_t v; memcpy(&v,p+8,8); return (unsigned char *)v;
 }
-int bb_class90_v597(BbClass90State597 *s,const BbClass90Ops597 *o) {
+static int class90_impl(BbClass90State597 *s,const BbClass90Ops597 *o,
+                        int (*checked_base)(void *,unsigned char **)) {
     if (sizeof(uintptr_t)!=8 || !s || !o || !o->prepare || !o->get_allocator || !o->kind ||
-        !o->insert || !o->get_base || !o->diagnose || !o->base_table || !o->class_table ||
+        !o->insert || (!o->get_base && !checked_base) || !o->diagnose || !o->base_table || !o->class_table ||
         !o->ascii_name || !o->wide_name) return -1;
     unsigned char *d=s->published;
     if (!d) {
@@ -50,7 +51,11 @@ int bb_class90_v597(BbClass90State597 *s,const BbClass90Ops597 *o) {
     write597(d+0x40,o->ascii_name);
     write597(d+0x48,o->wide_name);
     if (o->insert(o->ctx,d)) return -4;
-    unsigned char *base=o->get_base(o->ctx), *fast=base;
+    unsigned char *base=NULL;
+    if (checked_base) {
+        if (checked_base(o->ctx,&base)) return -6;
+    } else base=o->get_base(o->ctx);
+    unsigned char *fast=base;
     for (unsigned char *slow=base; slow; slow=parent597(slow)) {
         if (slow==d) goto cycle;
         if (fast) fast=parent597(fast);
@@ -64,4 +69,13 @@ cycle:
      * returns. Native leaves the parent unchanged, also for foreign cycles. */
     o->diagnose(o->ctx,0x192);
     return -5;
+}
+
+int bb_class90_v597(BbClass90State597 *s,const BbClass90Ops597 *o) {
+    return class90_impl(s,o,NULL);
+}
+
+int bb_class90_checked_v603(BbClass90State597 *s,const BbClass90Ops597 *o,
+                            int (*get)(void *,unsigned char **)) {
+    return get?class90_impl(s,o,get):-1;
 }
