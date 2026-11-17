@@ -1,0 +1,40 @@
+name: Native V595 registry factory
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v59*'
+      - 'native/source-port/recomp-v194/paleblood_v579/**'
+      - '.github/workflows/native-v595-registry-factory.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cc: gcc, cxx: g++ }
+          - { cc: clang, cxx: clang++ }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check cold factory without retail files
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        shell: bash
+        run: |
+          flags=(-O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-pie -pthread)
+          for source in registry_factory_v595.c registry_cold_v592.c test_registry_heap_v591.c; do
+            "$CC" "${flags[@]}" -std=c11 -DBB_PRIVATE_DIFFERENTIAL -c "$source" -o "$RUNNER_TEMP/${source%.c}.o"
+          done
+          "$CXX" "${flags[@]}" -no-pie -std=c++17 test_registry_factory_v595.cpp \
+            paleblood_v579/regular_heap_allocate.cpp \
+            "$RUNNER_TEMP"/{registry_factory_v595,registry_cold_v592,test_registry_heap_v591}.o \
+            -o "$RUNNER_TEMP/factory"
+          "$RUNNER_TEMP/factory"
