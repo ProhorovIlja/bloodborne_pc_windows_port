@@ -53,7 +53,7 @@ def file_reader(data):
     return ph,read
 
 
-def link_tables(data):
+def link_tables(data, *, details=None):
     ph,read = file_reader(memoryview(data))
     dynamic, = (p for p in ph if p[0]==2)
     dynlib, = (p for p in ph if p[0]==SCE)
@@ -99,10 +99,14 @@ def link_tables(data):
             key = identity(row)
             if key:
                 exports[key].add((row[1]&15,row[4]))
+                if details is not None:
+                    details.setdefault('exports', {}).setdefault(key,set()).add((row[1]&15,row[4],row[5]))
     imports = defaultdict(set)
     relocations, special = Counter(), Counter()
     for a,b in ((0x29,0x2d),(0x2f,0x31)):
-        for _,info,_ in RELA.iter_unpack(section(a,b)):
+        for slot,info,addend in RELA.iter_unpack(section(a,b)):
+            if details is not None:
+                details.setdefault('relocations', []).append((slot,info,addend))
             index, kind = info>>32, info&0xffffffff
             if index and not symbols[index][3]:
                 key = identity(symbols[index])
@@ -115,6 +119,8 @@ def link_tables(data):
                     else:
                         raise ValueError('unknown unqualified relocation')
                     continue
+                if details is not None:
+                    details.setdefault('imports', {}).setdefault(key,[]).append((slot,kind,addend))
                 imports[key].add(kind)
                 relocations[kind]+=1
     return imports,exports,relocations,special
