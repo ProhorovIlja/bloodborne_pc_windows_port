@@ -1,0 +1,29 @@
+name: Native V599 class registration
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v59[789].c'
+      - 'native/source-port/recomp-v194/class_*.h'
+      - '.github/workflows/native-v599-class-register.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  class90:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test without retail files
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_class_register_v599.c -o "$RUNNER_TEMP/class90"
+          "$RUNNER_TEMP/class90"
