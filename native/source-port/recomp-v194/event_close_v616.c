@@ -3,11 +3,8 @@
 #include <stdint.h>
 #include <string.h>
 
-typedef struct {
-    void *self;
-    const void *event;
-    void *payload;
-} BbClosePacket616;
+#include "event_packet_v619.h"
+typedef BbEventPacket619 BbClosePacket616;
 typedef struct {
     void *ctx;
     void (*before)(void *,unsigned char *);
