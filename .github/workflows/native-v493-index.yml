@@ -2,9 +2,9 @@ name: Native V493 indexed dispatch
 on:
   push:
     branches: [feature/native-v462-startup-closure-20261116]
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v57*', 'native/source-port/recomp-v194/*v58*', 'native/source-port/recomp-v194/paleblood_v579/**', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v57*', 'native/source-port/recomp-v194/*v58*', 'native/source-port/recomp-v194/*v59*', 'native/source-port/recomp-v194/paleblood_v579/**', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
   pull_request:
-    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v57*', 'native/source-port/recomp-v194/*v58*', 'native/source-port/recomp-v194/paleblood_v579/**', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v57*', 'native/source-port/recomp-v194/*v58*', 'native/source-port/recomp-v194/*v59*', 'native/source-port/recomp-v194/paleblood_v579/**', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
@@ -145,6 +145,8 @@ jobs:
           ./control588.exe
           clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_check_v589.cpp paleblood_v579/regular_heap_allocate.cpp -o check589.exe
           ./check589.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_dispatch_v590.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o dispatch590.exe
+          ./dispatch590.exe
           python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
           python ps4_import_coverage_v566.py --self-test
           python ps4_ctor_order_v567.py --self-test
