@@ -18,7 +18,7 @@ from ps4_ctor_order_v567 import inspect
 NID = b'gNQ1V2vfXDE'
 
 
-def audit(path, objdump='objdump'):
+def audit(path, objdump='objdump', *, resumes=None):
     blob = path.read_bytes()
     order, unwind = inspect(blob)
     phoff, = unpack_from('<Q', blob, 32)
@@ -71,6 +71,8 @@ def audit(path, objdump='objdump'):
         op='call' if code[i]!=0xe9 else 'jmp'
         matched=bool(re.search(rf'^\s*{i+offset:x}:\s+(?:[0-9a-f]{{2}}\s+){{{n}}}{op}\b',out,re.M))
         checks[va]=(start,matched,start in roots,op=="call")
+        if resumes is not None and matched and op == 'call':
+            resumes.append((va+n, i+offset+n))
     return dict(plt_slots=len(slots),plt_stubs=len(stubs), candidates=len(checks),
                 decoded_calls=sum(v[1] and v[3] for v in checks.values()),
                 decoded_tail_jumps=sum(v[1] and not v[3] for v in checks.values()),
