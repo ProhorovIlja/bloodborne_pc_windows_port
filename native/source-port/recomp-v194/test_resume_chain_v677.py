@@ -28,7 +28,7 @@ def main():
         if target not in returns:
             continue
         src, skip, pops, _ = returns[target]
-        if src != (0, 4, 5)[z]:
+        if src != (0, 4, 5, -1)[z]:
             raise ValueError('unexpected zeroed register')
         slots = ', '.join(str(pops.index(i)+skip if i in pops else -1) for i in range(6))
         rows.append(f'{{{pc}, {skip+len(pops)+1}, {src}, {{{slots}}}}},')

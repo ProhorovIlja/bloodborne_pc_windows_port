@@ -4,7 +4,7 @@
 #include <setjmp.h>
 #include <stdio.h>
 
-struct fixture { uint64_t pc; size_t words; unsigned zeroed; int slots[6]; };
+struct fixture { uint64_t pc; size_t words; int zeroed; int slots[6]; };
 static const struct fixture cases[]={
 #include "cases677.inc"
 };
@@ -20,10 +20,10 @@ static void check(const struct fixture *f, int result, unsigned seed) {
     assert(tls==0xaabbccdd && s.pc==before.pc && s.rax==before.rax && s.consumed==before.consumed);
     for (unsigned i=0;i<6;++i) assert(s.nonvolatile[i]==before.nonvolatile[i]);
     assert(bb_resume_chain_v677(&s,(uint32_t)result,&tls,addr,frame,f->words)==BB_RESUME_OK_V677);
-    assert(!tls && s.pc==frame[f->words-1] && s.consumed==f->words && s.rax==(addr & ~UINT64_C(255)));
+    assert(!tls && s.pc==frame[f->words-1] && s.consumed==f->words && s.rax==(f->zeroed<0 ? addr : (addr & ~UINT64_C(255))));
     for (unsigned i=0;i<6;++i) {
         assert(f->slots[i]<0 || (size_t)f->slots[i]<f->words-1);
-        assert(s.nonvolatile[i]==(f->slots[i]>=0 ? frame[f->slots[i]] : i==f->zeroed ? 0 : before.nonvolatile[i]));
+        assert(s.nonvolatile[i]==(f->slots[i]>=0 ? frame[f->slots[i]] : (int)i==f->zeroed ? 0 : before.nonvolatile[i]));
     }
 }
 static void run(const struct fixture *f, int value, unsigned seed) {

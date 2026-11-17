@@ -6,6 +6,8 @@ from pathlib import Path
 from struct import iter_unpack, unpack_from
 
 from audit_resume_block_v675 import blocks
+from audit_resume_branch_v674 import decode as decode_branch
+from audit_setjmp_v673 import audit
 
 GOT = 0x53e4318
 HEAD = bytes.fromhex('64488b042500000000480305')
@@ -15,7 +17,7 @@ MOV = [(b'\x88\xd8', 0), (b'\x44\x88\xf0', 4), (b'\x44\x88\xf8', 5)]
 POP = [(bytes.fromhex(x), i) for i, x in enumerate(('5b', '5d', '415c', '415d', '415e', '415f'))]
 
 
-def decode(code, pc):
+def decode(code, pc, *, direct=False):
     if len(code) < 22 or not code.startswith(HEAD) or code[16:22] != STORE:
         return None
     if pc + 16 + unpack_from('<i', code, 12)[0] != GOT:
@@ -26,7 +28,9 @@ def decode(code, pc):
             pos += len(op)
             break
     else:
-        return None  # e.g. stack canary path; never skip that check
+        if not direct:
+            return None
+        src = -1  # RAX is still the full TLS address; no MOV to AL
     skip = int(code.startswith(b'\x48\x83\xc4\x08', pos))
     pos += skip * 4
     pops = []
@@ -44,6 +48,9 @@ def decode(code, pc):
 
 
 def scan(path, *, resumes=None):
+    if resumes is None:
+        resumes = []
+        audit(path, resumes=resumes)
     _, previous = blocks(path, resumes=resumes)
     blob = path.read_bytes()
     off, = unpack_from('<Q', blob, 32)
@@ -53,14 +60,18 @@ def scan(path, *, resumes=None):
     data, = [p for p in ph if p[0] == 1 and p[1] & 2 and p[3] <= GOT <= p[3]+p[5]-8]
     delta, = unpack_from('<q', blob, data[2]+GOT-data[3])
     targets = {t for _, t, _ in previous.values()}
+    direct = {b[1] for pc, off in resumes if (b := decode_branch(blob, off, pc))
+              is not None and b[1] not in previous and b[1] not in targets}
     rows = {}
-    for pc in sorted(targets):
+    for pc in sorted(targets | direct):
         if rx[3] <= pc <= rx[3]+rx[5]-40:
             i = pc + rx[2] - rx[3]
-            row = decode(blob[i:i+40], pc)
-            if row:
+            row = decode(blob[i:i+40], pc, direct=pc in direct)
+            if row and (pc not in direct or row[0] == -1):
                 rows[pc] = row
-    return previous, targets, rows, delta
+                if pc in direct:
+                    previous[pc] = (-1, pc, b'')
+    return previous, targets | direct, rows, delta
 
 
 def emit(rows):
@@ -72,10 +83,11 @@ def emit(rows):
              '    uint64_t *rax, uint64_t *next, size_t *consumed) {',
              '    if (!tls || !stack || !regs || !rax || !next || !consumed) return 0;',
              '    switch (pc) {']
-    for pc, (src, skip, pops, _) in rows.items():
+    for pc, (src, skip, pops, _) in sorted(rows.items()):
         count = skip+len(pops)+1
+        result = 'tls_addr' if src == -1 else f'(tls_addr & ~UINT64_C(255)) | (uint8_t)regs[{src}]'
         lines += [f'    case 0x{pc:x}:', f'        if (words < {count}) return 0;',
-                  f'        *tls = 0; *rax = (tls_addr & ~UINT64_C(255)) | (uint8_t)regs[{src}];']
+                  f'        *tls = 0; *rax = {result};']
         lines += [f'        regs[{r}] = stack[{i}];' for i, r in enumerate(pops, skip)]
         lines += [f'        *next = stack[{count-1}]; *consumed = {count}; return 1;']
     return '\n'.join(lines+['    default: return 0;', '    }', '}', ''])

@@ -38,8 +38,11 @@ def blocks(path, *, resumes=None):
 def emit(rows):
     lines = ['#include <stdint.h>',
              'int bb_resume_block(uint64_t pc, uint64_t regs[3], uint64_t *flags, uint64_t *next) {',
-             '    switch (pc) {']
+             '    (void)regs; (void)flags;', '    switch (pc) {']
     for pc, (reg, target, _) in sorted(rows.items()):
+        if reg == -1:  # branch already lands at an attested direct epilogue
+            lines.append(f'    case 0x{pc:x}: *next=0x{target:x}; return 1;')
+            continue
         # XOR defines CF, PF, ZF, SF and OF. AF is undefined.
         lines.append(f'    case 0x{pc:x}: regs[{reg}]=0; *flags=(*flags & ~UINT64_C(0x8c5)) | 0x44; *next=0x{target:x}; return 1;')
     return '\n'.join(lines+['    default: return 0;', '    }', '}', ''])

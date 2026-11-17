@@ -25,7 +25,7 @@ def classify(blob, sites, blocks, returns):
         if tail is None:
             yield pc, 'epilogue'
             continue
-        if tail[0] != (0, 4, 5)[zeroed]:
+        if tail[0] != (0, 4, 5, -1)[zeroed]:
             yield pc, 'register_contract'
             continue
         yield pc, 'through_ret'
