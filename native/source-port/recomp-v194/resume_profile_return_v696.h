@@ -6,6 +6,19 @@
 struct bb_profile_state696 { uint64_t pc, rax, nv[6]; size_t used; };
 enum bb_profile_result696 { BB_PROFILE_MISS, BB_PROFILE_RET, BB_PROFILE_FATAL };
 
+/* Shared native epilogue; caller has validated the frame and state. */
+static inline enum bb_profile_result696 bb_profile_finish696(
+        struct bb_profile_state696 *s, const uint64_t *f, uint64_t guard, uint32_t edi) {
+    if (f[38] != guard) {
+        s->pc=UINT64_C(0x2bbe4f8); s->rax=guard; s->used=0;
+        return BB_PROFILE_FATAL;
+    }
+    s->rax=edi; s->pc=f[45]; s->used=46;
+    s->nv[0]=f[39]; s->nv[1]=f[44];
+    for (size_t i=2;i<6;++i) s->nv[i]=f[38+i];
+    return BB_PROFILE_RET;
+}
+
 /* Exit arm only: retry and zero-result paths are not consumed. All spans,
  * the frame and state must be disjoint. Register order: BX,BP,R12-R15. */
 static inline enum bb_profile_result696 bb_profile_return696(
@@ -21,13 +34,6 @@ static inline enum bb_profile_result696 bb_profile_return696(
     /* Accounting does not touch the first 12 bytes of vm. Commit the
      * V694 write only after the bounds checks in V695 succeed. */
     memcpy(vm+4,vm+8,4);
-    if (f[38] != guard) {
-        s->pc=UINT64_C(0x2bbe4f8); s->rax=guard; s->used=0;
-        return BB_PROFILE_FATAL;
-    }
-    s->rax=0; s->pc=f[45]; s->used=46;
-    s->nv[0]=f[39]; s->nv[1]=f[44];
-    for (size_t i=2;i<6;++i) s->nv[i]=f[38+i];
-    return BB_PROFILE_RET;
+    return bb_profile_finish696(s,f,guard,0);
 }
 #endif
