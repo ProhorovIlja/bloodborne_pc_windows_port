@@ -1,0 +1,29 @@
+name: Native V645 error publication replay
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v645*'
+      - 'native/source-port/recomp-v194/error_*v57*'
+      - 'native/source-port/recomp-v194/guarded_publish_v569.h'
+      - '.github/workflows/native-v645-error-replay.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and run public fixture
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_error_replay_v645.c -o "$RUNNER_TEMP/replay"
+          "$RUNNER_TEMP/replay"

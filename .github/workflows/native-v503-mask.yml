@@ -1,0 +1,19 @@
+name: Native V503 masked boot controls
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/mask_dump_v502.sh'
+      - 'native/source-port/recomp-v194/test_mask_dump_v503.py'
+      - '.github/workflows/native-v503-mask.yml'
+permissions:
+  contents: read
+jobs:
+  masked-boot:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - working-directory: native/source-port/recomp-v194/
+        run: python3 -m unittest -v test_mask_dump_v503

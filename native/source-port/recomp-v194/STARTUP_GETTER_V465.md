@@ -1,0 +1,9 @@
+# V465: startup publication getters
+
+The first registration helper called by constructor 1074 makes two virtual calls through the newly published object's table. In the owner-local CUSA03173 1.09 executable, the executable-relative relocations in slots +0x10 and +0x18 land on complete read-only leaves returning the 64-bit fields at +0x40 and +0x48 respectively. These are distinct from V464's dependency object and its structure-return route. The helper uses the first getter's value as input to strlen; the route does not itself dereference either returned value.
+
+The checked native routes verify the callsite and guest receiver, then read and compare the table and target, then load the field through a bounded little-endian adapter. Rejection leaves the return register unchanged. Guest addresses are not host function pointers. Single-controller startup only, with independently validated private route data.
+
+Linux x86-64 local result: 4,096 isolated comparisons (two leaves, 1,024 field values each, GCC and Clang). All matched the original return value and left the object and table unchanged. Only the reference executed the two opcode-verified leaves. Both compilers passed the synthetic rejection tests; Clang ASan/UBSan also passed. V464's three-OS CI is green. V465 is not integrated into ordered replay; no new constructor return, game main, or location load is claimed.
+
+Comparison: shadPS4's Bloodborne logs independently corroborate the guard import IDs; libc++abi is a reference for guard semantics, not a replacement for the repository's checked single-controller V413/V420 routes. PS4 SDK signatures corroborate pointer-to-handle mutex calls; mutex behavior and error mappings must be validated separately instead of always returning success. No external source code or game data was imported.

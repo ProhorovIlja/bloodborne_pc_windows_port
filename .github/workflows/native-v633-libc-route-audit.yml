@@ -1,0 +1,36 @@
+name: Native libc route audit and fatal handler
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v63[0-3].*'
+      - 'native/source-port/recomp-v194/*strncmp_v629.c'
+      - 'native/source-port/recomp-v194/audit_modules_v628.py'
+      - '.github/workflows/native-v633-libc-route-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run the route audit fixture and native tests without game files
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v test_audit_libc_routes_v632
+          for source in probe_libc_routes_v632 test_libc_pure_virtual_v633; do
+            "$CC" -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie "$source.c" -o "$RUNNER_TEMP/$source"
+          done
+          "$RUNNER_TEMP/probe_libc_routes_v632" > "$RUNNER_TEMP/native-routes"
+          test "$(wc -l < "$RUNNER_TEMP/native-routes")" -eq 23
+          "$RUNNER_TEMP/test_libc_pure_virtual_v633"

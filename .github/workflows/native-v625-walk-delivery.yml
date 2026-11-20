@@ -1,0 +1,35 @@
+name: Native V625 native walk delivery
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v62[01345].c'
+      - 'native/source-port/recomp-v194/event_dispatch_v614.c'
+      - 'native/source-port/recomp-v194/event_walk_v615.c'
+      - 'native/source-port/recomp-v194/class98_v613.c'
+      - 'native/source-port/recomp-v194/class90_v597.c'
+      - 'native/source-port/recomp-v194/yaw_pitch_v607.c'
+      - '.github/workflows/native-v625-walk-delivery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test under ASan and UBSan
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          "$CC" -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie -pthread test_event_bridge_v624.c -o "$RUNNER_TEMP/member-lookup"
+          "$RUNNER_TEMP/member-lookup"
+          "$CC" -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_event_walk_delivery_v625.c -o "$RUNNER_TEMP/v625"
+          "$RUNNER_TEMP/v625"

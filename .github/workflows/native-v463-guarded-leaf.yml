@@ -1,0 +1,31 @@
+name: Native V463 guarded registration fixture
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - native/source-port/recomp-v194/native_guarded_leaf_v463.c
+      - .github/workflows/native-v463-guarded-leaf.yml
+  pull_request:
+    paths:
+      - native/source-port/recomp-v194/native_guarded_leaf_v463.c
+      - .github/workflows/native-v463-guarded-leaf.yml
+permissions:
+  contents: read
+jobs:
+  guarded-leaf:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and execute synthetic fixture
+        shell: bash
+        run: |
+          set -eu
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -DNATIVE_GUARDED_LEAF_V463_SELF_TEST native/source-port/recomp-v194/native_guarded_leaf_v463.c -o guarded-leaf.exe
+          ./guarded-leaf.exe

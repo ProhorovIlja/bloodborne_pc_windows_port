@@ -1,0 +1,11 @@
+# V463 — differential registration test and corrected first-load triage
+
+The exact first-load sequence recovered from the private CUSA03173 ELF contains 18,444 entries. Among ordinals 1074–1500, 390 match the entire guarded registration form (12 of 1074–1089). Each match has adjacent writable object and guard fields, no relocations at those fields, and an executable-relative vtable slot.
+
+On Linux x86-64 the differential reference ran only the selected original leaf on isolated RX pages with separate RW test data. The candidate executed compiled host C and did not load the original executable. With GCC and Clang, six guard states and first-call/reentry comparisons, 9,360 checks matched on the affected memory and boundary canaries after normalizing the pointer base. Malformed-span and no-write fixtures passed under GCC, Clang and Clang ASan/UBSan. No flags or registers attested. The helper is not yet wired into the ordered startup harness.
+
+- The current first-load ordinal 1089 is a guarded registration leaf with no calls. GitHub comparison places V432 (#162) in the ancestry of V462, but its old ordinal-1089 stop does not identify this function. Match the archived target transcript to the exact current plan before mapping older ordinal evidence.
+- The earliest unverified constructor on the current branch is 1074. PLT relocations identify C++ guard acquire/release, stack check, strlen and a mutex-lock dependency. Two getter slots on the object published by 1074 resolve through executable-relative relocations. Two indirect call sites on its dependency object still require same-process receiver/vtable evidence. Static candidates are not checked runtime routes.
+- Donor intake: bloodborne-recomp #9 for jump-table recovery and #12 for call-state optimization after correctness; JIT #17 does not meet the strict runtime requirement. NielsL92 Windows TLS/nonlocal fixtures are independent ABI checks; PS4Recomp is an independent Apple Silicon AOT reference. No donor code or proprietary inputs committed.
+
+Current ordered evidence remains 1–1073. Next gate is a same-process replay of the verified prefix and 1074 using checked imports and virtual calls, then the following exact leaves without fallback. Retail main, gameplay, shutdown and Windows/macOS retail execution remain unproven.

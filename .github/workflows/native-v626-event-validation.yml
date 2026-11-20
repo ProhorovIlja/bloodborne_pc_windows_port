@@ -1,0 +1,36 @@
+name: Native V626 event validation
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v62[013456].c'
+      - 'native/source-port/recomp-v194/event_dispatch_v614.c'
+      - 'native/source-port/recomp-v194/event_walk_v615.c'
+      - 'native/source-port/recomp-v194/class98_v613.c'
+      - 'native/source-port/recomp-v194/class90_v597.c'
+      - 'native/source-port/recomp-v194/yaw_pitch_v607.c'
+      - '.github/workflows/native-v626-event-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test both delivery paths under ASan and UBSan
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          set -eu
+          for flag in '' -DBB_TEST_WALK; do
+            "$CC" $flag -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie -pthread test_event_validate_v626.c -o "$RUNNER_TEMP/v626"
+            "$RUNNER_TEMP/v626"
+          done

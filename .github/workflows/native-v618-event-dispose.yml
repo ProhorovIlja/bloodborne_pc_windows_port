@@ -1,0 +1,28 @@
+name: Native V618 event lifetime
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v61[78].c'
+      - '.github/workflows/native-v618-event-dispose.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test under ASan and UBSan
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          "$CC" -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_event_dispose_v618.c -o "$RUNNER_TEMP/member-lookup"
+          "$RUNNER_TEMP/member-lookup"

@@ -1,0 +1,35 @@
+name: Native V464 checked startup return route
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - native/source-port/recomp-v194/native_startup_sret_v464.c
+      - .github/workflows/native-v464-startup-sret.yml
+  pull_request:
+    paths:
+      - native/source-port/recomp-v194/native_startup_sret_v464.c
+      - .github/workflows/native-v464-startup-sret.yml
+permissions:
+  contents: read
+jobs:
+  sret:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - shell: bash
+        run: |
+          set -eu
+          src=native/source-port/recomp-v194/native_startup_sret_v464.c
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -DNATIVE_STARTUP_SRET_V464_TEST "$src" -o sret.exe
+          ./sret.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -DNATIVE_STARTUP_SRET_V464_TEST "$src" -o sret-san
+            ./sret-san
+          fi

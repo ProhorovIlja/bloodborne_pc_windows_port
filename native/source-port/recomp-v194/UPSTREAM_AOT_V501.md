@@ -1,0 +1,5 @@
+# V501 — distinguish AOT from an offline guest image
+
+- MaSieS4Fun/ARM_bloodborne_pc: run.sh requires eboot.bin and prepares a flat image; scripts/link_modules.py emits BBPROBE5 containing the main image and linked modules. The CPU route is FEX JIT on ARM64, not strict AOT. Reuse the relocation and TLS layout as reference, not the executable image.
+- ducvd89/Bloodborne-android-rebuild-tool at 6ebb33b0c729a3942fddaa03965360c699d7d900: FEX frontend and LLVM at build time; Android app requires matching AOT ABI and reports missing native entry rather than translating it while playing. Upstream setup still retains eboot.bin and bundled modules. Reuse image/ABI identity checks, miss-to-rebuild workflow and jump-table regression scenarios; no standalone desktop claim and no Android AOT library transplanted into desktop builds.
+- Bundle audit now flags known BBPROBE signatures even if the file is renamed and does not descend into reparse points. It remains a static screening check, not a sandbox or proof that the process never reads or executes original code. V501 tests use generated fixtures only.

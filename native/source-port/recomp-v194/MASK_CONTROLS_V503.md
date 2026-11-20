@@ -1,0 +1,5 @@
+# V503 — masked-dump positive and negative controls
+
+Three Linux integration tests exercise a real mount namespace with synthetic files only. The original-dependent process works without masking and fails with FileNotFoundError under the mask. The assets-only process still reads a separate asset; writes inside the masked path fail with EROFS. Reject working directory and temporary mount source inside the dump. Missing namespace support must fail the positive test, never count as a verified negative launch.
+
+Reuse triage: g-Barsani/bloodborne_pc_windows_port run.bat checks eboot.bin and invokes prepare.py/link_modules.py. hazeyxd23's cached boot image still contains original code/modules; its cache invalidation and byte-guarded stability patches are useful, not native-only CPU closure. GoncaloLobo0/bloodborne_pc_win documents separate Linux and Win32 TCB strategies; the Win32 TEB cannot be repurposed as Linux guest GS. Verify TLS against the host ABI rather than copying guest FS/GS assumptions. WitchyBND and SoulsFormats are independent references for asset validation, not substitutes for the game executable. No third-party source or game files imported.

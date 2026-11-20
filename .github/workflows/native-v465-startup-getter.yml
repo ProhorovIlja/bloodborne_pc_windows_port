@@ -1,0 +1,35 @@
+name: Native V465 checked publication getters
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - native/source-port/recomp-v194/native_startup_getter_v465.c
+      - .github/workflows/native-v465-startup-getter.yml
+  pull_request:
+    paths:
+      - native/source-port/recomp-v194/native_startup_getter_v465.c
+      - .github/workflows/native-v465-startup-getter.yml
+permissions:
+  contents: read
+jobs:
+  getter:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - shell: bash
+        run: |
+          set -eu
+          src=native/source-port/recomp-v194/native_startup_getter_v465.c
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -DNATIVE_STARTUP_GETTER_V465_TEST "$src" -o getter.exe
+          ./getter.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -O1 -fsanitize=address,undefined -fno-sanitize-recover=all -DNATIVE_STARTUP_GETTER_V465_TEST "$src" -o getter-san
+            ./getter-san
+          fi

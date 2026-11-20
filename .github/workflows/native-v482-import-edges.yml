@@ -1,0 +1,26 @@
+name: Native V482 relocation backed edges
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v482*', 'native/source-port/recomp-v194/cfg_v481.py', 'native/source-port/recomp-v194/census_v480.py', '.github/workflows/native-v482-import-edges.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v482*', 'native/source-port/recomp-v194/cfg_v481.py', 'native/source-port/recomp-v194/census_v480.py', '.github/workflows/native-v482-import-edges.yml']
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - working-directory: native/source-port/recomp-v194
+        run: python -m unittest -v test_census_v480 test_cfg_v481 test_import_edges_v482

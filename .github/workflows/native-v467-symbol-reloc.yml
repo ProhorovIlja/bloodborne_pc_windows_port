@@ -1,0 +1,30 @@
+name: Native V467 scoped symbol relocations
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v46[67].py'
+      - '.github/workflows/native-v467-symbol-reloc.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v46[67].py'
+      - '.github/workflows/native-v467-symbol-reloc.yml'
+permissions:
+  contents: read
+jobs:
+  relocation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python native/source-port/recomp-v194/audit_rebase_v466.py
+      - run: python native/source-port/recomp-v194/plan_symbol_reloc_v467.py

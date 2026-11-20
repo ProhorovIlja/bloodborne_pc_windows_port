@@ -1,0 +1,20 @@
+name: Native V628 offline module audit
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v62[78].py'
+      - 'native/source-port/recomp-v194/ps4_ctor_order_v567.py'
+      - '.github/workflows/native-v628-module-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-module:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest -v test_audit_modules_v628 test_audit_imports_v627
+        working-directory: native/source-port/recomp-v194

@@ -1,0 +1,38 @@
+name: Native V491 bounded stores
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v491*', 'native/source-port/recomp-v194/census_v480.py', 'native/source-port/recomp-v194/progress_v490.py', '.github/workflows/native-v491-stores.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v491*', 'native/source-port/recomp-v194/census_v480.py', 'native/source-port/recomp-v194/progress_v490.py', '.github/workflows/native-v491-stores.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  stores:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python test_store_v491.py
+          clang -O2 -std=c11 -Wall -Wextra -Werror fixture_store_v491.c -o fixture.exe
+          ./fixture.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -g -fsanitize=address,undefined -fno-sanitize-recover=all fixture_store_v491.c -o fixture-san
+            ./fixture-san
+          fi

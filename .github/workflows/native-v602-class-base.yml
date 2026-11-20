@@ -1,0 +1,29 @@
+name: Native V602 short class getter
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v59[78].c'
+      - 'native/source-port/recomp-v194/*v602.c'
+      - '.github/workflows/native-v602-class-base.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  class90:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test without retail files
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_class_base_v602.c -o "$RUNNER_TEMP/class90"
+          "$RUNNER_TEMP/class90"

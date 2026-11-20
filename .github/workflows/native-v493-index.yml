@@ -1,0 +1,208 @@
+name: Native V493 indexed dispatch
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v57*', 'native/source-port/recomp-v194/*v58*', 'native/source-port/recomp-v194/*v59*', 'native/source-port/recomp-v194/paleblood_v579/**', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+  pull_request:
+    paths: ['native/source-port/recomp-v194/*v49*', 'native/source-port/recomp-v194/*v50*', 'native/source-port/recomp-v194/*v51*', 'native/source-port/recomp-v194/*v52*', 'native/source-port/recomp-v194/*v53*', 'native/source-port/recomp-v194/*v54*', 'native/source-port/recomp-v194/*v55*', 'native/source-port/recomp-v194/*v56*', 'native/source-port/recomp-v194/*v57*', 'native/source-port/recomp-v194/*v58*', 'native/source-port/recomp-v194/*v59*', 'native/source-port/recomp-v194/paleblood_v579/**', 'native/source-port/recomp-v194/*v48*', 'native/source-port/recomp-v194/startup_memory_v478.h', '.github/workflows/native-v493-index.yml']
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          python -m unittest -v test_index_v494 test_progress_v490 test_census_v480 test_import_closure_v499 test_bundle_v501 test_switch_v505 test_switch_scan_v506 test_switch_audit_v507 test_switch_guard_v508 test_switch_default_v509 test_data_reloc_v510 test_module_closure_v511 test_tls_layout_v512 test_cfg_stop_v516 test_guest_payload_v517 test_ctor_v519
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_tls_resolve_v513.c -o tls513.exe
+          ./tls513.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -g -fsanitize=address,undefined -fno-sanitize-recover=all test_tls_resolve_v513.c -o tls513-san
+            ./tls513-san
+          fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_jump_record_v514.c -o jump514.exe
+          ./jump514.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_continuation_v515.c -o resume515.exe
+          ./resume515.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_startup_entry_v518.c -o entry518.exe
+          ./entry518.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_ctor_v519.c -o ctor519.exe
+          ./ctor519.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_init_walk_v520.c -o init520.exe
+          ./init520.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_guard_prefix_v521.c -o guard521.exe
+          ./guard521.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_mutex_init_v522.c -o mutex522.exe
+          ./mutex522.exe
+          if [ "$RUNNER_OS" != Windows ]; then
+            clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_mutex_host_v523.c -o mutex523
+            ./mutex523
+          fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_ctor_route_v524.c -o ctor524.exe
+          ./ctor524.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_singleton_v525.c -o singleton525.exe
+          ./singleton525.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_singleton_direct_v526.c -o singleton526.exe
+          ./singleton526.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_seed_v527.c -o arena527.exe
+          ./arena527.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_singleton_arena_v528.c -o arena528.exe
+          ./arena528.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_unlock_v531.c -o unlock531.exe
+          ./unlock531.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_ctor_link_v535.c -o link535.exe
+          ./link535.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_ctor_publish_v536.c -o publish536.exe
+          ./publish536.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_ctor_register_v537.c -o register537.exe
+          ./register537.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_factory_seed_v538.c -o factory538.exe
+          ./factory538.exe
+          rwflags=()
+          if [ "$RUNNER_OS" != Windows ]; then rwflags+=(-pthread); fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_factory_owner_v539.c -o factory539.exe
+          ./factory539.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_owner_registry_v540.c -o registry540.exe
+          ./registry540.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_registry_reserve_v541.c -o registry541.exe
+          ./registry541.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_registry_insert_v542.c -o registry542.exe
+          ./registry542.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_registry_grow_v543.c -o registry543.exe
+          ./registry543.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_registry_empty_v544.c -o registry544.exe
+          ./registry544.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_startup_transaction_v547.c -o transaction547.exe
+          ./transaction547.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_registry_startup_v548.c -o startup548.exe
+          ./startup548.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${rwflags[@]}" test_owner_factory_v552.c -o factory552.exe
+          ./factory552.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_class_table_v554.c -o class554.exe
+          ./class554.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_class_sort_v556.c -o class556.exe
+          ./class556.exe
+          python test_class_registry_mutations_v558.py
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_copy_dispatch_v565.c -o copy565.exe
+          ./copy565.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_guarded_publish_v569.c -o publish569.exe
+          ./publish569.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_error_category_v570.c -o error570.exe
+          ./error570.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_error_message_v571.c -o message571.exe
+          ./message571.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_error_destructor_v572.c -o dtor572.exe
+          ./dtor572.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_error_vtable_v573.c -o vtable573.exe
+          ./vtable573.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_mutex_gate_v574.c -o gate574.exe
+          ./gate574.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_wakeup_ctor_v575.c -o wakeup575.exe
+          ./wakeup575.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_singleton_ctor_v576.c -o singleton576.exe
+          ./singleton576.exe
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_seed_v577.c -o arena577.exe
+          ./arena577.exe
+          arenaflags=()
+          if [ "$RUNNER_OS" != Windows ]; then arenaflags+=(-D_POSIX_C_SOURCE=200809L -pthread); fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_ctor_v578.c -o arena578.exe
+          ./arena578.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_allocate_v579.cpp paleblood_v579/regular_heap_allocate.cpp -o allocate579.exe
+          ./allocate579.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_lifecycle_v580.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o lifecycle580.exe
+          ./lifecycle580.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_slots_v581.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o slots581.exe
+          ./slots581.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_routes_v582.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o routes582.exe
+          ./routes582.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_query_v583.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o query583.exe
+          ./query583.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_external_v584.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o external584.exe
+          ./external584.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_inspect_v585.cpp paleblood_v579/regular_heap_allocate.cpp -o inspect585.exe
+          ./inspect585.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_resize_v586.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o resize586.exe
+          ./resize586.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_meta_v587.cpp -o meta587.exe
+          ./meta587.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_control_v588.cpp -o control588.exe
+          ./control588.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror test_arena_check_v589.cpp paleblood_v579/regular_heap_allocate.cpp -o check589.exe
+          ./check589.exe
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror "${arenaflags[@]}" test_arena_dispatch_v590.cpp paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_allocate_aligned.cpp paleblood_v579/regular_heap_free.cpp -o dispatch590.exe
+          ./dispatch590.exe
+          python -m unittest -v test_ps4_guard_triage_v563 test_ps4_copy_init_v564
+          python ps4_import_coverage_v566.py --self-test
+          python ps4_ctor_order_v567.py --self-test
+          if [ "$RUNNER_OS" != Windows ]; then
+            clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -pthread test_startup_join_v529.c -o join529
+            ./join529
+          fi
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -g -fsanitize=address,undefined -fno-sanitize-recover=all test_singleton_arena_v528.c -o arena528-san
+            ./arena528-san
+          fi
+          python test_v497.py
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture test_load_route_v504.c -o load-route.exe
+          ./load-route.exe
+          build497() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror -DBB_WITH_RIP_V497 -I. -Iv497-fixture "$@" test_v497.c dispatch_v493.c -o five.exe
+            ./five.exe
+          }
+          build497 -O2
+          if [ "$RUNNER_OS" = Linux ]; then
+            build497 -g -fsanitize=address,undefined -fno-sanitize-recover=all
+          fi
+          python test_rip_v496.py
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror fixture_rip_v496.c -o rip.exe
+          ./rip.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            clang -std=c11 -g -fsanitize=address,undefined -fno-sanitize-recover=all fixture_rip_v496.c -o rip-san
+            ./rip-san
+          fi
+          build() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture "$@" test_v493.c dispatch_v493.c -o indexed.exe
+          }
+          build -O2
+          ./indexed.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            build -g -fsanitize=address,undefined -fno-sanitize-recover=all
+            ./indexed.exe
+          fi
+          parity() {
+            clang -std=c11 -Wall -Wextra -Wpedantic -Werror -DBB_ENABLE_V488 -I. -Iv487-fixture "$@" test_parity_v494.c dispatch_v492.c dispatch_v487.c dispatch_v493.c -o parity.exe
+            ./parity.exe
+          }
+          parity -O2
+          if [ "$RUNNER_OS" = Linux ]; then
+            parity -g -fsanitize=address,undefined -fno-sanitize-recover=all
+          fi
+          clang -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -I. -Iv487-fixture probe_dispatch_v495.c dispatch_v492.c -o all-routes.exe
+          ./all-routes.exe
+          if [ "$RUNNER_OS" = Linux ]; then
+            printf '{"metadata_start_generation":{"done":14}}\n' > v487-fixture/progress.json
+            # Copy the fixture out of Git to exercise the same owner-local gate.
+            private_fixture="$(mktemp -d)"
+            trap 'rm -rf -- "$private_fixture"' EXIT
+            cp v487-fixture/{native.c,loads.c,alu.c,stores.c,routes_v487.inc,index_v493.inc,progress.json} "$private_fixture/"
+            python probe_private_dispatch_v495.py "$private_fixture"
+            printf '{"metadata_start_generation":{"done":15}}\n' > "$private_fixture/progress.json"
+            cp v497-fixture/{rip.c,index_v493.inc} "$private_fixture/"
+            python probe_private_dispatch_v495.py --with-rip "$private_fixture"
+          fi

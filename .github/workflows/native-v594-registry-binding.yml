@@ -1,0 +1,31 @@
+name: Native V594 registry binding
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v59*.c'
+      - '.github/workflows/native-v594-registry-binding.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  registry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run without retail files
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fno-pie -no-pie \
+            -fsanitize=address,undefined -DBB_PRIVATE_DIFFERENTIAL -DBB_BIND_TEST \
+            -pthread registry_bind_v594.c registry_cold_v592.c test_registry_heap_v591.c \
+            -o "$RUNNER_TEMP/registry-v594"
+          "$RUNNER_TEMP/registry-v594"

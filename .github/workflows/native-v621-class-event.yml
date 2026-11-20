@@ -1,0 +1,33 @@
+name: Native V621 class event family
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v61[012345].*'
+      - 'native/source-port/recomp-v194/*v621.c'
+      - 'native/source-port/recomp-v194/class90_v597.c'
+      - 'native/source-port/recomp-v194/class_table_v554.h'
+      - 'native/source-port/recomp-v194/*v60[789].*'
+      - 'native/source-port/recomp-v194/member_handlers_v610.h'
+      - '.github/workflows/native-v621-class-event.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test under ASan and UBSan
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          "$CC" -std=c11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie -pthread test_class_event_v621.c -o "$RUNNER_TEMP/member-lookup"
+          "$RUNNER_TEMP/member-lookup"

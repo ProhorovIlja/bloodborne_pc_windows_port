@@ -1,0 +1,42 @@
+name: Native V474 data template
+on:
+  push:
+    branches: [feature/native-v462-startup-closure-20261116]
+    paths:
+      - 'native/source-port/recomp-v194/*v474*'
+      - '.github/workflows/native-v474-data-template.yml'
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v474*'
+      - '.github/workflows/native-v474-data-template.yml'
+permissions:
+  contents: read
+jobs:
+  template:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - shell: bash
+        working-directory: native/source-port/recomp-v194
+        run: |
+          set -euo pipefail
+          flags=()
+          if [ "$RUNNER_OS" = Windows ]; then
+            printf '%s\n' '#include <stddef.h>' '#include <stdint.h>' 'struct bb_patch_v474;' '__declspec(dllexport) int bb_data_init_v474(unsigned char *,size_t,const unsigned char *,size_t,const struct bb_patch_v474 *,size_t);' '#include "native_data_v474.c"' > export.c
+            src=export.c
+          else
+            flags+=(-fPIC)
+            src=native_data_v474.c
+          fi
+          clang -std=c11 -O2 -Wall -Wextra -Werror -shared "${flags[@]}" "$src" -o data.dll
+          python test_data_v474.py "$PWD/data.dll"

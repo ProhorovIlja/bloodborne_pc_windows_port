@@ -1,0 +1,28 @@
+name: Native V635 pure-virtual dispatch
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*pure_virtual*v63*'
+      - '.github/workflows/native-v635-pure-virtual-dispatch.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check native dispatch and fatal target without game files
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          "$CC" -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -no-pie test_pure_virtual_dispatch_v635.c -o "$RUNNER_TEMP/dispatch"
+          "$RUNNER_TEMP/dispatch"

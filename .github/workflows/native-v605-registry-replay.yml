@@ -1,0 +1,51 @@
+name: Native V605 metadata replay
+on:
+  pull_request:
+    paths:
+      - 'native/source-port/recomp-v194/*v59*'
+      - 'native/source-port/recomp-v194/*v60*'
+      - 'native/source-port/recomp-v194/paleblood_v579/**'
+      - '.github/workflows/native-v605-registry-replay.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cc: gcc, cxx: g++ }
+          - { cc: clang, cxx: clang++ }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check factory publication without retail files
+        working-directory: native/source-port/recomp-v194
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        shell: bash
+        run: |
+          flags=(-O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -pthread)
+          for source in test_registry_replay_v605.c registry_cold_v592.c test_registry_heap_v591.c; do
+            "$CC" "${flags[@]}" -std=c11 -D_XOPEN_SOURCE=700 -DBB_PRIVATE_DIFFERENTIAL -c "$source" -o "$RUNNER_TEMP/${source%.c}.o"
+          done
+          "$CXX" "${flags[@]}" -no-pie -std=c++17 test_registry_donor_v603.cpp \
+            paleblood_v579/regular_heap_allocate.cpp paleblood_v579/regular_heap_free.cpp \
+            "$RUNNER_TEMP"/{test_registry_replay_v605,registry_cold_v592,test_registry_heap_v591}.o \
+            -o "$RUNNER_TEMP/factory"
+          python3 -c '[print(i+1,i,(i+1 if i<29 else 30),1+i%7,*range(4*i,4*i+4)) for i in range(30)]' > "$RUNNER_TEMP/input"
+          "$RUNNER_TEMP/factory" < "$RUNNER_TEMP/input" | tee "$RUNNER_TEMP/result"
+          grep -Fx 'returns=30 identities=31 warm=29 primary=30 secondary=120' "$RUNNER_TEMP/result"
+          if printf '1 0 0 2 3 4 5 6\n' | "$RUNNER_TEMP/factory"; then exit 1; else test "${PIPESTATUS[1]}" = 2; fi
+      - name: Keep the synthetic-only runner for local dump comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-v605-${{ matrix.cc }}
+          path: ${{ runner.temp }}/factory
+          retention-days: 1
+          if-no-files-found: error
