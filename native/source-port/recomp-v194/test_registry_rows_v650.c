@@ -12,6 +12,16 @@ int main(void) {
     static const uint64_t keys[] = {0, 1, 7, INT64_MAX, UINT64_C(1)<<63, UINT64_MAX};
     struct bb_registry_row_v650 a[96], b[96];
     size_t cases = 0;
+    /* Rejections must preserve both the caller's count and any existing row. */
+    size_t count = 0;
+    const struct bb_registry_row_v650 sentinel = {1, 2, 3, 4};
+    a[0] = sentinel;
+    assert(!bb_registry_insert_v650(NULL, &count, 96, sentinel));
+    assert(!bb_registry_insert_v650(a, NULL, 96, sentinel));
+    assert(!bb_registry_insert_v650(a, &count, 0, sentinel));
+    assert(!bb_registry_insert_v650(a, &count, SIZE_MAX / sizeof *a + 1, sentinel));
+    assert(count == 0 && !memcmp(a, &sentinel, sizeof sentinel));
+    assert(bb_registry_upper_v650(NULL, 0, UINT64_MAX) == 0);
     uint64_t rng = 650;
     for (size_t round = 0; round < 256; ++round) {
         size_t n = 0;
