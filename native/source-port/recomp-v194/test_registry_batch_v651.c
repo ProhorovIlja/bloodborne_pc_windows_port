@@ -32,6 +32,25 @@ int main(void) {
         assert(!v.rows && !v.pending && !v.count && !v.used && !t.live);
     }
     t.fail=0;
+    /* Rollback with both arrays populated and both scheduled to grow. */
+    const struct bb_pending_v651 old_pending[]={{10,1},{20,1},{0,1},{40,1}};
+    v=(struct bb_registry_v651){alloc(&t,sizeof row,8),
+        alloc(&t,sizeof old_pending,8),1,1,4,4};
+    v.rows[0]=row;
+    memcpy(v.pending,old_pending,sizeof old_pending);
+    const struct bb_registry_v651 before=v;
+    for (size_t i=1;i<=2;++i) {
+        t.fail=t.calls+i;
+        assert(!bb_registry_register_v651(&v,&a,row,tags));
+        assert(v.rows==before.rows && v.pending==before.pending &&
+               v.count==1 && v.capacity==1 && v.used==4 && v.reserved==4 && t.live==2);
+        assert(!memcmp(v.rows,&row,sizeof row));
+        assert(!memcmp(v.pending,old_pending,sizeof old_pending));
+    }
+    release(&t,v.rows);
+    release(&t,v.pending);
+    v=(struct bb_registry_v651){0};
+    t.fail=0;
     size_t rc=512,pc=512;
     for (size_t i=0;i<2048;++i) {
         if (i==rc) rc+=rc/2;
@@ -47,5 +66,9 @@ int main(void) {
     release(&t,v.pending);
     assert(!t.live && !bb_registry_capacity_v651(SIZE_MAX/32,SIZE_MAX/32,1,32));
     assert(!bb_registry_capacity_v651(2,1,1,16));
-    puts("2048 registrations, 8192 pending records, 2 allocation failures OK");
+    const size_t max=SIZE_MAX/32;
+    assert(bb_registry_capacity_v651(max-max/4,max-max/4,max/4,32)==max);
+    assert(bb_registry_capacity_v651(max-max/4,max-max/4,max/4+1,32)==0);
+    assert(bb_registry_capacity_v651(1,1,1,32)==2);
+    puts("2048 registrations, 8192 pending records, 4 allocation failures and capacity bounds OK");
 }

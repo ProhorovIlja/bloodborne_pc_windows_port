@@ -27,9 +27,13 @@ static inline size_t bb_registry_capacity_v651(size_t n, size_t cap,
         if (max<512) return 0;
         cap=512;
     }
-    while (cap<n+add) {
+    const size_t required=n+add;
+    while (cap<required) {
         const size_t half=cap/2;
-        cap=(half && half<=max-cap) ? cap+half : cap+1;
+        // Once geometric growth would overflow the storage bound, every
+        // remaining step in the old loop was +1. Skip those steps exactly.
+        if (half>max-cap) return required;
+        cap+=half ? half : 1;
     }
     return cap;
 }
